@@ -8,6 +8,8 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { CircularProgress, ActivityRing, CircularSlider } from '@/components/ui/circular-progress';
+import { UnitToggle } from '@/components/ui/unit-toggle';
+import { BathroomScale } from '@/components/icons/BathroomScale';
 import {
   Scale,
   Footprints,
@@ -43,6 +45,14 @@ import {
 } from 'recharts';
 import FitCircleCreator from '@/components/FitCircleCreator';
 import DashboardNav from '@/components/DashboardNav';
+import { useUnitPreference } from '@/hooks/useUnitPreference';
+import {
+  formatWeight,
+  parseWeightToKg,
+  weightKgToDisplay,
+  getWeightUnit,
+  getWeightPlaceholder,
+} from '@/lib/utils/units';
 
 interface CheckIn {
   id: string;
@@ -66,6 +76,7 @@ interface DailyStats {
 
 export default function DashboardPage() {
   const { user } = useAuthStore();
+  const { unitSystem, setUnitSystem, isLoading: isLoadingUnits } = useUnitPreference();
   const [checkIns, setCheckIns] = useState<CheckIn[]>([]);
   const [isLoadingCheckIns, setIsLoadingCheckIns] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -152,7 +163,10 @@ export default function DashboardPage() {
       if (weekData && weekData.length > 1) {
         const weights = weekData.map(d => d.weight_kg).filter(w => w);
         if (weights.length > 1) {
-          weightChange = Math.round((weights[0]! - weights[weights.length - 1]!) * 10) / 10;
+          // Calculate change in kg first
+          const changeInKg = Math.round((weights[0]! - weights[weights.length - 1]!) * 10) / 10;
+          // Store raw kg value (will be converted for display later if needed)
+          weightChange = changeInKg;
         }
       }
 
@@ -203,10 +217,15 @@ export default function DashboardPage() {
     try {
       const today = new Date().toISOString().split('T')[0];
 
+      // Convert weight to kg if in imperial units
+      const weightInKg = checkInForm.weight
+        ? parseWeightToKg(checkInForm.weight, unitSystem)
+        : null;
+
       const checkInData = {
         user_id: user.id,
         tracking_date: today,
-        weight_kg: checkInForm.weight ? parseFloat(checkInForm.weight) : null,
+        weight_kg: weightInKg,
         steps: checkInForm.steps ? parseInt(checkInForm.steps) : null,
         mood_score: checkInForm.mood <= 5 ? checkInForm.mood * 2 : checkInForm.mood, // Convert 1-5 to 2-10 for DB
         energy_level: checkInForm.energy <= 5 ? checkInForm.energy * 2 : checkInForm.energy, // Convert 1-5 to 2-10 for DB
@@ -246,7 +265,8 @@ export default function DashboardPage() {
     .reverse()
     .map(checkIn => ({
       date: new Date(checkIn.tracking_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
-      weight: checkIn.weight_kg || null,
+      weight: checkIn.weight_kg ? weightKgToDisplay(checkIn.weight_kg, unitSystem) : null,
+      weightRaw: checkIn.weight_kg || null, // Keep raw kg for calculations if needed
       steps: checkIn.steps || 0,
       mood: checkIn.mood_score || 0,
       energy: checkIn.energy_level || 0,
@@ -370,12 +390,12 @@ export default function DashboardPage() {
                     size={100}
                     strokeWidth={8}
                     color="#8b5cf6"
-                    icon={Scale}
+                    icon={BathroomScale}
                     showValue={false}
                   />
                   <p className="text-xs text-gray-400 mt-2">Weight</p>
                   <p className="text-sm font-bold text-white">
-                    {dailyStats.todayWeight ? `${dailyStats.todayWeight} kg` : 'No data'}
+                    {formatWeight(dailyStats.todayWeight, unitSystem)}
                   </p>
                 </CardContent>
               </Card>
@@ -460,14 +480,24 @@ export default function DashboardPage() {
                     {/* Weight and Steps */}
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <div className="space-y-2">
-                        <Label htmlFor="weight" className="text-sm font-medium text-gray-300">Weight (kg)</Label>
+                        <div className="flex items-center justify-between">
+                          <Label htmlFor="weight" className="text-sm font-medium text-gray-300">
+                            Weight ({getWeightUnit(unitSystem)})
+                          </Label>
+                          <UnitToggle
+                            value={unitSystem}
+                            onChange={setUnitSystem}
+                            isLoading={isLoadingUnits}
+                            size="sm"
+                          />
+                        </div>
                         <div className="relative">
-                          <Scale className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-500" />
+                          <BathroomScale className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-500" size={16} />
                           <Input
                             id="weight"
                             type="number"
                             step="0.1"
-                            placeholder="70.5"
+                            placeholder={getWeightPlaceholder(unitSystem)}
                             className="pl-10 h-12 bg-slate-800/50 border-slate-700 text-white placeholder:text-gray-500"
                             value={checkInForm.weight}
                             onChange={(e) => setCheckInForm({ ...checkInForm, weight: e.target.value })}
@@ -604,8 +634,10 @@ export default function DashboardPage() {
                         <div className="flex items-center gap-3 sm:gap-4 flex-shrink-0">
                           {checkIn.weight_kg && (
                             <div className="flex items-center gap-1 text-xs sm:text-sm">
-                              <Scale className="h-3 w-3 sm:h-4 sm:w-4 text-purple-400" />
-                              <span className="font-medium text-white">{checkIn.weight_kg}kg</span>
+                              <BathroomScale className="h-3 w-3 sm:h-4 sm:w-4 text-purple-400" size={14} />
+                              <span className="font-medium text-white">
+                                {formatWeight(checkIn.weight_kg, unitSystem)}
+                              </span>
                             </div>
                           )}
                           {checkIn.steps && (
@@ -628,8 +660,8 @@ export default function DashboardPage() {
             <Card className="bg-slate-900/50 border-slate-800 backdrop-blur-xl shadow-2xl">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2 text-white">
-                  <Scale className="h-5 w-5" />
-                  Weight Progress
+                  <BathroomScale className="h-5 w-5" size={20} />
+                  Weight Progress ({getWeightUnit(unitSystem)})
                 </CardTitle>
                 <CardDescription className="text-gray-400">Last 14 days</CardDescription>
               </CardHeader>
@@ -637,7 +669,7 @@ export default function DashboardPage() {
                 {chartData.filter(d => d.weight).length === 0 ? (
                   <div className="flex items-center justify-center h-full">
                     <div className="text-center">
-                      <Scale className="h-12 w-12 text-gray-600 mx-auto mb-3" />
+                      <BathroomScale className="h-12 w-12 text-gray-600 mx-auto mb-3" size={48} />
                       <p className="text-gray-400">No weight data yet</p>
                     </div>
                   </div>
@@ -659,6 +691,10 @@ export default function DashboardPage() {
                           border: '1px solid #334155',
                           borderRadius: '8px',
                           color: '#fff'
+                        }}
+                        formatter={(value: any) => {
+                          if (value === null || value === undefined) return ['--', ''];
+                          return [`${value} ${getWeightUnit(unitSystem)}`, ''];
                         }}
                       />
                       <Area

@@ -3,6 +3,11 @@ import { createClient } from '@supabase/supabase-js'
 
 // Browser client for client-side operations with cookie support
 export const createBrowserSupabase = () => {
+  // Only access document in browser environment
+  if (typeof window === 'undefined') {
+    throw new Error('createBrowserSupabase can only be called in browser environment')
+  }
+
   return createBrowserClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
@@ -56,5 +61,29 @@ export const createAdminSupabase = () => {
   )
 }
 
-// Default browser client instance
-export const supabase = createBrowserSupabase()
+// Lazy-initialized browser client instance
+// This ensures it's only created when actually used in browser context
+let _supabase: ReturnType<typeof createBrowserClient> | null = null
+
+/**
+ * Get the browser Supabase client instance
+ * Only use this in client-side code (components with 'use client')
+ * For server-side operations, use createServerSupabase() or createAdminSupabase()
+ */
+export function getSupabase() {
+  if (typeof window === 'undefined') {
+    throw new Error('getSupabase() can only be called in browser environment. Use createServerSupabase() or createAdminSupabase() for server-side operations.')
+  }
+
+  if (!_supabase) {
+    _supabase = createBrowserSupabase()
+  }
+  return _supabase
+}
+
+// For backward compatibility - lazy getter that only initializes in browser
+export const supabase = new Proxy({} as ReturnType<typeof createBrowserClient>, {
+  get(target, prop) {
+    return getSupabase()[prop as keyof ReturnType<typeof createBrowserClient>]
+  }
+})

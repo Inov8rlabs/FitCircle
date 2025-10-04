@@ -1,4 +1,3 @@
-import { supabase } from '@/lib/supabase';
 import { createAdminSupabase } from '@/lib/supabase';
 
 /**
