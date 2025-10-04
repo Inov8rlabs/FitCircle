@@ -1,0 +1,29 @@
+{
+  "name": "fitcircle",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "cd apps/web && npm run dev",
+    "build": "cd apps/web && npm run build",
+    "start": "cd apps/web && npm run start",
+    "lint": "cd apps/web && npm run lint",
+    "format": "prettier --write \"**/*.{ts,tsx,md,json}\"",
+    "typecheck": "cd apps/web && npm run type-check",
+    "clean": "rm -rf node_modules apps/*/node_modules packages/*/node_modules"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "eslint": "^8.56.0",
+    "pg": "^8.11.3",
+    "prettier": "^3.2.4",
+    "typescript": "^5.6.0"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "packageManager": "bun@1.0.0"
+}
