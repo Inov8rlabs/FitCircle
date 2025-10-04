@@ -1,11 +1,13 @@
 'use client';
 
 import { motion } from 'framer-motion';
-import { Target, TrendingDown, TrendingUp, Sparkles } from 'lucide-react';
+import { Target, TrendingDown, TrendingUp, Sparkles, ArrowRight } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import Link from 'next/link';
 
 interface GoalProgressIndicatorProps {
-  currentWeight: number;
+  currentWeight?: number;
   goalWeight?: number;
   unit?: 'metric' | 'imperial';
   className?: string;
@@ -17,11 +19,51 @@ export function GoalProgressIndicator({
   unit = 'metric',
   className = ''
 }: GoalProgressIndicatorProps) {
+  const unitLabel = unit === 'metric' ? 'kg' : 'lbs';
+
+  // Show placeholder when no goal is set
   if (!goalWeight) {
+    return (
+      <Card className={`bg-gradient-to-br from-slate-900/50 to-slate-800/30 border-slate-700/50 backdrop-blur-xl overflow-hidden ${className}`}>
+        <CardContent className="p-6">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="w-10 h-10 rounded-full bg-slate-700/50 flex items-center justify-center">
+              <Target className="w-5 h-5 text-gray-500" />
+            </div>
+            <div>
+              <h3 className="text-sm font-medium text-gray-400">Goal Progress</h3>
+              <p className="text-sm text-gray-500">No goal set</p>
+            </div>
+          </div>
+
+          {/* Inactive Progress Bar */}
+          <div className="relative h-3 bg-slate-800/50 rounded-full mb-4 opacity-30">
+            <div className="absolute inset-y-0 left-0 w-0 bg-gradient-to-r from-purple-500 to-indigo-500 rounded-full" />
+          </div>
+
+          <div className="text-center py-4">
+            <p className="text-sm text-gray-400 mb-4">
+              Set a goal weight to track your progress and stay motivated!
+            </p>
+            <Button
+              className="bg-purple-600 hover:bg-purple-700 shadow-lg hover:shadow-purple-500/50"
+              asChild
+            >
+              <Link href="/profile">
+                Set Your Goal
+                <ArrowRight className="ml-2 h-4 w-4" />
+              </Link>
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (!currentWeight) {
     return null;
   }
 
-  const unitLabel = unit === 'metric' ? 'kg' : 'lbs';
   const difference = currentWeight - goalWeight;
   const absDifference = Math.abs(difference);
   const isAtGoal = Math.abs(difference) < 0.5; // Within 0.5 units of goal

@@ -474,20 +474,18 @@ export default function DashboardPage() {
           </div>
 
           {/* Goal Progress Indicator */}
-          {goalWeightKg && dailyStats.todayWeight && (
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.3 }}
-              className="mt-6"
-            >
-              <GoalProgressIndicator
-                currentWeight={weightKgToDisplay(dailyStats.todayWeight, unitSystem)}
-                goalWeight={weightKgToDisplay(goalWeightKg, unitSystem)}
-                unit={unitSystem}
-              />
-            </motion.div>
-          )}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.3 }}
+            className="mt-6"
+          >
+            <GoalProgressIndicator
+              currentWeight={dailyStats.todayWeight ? weightKgToDisplay(dailyStats.todayWeight, unitSystem) : undefined}
+              goalWeight={goalWeightKg ? weightKgToDisplay(goalWeightKg, unitSystem) : undefined}
+              unit={unitSystem}
+            />
+          </motion.div>
         </div>
 
         {/* Main Content Tabs */}

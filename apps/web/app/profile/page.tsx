@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import DashboardNav from '@/components/DashboardNav';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -21,9 +21,13 @@ import {
   Save,
   X,
   Scale,
+  Target,
+  Loader2,
 } from 'lucide-react';
 import { useAuthStore } from '@/stores/auth-store';
 import { useUnitPreference } from '@/hooks/useUnitPreference';
+import { supabase } from '@/lib/supabase';
+import { parseWeightToKg, weightKgToDisplay, getWeightUnit } from '@/lib/utils/units';
 import { toast } from 'sonner';
 
 export default function ProfilePage() {
@@ -31,11 +35,87 @@ export default function ProfilePage() {
   const { user, logout } = useAuthStore();
   const { unitSystem, setUnitSystem, isLoading: isLoadingUnits } = useUnitPreference();
   const [isEditing, setIsEditing] = useState(false);
+  const [goalWeight, setGoalWeight] = useState('');
+  const [isSavingGoal, setIsSavingGoal] = useState(false);
   const [formData, setFormData] = useState({
     name: user?.name || '',
     email: user?.email || '',
     username: user?.username || '',
   });
+
+  // Fetch current goal weight
+  useEffect(() => {
+    const fetchGoalWeight = async () => {
+      if (!user) return;
+
+      try {
+        const { data, error } = await supabase
+          .from('profiles')
+          .select('goals')
+          .eq('id', user.id)
+          .single();
+
+        if (error) throw error;
+
+        if (data?.goals && Array.isArray(data.goals)) {
+          const weightGoal = data.goals.find((goal: any) => goal.type === 'weight');
+          if (weightGoal?.target_weight_kg) {
+            setGoalWeight(weightKgToDisplay(weightGoal.target_weight_kg, unitSystem).toString());
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching goal weight:', error);
+      }
+    };
+
+    fetchGoalWeight();
+  }, [user, unitSystem]);
+
+  const handleSaveGoalWeight = async () => {
+    if (!user || !goalWeight) return;
+
+    setIsSavingGoal(true);
+    try {
+      const goalWeightKg = parseWeightToKg(parseFloat(goalWeight), unitSystem);
+
+      // Get current goals
+      const { data: profileData, error: fetchError } = await supabase
+        .from('profiles')
+        .select('goals')
+        .eq('id', user.id)
+        .single();
+
+      if (fetchError) throw fetchError;
+
+      const currentGoals = profileData?.goals || [];
+      const otherGoals = Array.isArray(currentGoals)
+        ? currentGoals.filter((g: any) => g.type !== 'weight')
+        : [];
+
+      const updatedGoals = [
+        ...otherGoals,
+        {
+          type: 'weight',
+          target_weight_kg: goalWeightKg,
+          created_at: new Date().toISOString()
+        }
+      ];
+
+      const { error: updateError } = await supabase
+        .from('profiles')
+        .update({ goals: updatedGoals })
+        .eq('id', user.id);
+
+      if (updateError) throw updateError;
+
+      toast.success('Goal weight saved successfully!');
+    } catch (error) {
+      console.error('Error saving goal weight:', error);
+      toast.error('Failed to save goal weight');
+    } finally {
+      setIsSavingGoal(false);
+    }
+  };
 
   const handleSave = async () => {
     // TODO: Implement profile update
@@ -217,6 +297,65 @@ export default function ProfilePage() {
                       </div>
                       <p className="text-xs text-gray-500 mt-2">
                         This will affect how weight is displayed throughout the app
+                      </p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Goal Weight */}
+              <Card className="bg-slate-900/50 border-slate-800 backdrop-blur-xl">
+                <CardHeader>
+                  <div className="flex items-center gap-4">
+                    <div className="w-12 h-12 rounded-lg bg-slate-800 flex items-center justify-center text-purple-400">
+                      <Target className="w-6 h-6" />
+                    </div>
+                    <div className="flex-1">
+                      <CardTitle className="text-white text-lg">Goal Weight</CardTitle>
+                      <CardDescription className="text-gray-400">
+                        Set your target weight to track progress
+                      </CardDescription>
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    <div>
+                      <Label htmlFor="goalWeight" className="text-sm font-medium text-gray-300 mb-3 block">
+                        Target Weight ({getWeightUnit(unitSystem)})
+                      </Label>
+                      <div className="flex gap-3">
+                        <div className="flex-1">
+                          <Input
+                            id="goalWeight"
+                            type="number"
+                            step="0.1"
+                            placeholder={unitSystem === 'metric' ? 'e.g., 75' : 'e.g., 165'}
+                            value={goalWeight}
+                            onChange={(e) => setGoalWeight(e.target.value)}
+                            className="bg-slate-800/50 border-slate-700 text-white placeholder:text-gray-500"
+                          />
+                        </div>
+                        <Button
+                          onClick={handleSaveGoalWeight}
+                          disabled={isSavingGoal || !goalWeight}
+                          className="bg-purple-600 hover:bg-purple-700"
+                        >
+                          {isSavingGoal ? (
+                            <>
+                              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                              Saving...
+                            </>
+                          ) : (
+                            <>
+                              <Save className="w-4 h-4 mr-2" />
+                              Save Goal
+                            </>
+                          )}
+                        </Button>
+                      </div>
+                      <p className="text-xs text-gray-500 mt-2">
+                        This will appear on your dashboard to track your progress
                       </p>
                     </div>
                   </div>
