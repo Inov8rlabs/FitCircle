@@ -45,6 +45,7 @@ import {
 } from 'recharts';
 import FitCircleCreator from '@/components/FitCircleCreator';
 import DashboardNav from '@/components/DashboardNav';
+import { GoalProgressIndicator } from '@/components/GoalProgressIndicator';
 import { useUnitPreference } from '@/hooks/useUnitPreference';
 import {
   formatWeight,
@@ -80,6 +81,7 @@ export default function DashboardPage() {
   const [checkIns, setCheckIns] = useState<CheckIn[]>([]);
   const [isLoadingCheckIns, setIsLoadingCheckIns] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [goalWeightKg, setGoalWeightKg] = useState<number | undefined>();
   const [dailyStats, setDailyStats] = useState<DailyStats>({
     todaySteps: 0,
     todayWeight: undefined,
@@ -97,13 +99,38 @@ export default function DashboardPage() {
     notes: '',
   });
 
-  // Fetch check-ins on mount
+  // Fetch check-ins and profile on mount
   useEffect(() => {
     if (user) {
       fetchCheckIns();
       fetchDailyStats();
+      fetchGoalWeight();
     }
   }, [user]);
+
+  const fetchGoalWeight = async () => {
+    if (!user) return;
+
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('goals')
+        .eq('id', user.id)
+        .single();
+
+      if (error) throw error;
+
+      // Extract goal weight from goals array
+      if (data?.goals && Array.isArray(data.goals)) {
+        const weightGoal = data.goals.find((goal: any) => goal.type === 'weight');
+        if (weightGoal?.target_weight_kg) {
+          setGoalWeightKg(weightGoal.target_weight_kg);
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching goal weight:', error);
+    }
+  };
 
   const fetchCheckIns = async () => {
     if (!user) return;
@@ -445,6 +472,22 @@ export default function DashboardPage() {
               </Card>
             </motion.div>
           </div>
+
+          {/* Goal Progress Indicator */}
+          {goalWeightKg && dailyStats.todayWeight && (
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.3 }}
+              className="mt-6"
+            >
+              <GoalProgressIndicator
+                currentWeight={weightKgToDisplay(dailyStats.todayWeight, unitSystem)}
+                goalWeight={weightKgToDisplay(goalWeightKg, unitSystem)}
+                unit={unitSystem}
+              />
+            </motion.div>
+          )}
         </div>
 
         {/* Main Content Tabs */}
