@@ -7,6 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { UnitToggle } from '@/components/ui/unit-toggle';
 import {
   User,
   Mail,
@@ -19,13 +20,16 @@ import {
   Palette,
   Save,
   X,
+  Scale,
 } from 'lucide-react';
 import { useAuthStore } from '@/stores/auth-store';
+import { useUnitPreference } from '@/hooks/useUnitPreference';
 import { toast } from 'sonner';
 
 export default function ProfilePage() {
   const router = useRouter();
   const { user, logout } = useAuthStore();
+  const { unitSystem, setUnitSystem, isLoading: isLoadingUnits } = useUnitPreference();
   const [isEditing, setIsEditing] = useState(false);
   const [formData, setFormData] = useState({
     name: user?.name || '',
@@ -173,32 +177,51 @@ export default function ProfilePage() {
               </CardContent>
             </Card>
 
-            {/* Settings Sections */}
+            {/* Preferences */}
             <div className="space-y-4">
-              <h2 className="text-xl font-semibold text-white">Settings</h2>
+              <h2 className="text-xl font-semibold text-white">Preferences</h2>
 
-              {[
-                { icon: Bell, title: 'Notifications', description: 'Manage notification preferences', color: 'text-indigo-400', href: '/settings/notifications' },
-                { icon: Shield, title: 'Privacy & Security', description: 'Control your privacy settings', color: 'text-purple-400', href: '/settings/privacy' },
-                { icon: Palette, title: 'Appearance', description: 'Customize your experience', color: 'text-orange-400', href: '/settings/appearance' },
-              ].map((item) => (
-                <Card key={item.title} className="bg-slate-900/50 border-slate-800 backdrop-blur-xl hover:border-slate-700 transition-colors cursor-pointer">
-                  <CardHeader>
-                    <div className="flex items-center gap-4">
-                      <div className={`w-12 h-12 rounded-lg bg-slate-800 flex items-center justify-center ${item.color}`}>
-                        <item.icon className="w-6 h-6" />
-                      </div>
-                      <div className="flex-1">
-                        <CardTitle className="text-white text-lg">{item.title}</CardTitle>
-                        <CardDescription className="text-gray-400">{item.description}</CardDescription>
-                      </div>
-                      <svg className="w-5 h-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                      </svg>
+              {/* Units & Measurements */}
+              <Card className="bg-slate-900/50 border-slate-800 backdrop-blur-xl">
+                <CardHeader>
+                  <div className="flex items-center gap-4">
+                    <div className="w-12 h-12 rounded-lg bg-slate-800 flex items-center justify-center text-indigo-400">
+                      <Scale className="w-6 h-6" />
                     </div>
-                  </CardHeader>
-                </Card>
-              ))}
+                    <div className="flex-1">
+                      <CardTitle className="text-white text-lg">Units & Measurements</CardTitle>
+                      <CardDescription className="text-gray-400">
+                        Choose your preferred measurement system
+                      </CardDescription>
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    <div>
+                      <Label className="text-sm font-medium text-gray-300 mb-3 block">
+                        Weight Units
+                      </Label>
+                      <div className="flex items-center gap-4">
+                        <UnitToggle
+                          value={unitSystem}
+                          onChange={setUnitSystem}
+                          isLoading={isLoadingUnits}
+                          size="md"
+                        />
+                        <span className="text-sm text-gray-400">
+                          {unitSystem === 'metric'
+                            ? 'Using kilograms (kg)'
+                            : 'Using pounds (lbs)'}
+                        </span>
+                      </div>
+                      <p className="text-xs text-gray-500 mt-2">
+                        This will affect how weight is displayed throughout the app
+                      </p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
             </div>
 
             {/* Logout Section */}
