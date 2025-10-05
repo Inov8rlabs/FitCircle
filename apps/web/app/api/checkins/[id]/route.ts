@@ -68,7 +68,7 @@ async function getAuthenticatedUser(request: NextRequest) {
 // GET /api/checkins/[id] - Get a specific check-in
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const user = await getAuthenticatedUser(request);
@@ -80,6 +80,8 @@ export async function GET(
       );
     }
 
+    const { id } = await params;
+
     const supabase = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -88,7 +90,7 @@ export async function GET(
     const { data, error } = await supabase
       .from('checkins')
       .select('*')
-      .eq('id', params.id)
+      .eq('id', id)
       .eq('user_id', user.id)
       .single();
 
@@ -115,7 +117,7 @@ export async function GET(
 // PATCH /api/checkins/[id] - Update a check-in
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const user = await getAuthenticatedUser(request);
@@ -126,6 +128,8 @@ export async function PATCH(
         { status: 401 }
       );
     }
+
+    const { id } = await params;
 
     // Parse and validate request body
     const body = await request.json();
@@ -140,7 +144,7 @@ export async function PATCH(
     const { data: existingCheckIn } = await supabase
       .from('checkins')
       .select('user_id')
-      .eq('id', params.id)
+      .eq('id', id)
       .single();
 
     if (!existingCheckIn || existingCheckIn.user_id !== user.id) {
@@ -157,7 +161,7 @@ export async function PATCH(
         ...validatedData,
         updated_at: new Date().toISOString(),
       })
-      .eq('id', params.id)
+      .eq('id', id)
       .select()
       .single();
 
@@ -194,7 +198,7 @@ export async function PATCH(
 // DELETE /api/checkins/[id] - Delete a check-in
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const user = await getAuthenticatedUser(request);
@@ -206,6 +210,8 @@ export async function DELETE(
       );
     }
 
+    const { id } = await params;
+
     const supabase = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -215,7 +221,7 @@ export async function DELETE(
     const { data: existingCheckIn } = await supabase
       .from('checkins')
       .select('user_id, xp_earned')
-      .eq('id', params.id)
+      .eq('id', id)
       .single();
 
     if (!existingCheckIn || existingCheckIn.user_id !== user.id) {
@@ -229,7 +235,7 @@ export async function DELETE(
     const { error } = await supabase
       .from('checkins')
       .delete()
-      .eq('id', params.id);
+      .eq('id', id);
 
     if (error) {
       console.error('Delete check-in error:', error);
