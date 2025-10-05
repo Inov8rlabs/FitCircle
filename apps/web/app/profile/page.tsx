@@ -23,6 +23,7 @@ import {
   Scale,
   Target,
   Loader2,
+  Footprints,
 } from 'lucide-react';
 import { useAuthStore } from '@/stores/auth-store';
 import { useUnitPreference } from '@/hooks/useUnitPreference';
@@ -36,7 +37,9 @@ export default function ProfilePage() {
   const { unitSystem, setUnitSystem, isLoading: isLoadingUnits } = useUnitPreference();
   const [isEditing, setIsEditing] = useState(false);
   const [goalWeight, setGoalWeight] = useState('');
+  const [dailyStepsGoal, setDailyStepsGoal] = useState('10000');
   const [isSavingGoal, setIsSavingGoal] = useState(false);
+  const [isSavingStepsGoal, setIsSavingStepsGoal] = useState(false);
   const [formData, setFormData] = useState({
     name: user?.name || '',
     email: user?.email || '',
@@ -61,6 +64,11 @@ export default function ProfilePage() {
           const weightGoal = data.goals.find((goal: any) => goal.type === 'weight');
           if (weightGoal?.target_weight_kg) {
             setGoalWeight(weightKgToDisplay(weightGoal.target_weight_kg, unitSystem).toString());
+          }
+
+          const stepsGoal = data.goals.find((goal: any) => goal.type === 'steps');
+          if (stepsGoal?.daily_steps_target) {
+            setDailyStepsGoal(stepsGoal.daily_steps_target.toString());
           }
         }
       } catch (error) {
@@ -114,6 +122,52 @@ export default function ProfilePage() {
       toast.error('Failed to save goal weight');
     } finally {
       setIsSavingGoal(false);
+    }
+  };
+
+  const handleSaveStepsGoal = async () => {
+    if (!user || !dailyStepsGoal) return;
+
+    setIsSavingStepsGoal(true);
+    try {
+      const stepsTarget = parseInt(dailyStepsGoal);
+
+      // Get current goals
+      const { data: profileData, error: fetchError } = await supabase
+        .from('profiles')
+        .select('goals')
+        .eq('id', user.id)
+        .single();
+
+      if (fetchError) throw fetchError;
+
+      const currentGoals = profileData?.goals || [];
+      const otherGoals = Array.isArray(currentGoals)
+        ? currentGoals.filter((g: any) => g.type !== 'steps')
+        : [];
+
+      const updatedGoals = [
+        ...otherGoals,
+        {
+          type: 'steps',
+          daily_steps_target: stepsTarget,
+          created_at: new Date().toISOString()
+        }
+      ];
+
+      const { error: updateError } = await supabase
+        .from('profiles')
+        .update({ goals: updatedGoals })
+        .eq('id', user.id);
+
+      if (updateError) throw updateError;
+
+      toast.success('Steps goal saved successfully!');
+    } catch (error) {
+      console.error('Error saving steps goal:', error);
+      toast.error('Failed to save steps goal');
+    } finally {
+      setIsSavingStepsGoal(false);
     }
   };
 
@@ -356,6 +410,65 @@ export default function ProfilePage() {
                       </div>
                       <p className="text-xs text-gray-500 mt-2">
                         This will appear on your dashboard to track your progress
+                      </p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Daily Steps Goal */}
+              <Card className="bg-slate-900/50 border-slate-800 backdrop-blur-xl">
+                <CardHeader>
+                  <div className="flex items-center gap-4">
+                    <div className="w-12 h-12 rounded-lg bg-slate-800 flex items-center justify-center text-indigo-400">
+                      <Footprints className="w-6 h-6" />
+                    </div>
+                    <div className="flex-1">
+                      <CardTitle className="text-white text-lg">Daily Steps Goal</CardTitle>
+                      <CardDescription className="text-gray-400">
+                        Set your daily walking target
+                      </CardDescription>
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    <div>
+                      <Label htmlFor="stepsGoal" className="text-sm font-medium text-gray-300 mb-3 block">
+                        Target Steps per Day
+                      </Label>
+                      <div className="flex gap-3">
+                        <div className="flex-1">
+                          <Input
+                            id="stepsGoal"
+                            type="number"
+                            step="100"
+                            placeholder="e.g., 10000"
+                            value={dailyStepsGoal}
+                            onChange={(e) => setDailyStepsGoal(e.target.value)}
+                            className="bg-slate-800/50 border-slate-700 text-white placeholder:text-gray-500"
+                          />
+                        </div>
+                        <Button
+                          onClick={handleSaveStepsGoal}
+                          disabled={isSavingStepsGoal || !dailyStepsGoal}
+                          className="bg-indigo-600 hover:bg-indigo-700"
+                        >
+                          {isSavingStepsGoal ? (
+                            <>
+                              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                              Saving...
+                            </>
+                          ) : (
+                            <>
+                              <Save className="w-4 h-4 mr-2" />
+                              Save Goal
+                            </>
+                          )}
+                        </Button>
+                      </div>
+                      <p className="text-xs text-gray-500 mt-2">
+                        Track your daily walking progress on the dashboard
                       </p>
                     </div>
                   </div>

@@ -2,6 +2,16 @@
 
 ## Critical Project Rules
 
+### 🚫 **NEVER COMMIT CODE WITHOUT EXPLICIT PERMISSION**
+
+**IMPORTANT:** Do NOT run `git commit` or `git push` commands unless the user explicitly asks you to commit and push the code.
+
+- ❌ Do NOT auto-commit after completing a feature
+- ❌ Do NOT commit "for convenience"
+- ❌ Do NOT assume the user wants changes committed
+- ✅ ONLY commit when the user explicitly says "commit" or "push"
+- ✅ Wait for user approval before any git operations
+
 ### 🚫 **NEVER USE STORED PROCEDURES**
 
 **Important:** All business logic MUST be implemented in the backend (Next.js API routes and service layers). Do NOT create PostgreSQL stored procedures, functions, or triggers for business logic.

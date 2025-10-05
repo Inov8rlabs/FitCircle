@@ -46,6 +46,7 @@ import {
 import FitCircleCreator from '@/components/FitCircleCreator';
 import DashboardNav from '@/components/DashboardNav';
 import { GoalProgressIndicator } from '@/components/GoalProgressIndicator';
+import { StepsGoalCard } from '@/components/StepsGoalCard';
 import { useUnitPreference } from '@/hooks/useUnitPreference';
 import {
   formatWeight,
@@ -82,6 +83,8 @@ export default function DashboardPage() {
   const [isLoadingCheckIns, setIsLoadingCheckIns] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [goalWeightKg, setGoalWeightKg] = useState<number | undefined>();
+  const [startingWeightKg, setStartingWeightKg] = useState<number | undefined>();
+  const [dailyStepsGoal, setDailyStepsGoal] = useState<number>(10000); // Default 10k steps
   const [dailyStats, setDailyStats] = useState<DailyStats>({
     todaySteps: 0,
     todayWeight: undefined,
@@ -120,15 +123,21 @@ export default function DashboardPage() {
 
       if (error) throw error;
 
-      // Extract goal weight from goals array
+      // Extract goals from goals array
       if (data?.goals && Array.isArray(data.goals)) {
         const weightGoal = data.goals.find((goal: any) => goal.type === 'weight');
         if (weightGoal?.target_weight_kg) {
           setGoalWeightKg(weightGoal.target_weight_kg);
+          setStartingWeightKg(weightGoal.starting_weight_kg);
+        }
+
+        const stepsGoal = data.goals.find((goal: any) => goal.type === 'steps');
+        if (stepsGoal?.daily_steps_target) {
+          setDailyStepsGoal(stepsGoal.daily_steps_target);
         }
       }
     } catch (error) {
-      console.error('Error fetching goal weight:', error);
+      console.error('Error fetching goals:', error);
     }
   };
 
@@ -326,20 +335,21 @@ export default function DashboardPage() {
         </motion.div>
 
         {/* Activity Rings Dashboard */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
-          {/* Main Activity Ring */}
-          <motion.div
-            initial={{ opacity: 0, scale: 0.9 }}
-            animate={{ opacity: 1, scale: 1 }}
-            className="lg:col-span-1"
-          >
-            <Card className="bg-slate-900/50 border-slate-800 backdrop-blur-xl shadow-2xl">
+        <div className="space-y-6 mb-8">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {/* Main Activity Ring */}
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              className="lg:col-span-1"
+            >
+              <Card className="bg-slate-900/50 border-slate-800 backdrop-blur-xl shadow-2xl">
               <CardContent className="p-8 flex flex-col items-center justify-center">
                 <ActivityRing
                   rings={[
                     {
                       value: dailyStats.todaySteps,
-                      max: 10000,
+                      max: dailyStepsGoal,
                       color: '#6366f1',
                       label: 'Steps'
                     },
@@ -348,16 +358,10 @@ export default function DashboardPage() {
                       max: 30,
                       color: '#f97316',
                       label: 'Streak'
-                    },
-                    {
-                      value: dailyStats.totalCheckIns,
-                      max: 100,
-                      color: '#8b5cf6',
-                      label: 'Check-ins'
                     }
                   ]}
                   size={200}
-                  strokeWidth={14}
+                  strokeWidth={16}
                 />
                 <div className="mt-6 text-center">
                   <h3 className="text-lg font-semibold text-white mb-2">Today's Activity</h3>
@@ -370,51 +374,39 @@ export default function DashboardPage() {
                       <div className="w-3 h-3 bg-orange-400 rounded-full inline-block mr-1" />
                       <span className="text-gray-400">Streak</span>
                     </div>
-                    <div>
-                      <div className="w-3 h-3 bg-purple-400 rounded-full inline-block mr-1" />
-                      <span className="text-gray-400">Total</span>
-                    </div>
                   </div>
                 </div>
               </CardContent>
             </Card>
           </motion.div>
 
-          {/* Individual Progress Circles */}
-          <div className="lg:col-span-2 grid grid-cols-2 sm:grid-cols-4 gap-4">
+          {/* Stats Grid - 2x2 layout with goals */}
+          <div className="lg:col-span-2 grid grid-cols-2 gap-4">
+            {/* Steps with Goal */}
             <motion.div
               initial={{ opacity: 0, scale: 0.9 }}
               animate={{ opacity: 1, scale: 1 }}
               transition={{ delay: 0.1 }}
             >
-              <Card className="bg-slate-900/50 border-slate-800 backdrop-blur-xl">
-                <CardContent className="p-4 flex flex-col items-center">
-                  <CircularProgress
-                    value={dailyStats.todaySteps}
-                    max={10000}
-                    size={100}
-                    strokeWidth={8}
-                    color="#6366f1"
-                    icon={Footprints}
-                    showValue={false}
-                  />
-                  <p className="text-xs text-gray-400 mt-2">Steps</p>
-                  <p className="text-sm font-bold text-white">{dailyStats.todaySteps.toLocaleString()}</p>
-                </CardContent>
-              </Card>
+              <StepsGoalCard
+                currentSteps={dailyStats.todaySteps}
+                dailyGoal={dailyStepsGoal}
+                onGoalSaved={fetchGoalWeight}
+              />
             </motion.div>
 
+            {/* Weight */}
             <motion.div
               initial={{ opacity: 0, scale: 0.9 }}
               animate={{ opacity: 1, scale: 1 }}
               transition={{ delay: 0.15 }}
             >
-              <Card className="bg-slate-900/50 border-slate-800 backdrop-blur-xl">
-                <CardContent className="p-4 flex flex-col items-center">
+              <Card className="bg-slate-900/50 border-slate-800 backdrop-blur-xl h-full">
+                <CardContent className="p-3 flex flex-col items-center justify-center h-full">
                   <CircularProgress
                     value={dailyStats.todayWeight || 0}
                     max={100}
-                    size={100}
+                    size={80}
                     strokeWidth={8}
                     color="#8b5cf6"
                     icon={BathroomScale}
@@ -428,17 +420,33 @@ export default function DashboardPage() {
               </Card>
             </motion.div>
 
+            {/* Weight Goal Tracker */}
             <motion.div
               initial={{ opacity: 0, scale: 0.9 }}
               animate={{ opacity: 1, scale: 1 }}
               transition={{ delay: 0.2 }}
             >
-              <Card className="bg-slate-900/50 border-slate-800 backdrop-blur-xl">
-                <CardContent className="p-4 flex flex-col items-center">
+              <GoalProgressIndicator
+                currentWeight={dailyStats.todayWeight ? weightKgToDisplay(dailyStats.todayWeight, unitSystem) : undefined}
+                goalWeight={goalWeightKg ? weightKgToDisplay(goalWeightKg, unitSystem) : undefined}
+                startingWeight={startingWeightKg ? weightKgToDisplay(startingWeightKg, unitSystem) : undefined}
+                unit={unitSystem}
+                onGoalSaved={fetchGoalWeight}
+              />
+            </motion.div>
+
+            {/* Streak */}
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ delay: 0.25 }}
+            >
+              <Card className="bg-slate-900/50 border-slate-800 backdrop-blur-xl h-full">
+                <CardContent className="p-3 flex flex-col items-center justify-center h-full">
                   <CircularProgress
                     value={dailyStats.currentStreak}
                     max={30}
-                    size={100}
+                    size={80}
                     strokeWidth={8}
                     color="#f97316"
                     icon={Flame}
@@ -450,42 +458,8 @@ export default function DashboardPage() {
               </Card>
             </motion.div>
 
-            <motion.div
-              initial={{ opacity: 0, scale: 0.9 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ delay: 0.25 }}
-            >
-              <Card className="bg-slate-900/50 border-slate-800 backdrop-blur-xl">
-                <CardContent className="p-4 flex flex-col items-center">
-                  <CircularProgress
-                    value={dailyStats.totalCheckIns}
-                    max={100}
-                    size={100}
-                    strokeWidth={8}
-                    color="#10b981"
-                    icon={Trophy}
-                    showValue={false}
-                  />
-                  <p className="text-xs text-gray-400 mt-2">Check-ins</p>
-                  <p className="text-sm font-bold text-white">{dailyStats.totalCheckIns}</p>
-                </CardContent>
-              </Card>
-            </motion.div>
           </div>
-
-          {/* Goal Progress Indicator */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.3 }}
-            className="mt-6"
-          >
-            <GoalProgressIndicator
-              currentWeight={dailyStats.todayWeight ? weightKgToDisplay(dailyStats.todayWeight, unitSystem) : undefined}
-              goalWeight={goalWeightKg ? weightKgToDisplay(goalWeightKg, unitSystem) : undefined}
-              unit={unitSystem}
-            />
-          </motion.div>
+          </div>
         </div>
 
         {/* Main Content Tabs */}
