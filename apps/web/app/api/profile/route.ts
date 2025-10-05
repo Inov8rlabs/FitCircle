@@ -23,7 +23,7 @@ const profileUpdateSchema = z.object({
 
 // Helper function to get authenticated user
 async function getAuthenticatedUser(request: NextRequest) {
-  const cookieStore = cookies();
+  const cookieStore = await cookies();
   const accessToken = cookieStore.get('sb-access-token')?.value;
 
   if (!accessToken) {
