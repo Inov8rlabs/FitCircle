@@ -250,11 +250,11 @@ export default function CircleCreationWizard({ isOpen, onClose, onSuccess }: Cir
         invite_code_length: inviteCode.length,
       });
 
-      let { data, error } = await supabase
+      let { data, error } = (await supabase
         .from('challenges')
         .insert(challengeData as any)
         .select()
-        .single();
+        .single()) as { data: any; error: any };
 
       // If error is due to invite_code length, try with 9-char code (backward compatibility)
       if (error && (error.message?.includes('value too long') || error.code === '22001')) {
@@ -262,11 +262,11 @@ export default function CircleCreationWizard({ isOpen, onClose, onSuccess }: Cir
         inviteCode = inviteCode.replace('-', ''); // Remove hyphen: FIT-ABC123 -> FITABC123
         challengeData.invite_code = inviteCode;
 
-        const retry = await supabase
+        const retry = (await supabase
           .from('challenges')
           .insert(challengeData as any)
           .select()
-          .single();
+          .single()) as { data: any; error: any };
 
         data = retry.data;
         error = retry.error;
