@@ -109,7 +109,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Get stats
-    const { data: stats } = await getProfileStats(user.id);
+    const stats = await getProfileStats(user.id);
 
     return NextResponse.json({
       profile: profile,
