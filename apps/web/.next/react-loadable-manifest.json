@@ -26,5 +26,33 @@
     "files": [
       "static/chunks/_app-pages-browser_node_modules_tanstack_query-devtools_build_DevtoolsPanelComponent_PULY4AJ7_js.js"
     ]
+  },
+  "app/components/GoalProgressIndicator.tsx -> @/lib/supabase": {
+    "id": "app/components/GoalProgressIndicator.tsx -> @/lib/supabase",
+    "files": []
+  },
+  "app/components/GoalProgressIndicator.tsx -> @/lib/utils/units": {
+    "id": "app/components/GoalProgressIndicator.tsx -> @/lib/utils/units",
+    "files": []
+  },
+  "app/components/GoalProgressIndicator.tsx -> @/stores/auth-store": {
+    "id": "app/components/GoalProgressIndicator.tsx -> @/stores/auth-store",
+    "files": []
+  },
+  "app/components/GoalProgressIndicator.tsx -> sonner": {
+    "id": "app/components/GoalProgressIndicator.tsx -> sonner",
+    "files": []
+  },
+  "app/components/StepsGoalCard.tsx -> @/lib/supabase": {
+    "id": "app/components/StepsGoalCard.tsx -> @/lib/supabase",
+    "files": []
+  },
+  "app/components/StepsGoalCard.tsx -> @/stores/auth-store": {
+    "id": "app/components/StepsGoalCard.tsx -> @/stores/auth-store",
+    "files": []
+  },
+  "app/components/StepsGoalCard.tsx -> sonner": {
+    "id": "app/components/StepsGoalCard.tsx -> sonner",
+    "files": []
   }
 }

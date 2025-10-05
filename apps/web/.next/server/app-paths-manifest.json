@@ -1,9 +1,5 @@
 {
   "/_not-found/page": "app/_not-found/page.js",
-  "/circles/page": "app/circles/page.js",
-  "/challenges/page": "app/challenges/page.js",
-  "/profile/page": "app/profile/page.js",
   "/dashboard/page": "app/dashboard/page.js",
-  "/page": "app/page.js",
-  "/terms/page": "app/terms/page.js"
+  "/fitcircles/page": "app/fitcircles/page.js"
 }

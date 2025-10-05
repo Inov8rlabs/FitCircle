@@ -94,8 +94,6 @@ export default function FitCircleCreator() {
     startDate: '',
     endDate: '',
     maxParticipants: '',
-    entryFee: '0',
-    prizePool: '0',
   });
 
   const challengeTypes = [
@@ -131,8 +129,8 @@ export default function FitCircleCreator() {
           end_date: formData.endDate,
           registration_deadline: registrationDeadline.toISOString(),
           max_participants: formData.maxParticipants ? parseInt(formData.maxParticipants) : null,
-          entry_fee: parseFloat(formData.entryFee),
-          prize_pool: parseFloat(formData.prizePool),
+          entry_fee: 0,
+          prize_pool: 0,
           rules: {
             daily_checkin_required: true,
             min_checkins_per_week: 5,
@@ -161,8 +159,6 @@ export default function FitCircleCreator() {
         startDate: '',
         endDate: '',
         maxParticipants: '',
-        entryFee: '0',
-        prizePool: '0',
       });
 
       // Refresh FitCircles list
@@ -394,41 +390,15 @@ export default function FitCircleCreator() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-3 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="maxParticipants">Max Participants</Label>
-                  <Input
-                    id="maxParticipants"
-                    type="number"
-                    placeholder="No limit"
-                    value={formData.maxParticipants}
-                    onChange={(e) => setFormData({ ...formData, maxParticipants: e.target.value })}
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="entryFee">Entry Fee ($)</Label>
-                  <Input
-                    id="entryFee"
-                    type="number"
-                    step="0.01"
-                    placeholder="0"
-                    value={formData.entryFee}
-                    onChange={(e) => setFormData({ ...formData, entryFee: e.target.value })}
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="prizePool">Prize Pool ($)</Label>
-                  <Input
-                    id="prizePool"
-                    type="number"
-                    step="0.01"
-                    placeholder="0"
-                    value={formData.prizePool}
-                    onChange={(e) => setFormData({ ...formData, prizePool: e.target.value })}
-                  />
-                </div>
+              <div className="space-y-2">
+                <Label htmlFor="maxParticipants">Max Participants (Optional)</Label>
+                <Input
+                  id="maxParticipants"
+                  type="number"
+                  placeholder="No limit"
+                  value={formData.maxParticipants}
+                  onChange={(e) => setFormData({ ...formData, maxParticipants: e.target.value })}
+                />
               </div>
             </div>
 
@@ -562,10 +532,6 @@ export default function FitCircleCreator() {
                   <span className="flex items-center gap-1">
                     <Calendar className="h-3 w-3" />
                     Starts Jan 1
-                  </span>
-                  <span className="flex items-center gap-1">
-                    <Trophy className="h-3 w-3" />
-                    $100 prize
                   </span>
                 </div>
               </div>

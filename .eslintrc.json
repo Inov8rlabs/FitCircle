@@ -9,8 +9,7 @@
   "plugins": [
     "@typescript-eslint",
     "import",
-    "unused-imports",
-    "prettier"
+    "unused-imports"
   ],
   "extends": [
     "eslint:recommended",
@@ -19,7 +18,6 @@
     "plugin:import/errors",
     "plugin:import/warnings",
     "plugin:import/typescript",
-    "plugin:prettier/recommended",
     "next/core-web-vitals"
   ],
   "rules": {
@@ -64,8 +62,7 @@
         }
       }
     ],
-    "no-console": ["warn", { "allow": ["warn", "error"] }],
-    "prettier/prettier": "error"
+    "no-console": ["warn", { "allow": ["warn", "error"] }]
   },
   "settings": {
     "import/resolver": {

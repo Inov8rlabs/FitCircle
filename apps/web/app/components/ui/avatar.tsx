@@ -110,3 +110,29 @@ export function AvatarGroup({ avatars, max = 3, size = 'md', className }: Avatar
     </div>
   );
 }
+
+// Radix UI style exports for compatibility
+export const AvatarImage = ({ src, alt, className }: { src?: string; alt?: string; className?: string }) => {
+  const [error, setError] = React.useState(false);
+
+  if (!src || error) return null;
+
+  return (
+    <Image
+      src={src}
+      alt={alt || 'Avatar'}
+      fill
+      className={cn('object-cover', className)}
+      onError={() => setError(true)}
+      sizes="100px"
+    />
+  );
+};
+
+export const AvatarFallback = ({ children, className }: { children: React.ReactNode; className?: string }) => {
+  return (
+    <span className={cn('font-semibold text-muted-foreground flex items-center justify-center w-full h-full', className)}>
+      {children}
+    </span>
+  );
+};

@@ -22,7 +22,7 @@ import { useAuthStore } from '@/stores/auth-store';
 
 const navigation = [
   { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
-  { name: 'FitCircles', href: '/circles', icon: Users },
+  { name: 'FitCircles', href: '/fitcircles', icon: Users },
 ];
 
 export default function DashboardNav() {

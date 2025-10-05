@@ -43,7 +43,6 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from 'recharts';
-import FitCircleCreator from '@/components/FitCircleCreator';
 import DashboardNav from '@/components/DashboardNav';
 import { GoalProgressIndicator } from '@/components/GoalProgressIndicator';
 import { StepsGoalCard } from '@/components/StepsGoalCard';
@@ -464,14 +463,13 @@ export default function DashboardPage() {
 
         {/* Main Content Tabs */}
         <Tabs defaultValue="checkin" className="space-y-6">
-          <TabsList className="w-full sm:w-auto grid grid-cols-2 sm:grid-cols-4 gap-2 bg-slate-900/50 border border-slate-800">
+          <TabsList className="w-full sm:w-auto grid grid-cols-2 sm:grid-cols-3 gap-2 bg-slate-900/50 border border-slate-800">
             <TabsTrigger value="checkin" className="text-sm data-[state=active]:bg-indigo-500/20 data-[state=active]:text-indigo-400">
               <Plus className="h-4 w-4 mr-2" />
               Check-in
             </TabsTrigger>
             <TabsTrigger value="weight" className="text-sm data-[state=active]:bg-purple-500/20 data-[state=active]:text-purple-400">Weight</TabsTrigger>
             <TabsTrigger value="steps" className="text-sm data-[state=active]:bg-indigo-500/20 data-[state=active]:text-indigo-400">Steps</TabsTrigger>
-            <TabsTrigger value="fitcircles" className="text-sm data-[state=active]:bg-orange-500/20 data-[state=active]:text-orange-400">Circles</TabsTrigger>
           </TabsList>
 
           {/* Daily Check-in Tab */}
@@ -764,11 +762,6 @@ export default function DashboardPage() {
                 )}
               </CardContent>
             </Card>
-          </TabsContent>
-
-          {/* FitCircles Tab */}
-          <TabsContent value="fitcircles">
-            <FitCircleCreator />
           </TabsContent>
         </Tabs>
         </div>
