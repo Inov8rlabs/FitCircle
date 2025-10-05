@@ -252,7 +252,7 @@ export default function CircleCreationWizard({ isOpen, onClose, onSuccess }: Cir
 
       let { data, error } = await supabase
         .from('challenges')
-        .insert(challengeData)
+        .insert(challengeData as any)
         .select()
         .single();
 
@@ -264,7 +264,7 @@ export default function CircleCreationWizard({ isOpen, onClose, onSuccess }: Cir
 
         const retry = await supabase
           .from('challenges')
-          .insert(challengeData)
+          .insert(challengeData as any)
           .select()
           .single();
 
@@ -296,7 +296,7 @@ export default function CircleCreationWizard({ isOpen, onClose, onSuccess }: Cir
           challenge_id: data.id,
           user_id: user.id,
           status: 'active',
-        });
+        } as any);
 
       if (joinError) {
         console.error('Error joining circle:', {
