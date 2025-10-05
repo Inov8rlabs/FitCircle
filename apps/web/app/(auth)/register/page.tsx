@@ -54,10 +54,13 @@ export default function RegisterPage() {
   const {
     register,
     handleSubmit,
+    watch,
     formState: { errors, isSubmitting },
   } = useForm<RegisterFormData>({
     resolver: zodResolver(registerSchema),
   });
+
+  const password = watch('password', '');
 
   const onSubmit = async (data: RegisterFormData) => {
     try {
@@ -216,8 +219,8 @@ export default function RegisterPage() {
                 {/* Password requirements */}
                 <div className="mt-2 space-y-1">
                   <div className="flex items-center text-xs">
-                    <Check className={`w-3 h-3 mr-2 ${register('password')?.value?.length >= 8 ? 'text-green-400' : 'text-gray-500'}`} />
-                    <span className={register('password')?.value?.length >= 8 ? 'text-green-400' : 'text-gray-500'}>
+                    <Check className={`w-3 h-3 mr-2 ${password?.length >= 8 ? 'text-green-400' : 'text-gray-500'}`} />
+                    <span className={password?.length >= 8 ? 'text-green-400' : 'text-gray-500'}>
                       At least 8 characters
                     </span>
                   </div>
