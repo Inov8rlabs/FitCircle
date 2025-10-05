@@ -223,7 +223,7 @@ export default function CircleCreationWizard({ isOpen, onClose, onSuccess }: Cir
         description: formData.description || null,
         type: formData.type,
         status: 'upcoming' as const,
-        visibility: (formData.isPrivate ? 'invite_only' : 'public') as const,
+        visibility: formData.isPrivate ? ('invite_only' as const) : ('public' as const),
         start_date: formData.startDate,
         end_date: formData.endDate,
         registration_deadline: registrationDeadline.toISOString(),
