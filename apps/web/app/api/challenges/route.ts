@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
 import { cookies } from 'next/headers';
-import { DatabaseService, DatabaseError } from '@fitcircle/database/client';
 import { z } from 'zod';
 
 // Validation schemas
