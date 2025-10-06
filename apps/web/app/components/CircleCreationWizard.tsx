@@ -30,6 +30,10 @@ import {
   X,
   UserPlus,
   Copy,
+  Search,
+  Share2,
+  Sparkles,
+  QrCode,
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/stores/auth-store';
@@ -53,6 +57,9 @@ interface FormData {
   isPrivate: boolean;
   autoAccept: boolean;
   inviteEmails: string[];
+  leaderboardFrequency: 'realtime' | 'daily' | 'weekly';
+  leaderboardDay: number;
+  leaderboardTime: string;
 }
 
 export default function CircleCreationWizard({ isOpen, onClose, onSuccess }: CircleCreationWizardProps) {
@@ -62,6 +69,10 @@ export default function CircleCreationWizard({ isOpen, onClose, onSuccess }: Cir
   const [emailInput, setEmailInput] = useState('');
   const [createdCircleId, setCreatedCircleId] = useState<string | null>(null);
   const [inviteLink, setInviteLink] = useState('');
+  const [participantSearch, setParticipantSearch] = useState('');
+  const [searchResults, setSearchResults] = useState<any[]>([]);
+  const [selectedParticipants, setSelectedParticipants] = useState<any[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
   const [formData, setFormData] = useState<FormData>({
     name: '',
     description: '',
@@ -72,6 +83,9 @@ export default function CircleCreationWizard({ isOpen, onClose, onSuccess }: Cir
     isPrivate: true,
     autoAccept: true,
     inviteEmails: [],
+    leaderboardFrequency: 'realtime',
+    leaderboardDay: 1, // Monday
+    leaderboardTime: '08:00',
   });
 
   const challengeTypes = [
@@ -231,6 +245,9 @@ export default function CircleCreationWizard({ isOpen, onClose, onSuccess }: Cir
         invite_code: inviteCode,
         entry_fee: 0,
         prize_pool: 0,
+        leaderboard_update_frequency: formData.leaderboardFrequency,
+        leaderboard_update_day: formData.leaderboardFrequency === 'weekly' ? formData.leaderboardDay : null,
+        leaderboard_update_time: formData.leaderboardFrequency === 'weekly' ? formData.leaderboardTime : null,
         rules: {
           daily_checkin_required: false,
           min_checkins_per_week: 0,
@@ -357,15 +374,16 @@ export default function CircleCreationWizard({ isOpen, onClose, onSuccess }: Cir
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-2xl bg-slate-900/95 border-slate-800 backdrop-blur-xl">
-        <DialogHeader>
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto bg-slate-900/95 border-slate-800 backdrop-blur-xl">
+        <DialogHeader className="sticky top-0 z-10 bg-slate-900/95 pb-4 backdrop-blur-xl">
           <DialogTitle className="text-xl font-bold bg-gradient-to-r from-orange-400 to-purple-400 bg-clip-text text-transparent">
             Create Your FitCircle
           </DialogTitle>
         </DialogHeader>
 
-        {/* Progress Indicator */}
-        <div className="flex items-center justify-between mb-6">
+        <div className="overflow-y-auto">
+          {/* Progress Indicator */}
+          <div className="flex items-center justify-between mb-6">
           {[1, 2, 3, 4].map((step) => (
             <div key={step} className="flex items-center flex-1">
               <div className="relative">
@@ -614,6 +632,7 @@ export default function CircleCreationWizard({ isOpen, onClose, onSuccess }: Cir
                       checked={formData.isPrivate}
                       onChange={(e) => setFormData({ ...formData, isPrivate: e.target.checked })}
                       className="h-6 w-11 rounded-full cursor-pointer"
+                      aria-label="Toggle privacy mode"
                     />
                   </div>
 
@@ -651,7 +670,99 @@ export default function CircleCreationWizard({ isOpen, onClose, onSuccess }: Cir
                       checked={formData.autoAccept}
                       onChange={(e) => setFormData({ ...formData, autoAccept: e.target.checked })}
                       className="h-6 w-11 rounded-full cursor-pointer"
+                      aria-label="Toggle auto-accept invites"
                     />
+                  </div>
+
+                  {/* Leaderboard Update Frequency */}
+                  <div className="space-y-3">
+                    <Label className="text-white">Leaderboard Update Frequency</Label>
+                    <p className="text-xs text-gray-400">
+                      When should the leaderboard update with new tracking data?
+                    </p>
+                    <div className="grid grid-cols-3 gap-3">
+                      <button
+                        type="button"
+                        onClick={() => setFormData({ ...formData, leaderboardFrequency: 'realtime' })}
+                        className={`p-3 rounded-lg border transition-all ${
+                          formData.leaderboardFrequency === 'realtime'
+                            ? 'bg-orange-500/20 border-orange-500 text-white'
+                            : 'bg-slate-800/50 border-slate-700 text-gray-400 hover:bg-slate-800'
+                        }`}
+                      >
+                        <Activity className="h-5 w-5 mx-auto mb-1" />
+                        <p className="text-sm font-medium">Realtime</p>
+                        <p className="text-xs opacity-75">Instant updates</p>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setFormData({ ...formData, leaderboardFrequency: 'daily' })}
+                        className={`p-3 rounded-lg border transition-all ${
+                          formData.leaderboardFrequency === 'daily'
+                            ? 'bg-orange-500/20 border-orange-500 text-white'
+                            : 'bg-slate-800/50 border-slate-700 text-gray-400 hover:bg-slate-800'
+                        }`}
+                      >
+                        <Calendar className="h-5 w-5 mx-auto mb-1" />
+                        <p className="text-sm font-medium">Daily</p>
+                        <p className="text-xs opacity-75">Once per day</p>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setFormData({ ...formData, leaderboardFrequency: 'weekly' })}
+                        className={`p-3 rounded-lg border transition-all ${
+                          formData.leaderboardFrequency === 'weekly'
+                            ? 'bg-orange-500/20 border-orange-500 text-white'
+                            : 'bg-slate-800/50 border-slate-700 text-gray-400 hover:bg-slate-800'
+                        }`}
+                      >
+                        <Clock className="h-5 w-5 mx-auto mb-1" />
+                        <p className="text-sm font-medium">Weekly</p>
+                        <p className="text-xs opacity-75">Once per week</p>
+                      </button>
+                    </div>
+
+                    {/* Weekly schedule settings */}
+                    {formData.leaderboardFrequency === 'weekly' && (
+                      <div className="grid grid-cols-2 gap-3 mt-3">
+                        <div className="space-y-2">
+                          <Label className="text-white text-xs">Update Day</Label>
+                          <select
+                            value={formData.leaderboardDay}
+                            onChange={(e) => setFormData({ ...formData, leaderboardDay: parseInt(e.target.value) })}
+                            className="w-full p-2 bg-slate-800/50 border-slate-700 rounded-lg text-white text-sm"
+                          >
+                            <option value={0}>Sunday</option>
+                            <option value={1}>Monday</option>
+                            <option value={2}>Tuesday</option>
+                            <option value={3}>Wednesday</option>
+                            <option value={4}>Thursday</option>
+                            <option value={5}>Friday</option>
+                            <option value={6}>Saturday</option>
+                          </select>
+                        </div>
+                        <div className="space-y-2">
+                          <Label className="text-white text-xs">Update Time (ET)</Label>
+                          <input
+                            type="time"
+                            value={formData.leaderboardTime}
+                            onChange={(e) => setFormData({ ...formData, leaderboardTime: e.target.value })}
+                            className="w-full p-2 bg-slate-800/50 border-slate-700 rounded-lg text-white text-sm"
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="bg-slate-800/50 rounded-lg p-3 mt-2">
+                      <p className="text-xs text-gray-400">
+                        {formData.leaderboardFrequency === 'realtime' &&
+                          'Leaderboard updates instantly when you track your daily progress.'}
+                        {formData.leaderboardFrequency === 'daily' &&
+                          'Leaderboard updates once per day with your latest tracking data.'}
+                        {formData.leaderboardFrequency === 'weekly' &&
+                          `Leaderboard updates weekly on ${['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][formData.leaderboardDay]} at ${formData.leaderboardTime} ET. Your last entry in the 12-hour window before update time will be used.`}
+                      </p>
+                    </div>
                   </div>
                 </div>
 
@@ -701,49 +812,119 @@ export default function CircleCreationWizard({ isOpen, onClose, onSuccess }: Cir
                   </p>
                 </div>
 
-                {/* Invite Code - Hero Section */}
+                {/* Invite Code - Hero Section with Animation */}
                 <motion.div
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: 0.2 }}
-                  className="bg-gradient-to-br from-orange-500/20 via-purple-500/20 to-cyan-500/20 rounded-2xl p-6 border border-orange-500/30 backdrop-blur-xl"
+                  className="relative bg-gradient-to-br from-orange-500/20 via-purple-500/20 to-cyan-500/20 rounded-2xl p-6 border border-orange-500/30 backdrop-blur-xl overflow-hidden"
                 >
-                  <div className="text-center space-y-4">
+                  {/* Animated background particles */}
+                  <div className="absolute inset-0 pointer-events-none">
+                    <motion.div
+                      className="absolute top-10 left-10 w-2 h-2 bg-orange-400 rounded-full opacity-50"
+                      animate={{
+                        y: [-20, 20, -20],
+                        x: [-10, 10, -10],
+                      }}
+                      transition={{
+                        duration: 4,
+                        repeat: Infinity,
+                        ease: "easeInOut",
+                      }}
+                    />
+                    <motion.div
+                      className="absolute bottom-10 right-10 w-3 h-3 bg-purple-400 rounded-full opacity-50"
+                      animate={{
+                        y: [20, -20, 20],
+                        x: [10, -10, 10],
+                      }}
+                      transition={{
+                        duration: 5,
+                        repeat: Infinity,
+                        ease: "easeInOut",
+                      }}
+                    />
+                    <motion.div
+                      className="absolute top-20 right-20 w-1.5 h-1.5 bg-cyan-400 rounded-full opacity-50"
+                      animate={{
+                        y: [-15, 15, -15],
+                        x: [15, -15, 15],
+                      }}
+                      transition={{
+                        duration: 3.5,
+                        repeat: Infinity,
+                        ease: "easeInOut",
+                      }}
+                    />
+                  </div>
+                  
+                  <div className="relative text-center space-y-4">
                     <div>
-                      <p className="text-sm text-gray-300 mb-2">Your FitCircle Code</p>
+                      <div className="flex items-center justify-center gap-2 mb-3">
+                        <Sparkles className="h-5 w-5 text-yellow-400 animate-pulse" />
+                        <p className="text-sm text-gray-300 font-medium">Your Unique FitCircle Code</p>
+                        <Sparkles className="h-5 w-5 text-yellow-400 animate-pulse" />
+                      </div>
                       <div className="relative inline-block">
-                        <div className="absolute inset-0 bg-gradient-to-r from-orange-400 to-purple-400 blur-xl opacity-50" />
-                        <div className="relative bg-slate-900/90 px-8 py-4 rounded-xl border-2 border-orange-500/50">
-                          <p className="text-4xl font-bold bg-gradient-to-r from-orange-400 via-purple-400 to-cyan-400 bg-clip-text text-transparent tracking-wider font-mono">
+                        <div className="absolute inset-0 bg-gradient-to-r from-orange-400 to-purple-400 blur-xl opacity-50 animate-pulse" />
+                        <motion.div
+                          className="relative bg-slate-900/90 px-8 py-4 rounded-xl border-2 border-orange-500/50"
+                          whileHover={{ scale: 1.02 }}
+                          whileTap={{ scale: 0.98 }}
+                        >
+                          <p className="text-4xl font-bold bg-gradient-to-r from-orange-400 via-purple-400 to-cyan-400 bg-clip-text text-transparent tracking-wider font-mono select-all">
                             {inviteLink}
                           </p>
-                        </div>
+                        </motion.div>
                       </div>
                     </div>
 
-                    <div className="flex gap-3 justify-center">
-                      <Button
-                        onClick={copyInviteCode}
-                        className="bg-gradient-to-r from-orange-600 to-purple-600 hover:from-orange-700 hover:to-purple-700 shadow-lg hover:shadow-orange-500/50"
-                      >
-                        <Copy className="h-4 w-4 mr-2" />
-                        Copy Code
-                      </Button>
-                      <Button
-                        onClick={copyInviteURL}
-                        variant="outline"
-                        className="border-slate-700 hover:bg-slate-800"
-                      >
-                        <Copy className="h-4 w-4 mr-2" />
-                        Copy Link
-                      </Button>
+                    <div className="flex gap-3 justify-center flex-wrap">
+                      <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+                        <Button
+                          onClick={copyInviteCode}
+                          className="bg-gradient-to-r from-orange-600 to-purple-600 hover:from-orange-700 hover:to-purple-700 shadow-lg hover:shadow-orange-500/50"
+                        >
+                          <Copy className="h-4 w-4 mr-2" />
+                          Copy Code
+                        </Button>
+                      </motion.div>
+                      <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+                        <Button
+                          onClick={copyInviteURL}
+                          variant="outline"
+                          className="border-slate-700 hover:bg-slate-800 hover:border-purple-500/50"
+                        >
+                          <Share2 className="h-4 w-4 mr-2" />
+                          Share Link
+                        </Button>
+                      </motion.div>
+                      <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+                        <Button
+                          onClick={() => {
+                            // Generate QR code (future feature)
+                            toast.info('QR Code feature coming soon!');
+                          }}
+                          variant="outline"
+                          className="border-slate-700 hover:bg-slate-800 hover:border-cyan-500/50"
+                        >
+                          <QrCode className="h-4 w-4 mr-2" />
+                          QR Code
+                        </Button>
+                      </motion.div>
                     </div>
 
-                    <div className="bg-slate-800/50 rounded-lg p-3">
+                    <motion.div
+                      className="bg-slate-800/50 rounded-lg p-3"
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      transition={{ delay: 0.5 }}
+                    >
                       <p className="text-xs text-gray-400">
-                        Friends can join by entering <span className="text-orange-400 font-semibold">{inviteLink}</span> in the "Join FitCircle" section
+                        Friends can join instantly by entering <span className="text-orange-400 font-semibold">{inviteLink}</span> or clicking your share link
                       </p>
-                    </div>
+                    </motion.div>
                   </div>
                 </motion.div>
 
@@ -825,6 +1006,7 @@ export default function CircleCreationWizard({ isOpen, onClose, onSuccess }: Cir
             onClick={currentStep === 1 ? onClose : handleBack}
             className="border-slate-700 hover:bg-slate-800"
             disabled={currentStep === 4} // Can't go back from invite step
+            aria-label={currentStep === 1 ? 'Cancel' : 'Go back'}
           >
             <ChevronLeft className="h-4 w-4 mr-2" />
             {currentStep === 1 ? 'Cancel' : 'Back'}
@@ -866,6 +1048,7 @@ export default function CircleCreationWizard({ isOpen, onClose, onSuccess }: Cir
               {formData.inviteEmails.length > 0 ? 'Send Invites & Finish' : 'Finish'}
             </Button>
           )}
+        </div>
         </div>
       </DialogContent>
     </Dialog>

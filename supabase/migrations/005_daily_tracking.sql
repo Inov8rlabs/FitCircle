@@ -13,31 +13,46 @@ CREATE TABLE IF NOT EXISTS daily_tracking (
     UNIQUE(user_id, tracking_date)
 );
 
--- Create index for faster queries
-CREATE INDEX idx_daily_tracking_user_date ON daily_tracking(user_id, tracking_date DESC);
+-- Create index for faster queries (only if it doesn't exist)
+CREATE INDEX IF NOT EXISTS idx_daily_tracking_user_date ON daily_tracking(user_id, tracking_date DESC);
 
 -- Enable RLS
 ALTER TABLE daily_tracking ENABLE ROW LEVEL SECURITY;
 
--- RLS Policies for daily_tracking
-CREATE POLICY "Users can view own tracking"
-  ON daily_tracking FOR SELECT
-  USING (auth.uid() = user_id);
+-- RLS Policies for daily_tracking (only if they don't exist)
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'daily_tracking' AND policyname = 'Users can view own tracking') THEN
+        CREATE POLICY "Users can view own tracking"
+          ON daily_tracking FOR SELECT
+          USING (auth.uid() = user_id);
+    END IF;
 
-CREATE POLICY "Users can insert own tracking"
-  ON daily_tracking FOR INSERT
-  WITH CHECK (auth.uid() = user_id);
+    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'daily_tracking' AND policyname = 'Users can insert own tracking') THEN
+        CREATE POLICY "Users can insert own tracking"
+          ON daily_tracking FOR INSERT
+          WITH CHECK (auth.uid() = user_id);
+    END IF;
+END $$;
 
-CREATE POLICY "Users can update own tracking"
-  ON daily_tracking FOR UPDATE
-  USING (auth.uid() = user_id)
-  WITH CHECK (auth.uid() = user_id);
+-- More RLS Policies for daily_tracking (only if they don't exist)
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'daily_tracking' AND policyname = 'Users can update own tracking') THEN
+        CREATE POLICY "Users can update own tracking"
+          ON daily_tracking FOR UPDATE
+          USING (auth.uid() = user_id)
+          WITH CHECK (auth.uid() = user_id);
+    END IF;
 
-CREATE POLICY "Users can delete own tracking"
-  ON daily_tracking FOR DELETE
-  USING (auth.uid() = user_id);
+    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'daily_tracking' AND policyname = 'Users can delete own tracking') THEN
+        CREATE POLICY "Users can delete own tracking"
+          ON daily_tracking FOR DELETE
+          USING (auth.uid() = user_id);
+    END IF;
+END $$;
 
--- Function to update updated_at timestamp
+-- Function to update updated_at timestamp (only if it doesn't exist)
 CREATE OR REPLACE FUNCTION update_daily_tracking_updated_at()
 RETURNS TRIGGER AS $$
 BEGIN
@@ -46,6 +61,8 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+-- Drop trigger if exists and recreate
+DROP TRIGGER IF EXISTS daily_tracking_updated_at ON daily_tracking;
 CREATE TRIGGER daily_tracking_updated_at
     BEFORE UPDATE ON daily_tracking
     FOR EACH ROW

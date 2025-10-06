@@ -1,0 +1,745 @@
+'use client';
+
+import { useState, useEffect } from 'react';
+import { useParams, useRouter } from 'next/navigation';
+import DashboardNav from '@/components/DashboardNav';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Progress } from '@/components/ui/progress';
+import {
+  Trophy,
+  Users,
+  Calendar,
+  Target,
+  Crown,
+  Medal,
+  TrendingUp,
+  Clock,
+  ArrowLeft,
+  Settings,
+  UserPlus,
+  MoreHorizontal,
+  Activity,
+  AlertCircle,
+} from 'lucide-react';
+import { motion } from 'framer-motion';
+import { supabase } from '@/lib/supabase';
+import { useAuthStore } from '@/stores/auth-store';
+
+interface FitCircle {
+  id: string;
+  name: string;
+  description: string;
+  type: string;
+  start_date: string;
+  end_date: string;
+  creator_id: string;
+  invite_code: string;
+  visibility: string;
+  max_participants: number;
+  created_at: string;
+  participant_count: number;
+  is_creator: boolean;
+  is_participant: boolean;
+}
+
+interface Participant {
+  id: string;
+  user_id: string;
+  challenge_id: string;
+  status: string;
+  joined_at: string;
+  display_name: string;
+  avatar_url: string;
+  progress: number;
+  current_value?: number;
+  target_value?: number;
+  is_public?: boolean;
+  entries?: ProgressEntry[];
+}
+
+interface ProgressEntry {
+  id: string;
+  user_id: string;
+  challenge_id: string;
+  value: number;
+  date: string;
+  is_public: boolean;
+  created_at: string;
+}
+
+export default function FitCirclePage() {
+  const params = useParams();
+  const router = useRouter();
+  const { user } = useAuthStore();
+  const [fitCircle, setFitCircle] = useState<FitCircle | null>(null);
+  const [participants, setParticipants] = useState<Participant[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [selectedParticipant, setSelectedParticipant] = useState<Participant | null>(null);
+  const [showDetailModal, setShowDetailModal] = useState(false);
+
+  const circleId = params.id as string;
+
+  useEffect(() => {
+    if (circleId && user) {
+      fetchFitCircle();
+      fetchParticipants();
+    }
+  }, [circleId, user]);
+
+  const fetchFitCircle = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('challenges')
+        .select('*')
+        .eq('id', circleId)
+        .single();
+
+      if (error) {
+        setError('FitCircle not found');
+        return;
+      }
+
+      if (data) {
+        setFitCircle({
+          ...data,
+          participant_count: 0, // Will be updated by participants fetch
+          is_creator: data.creator_id === user?.id,
+          is_participant: false, // Will be determined from participants
+        });
+      }
+    } catch (err) {
+      console.error('Error fetching FitCircle:', err);
+      setError('Failed to load FitCircle');
+    }
+  };
+
+  const fetchParticipants = async () => {
+    try {
+      console.log('Fetching leaderboard for challenge:', circleId);
+
+      // Use new leaderboard API that pulls from daily_tracking
+      const response = await fetch(`/api/fitcircles/${circleId}/leaderboard`);
+
+      if (response.ok) {
+        const data = await response.json();
+        console.log('Leaderboard data received:', data.leaderboard?.length || 0);
+
+        const leaderboardData = data.leaderboard || [];
+
+        // Transform leaderboard data to participant format
+        const participantsList = leaderboardData.map((entry: any) => ({
+          id: entry.user_id,
+          user_id: entry.user_id,
+          display_name: entry.display_name,
+          avatar_url: entry.avatar_url,
+          progress: Math.round(entry.progress_percentage),
+          current_value: entry.current_value,
+          target_value: entry.target_value,
+          total_entries: entry.total_entries,
+          is_creator: entry.is_creator,
+          is_current_user: entry.is_current_user,
+          is_public: true, // daily_tracking visibility will be handled separately
+        }));
+
+        setParticipants(participantsList);
+
+        // Check if current user is a participant
+        const userIsParticipant = participantsList.some((p: any) => p.is_current_user);
+        console.log('User is participant (from leaderboard):', userIsParticipant);
+
+        // Update fitCircle state with participant info
+        setFitCircle(prev => prev ? {
+          ...prev,
+          participant_count: participantsList.length,
+          is_participant: userIsParticipant,
+        } : null);
+
+        setLoading(false);
+        return;
+      }
+
+      console.error('Leaderboard API failed:', response.status, response.statusText);
+      const errorData = await response.json().catch(() => ({}));
+      console.error('Error response:', errorData);
+
+      // Fallback: Try direct query approach
+      console.log('Trying fallback direct query...');
+      await fetchParticipantsFallback();
+
+    } catch (err) {
+      console.error('Error fetching participants:', err);
+      // Fallback to empty participants list
+      setParticipants([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchParticipantsFallback = async () => {
+    try {
+      // Fallback: Fetch participants directly without progress data
+      const { data: participantsData, error: participantsError } = await supabase
+        .from('challenge_participants')
+        .select(`
+          id,
+          user_id,
+          challenge_id,
+          status,
+          joined_at,
+          profiles!challenge_participants_user_id_fkey (
+            display_name,
+            avatar_url
+          )
+        `)
+        .eq('challenge_id', circleId)
+        .eq('status', 'active');
+
+      if (participantsError) {
+        console.error('Fallback query also failed:', participantsError);
+        setParticipants([]);
+        return;
+      }
+
+      if (participantsData) {
+        // Create basic participant objects without progress data
+        const basicParticipants = participantsData.map((participant: any) => {
+          const isCurrentUser = participant.user_id === user?.id;
+          return {
+            ...participant,
+            display_name: participant.profiles?.display_name || participant.profiles?.[0]?.display_name || 'Unknown User',
+            avatar_url: participant.profiles?.avatar_url || participant.profiles?.[0]?.avatar_url || '',
+            latest_value: 0,
+            latest_date: new Date().toISOString().split('T')[0],
+            total_entries: 0,
+            is_public: false,
+            is_creator: participant.user_id === fitCircle?.creator_id,
+            is_current_user: isCurrentUser,
+            progress: 0,
+            current_value: 0,
+            target_value: 100,
+            progress_percentage: 0,
+            entries: []
+          };
+        });
+
+        console.log('Participants loaded:', basicParticipants);
+        console.log('Current user is participant:', basicParticipants.some((p: any) => p.is_current_user));
+
+        setParticipants(basicParticipants);
+
+        // Update is_participant flag in fitCircle
+        const userIsParticipant = basicParticipants.some((p: any) => p.is_current_user);
+
+        setFitCircle(prev => prev ? {
+          ...prev,
+          participant_count: basicParticipants.length,
+          is_participant: userIsParticipant,
+        } : null);
+      }
+    } catch (err) {
+      console.error('Error in fallback fetch:', err);
+      setParticipants([]);
+    }
+  };
+
+  const handleParticipantClick = (participant: Participant) => {
+    // Only allow viewing details if:
+    // 1. It's the user's own profile, OR
+    // 2. The participant has made their data public
+    if (participant.user_id === user?.id || participant.is_public) {
+      setSelectedParticipant(participant);
+      setShowDetailModal(true);
+    }
+  };
+
+  if (loading) {
+    return (
+      <>
+        <DashboardNav />
+        <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 flex items-center justify-center">
+          <div className="text-center">
+            <div className="animate-spin w-8 h-8 border-4 border-orange-500 border-t-transparent rounded-full mx-auto mb-4"></div>
+            <p className="text-gray-400">Loading FitCircle...</p>
+          </div>
+        </div>
+      </>
+    );
+  }
+
+  if (error || !fitCircle) {
+    return (
+      <>
+        <DashboardNav />
+        <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 flex items-center justify-center">
+          <Card className="bg-red-900/20 border-red-800/50 backdrop-blur-xl">
+            <CardContent className="p-8 text-center">
+              <div className="text-red-400 mb-4">
+                <AlertCircle className="h-12 w-12 mx-auto" />
+              </div>
+              <h2 className="text-xl font-semibold text-red-400 mb-2">FitCircle Not Found</h2>
+              <p className="text-gray-400 mb-4">{error || 'The FitCircle you\'re looking for doesn\'t exist.'}</p>
+              <Button
+                onClick={() => router.push('/fitcircles')}
+                variant="outline"
+                className="border-orange-500/50 text-orange-400 hover:bg-orange-500/10"
+              >
+                <ArrowLeft className="h-4 w-4 mr-2" />
+                Back to FitCircles
+              </Button>
+            </CardContent>
+          </Card>
+        </div>
+      </>
+    );
+  }
+
+  const getRankIcon = (rank: number) => {
+    switch (rank) {
+      case 1:
+        return <Crown className="h-5 w-5 text-yellow-500" />;
+      case 2:
+        return <Medal className="h-5 w-5 text-gray-400" />;
+      case 3:
+        return <Medal className="h-5 w-5 text-orange-600" />;
+      default:
+        return <span className="text-lg font-bold text-gray-500">#{rank}</span>;
+    }
+  };
+
+  const getProgressColor = (progress: number) => {
+    if (progress >= 80) return 'from-green-500 to-green-600';
+    if (progress >= 60) return 'from-orange-500 to-orange-600';
+    if (progress >= 40) return 'from-yellow-500 to-yellow-600';
+    return 'from-red-500 to-red-600';
+  };
+
+  const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+    });
+  };
+
+  const getDaysRemaining = (endDate: string) => {
+    const now = new Date();
+    const end = new Date(endDate);
+    const diffTime = end.getTime() - now.getTime();
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    return diffDays > 0 ? diffDays : 0;
+  };
+
+  return (
+    <>
+      <DashboardNav />
+      <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950">
+        {/* Subtle background decorations */}
+        <div className="fixed inset-0 overflow-hidden pointer-events-none">
+          <div className="absolute top-20 left-10 w-96 h-96 bg-indigo-500/5 rounded-full blur-3xl" />
+          <div className="absolute top-40 right-20 w-[500px] h-[500px] bg-purple-500/5 rounded-full blur-3xl" />
+          <div className="absolute bottom-20 left-1/3 w-[400px] h-[400px] bg-orange-500/5 rounded-full blur-3xl" />
+        </div>
+
+        <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 lg:py-12">
+          {/* Header */}
+          <div className="mb-8">
+            <Button
+              onClick={() => router.push('/fitcircles')}
+              variant="ghost"
+              className="mb-4 text-gray-400 hover:text-white hover:bg-slate-800/50"
+            >
+              <ArrowLeft className="h-4 w-4 mr-2" />
+              Back to FitCircles
+            </Button>
+
+            <div className="flex items-center justify-between">
+              <div>
+                <h1 className="text-3xl sm:text-4xl lg:text-5xl font-bold bg-gradient-to-r from-indigo-300 via-fuchsia-400 to-orange-400 bg-clip-text text-transparent mb-2">
+                  {fitCircle.name}
+                </h1>
+                <p className="text-gray-400 text-sm sm:text-base max-w-2xl">
+                  {fitCircle.description}
+                </p>
+              </div>
+
+              {fitCircle.is_creator && (
+                <Button variant="outline" className="border-orange-500/50 text-orange-400 hover:bg-orange-500/10">
+                  <Settings className="h-4 w-4 mr-2" />
+                  Manage
+                </Button>
+              )}
+            </div>
+          </div>
+
+          {/* FitCircle Stats Cards */}
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.1 }}
+            >
+              <Card className="bg-slate-900/50 border-slate-800/50 backdrop-blur-xl">
+                <CardContent className="p-6">
+                  <div className="flex items-center space-x-4">
+                    <div className="p-3 bg-indigo-500/20 rounded-lg">
+                      <Users className="h-6 w-6 text-indigo-400" />
+                    </div>
+                    <div>
+                      <p className="text-sm text-gray-400">Participants</p>
+                      <p className="text-2xl font-bold text-white">
+                        {participants.length}/{fitCircle.max_participants || '∞'}
+                      </p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </motion.div>
+
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.2 }}
+            >
+              <Card className="bg-slate-900/50 border-slate-800/50 backdrop-blur-xl">
+                <CardContent className="p-6">
+                  <div className="flex items-center space-x-4">
+                    <div className="p-3 bg-orange-500/20 rounded-lg">
+                      <Calendar className="h-6 w-6 text-orange-400" />
+                    </div>
+                    <div>
+                      <p className="text-sm text-gray-400">Days Left</p>
+                      <p className="text-2xl font-bold text-white">
+                        {getDaysRemaining(fitCircle.end_date)}
+                      </p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </motion.div>
+
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.3 }}
+            >
+              <Card className="bg-slate-900/50 border-slate-800/50 backdrop-blur-xl">
+                <CardContent className="p-6">
+                  <div className="flex items-center space-x-4">
+                    <div className="p-3 bg-green-500/20 rounded-lg">
+                      <Trophy className="h-6 w-6 text-green-400" />
+                    </div>
+                    <div>
+                      <p className="text-sm text-gray-400">Challenge Type</p>
+                      <p className="text-lg font-semibold text-white capitalize">
+                        {fitCircle.type.replace('_', ' ')}
+                      </p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </motion.div>
+
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.4 }}
+            >
+              <Card className="bg-slate-900/50 border-slate-800/50 backdrop-blur-xl">
+                <CardContent className="p-6">
+                  <div className="flex items-center space-x-4">
+                    <div className="p-3 bg-purple-500/20 rounded-lg">
+                      <Target className="h-6 w-6 text-purple-400" />
+                    </div>
+                    <div>
+                      <p className="text-sm text-gray-400">Duration</p>
+                      <p className="text-lg font-semibold text-white">
+                        {formatDate(fitCircle.start_date)} - {formatDate(fitCircle.end_date)}
+                      </p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </motion.div>
+          </div>
+
+          {/* Leaderboard */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.5 }}
+          >
+            <Card className="bg-slate-900/50 border-slate-800/50 backdrop-blur-xl">
+              <CardHeader>
+                <CardTitle className="flex items-center space-x-3 text-xl">
+                  <Trophy className="h-6 w-6 text-yellow-500" />
+                  <span className="bg-gradient-to-r from-yellow-400 to-orange-400 bg-clip-text text-transparent">
+                    Leaderboard
+                  </span>
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {participants.length === 0 ? (
+                  <div className="text-center py-8">
+                    <Users className="h-12 w-12 text-gray-600 mx-auto mb-4" />
+                    <p className="text-gray-400">No participants yet</p>
+                    <p className="text-sm text-gray-500 mt-2">Be the first to join this challenge!</p>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {participants.map((participant, index) => {
+                      const rank = index + 1;
+                      return (
+                        <motion.div
+                          key={participant.id}
+                          initial={{ opacity: 0, x: -20 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          transition={{ delay: 0.1 * index }}
+                          className={`flex items-center space-x-4 p-4 rounded-lg border transition-all ${
+                            participant.user_id === user?.id || participant.is_public
+                              ? 'cursor-pointer hover:bg-slate-800/70'
+                              : 'cursor-not-allowed'
+                          } ${
+                            participant.user_id === user?.id
+                              ? 'bg-indigo-500/10 border-indigo-500/30'
+                              : participant.is_public
+                                ? 'bg-slate-800/50 border-slate-700/50 hover:border-orange-500/30'
+                                : 'bg-slate-800/30 border-slate-700/30 opacity-60'
+                          }`}
+                          onClick={() => handleParticipantClick(participant)}
+                        >
+                          <div className="flex items-center justify-center w-10 h-10 rounded-full bg-slate-800/50">
+                            {getRankIcon(rank)}
+                          </div>
+
+                          <div className="flex-1">
+                            <div className="flex items-center space-x-3">
+                              <div className="relative">
+                                <div className="w-8 h-8 rounded-full bg-gradient-to-r from-indigo-500 to-purple-600 flex items-center justify-center text-white font-semibold text-sm">
+                                  {participant.display_name.charAt(0).toUpperCase()}
+                                </div>
+                                {!participant.is_public && participant.user_id !== user?.id && (
+                                  <div className="absolute -top-1 -right-1 w-4 h-4 bg-gray-500 rounded-full flex items-center justify-center">
+                                    <Lock className="h-2 w-2 text-white" />
+                                  </div>
+                                )}
+                              </div>
+                              <div>
+                                <div className="font-semibold text-white flex items-center space-x-2">
+                                  <span>{participant.display_name}</span>
+                                  {participant.user_id === fitCircle.creator_id && (
+                                    <Crown className="h-4 w-4 text-yellow-500" />
+                                  )}
+                                  {participant.user_id === user?.id && (
+                                    <Badge variant="outline" className="text-xs border-indigo-500/50 text-indigo-400">
+                                      You
+                                    </Badge>
+                                  )}
+                                  {!participant.is_public && participant.user_id !== user?.id && (
+                                    <Badge variant="secondary" className="text-xs">
+                                      Private
+                                    </Badge>
+                                  )}
+                                </div>
+                                <p className="text-sm text-gray-400">
+                                  {participant.current_value || 0} / {participant.target_value || 100} completed
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center space-x-4">
+                            <div className="text-right">
+                              <p className="text-lg font-bold text-white">{participant.progress}%</p>
+                              <p className="text-sm text-gray-400">Progress</p>
+                            </div>
+                            <div className="w-32">
+                              <Progress
+                                value={participant.progress}
+                                className={`h-2 bg-slate-800`}
+                              />
+                            </div>
+                          </div>
+                        </motion.div>
+                      );
+                    })}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </motion.div>
+
+          {/* Action Buttons */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.6 }}
+            className="mt-8 flex justify-center space-x-4"
+          >
+            {fitCircle.is_participant && (
+              <Button
+                size="lg"
+                onClick={() => router.push(`/fitcircles/${circleId}/checkin`)}
+                className="bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800"
+              >
+                <TrendingUp className="h-5 w-5 mr-2" />
+                Submit Progress
+              </Button>
+            )}
+
+            {!fitCircle.is_participant && (
+              <Button
+                size="lg"
+                className="bg-gradient-to-r from-orange-600 to-orange-700 hover:from-orange-700 hover:to-orange-800"
+              >
+                <UserPlus className="h-5 w-5 mr-2" />
+                Join Challenge
+              </Button>
+            )}
+          </motion.div>
+        </div>
+
+        {/* Participant Detail Modal */}
+        {showDetailModal && selectedParticipant && (
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-hidden">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.9 }}
+              className="bg-slate-900/95 border border-slate-800 rounded-lg max-w-2xl w-full max-h-[90vh] flex flex-col"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Header - Sticky */}
+              <div className="flex-shrink-0 flex items-center justify-between mb-6 p-6 border-b border-slate-800">
+                <div className="flex items-center space-x-4">
+                  <div className="w-12 h-12 rounded-full bg-gradient-to-r from-indigo-500 to-purple-600 flex items-center justify-center text-white font-bold text-lg">
+                    {selectedParticipant.display_name.charAt(0).toUpperCase()}
+                  </div>
+                  <div>
+                    <h2 className="text-xl font-bold text-white flex items-center space-x-2">
+                      <span>{selectedParticipant.display_name}</span>
+                      {selectedParticipant.user_id === fitCircle?.creator_id && (
+                        <Crown className="h-5 w-5 text-yellow-500" />
+                      )}
+                      {selectedParticipant.user_id === user?.id && (
+                        <Badge variant="outline" className="text-xs border-indigo-500/50 text-indigo-400">
+                          You
+                        </Badge>
+                      )}
+                    </h2>
+                    <p className="text-gray-400 text-sm">
+                      {selectedParticipant.entries?.length || 0} entries • {selectedParticipant.progress}% progress
+                    </p>
+                  </div>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setShowDetailModal(false)}
+                  className="text-gray-400 hover:text-white"
+                >
+                  ✕
+                </Button>
+              </div>
+
+              {/* Scrollable Content */}
+              <div className="flex-1 overflow-y-auto p-6">
+
+              {/* Progress Overview */}
+              <div className="mb-6">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-sm text-gray-400">Current Progress</span>
+                  <span className="text-lg font-bold text-white">
+                    {selectedParticipant.current_value || 0} / {selectedParticipant.target_value || 100}
+                  </span>
+                </div>
+                <Progress value={selectedParticipant.progress} className="h-3 bg-slate-800" />
+              </div>
+
+              {/* Progress Chart/Entries */}
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-lg font-semibold text-white">Progress History</h3>
+                  <div className="flex items-center space-x-2 text-sm text-gray-400">
+                    <div className="flex items-center space-x-1">
+                      <div className="w-3 h-3 bg-green-500 rounded-full"></div>
+                      <span>Public</span>
+                    </div>
+                    <div className="flex items-center space-x-1">
+                      <div className="w-3 h-3 bg-gray-500 rounded-full"></div>
+                      <span>Private</span>
+                    </div>
+                  </div>
+                </div>
+
+                {selectedParticipant.entries && selectedParticipant.entries.length > 0 ? (
+                  <div className="space-y-3 max-h-96 overflow-y-auto">
+                    {selectedParticipant.entries.map((entry, entryIndex) => (
+                      <motion.div
+                        key={entry.id}
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: entryIndex * 0.05 }}
+                        className={`flex items-center justify-between p-3 rounded-lg border ${
+                          entry.is_public
+                            ? 'bg-slate-800/50 border-slate-700/50'
+                            : 'bg-slate-800/30 border-slate-700/30 opacity-75'
+                        }`}
+                      >
+                        <div className="flex items-center space-x-3">
+                          <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold ${
+                            entry.is_public
+                              ? 'bg-green-500/20 text-green-400'
+                              : 'bg-gray-500/20 text-gray-400'
+                          }`}>
+                            {entry.is_public ? '👁️' : '🔒'}
+                          </div>
+                          <div>
+                            <p className="font-semibold text-white">{entry.value}</p>
+                            <p className="text-sm text-gray-400">
+                              {new Date(entry.date).toLocaleDateString()}
+                              {entry.is_public ? ' • Public' : ' • Private'}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-sm text-gray-400">
+                            {Math.floor((entry.value / (selectedParticipant.target_value || 100)) * 100)}% of goal
+                          </p>
+                        </div>
+                      </motion.div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-8">
+                    <Activity className="h-12 w-12 text-gray-600 mx-auto mb-4" />
+                    <p className="text-gray-400">No progress entries yet</p>
+                  </div>
+                )}
+              </div>
+
+              {/* Privacy Notice */}
+              {selectedParticipant.user_id !== user?.id && (
+                <div className="mt-6 p-4 bg-slate-800/50 rounded-lg border border-slate-700/50">
+                  <div className="flex items-center space-x-2 text-sm text-gray-400">
+                    <Lock className="h-4 w-4" />
+                    <span>
+                      {selectedParticipant.is_public
+                        ? 'This participant has chosen to share their progress publicly.'
+                        : 'This participant has chosen to keep their progress private.'
+                      }
+                    </span>
+                  </div>
+                </div>
+              )}
+
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </div>
+    </>
+  );
+}
