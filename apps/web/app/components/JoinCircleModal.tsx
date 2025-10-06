@@ -72,7 +72,7 @@ export default function JoinCircleModal({ isOpen, onClose, onSuccess }: JoinCirc
 
     setIsSearching(true);
     try {
-      const { data, error } = await supabase
+      const { data, error } = (await supabase
         .from('challenges')
         .select(`
           id,
@@ -91,7 +91,7 @@ export default function JoinCircleModal({ isOpen, onClose, onSuccess }: JoinCirc
           )
         `)
         .eq('invite_code', code)
-        .single();
+        .single()) as { data: any; error: any };
 
       if (error) {
         if (error.code === 'PGRST116') {
@@ -108,7 +108,7 @@ export default function JoinCircleModal({ isOpen, onClose, onSuccess }: JoinCirc
         .from('challenge_participants')
         .select('id')
         .eq('challenge_id', data.id)
-        .eq('user_id', user?.id)
+        .eq('user_id', user?.id!)
         .single();
 
       if (existingMember) {
@@ -146,7 +146,7 @@ export default function JoinCircleModal({ isOpen, onClose, onSuccess }: JoinCirc
           challenge_id: circlePreview.id,
           user_id: user.id,
           status: 'active',
-        });
+        } as any);
 
       if (error) throw error;
 

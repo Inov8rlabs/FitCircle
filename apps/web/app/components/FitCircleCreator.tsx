@@ -116,7 +116,7 @@ export default function FitCircleCreator() {
       const registrationDeadline = new Date(startDate);
       registrationDeadline.setDate(registrationDeadline.getDate() - 1);
 
-      const { data, error } = await supabase
+      const { data, error } = (await supabase
         .from('challenges')
         .insert({
           creator_id: user.id,
@@ -141,9 +141,9 @@ export default function FitCircleCreator() {
             goal_achievement_points: 100,
             streak_bonus_points: 5,
           },
-        })
+        } as any)
         .select()
-        .single();
+        .single()) as { data: any; error: any };
 
       if (error) throw error;
 
@@ -237,7 +237,7 @@ export default function FitCircleCreator() {
           challenge_id: challengeId,
           user_id: user.id,
           status: 'active',
-        });
+        } as any);
 
       if (error) throw error;
 

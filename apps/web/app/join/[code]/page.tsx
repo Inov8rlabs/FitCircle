@@ -6,7 +6,7 @@ import { motion } from 'framer-motion';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { Avatar } from '@/components/ui/avatar';
 import {
   Users,
   Calendar,
@@ -96,19 +96,20 @@ export default function JoinCirclePage() {
         return;
       }
 
+      const circleInfo = circleData as any;
       const circle: CircleDetails = {
-        id: circleData.id,
-        name: circleData.name,
-        description: circleData.description || '',
-        type: circleData.type,
-        status: circleData.status,
-        start_date: circleData.start_date,
-        end_date: circleData.end_date,
-        participant_count: circleData.participant_count || 0,
-        max_participants: circleData.max_participants,
+        id: circleInfo.id,
+        name: circleInfo.name,
+        description: circleInfo.description || '',
+        type: circleInfo.type,
+        status: circleInfo.status,
+        start_date: circleInfo.start_date,
+        end_date: circleInfo.end_date,
+        participant_count: circleInfo.participant_count || 0,
+        max_participants: circleInfo.max_participants,
         creator: {
-          display_name: circleData.profiles?.display_name || 'Circle Creator',
-          avatar_url: circleData.profiles?.avatar_url,
+          display_name: circleInfo.profiles?.display_name || 'Circle Creator',
+          avatar_url: circleInfo.profiles?.avatar_url,
         },
       };
 
@@ -182,7 +183,7 @@ export default function JoinCirclePage() {
           target_value: goalData.target_value,
           current_value: goalData.current_value,
           progress_percentage: 0,
-        });
+        } as any);
 
       if (joinError) throw joinError;
 
@@ -196,7 +197,7 @@ export default function JoinCirclePage() {
           starting_value: goalData.current_value,
           goal_value: goalData.target_value,
           current_value: goalData.current_value,
-        });
+        } as any);
 
       if (participantError) throw participantError;
 
@@ -349,15 +350,12 @@ export default function JoinCirclePage() {
 
               {/* Creator Info */}
               <div className="flex items-center gap-3 mt-6 p-3 bg-slate-800/30 rounded-lg">
-                <Avatar className="h-10 w-10">
-                  {circleDetails.creator.avatar_url ? (
-                    <AvatarImage src={circleDetails.creator.avatar_url} />
-                  ) : (
-                    <AvatarFallback className="bg-gradient-to-br from-orange-500 to-purple-600 text-white">
-                      {circleDetails.creator.display_name[0].toUpperCase()}
-                    </AvatarFallback>
-                  )}
-                </Avatar>
+                <Avatar 
+                  src={circleDetails.creator.avatar_url}
+                  fallback={circleDetails.creator.display_name}
+                  size="md"
+                  className="h-10 w-10"
+                />
                 <div>
                   <p className="text-sm text-gray-400">Created by</p>
                   <p className="text-white font-medium">{circleDetails.creator.display_name}</p>

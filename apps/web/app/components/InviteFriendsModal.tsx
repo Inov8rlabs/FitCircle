@@ -97,7 +97,7 @@ export default function InviteFriendsModal({
   const shareViaEmail = () => {
     const subject = encodeURIComponent(`Join my FitCircle: ${circleName}`);
     const body = encodeURIComponent(
-      `Hi there,\n\nI'm starting a fitness challenge called "${circleName}".\n\nWhat makes FitCircle different:\n✓ Your actual weight/metrics stay private\n✓ We only share progress % toward goals\n✓ Daily check-ins and encouragement\n✓ No judgment, just support!\n\nClick here to join: ${inviteLink}\n\nLet's do this together!\n${user?.display_name || 'Your friend'}`
+      `Hi there,\n\nI'm starting a fitness challenge called "${circleName}".\n\nWhat makes FitCircle different:\n✓ Your actual weight/metrics stay private\n✓ We only share progress % toward goals\n✓ Daily check-ins and encouragement\n✓ No judgment, just support!\n\nClick here to join: ${inviteLink}\n\nLet's do this together!\nYour friend`
     );
     window.location.href = `mailto:?subject=${subject}&body=${body}`;
   };
@@ -138,7 +138,7 @@ export default function InviteFriendsModal({
             invite_method: 'email',
             recipient_email: email,
             invite_code: inviteCode,
-          }))
+          })) as any
         );
 
       if (error) throw error;

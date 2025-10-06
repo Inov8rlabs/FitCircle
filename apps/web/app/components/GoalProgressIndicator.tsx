@@ -9,7 +9,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 
 interface GoalProgressIndicatorProps {
-  currentWeight?: number;
+  currentWeight?: number | null;
   goalWeight?: number;
   startingWeight?: number;
   unit?: 'metric' | 'imperial';
@@ -45,11 +45,11 @@ export function GoalProgressIndicator({
       const goalWeightKg = parseWeightToKg(parseFloat(goalInput), unit);
 
       // Get current goals
-      const { data: profileData, error: fetchError } = await supabase
+      const { data: profileData, error: fetchError } = (await supabase
         .from('profiles')
         .select('goals')
         .eq('id', user.id)
-        .single();
+        .single()) as { data: any; error: any };
 
       if (fetchError) throw fetchError;
 
@@ -80,8 +80,8 @@ export function GoalProgressIndicator({
         }
       ];
 
-      const { error: updateError } = await supabase
-        .from('profiles')
+      const { error: updateError } = await (supabase
+        .from('profiles') as any)
         .update({ goals: updatedGoals })
         .eq('id', user.id);
 
