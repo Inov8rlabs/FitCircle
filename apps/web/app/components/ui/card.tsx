@@ -1,38 +1,23 @@
 import * as React from 'react';
 import { cn } from '@/lib/utils';
-import { motion, HTMLMotionProps } from 'framer-motion';
 
 const Card = React.forwardRef<
   HTMLDivElement,
   React.HTMLAttributes<HTMLDivElement> & {
     hover?: boolean;
-    animate?: boolean;
   }
->(({ className, hover = false, animate = false, ...props }, ref) => {
-  const Component = animate ? motion.div : 'div';
-
-  const baseProps = {
-    ref,
-    className: cn(
-      'rounded-lg border bg-card text-card-foreground shadow-sm',
-      hover && 'transition-all hover:shadow-md hover:-translate-y-0.5',
-      className
-    ),
-    ...props,
-  };
-
-  if (animate) {
-    return (
-      <Component
-        {...(baseProps as HTMLMotionProps<'div'>)}
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.3 }}
-      />
-    );
-  }
-
-  return <Component {...baseProps} />;
+>(({ className, hover = false, ...props }, ref) => {
+  return (
+    <div 
+      ref={ref} 
+      className={cn(
+        'rounded-lg border bg-card text-card-foreground shadow-sm',
+        hover && 'transition-all hover:shadow-md hover:-translate-y-0.5',
+        className
+      )} 
+      {...props} 
+    />
+  );
 });
 Card.displayName = 'Card';
 

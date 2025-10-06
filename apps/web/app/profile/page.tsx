@@ -60,13 +60,14 @@ export default function ProfilePage() {
 
         if (error) throw error;
 
-        if (data?.goals && Array.isArray(data.goals)) {
-          const weightGoal = data.goals.find((goal: any) => goal.type === 'weight');
+        const profileData = data as any;
+        if (profileData?.goals && Array.isArray(profileData.goals)) {
+          const weightGoal = profileData.goals.find((goal: any) => goal.type === 'weight');
           if (weightGoal?.target_weight_kg) {
             setGoalWeight(weightKgToDisplay(weightGoal.target_weight_kg, unitSystem).toString());
           }
 
-          const stepsGoal = data.goals.find((goal: any) => goal.type === 'steps');
+          const stepsGoal = profileData.goals.find((goal: any) => goal.type === 'steps');
           if (stepsGoal?.daily_steps_target) {
             setDailyStepsGoal(stepsGoal.daily_steps_target.toString());
           }
@@ -95,7 +96,7 @@ export default function ProfilePage() {
 
       if (fetchError) throw fetchError;
 
-      const currentGoals = profileData?.goals || [];
+      const currentGoals = (profileData as any)?.goals || [];
       const otherGoals = Array.isArray(currentGoals)
         ? currentGoals.filter((g: any) => g.type !== 'weight')
         : [];
@@ -109,7 +110,7 @@ export default function ProfilePage() {
         }
       ];
 
-      const { error: updateError } = await supabase
+      const { error: updateError } = await (supabase as any)
         .from('profiles')
         .update({ goals: updatedGoals })
         .eq('id', user.id);
@@ -141,7 +142,7 @@ export default function ProfilePage() {
 
       if (fetchError) throw fetchError;
 
-      const currentGoals = profileData?.goals || [];
+      const currentGoals = (profileData as any)?.goals || [];
       const otherGoals = Array.isArray(currentGoals)
         ? currentGoals.filter((g: any) => g.type !== 'steps')
         : [];
@@ -155,7 +156,7 @@ export default function ProfilePage() {
         }
       ];
 
-      const { error: updateError } = await supabase
+      const { error: updateError } = await (supabase as any)
         .from('profiles')
         .update({ goals: updatedGoals })
         .eq('id', user.id);
@@ -302,7 +303,7 @@ export default function ProfilePage() {
                       <div>
                         <p className="text-xs text-gray-500">Member Since</p>
                         <p className="text-sm font-medium">
-                          {user?.created_at ? new Date(user.created_at).toLocaleDateString() : 'Unknown'}
+                          {(user as any)?.created_at ? new Date((user as any).created_at).toLocaleDateString() : 'Unknown'}
                         </p>
                       </div>
                     </div>

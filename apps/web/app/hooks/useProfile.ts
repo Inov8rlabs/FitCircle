@@ -66,7 +66,7 @@ export function useProfile() {
       if (existingProfile) {
         console.log('Updating existing profile');
         // Update existing profile
-        result = await supabase
+        result = await (supabase as any)
           .from('profiles')
           .update({
             ...data,
@@ -78,7 +78,7 @@ export function useProfile() {
       } else {
         console.log('Creating new profile');
         // Create new profile
-        result = await supabase
+        result = await (supabase as any)
           .from('profiles')
           .insert({
             id: user.id,
@@ -108,11 +108,11 @@ export function useProfile() {
         targetWeight: user.targetWeight,
         dateOfBirth: data.date_of_birth,
         goals: data.goals,
-        fitnessLevel: data.fitness_level,
+        fitnessLevel: data.fitness_level as 'beginner' | 'intermediate' | 'advanced' | undefined,
         preferences: {
           ...user.preferences,
-          ...data.preferences,
-        },
+          ...(data.preferences || {}),
+        } as any,
       });
 
       setIsLoading(false);

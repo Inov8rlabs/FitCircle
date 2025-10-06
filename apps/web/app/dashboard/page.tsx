@@ -123,14 +123,16 @@ export default function DashboardPage() {
       if (error) throw error;
 
       // Extract goals from goals array
-      if (data?.goals && Array.isArray(data.goals)) {
-        const weightGoal = data.goals.find((goal: any) => goal.type === 'weight');
+      const profileData = data as any;
+      if (profileData?.goals && Array.isArray(profileData.goals)) {
+        const goals = profileData.goals;
+        const weightGoal = goals.find((goal: any) => goal.type === 'weight');
         if (weightGoal?.target_weight_kg) {
           setGoalWeightKg(weightGoal.target_weight_kg);
           setStartingWeightKg(weightGoal.starting_weight_kg);
         }
 
-        const stepsGoal = data.goals.find((goal: any) => goal.type === 'steps');
+        const stepsGoal = goals.find((goal: any) => goal.type === 'steps');
         if (stepsGoal?.daily_steps_target) {
           setDailyStepsGoal(stepsGoal.daily_steps_target);
         }
@@ -180,7 +182,7 @@ export default function DashboardPage() {
         .select('weight_kg, steps')
         .eq('user_id', user.id)
         .eq('tracking_date', today)
-        .maybeSingle();
+        .maybeSingle() as { data: any };
 
       const { data: weekData } = await supabase
         .from('daily_tracking')
@@ -189,14 +191,15 @@ export default function DashboardPage() {
         .gte('tracking_date', weekAgo)
         .order('tracking_date', { ascending: false });
 
-      const weeklySteps = weekData?.map(d => d.steps || 0).filter(s => s > 0) || [];
+      const weekDataTyped = weekData as any[] || [];
+      const weeklySteps = weekDataTyped.map(d => d.steps || 0).filter(s => s > 0);
       const weeklyAvgSteps = weeklySteps.length > 0
         ? Math.round(weeklySteps.reduce((a, b) => a + b, 0) / weeklySteps.length)
         : 0;
 
       let weightChange = 0;
-      if (weekData && weekData.length > 1) {
-        const weights = weekData.map(d => d.weight_kg).filter(w => w);
+      if (weekDataTyped.length > 1) {
+        const weights = weekDataTyped.map(d => d.weight_kg).filter(w => w);
         if (weights.length > 1) {
           // Calculate change in kg first
           const changeInKg = Math.round((weights[0]! - weights[weights.length - 1]!) * 10) / 10;
@@ -206,8 +209,8 @@ export default function DashboardPage() {
       }
 
       let streak = 0;
-      if (weekData && weekData.length > 0) {
-        const dates = weekData.map(d => d.tracking_date);
+      if (weekDataTyped.length > 0) {
+        const dates = weekDataTyped.map(d => d.tracking_date);
         const todayDate = new Date();
 
         for (let i = 0; i < 30; i++) {
@@ -269,7 +272,7 @@ export default function DashboardPage() {
 
       const { error } = await supabase
         .from('daily_tracking')
-        .upsert(checkInData, {
+        .upsert(checkInData as any, {
           onConflict: 'user_id,tracking_date'
         });
 
@@ -408,7 +411,7 @@ export default function DashboardPage() {
                     size={80}
                     strokeWidth={8}
                     color="#8b5cf6"
-                    icon={BathroomScale}
+                    icon={BathroomScale as any}
                     showValue={false}
                   />
                   <p className="text-xs text-gray-400 mt-2">Weight</p>

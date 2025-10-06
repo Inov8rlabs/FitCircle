@@ -3,8 +3,8 @@ import { cookies } from 'next/headers';
 import { createClient } from '@supabase/supabase-js';
 
 // Create a Supabase client for server-side operations with proper cookie handling
-export function createServerSupabase() {
-  const cookieStore = cookies();
+export async function createServerSupabase() {
+  const cookieStore = await cookies();
 
   return createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,

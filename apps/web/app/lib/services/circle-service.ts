@@ -124,7 +124,7 @@ export class CircleService {
     const completed: CircleWithDetails[] = [];
 
     for (const membership of memberships || []) {
-      const circle = membership.challenges;
+      const circle = membership.challenges as any;
       const status = this.getCircleStatus(circle.start_date, circle.end_date);
 
       const circleWithDetails: CircleWithDetails = {
@@ -297,7 +297,7 @@ export class CircleService {
       circle_description: circle.description,
       starts_in_days: startsInDays,
       member_count: circle.participant_count || 0,
-      inviter_name: circle.profiles?.display_name,
+      inviter_name: (circle.profiles as any)?.display_name,
     };
   }
 
@@ -698,8 +698,8 @@ export class CircleService {
     return sorted.map((member, index) => ({
       rank: index + 1,
       user_id: member.user_id,
-      display_name: member.profiles.display_name,
-      avatar_url: member.profiles.avatar_url,
+      display_name: (member.profiles as any).display_name,
+      avatar_url: (member.profiles as any).avatar_url,
       progress_percentage: member.progress_percentage,
       streak_days: member.privacy_settings?.hide_streak ? 0 : member.streak_days,
       last_check_in_at: member.last_check_in_at,

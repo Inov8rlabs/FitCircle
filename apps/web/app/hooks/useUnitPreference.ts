@@ -45,7 +45,8 @@ export function useUnitPreference(): UseUnitPreferenceReturn {
         return;
       }
 
-      const preferences = data?.preferences || {};
+      const profileData = data as any;
+      const preferences = profileData?.preferences || {};
       const system = preferences.unitSystem || 'metric';
       setUnitSystemState(system);
     } catch (err) {
@@ -70,7 +71,7 @@ export function useUnitPreference(): UseUnitPreferenceReturn {
         .eq('id', user.id)
         .single();
 
-      const currentPreferences = currentData?.preferences || {};
+      const currentPreferences = (currentData as any)?.preferences || {};
 
       // Update preferences with new unit system
       const updatedPreferences = {
@@ -83,7 +84,7 @@ export function useUnitPreference(): UseUnitPreferenceReturn {
       };
 
       // Save to database
-      const { error: updateError } = await supabase
+      const { error: updateError } = await (supabase as any)
         .from('profiles')
         .update({
           preferences: updatedPreferences,
