@@ -246,7 +246,7 @@ export default function GoalSettingForm({
                       <Input
                         id="current_weight"
                         type="number"
-                        step="0.1"
+                        step="0.01"
                         value={goalData.current_value || ''}
                         onChange={(e) => setGoalData({
                           ...goalData,
@@ -285,7 +285,7 @@ export default function GoalSettingForm({
                       <Input
                         id="target_weight"
                         type="number"
-                        step="0.1"
+                        step="0.01"
                         value={goalData.target_value || ''}
                         onChange={(e) => setGoalData({
                           ...goalData,

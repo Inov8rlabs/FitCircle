@@ -158,7 +158,7 @@ export function GoalProgressIndicator({
                   <Input
                     id="goalWeightInput"
                     type="number"
-                    step="0.1"
+                    step="0.01"
                     placeholder={unit === 'metric' ? 'e.g., 75' : 'e.g., 165'}
                     value={goalInput}
                     onChange={(e) => setGoalInput(e.target.value)}

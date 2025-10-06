@@ -384,7 +384,7 @@ export default function ProfilePage() {
                           <Input
                             id="goalWeight"
                             type="number"
-                            step="0.1"
+                            step="0.01"
                             placeholder={unitSystem === 'metric' ? 'e.g., 75' : 'e.g., 165'}
                             value={goalWeight}
                             onChange={(e) => setGoalWeight(e.target.value)}

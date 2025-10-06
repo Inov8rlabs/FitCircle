@@ -512,7 +512,7 @@ export default function DashboardPage() {
                           <Input
                             id="weight"
                             type="number"
-                            step="0.1"
+                            step="0.01"
                             placeholder={getWeightPlaceholder(unitSystem)}
                             className="pl-10 h-12 bg-slate-800/50 border-slate-700 text-white placeholder:text-gray-500"
                             value={checkInForm.weight}
