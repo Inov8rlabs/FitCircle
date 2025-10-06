@@ -130,23 +130,33 @@ export class LeaderboardService {
 
     // Map challenge type to daily_tracking column
     const columnMap: Record<string, string> = {
-      weight_loss: 'weight',
+      weight_loss: 'weight_kg',
       step_count: 'steps',
       workout_frequency: 'workout_minutes',
-      custom: 'weight', // fallback
+      custom: 'weight_kg', // fallback
     };
 
-    const column = columnMap[challengeType] || 'weight';
+    const column = columnMap[challengeType] || 'weight_kg';
+
+    console.log('Getting participant progress:', {
+      userId,
+      challengeType,
+      column,
+      startDate,
+      endDate
+    });
 
     // Get all entries within the challenge period
     const { data: entries, error } = await supabase
       .from('daily_tracking')
-      .select(`date, ${column}`)
+      .select(`tracking_date, ${column}`)
       .eq('user_id', userId)
-      .gte('date', startDate)
-      .lte('date', endDate)
+      .gte('tracking_date', startDate)
+      .lte('tracking_date', endDate)
       .not(column, 'is', null)
-      .order('date', { ascending: true });
+      .order('tracking_date', { ascending: true });
+
+    console.log('Tracking entries found:', entries?.length || 0, error);
 
     if (error || !entries || entries.length === 0) {
       return {
@@ -196,7 +206,7 @@ export class LeaderboardService {
       const latest = entries[entries.length - 1];
       return {
         value: latest[column] || 0,
-        date: latest.date,
+        date: latest.tracking_date,
       };
     }
 
@@ -213,19 +223,19 @@ export class LeaderboardService {
 
       // Filter entries before the update date/time
       const validEntries = entries.filter((entry) => {
-        const entryDate = new Date(entry.date);
+        const entryDate = new Date(entry.tracking_date);
         return entryDate <= mostRecentUpdateDate;
       });
 
       if (validEntries.length === 0) {
         const latest = entries[entries.length - 1];
-        return { value: latest[column] || 0, date: latest.date };
+        return { value: latest[column] || 0, date: latest.tracking_date };
       }
 
       const latest = validEntries[validEntries.length - 1];
       return {
         value: latest[column] || 0,
-        date: latest.date,
+        date: latest.tracking_date,
       };
     }
 
@@ -233,7 +243,7 @@ export class LeaderboardService {
     const latest = entries[entries.length - 1];
     return {
       value: latest[column] || 0,
-      date: latest.date,
+      date: latest.tracking_date,
     };
   }
 
