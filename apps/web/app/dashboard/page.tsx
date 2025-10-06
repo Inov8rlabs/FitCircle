@@ -178,9 +178,20 @@ export default function DashboardPage() {
       const today = new Date().toISOString().split('T')[0];
       const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
 
+      // Get the most recent weight entry (not just today's)
+      const { data: latestWeightData } = await supabase
+        .from('daily_tracking')
+        .select('weight_kg, steps, tracking_date')
+        .eq('user_id', user.id)
+        .not('weight_kg', 'is', null)
+        .order('tracking_date', { ascending: false })
+        .limit(1)
+        .maybeSingle() as { data: any };
+
+      // Also get today's data for steps
       const { data: todayData } = await supabase
         .from('daily_tracking')
-        .select('weight_kg, steps')
+        .select('steps')
         .eq('user_id', user.id)
         .eq('tracking_date', today)
         .maybeSingle() as { data: any };
@@ -234,7 +245,7 @@ export default function DashboardPage() {
 
       setDailyStats({
         todaySteps: todayData?.steps || 0,
-        todayWeight: todayData?.weight_kg,
+        todayWeight: latestWeightData?.weight_kg, // Use latest weight, not just today's
         weeklyAvgSteps,
         weightChange,
         currentStreak: streak,
