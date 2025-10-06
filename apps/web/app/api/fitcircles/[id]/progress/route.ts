@@ -66,7 +66,7 @@ export async function POST(
       return NextResponse.json({ error: 'Invalid value' }, { status: 400 });
     }
 
-    console.log('Submitting progress entry:', { challengeId, user.id: user.id, value, is_public });
+    console.log('Submitting progress entry:', { challengeId, userId: user.id, value, is_public });
 
     // Check if user already submitted today
     const today = new Date().toISOString().split('T')[0];
