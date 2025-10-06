@@ -169,7 +169,7 @@ export default function CircleCreationWizard({ isOpen, onClose, onSuccess }: Cir
   };
 
   const copyInviteURL = () => {
-    const url = `${window.location.origin}/circles/join/${inviteLink}`;
+    const url = `${window.location.origin}/join/${inviteLink}`;
     navigator.clipboard.writeText(url);
     toast.success('Invite link copied to clipboard!');
   };

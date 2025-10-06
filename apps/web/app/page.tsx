@@ -168,7 +168,7 @@ export default function LandingPage() {
                     </Link>
                   </Button>
                   <Button size="lg" variant="outline" className="border-slate-700 text-gray-300 hover:bg-slate-800 hover:text-white" asChild>
-                    <Link href="/circles">
+                    <Link href="/fitcircles">
                       Explore FitCircles
                     </Link>
                   </Button>
