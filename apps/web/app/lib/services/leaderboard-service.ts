@@ -48,7 +48,7 @@ export class LeaderboardService {
       return [];
     }
 
-    // Get all active participants
+    // Get all active participants with their profile goals
     const { data: participants, error: participantsError } = await client
       .from('challenge_participants')
       .select(`
@@ -58,7 +58,8 @@ export class LeaderboardService {
         goal_value,
         profiles!challenge_participants_user_id_fkey (
           display_name,
-          avatar_url
+          avatar_url,
+          goals
         )
       `)
       .eq('challenge_id', challengeId)
@@ -78,17 +79,49 @@ export class LeaderboardService {
           client
         );
 
+        // Get goal from profile if not set in participant record
+        let goalValue = participant.goal_value;
+        let startingValue = participant.starting_value;
+
+        if (!goalValue && participant.profiles?.goals) {
+          const profileGoals = Array.isArray(participant.profiles.goals)
+            ? participant.profiles.goals
+            : participant.profiles?.[0]?.goals || [];
+
+          const weightGoal = profileGoals.find((g: any) => g.type === 'weight');
+          if (weightGoal) {
+            goalValue = weightGoal.target_weight_kg;
+            startingValue = startingValue || weightGoal.starting_weight_kg;
+          }
+        }
+
+        // Use tracking data for starting value if we have it
+        const finalStartingValue = trackingData.starting_value || startingValue || trackingData.current_value || 0;
+        const finalGoalValue = goalValue || 0;
+
+        console.log('Leaderboard entry for user:', participant.user_id, {
+          trackingDataStarting: trackingData.starting_value,
+          trackingDataCurrent: trackingData.current_value,
+          participantStarting: participant.starting_value,
+          participantGoal: participant.goal_value,
+          profileGoal: goalValue,
+          finalStarting: finalStartingValue,
+          finalCurrent: trackingData.current_value,
+          finalGoal: finalGoalValue,
+          totalEntries: trackingData.total_entries
+        });
+
         return {
           user_id: participant.user_id,
           display_name: participant.profiles?.display_name || participant.profiles?.[0]?.display_name || 'Unknown User',
           avatar_url: participant.profiles?.avatar_url || participant.profiles?.[0]?.avatar_url || null,
           current_value: trackingData.current_value,
-          starting_value: trackingData.starting_value || participant.starting_value || 0,
-          target_value: participant.goal_value || 0,
+          starting_value: finalStartingValue,
+          target_value: finalGoalValue,
           progress_percentage: this.calculateProgress(
-            trackingData.starting_value || participant.starting_value || 0,
+            finalStartingValue,
             trackingData.current_value,
-            participant.goal_value || 0,
+            finalGoalValue,
             challenge.type
           ),
           latest_entry_date: trackingData.latest_date,
