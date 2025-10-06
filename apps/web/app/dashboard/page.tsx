@@ -94,6 +94,7 @@ export default function DashboardPage() {
   });
 
   const [checkInForm, setCheckInForm] = useState({
+    date: new Date().toISOString().split('T')[0], // Today's date
     weight: '',
     steps: '',
     mood: 3,
@@ -253,7 +254,8 @@ export default function DashboardPage() {
 
     setIsSubmitting(true);
     try {
-      const today = new Date().toISOString().split('T')[0];
+      // Use the date from the form
+      const trackingDate = checkInForm.date;
 
       // Convert weight to kg if in imperial units
       const weightInKg = checkInForm.weight
@@ -262,7 +264,7 @@ export default function DashboardPage() {
 
       const checkInData = {
         user_id: user.id,
-        tracking_date: today,
+        tracking_date: trackingDate,
         weight_kg: weightInKg,
         steps: checkInForm.steps ? parseInt(checkInForm.steps) : null,
         mood_score: checkInForm.mood <= 5 ? checkInForm.mood * 2 : checkInForm.mood, // Convert 1-5 to 2-10 for DB
@@ -278,9 +280,15 @@ export default function DashboardPage() {
 
       if (error) throw error;
 
-      toast.success('Check-in saved successfully!');
+      const isToday = trackingDate === new Date().toISOString().split('T')[0];
+      const dateDisplay = isToday
+        ? 'today'
+        : new Date(trackingDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+
+      toast.success(`Check-in saved for ${dateDisplay}!`);
 
       setCheckInForm({
+        date: new Date().toISOString().split('T')[0], // Reset to today
         weight: '',
         steps: '',
         mood: 3,
@@ -493,6 +501,27 @@ export default function DashboardPage() {
                 </CardHeader>
                 <CardContent>
                   <form onSubmit={handleCheckIn} className="space-y-6">
+                    {/* Date Picker */}
+                    <div className="space-y-2">
+                      <Label htmlFor="tracking-date" className="text-sm font-medium text-gray-300">
+                        Date
+                      </Label>
+                      <div className="relative">
+                        <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-500" />
+                        <Input
+                          id="tracking-date"
+                          type="date"
+                          max={new Date().toISOString().split('T')[0]}
+                          value={checkInForm.date}
+                          onChange={(e) => setCheckInForm({ ...checkInForm, date: e.target.value })}
+                          className="pl-10 h-12 bg-slate-800/50 border-slate-700 text-white"
+                        />
+                      </div>
+                      <p className="text-xs text-gray-400">
+                        Submit data for past dates if you missed tracking
+                      </p>
+                    </div>
+
                     {/* Weight and Steps */}
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <div className="space-y-2">
