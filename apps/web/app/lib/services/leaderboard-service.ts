@@ -200,8 +200,27 @@ export class LeaderboardService {
       };
     }
 
-    // Get starting value (first entry in challenge period)
-    const startingValue = entries[0]?.[column] || null;
+    // Get starting value: Look for the most recent entry BEFORE challenge start
+    // If none exists, use the first entry in the challenge period
+    const { data: baselineEntry } = await supabase
+      .from('daily_tracking')
+      .select(`tracking_date, ${column}`)
+      .eq('user_id', userId)
+      .lt('tracking_date', startDate)
+      .not(column, 'is', null)
+      .order('tracking_date', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    const startingValue = baselineEntry?.[column as keyof typeof baselineEntry]
+      || entries[0]?.[column as keyof typeof entries[0]]
+      || null;
+
+    console.log('Starting value calculation:', {
+      baselineEntry: baselineEntry?.[column as keyof typeof baselineEntry],
+      firstChallengeEntry: entries[0]?.[column as keyof typeof entries[0]],
+      finalStartingValue: startingValue
+    });
 
     // Get latest value based on leaderboard update frequency
     const latestValue = this.getLatestValueForFrequency(

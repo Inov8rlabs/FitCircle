@@ -22,6 +22,7 @@ import {
   MoreHorizontal,
   Activity,
   AlertCircle,
+  Lock,
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { supabase } from '@/lib/supabase';
@@ -47,26 +48,27 @@ interface FitCircle {
 interface Participant {
   id: string;
   user_id: string;
-  challenge_id: string;
-  status: string;
-  joined_at: string;
+  challenge_id?: string;
+  status?: string;
+  joined_at?: string;
   display_name: string;
   avatar_url: string;
   progress: number;
   current_value?: number;
   target_value?: number;
+  starting_value?: number;
+  total_entries?: number;
+  latest_entry_date?: string;
   is_public?: boolean;
+  is_creator?: boolean;
+  is_current_user?: boolean;
   entries?: ProgressEntry[];
 }
 
 interface ProgressEntry {
-  id: string;
-  user_id: string;
-  challenge_id: string;
+  tracking_date: string;
   value: number;
-  date: string;
   is_public: boolean;
-  created_at: string;
 }
 
 export default function FitCirclePage() {
@@ -137,6 +139,7 @@ export default function FitCirclePage() {
           avatar_url: entry.avatar_url,
           progress: Math.round(entry.progress_percentage),
           current_value: entry.current_value,
+          starting_value: entry.starting_value,
           target_value: entry.target_value,
           total_entries: entry.total_entries,
           is_creator: entry.is_creator,
@@ -245,12 +248,35 @@ export default function FitCirclePage() {
     }
   };
 
-  const handleParticipantClick = (participant: Participant) => {
+  const handleParticipantClick = async (participant: Participant) => {
     // Only allow viewing details if:
     // 1. It's the user's own profile, OR
     // 2. The participant has made their data public
     if (participant.user_id === user?.id || participant.is_public) {
-      setSelectedParticipant(participant);
+      // Fetch progress history from daily_tracking
+      try {
+        const url = `/api/fitcircles/${circleId}/progress/${participant.user_id}`;
+        console.log('Fetching progress history from:', url);
+
+        const response = await fetch(url);
+        console.log('Progress history response:', response.status, response.statusText);
+
+        if (response.ok) {
+          const data = await response.json();
+          console.log('Progress history data:', data);
+          setSelectedParticipant({
+            ...participant,
+            entries: data.entries || []
+          });
+        } else {
+          const errorText = await response.text();
+          console.error('Progress history API error:', errorText);
+          setSelectedParticipant(participant);
+        }
+      } catch (err) {
+        console.error('Error fetching progress history:', err);
+        setSelectedParticipant(participant);
+      }
       setShowDetailModal(true);
     }
   };
@@ -544,7 +570,8 @@ export default function FitCirclePage() {
                                   )}
                                 </div>
                                 <p className="text-sm text-gray-400">
-                                  {participant.current_value || 0} / {participant.target_value || 100} completed
+                                  {participant.current_value ? `${participant.current_value.toFixed(1)} kg` : 'No data'}
+                                  {participant.target_value && ` → ${participant.target_value.toFixed(1)} kg goal`}
                                 </p>
                               </div>
                             </div>
@@ -630,7 +657,7 @@ export default function FitCirclePage() {
                       )}
                     </h2>
                     <p className="text-gray-400 text-sm">
-                      {selectedParticipant.entries?.length || 0} entries • {selectedParticipant.progress}% progress
+                      {selectedParticipant.total_entries || 0} entries • {selectedParticipant.progress}% progress
                     </p>
                   </div>
                 </div>
@@ -650,10 +677,17 @@ export default function FitCirclePage() {
               {/* Progress Overview */}
               <div className="mb-6">
                 <div className="flex items-center justify-between mb-2">
-                  <span className="text-sm text-gray-400">Current Progress</span>
-                  <span className="text-lg font-bold text-white">
-                    {selectedParticipant.current_value || 0} / {selectedParticipant.target_value || 100}
-                  </span>
+                  <span className="text-sm text-gray-400">Weight Progress</span>
+                  <div className="text-right">
+                    <div className="text-lg font-bold text-white">
+                      {selectedParticipant.starting_value?.toFixed(1)} kg → {selectedParticipant.current_value?.toFixed(1)} kg → {selectedParticipant.target_value?.toFixed(1)} kg
+                    </div>
+                    <div className="text-sm text-gray-400">
+                      {selectedParticipant.starting_value && selectedParticipant.current_value &&
+                        `${(selectedParticipant.starting_value - selectedParticipant.current_value).toFixed(1)} kg lost`
+                      }
+                    </div>
+                  </div>
                 </div>
                 <Progress value={selectedParticipant.progress} className="h-3 bg-slate-800" />
               </div>
@@ -678,7 +712,7 @@ export default function FitCirclePage() {
                   <div className="space-y-3 max-h-96 overflow-y-auto">
                     {selectedParticipant.entries.map((entry, entryIndex) => (
                       <motion.div
-                        key={entry.id}
+                        key={`${entry.tracking_date}-${entryIndex}`}
                         initial={{ opacity: 0, y: 10 }}
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ delay: entryIndex * 0.05 }}
@@ -697,16 +731,18 @@ export default function FitCirclePage() {
                             {entry.is_public ? '👁️' : '🔒'}
                           </div>
                           <div>
-                            <p className="font-semibold text-white">{entry.value}</p>
+                            <p className="font-semibold text-white">{entry.value} kg</p>
                             <p className="text-sm text-gray-400">
-                              {new Date(entry.date).toLocaleDateString()}
+                              {new Date(entry.tracking_date).toLocaleDateString()}
                               {entry.is_public ? ' • Public' : ' • Private'}
                             </p>
                           </div>
                         </div>
                         <div className="text-right">
                           <p className="text-sm text-gray-400">
-                            {Math.floor((entry.value / (selectedParticipant.target_value || 100)) * 100)}% of goal
+                            {selectedParticipant.starting_value &&
+                              `${(selectedParticipant.starting_value - entry.value).toFixed(1)} kg lost`
+                            }
                           </p>
                         </div>
                       </motion.div>

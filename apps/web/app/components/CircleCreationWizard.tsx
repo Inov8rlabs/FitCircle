@@ -28,6 +28,7 @@ import {
   Globe,
   Mail,
   X,
+  Activity,
   UserPlus,
   Copy,
   Search,
