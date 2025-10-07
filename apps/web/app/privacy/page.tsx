@@ -17,7 +17,7 @@ export default function PrivacyPage() {
 
         <div className="prose prose-neutral dark:prose-invert max-w-none">
           <p className="text-muted-foreground mb-6">
-            Effective Date: January 1, 2025
+            Effective Date: October 7, 2025
           </p>
 
           <section className="mb-8">
