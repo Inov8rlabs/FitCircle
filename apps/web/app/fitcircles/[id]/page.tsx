@@ -112,10 +112,22 @@ export default function FitCirclePage() {
       }
 
       if (data) {
+        // Type assertion to help TypeScript understand the data structure
+        const challengeData = data as any;
         setFitCircle({
-          ...data,
+          id: challengeData.id,
+          name: challengeData.name,
+          description: challengeData.description || '',
+          type: challengeData.type,
+          start_date: challengeData.start_date,
+          end_date: challengeData.end_date,
+          creator_id: challengeData.creator_id,
+          invite_code: challengeData.invite_code || '',
+          visibility: challengeData.visibility || 'public',
+          max_participants: challengeData.max_participants || 0,
+          created_at: challengeData.created_at || '',
           participant_count: 0, // Will be updated by participants fetch
-          is_creator: data.creator_id === user?.id,
+          is_creator: challengeData.creator_id === user?.id,
           is_participant: false, // Will be determined from participants
         });
       }

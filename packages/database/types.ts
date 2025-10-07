@@ -77,6 +77,10 @@ export interface Challenge {
   is_featured?: boolean;
   sponsor_info?: Record<string, any>;
   custom_fields?: Record<string, any>;
+  invite_code?: string;
+  privacy_mode?: boolean;
+  auto_accept_invites?: boolean;
+  late_join_deadline?: number;
   participant_count?: number;
   team_count?: number;
   total_check_ins?: number;

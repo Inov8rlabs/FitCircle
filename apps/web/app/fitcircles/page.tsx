@@ -74,8 +74,11 @@ export default function CirclesPage() {
       if (!allError && allChallenges) {
         console.log('Successfully fetched all challenges:', allChallenges.length);
 
+        // Type assertion to help TypeScript understand the data structure
+        const challenges = allChallenges as any[];
+
         // Filter for user's challenges (created or participated)
-        const createdByUser = allChallenges.filter(c => c.creator_id === user.id);
+        const createdByUser = challenges.filter(c => c.creator_id === user.id);
         userCircles = [...createdByUser];
 
         // Try to get participations
@@ -85,8 +88,10 @@ export default function CirclesPage() {
           .eq('user_id', user.id);
 
         if (participations) {
-          const participantChallengeIds = participations.map(p => p.challenge_id);
-          const participatedChallenges = allChallenges.filter(
+          // Type assertion to help TypeScript understand the data structure
+          const participationData = participations as any[];
+          const participantChallengeIds = participationData.map(p => p.challenge_id);
+          const participatedChallenges = challenges.filter(
             c => participantChallengeIds.includes(c.id) && c.creator_id !== user.id
           );
           userCircles = [...userCircles, ...participatedChallenges];
