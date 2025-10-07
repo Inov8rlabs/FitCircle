@@ -17,7 +17,7 @@ export default function TermsPage() {
 
         <div className="prose prose-neutral dark:prose-invert max-w-none">
           <p className="text-muted-foreground mb-6">
-            Effective Date: January 1, 2024
+            Effective Date: January 1, 2025
           </p>
 
           <section className="mb-8">
@@ -146,7 +146,7 @@ export default function TermsPage() {
 
         <div className="mt-12 pt-8 border-t">
           <p className="text-sm text-muted-foreground text-center">
-            © 2024 FitCircle. All rights reserved.
+            © 2025 FitCircle. All rights reserved.
           </p>
         </div>
       </div>

@@ -541,7 +541,7 @@ export default function LandingPage() {
             </div>
           </div>
           <div className="mt-8 pt-8 border-t border-slate-800 text-center text-sm text-gray-500">
-            © 2024 FitCircle. All rights reserved.
+            © 2025 FitCircle. All rights reserved.
           </div>
         </div>
       </footer>
