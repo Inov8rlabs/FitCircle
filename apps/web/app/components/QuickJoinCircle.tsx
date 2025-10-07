@@ -104,12 +104,12 @@ export default function QuickJoinCircle({ isOpen, onClose, initialCode = '' }: Q
 
       // Check if user is already a member
       if (user) {
-        const { data: membership } = await supabase
+        const { data: membership } = (await supabase
           .from('challenge_participants')
           .select('id')
-          .eq('challenge_id', challenge.id)
+          .eq('challenge_id', (challenge as any).id)
           .eq('user_id', user.id)
-          .single();
+          .single()) as { data: any; error: any };
 
         if (membership) {
           setError('You\'re already a member of this FitCircle!');
@@ -142,14 +142,16 @@ export default function QuickJoinCircle({ isOpen, onClose, initialCode = '' }: Q
     setIsJoining(true);
     try {
       // Direct approach to join the circle
-      const { error: joinError } = await supabase
-        .from('challenge_participants')
+      const joinResult = (await (supabase
+        .from('challenge_participants') as any)
         .insert({
           challenge_id: circlePreview.id,
           user_id: user.id,
           status: 'active',
           joined_at: new Date().toISOString(),
-        });
+        }));
+
+      const joinError = joinResult.error;
 
       if (joinError) {
         // Check for specific error types

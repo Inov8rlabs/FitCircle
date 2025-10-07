@@ -96,11 +96,13 @@ export default function CheckInPage() {
   const fetchRecentEntriesFallback = async () => {
     try {
       // Fallback: Fetch entries directly from progress_entries table
+      if (!user?.id) return;
+
       const { data: entriesData, error: entriesError } = await supabase
         .from('progress_entries')
         .select('*')
         .eq('challenge_id', circleId)
-        .eq('user_id', user?.id)
+        .eq('user_id', user.id)
         .order('date', { ascending: false });
 
       if (entriesError) {

@@ -3,11 +3,11 @@ import { createServerSupabase } from '@/lib/supabase-server';
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  context: { params: Promise<{ id: string }> }
 ) {
   try {
     const supabase = await createServerSupabase();
-    const challengeId = params.id;
+    const { id: challengeId } = await context.params;
 
     // Get the authenticated user using cookies
     const { data: { session }, error: authError } = await supabase.auth.getSession();
@@ -44,11 +44,11 @@ export async function GET(
 
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  context: { params: Promise<{ id: string }> }
 ) {
   try {
     const supabase = await createServerSupabase();
-    const challengeId = params.id;
+    const { id: challengeId } = await context.params;
 
     // Get the authenticated user using cookies
     const { data: { session }, error: authError } = await supabase.auth.getSession();
