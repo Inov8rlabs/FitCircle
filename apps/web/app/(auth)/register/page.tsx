@@ -3,8 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import Image from 'next/image';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -20,8 +19,6 @@ import {
   Users,
   TrendingUp,
   Check,
-  Github,
-  Chrome
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -106,41 +103,6 @@ export default function RegisterPage() {
             <p className="mt-2 text-gray-400">
               Join thousands achieving their fitness goals together
             </p>
-          </div>
-
-          {/* Social Login Buttons */}
-          <div className="space-y-3">
-            <Button
-              type="button"
-              variant="outline"
-              fullWidth
-              size="lg"
-              className="bg-slate-900/50 border-slate-700 text-gray-300 hover:bg-slate-800 hover:text-white"
-            >
-              <Chrome className="w-5 h-5 mr-2" />
-              Continue with Google
-            </Button>
-
-            <Button
-              type="button"
-              variant="outline"
-              fullWidth
-              size="lg"
-              className="bg-slate-900/50 border-slate-700 text-gray-300 hover:bg-slate-800 hover:text-white"
-            >
-              <Github className="w-5 h-5 mr-2" />
-              Continue with GitHub
-            </Button>
-          </div>
-
-          {/* Divider */}
-          <div className="relative">
-            <div className="absolute inset-0 flex items-center">
-              <div className="w-full border-t border-slate-700"></div>
-            </div>
-            <div className="relative flex justify-center text-sm">
-              <span className="px-4 bg-slate-950 text-gray-400">Or register with email</span>
-            </div>
           </div>
 
           {/* Registration Form */}
