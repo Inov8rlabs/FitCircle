@@ -212,13 +212,19 @@ export class LeaderboardService {
       .limit(1)
       .maybeSingle();
 
-    const startingValue = baselineEntry?.[column as keyof typeof baselineEntry]
+    const rawStartingValue = baselineEntry?.[column as keyof typeof baselineEntry]
       || entries[0]?.[column as keyof typeof entries[0]]
       || null;
+
+    // Convert to number if not null/undefined, ensure proper typing
+    const startingValue = rawStartingValue !== null && rawStartingValue !== undefined
+      ? Number(rawStartingValue)
+      : null;
 
     console.log('Starting value calculation:', {
       baselineEntry: baselineEntry?.[column as keyof typeof baselineEntry],
       firstChallengeEntry: entries[0]?.[column as keyof typeof entries[0]],
+      rawStartingValue,
       finalStartingValue: startingValue
     });
 
