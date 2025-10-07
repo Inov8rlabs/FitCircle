@@ -28,6 +28,9 @@ import {
   Edit,
   Trash2,
   Share2,
+  X,
+  Check,
+  Loader2,
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { supabase } from '@/lib/supabase';
@@ -88,6 +91,9 @@ export default function FitCirclePage() {
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [showManageModal, setShowManageModal] = useState(false);
   const [copySuccess, setCopySuccess] = useState(false);
+  const [isEditingName, setIsEditingName] = useState(false);
+  const [editedName, setEditedName] = useState('');
+  const [isSavingName, setIsSavingName] = useState(false);
 
   const circleId = params.id as string;
 
@@ -293,6 +299,44 @@ export default function FitCirclePage() {
     } catch (err) {
       console.error('Error deleting challenge:', err);
       alert('Failed to delete challenge');
+    }
+  };
+
+  const handleStartEditName = () => {
+    setEditedName(fitCircle?.name || '');
+    setIsEditingName(true);
+  };
+
+  const handleCancelEditName = () => {
+    setIsEditingName(false);
+    setEditedName('');
+  };
+
+  const handleSaveName = async () => {
+    if (!editedName.trim() || !fitCircle) return;
+
+    setIsSavingName(true);
+    try {
+      const { error } = await supabase
+        .from('challenges')
+        .update({ name: editedName.trim() })
+        .eq('id', circleId);
+
+      if (error) throw error;
+
+      // Update local state
+      setFitCircle({
+        ...fitCircle,
+        name: editedName.trim(),
+      });
+
+      setIsEditingName(false);
+      setEditedName('');
+    } catch (err) {
+      console.error('Error updating challenge name:', err);
+      alert('Failed to update name');
+    } finally {
+      setIsSavingName(false);
     }
   };
 
@@ -866,6 +910,71 @@ export default function FitCirclePage() {
                 </div>
 
                 <div className="space-y-4">
+                  {/* Edit Name */}
+                  <div className="p-4 bg-slate-800/50 rounded-lg border border-slate-700/50">
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center space-x-2">
+                        <Edit className="h-4 w-4 text-purple-400" />
+                        <span className="text-sm font-semibold text-white">FitCircle Name</span>
+                      </div>
+                      {!isEditingName && (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={handleStartEditName}
+                          className="text-indigo-400 hover:text-indigo-300 hover:bg-indigo-500/10"
+                        >
+                          <Edit className="h-3 w-3 mr-1" />
+                          Edit
+                        </Button>
+                      )}
+                    </div>
+                    {isEditingName ? (
+                      <div className="space-y-2">
+                        <input
+                          type="text"
+                          value={editedName}
+                          onChange={(e) => setEditedName(e.target.value)}
+                          className="w-full px-3 py-2 bg-slate-900 rounded border border-slate-700 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                          placeholder="Enter FitCircle name"
+                          maxLength={50}
+                        />
+                        <div className="flex items-center space-x-2">
+                          <Button
+                            size="sm"
+                            onClick={handleSaveName}
+                            disabled={!editedName.trim() || isSavingName}
+                            className="bg-green-600 hover:bg-green-700"
+                          >
+                            {isSavingName ? (
+                              <>
+                                <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                                Saving...
+                              </>
+                            ) : (
+                              <>
+                                <Check className="h-3 w-3 mr-1" />
+                                Save
+                              </>
+                            )}
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={handleCancelEditName}
+                            disabled={isSavingName}
+                            className="text-gray-400 hover:text-white"
+                          >
+                            <X className="h-3 w-3 mr-1" />
+                            Cancel
+                          </Button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="text-white font-medium">{fitCircle.name}</div>
+                    )}
+                  </div>
+
                   {/* Invite Link */}
                   <div className="p-4 bg-slate-800/50 rounded-lg border border-slate-700/50">
                     <div className="flex items-center justify-between mb-2">
