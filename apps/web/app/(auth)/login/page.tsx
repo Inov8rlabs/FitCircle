@@ -11,6 +11,7 @@ import { Mail, Lock, Eye, EyeOff, ArrowRight, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { LogoIcon } from '@/components/ui/logo';
 import { useAuthStore } from '@/stores/auth-store';
 import { useUIStore } from '@/stores/ui-store';
 
@@ -68,9 +69,7 @@ export default function LoginPage() {
         >
           <div className="text-center mb-8">
             <Link href="/" className="inline-flex items-center justify-center mb-6">
-              <div className="w-12 h-12 bg-gradient-to-r from-indigo-500 to-purple-600 rounded-lg flex items-center justify-center">
-                <span className="text-white text-xl font-bold italic">f</span>
-              </div>
+              <LogoIcon size="lg" />
             </Link>
             <h1 className="text-3xl font-bold text-white">Welcome back</h1>
             <p className="text-gray-400 mt-2">
