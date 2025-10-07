@@ -23,6 +23,11 @@ import {
   Activity,
   AlertCircle,
   Lock,
+  Copy,
+  CheckCircle,
+  Edit,
+  Trash2,
+  Share2,
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { supabase } from '@/lib/supabase';
@@ -81,6 +86,8 @@ export default function FitCirclePage() {
   const [error, setError] = useState('');
   const [selectedParticipant, setSelectedParticipant] = useState<Participant | null>(null);
   const [showDetailModal, setShowDetailModal] = useState(false);
+  const [showManageModal, setShowManageModal] = useState(false);
+  const [copySuccess, setCopySuccess] = useState(false);
 
   const circleId = params.id as string;
 
@@ -248,6 +255,35 @@ export default function FitCirclePage() {
     }
   };
 
+  const copyInviteCode = async () => {
+    if (!fitCircle?.invite_code) return;
+
+    const inviteUrl = `${window.location.origin}/fitcircles/join/${fitCircle.invite_code}`;
+    await navigator.clipboard.writeText(inviteUrl);
+    setCopySuccess(true);
+    setTimeout(() => setCopySuccess(false), 2000);
+  };
+
+  const handleDeleteChallenge = async () => {
+    if (!confirm('Are you sure you want to delete this FitCircle? This action cannot be undone.')) {
+      return;
+    }
+
+    try {
+      const { error } = await supabase
+        .from('challenges')
+        .delete()
+        .eq('id', circleId);
+
+      if (error) throw error;
+
+      router.push('/fitcircles');
+    } catch (err) {
+      console.error('Error deleting challenge:', err);
+      alert('Failed to delete challenge');
+    }
+  };
+
   const handleParticipantClick = async (participant: Participant) => {
     // Only allow viewing details if:
     // 1. It's the user's own profile, OR
@@ -392,7 +428,11 @@ export default function FitCirclePage() {
               </div>
 
               {fitCircle.is_creator && (
-                <Button variant="outline" className="border-orange-500/50 text-orange-400 hover:bg-orange-500/10">
+                <Button
+                  variant="outline"
+                  className="border-orange-500/50 text-orange-400 hover:bg-orange-500/10"
+                  onClick={() => setShowManageModal(true)}
+                >
                   <Settings className="h-4 w-4 mr-2" />
                   Manage
                 </Button>
@@ -416,7 +456,10 @@ export default function FitCirclePage() {
                     <div>
                       <p className="text-sm text-gray-400">Participants</p>
                       <p className="text-2xl font-bold text-white">
-                        {participants.length}/{fitCircle.max_participants || '∞'}
+                        {fitCircle.max_participants
+                          ? `${participants.length}/${fitCircle.max_participants}`
+                          : participants.length
+                        }
                       </p>
                     </div>
                   </div>
@@ -771,6 +814,105 @@ export default function FitCirclePage() {
                 </div>
               )}
 
+              </div>
+            </motion.div>
+          </div>
+        )}
+
+        {/* Manage Modal */}
+        {showManageModal && fitCircle && (
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.9 }}
+              className="bg-slate-900/95 border border-slate-800 rounded-lg max-w-lg w-full"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="p-6">
+                <div className="flex items-center justify-between mb-6">
+                  <h2 className="text-2xl font-bold text-white">Manage FitCircle</h2>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setShowManageModal(false)}
+                    className="text-gray-400 hover:text-white"
+                  >
+                    ✕
+                  </Button>
+                </div>
+
+                <div className="space-y-4">
+                  {/* Invite Link */}
+                  <div className="p-4 bg-slate-800/50 rounded-lg border border-slate-700/50">
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center space-x-2">
+                        <Share2 className="h-4 w-4 text-indigo-400" />
+                        <span className="text-sm font-semibold text-white">Invite Link</span>
+                      </div>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <div className="flex-1 px-3 py-2 bg-slate-900 rounded border border-slate-700 text-sm text-gray-300 overflow-x-auto">
+                        {`${window.location.origin}/fitcircles/join/${fitCircle.invite_code}`}
+                      </div>
+                      <Button
+                        size="sm"
+                        onClick={copyInviteCode}
+                        className={`${
+                          copySuccess
+                            ? 'bg-green-600 hover:bg-green-700'
+                            : 'bg-indigo-600 hover:bg-indigo-700'
+                        }`}
+                      >
+                        {copySuccess ? (
+                          <>
+                            <CheckCircle className="h-4 w-4 mr-1" />
+                            Copied
+                          </>
+                        ) : (
+                          <>
+                            <Copy className="h-4 w-4 mr-1" />
+                            Copy
+                          </>
+                        )}
+                      </Button>
+                    </div>
+                    <p className="text-xs text-gray-400 mt-2">
+                      Share this link with friends to invite them to join
+                    </p>
+                  </div>
+
+                  {/* Challenge Info */}
+                  <div className="p-4 bg-slate-800/50 rounded-lg border border-slate-700/50">
+                    <h3 className="text-sm font-semibold text-white mb-3">Challenge Details</h3>
+                    <div className="space-y-2 text-sm">
+                      <div className="flex justify-between">
+                        <span className="text-gray-400">Invite Code:</span>
+                        <span className="text-white font-mono">{fitCircle.invite_code}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-400">Visibility:</span>
+                        <span className="text-white capitalize">{fitCircle.visibility}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-400">Type:</span>
+                        <span className="text-white capitalize">{fitCircle.type.replace('_', ' ')}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Actions */}
+                  <div className="space-y-2 pt-2">
+                    <Button
+                      variant="outline"
+                      className="w-full border-red-500/50 text-red-400 hover:bg-red-500/10"
+                      onClick={handleDeleteChallenge}
+                    >
+                      <Trash2 className="h-4 w-4 mr-2" />
+                      Delete FitCircle
+                    </Button>
+                  </div>
+                </div>
               </div>
             </motion.div>
           </div>
