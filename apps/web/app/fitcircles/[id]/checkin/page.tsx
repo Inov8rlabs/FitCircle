@@ -95,15 +95,28 @@ export default function CheckInPage() {
 
   const fetchRecentEntriesFallback = async () => {
     try {
-      // Fallback: Fetch entries directly from progress_entries table
-      if (!user?.id) return;
+      // Fallback: Fetch entries directly from daily_tracking table
+      if (!user?.id || !fitCircle) return;
+
+      // Map challenge type to daily_tracking column
+      const columnMap: Record<string, string> = {
+        weight_loss: 'weight_kg',
+        step_count: 'steps',
+        workout_frequency: 'workout_minutes',
+        custom: 'weight_kg',
+      };
+
+      const column = columnMap[fitCircle.type] || 'weight_kg';
 
       const { data: entriesData, error: entriesError } = await supabase
-        .from('progress_entries')
-        .select('*')
-        .eq('challenge_id', circleId)
+        .from('daily_tracking')
+        .select(`tracking_date, ${column}`)
         .eq('user_id', user.id)
-        .order('date', { ascending: false });
+        .gte('tracking_date', fitCircle.start_date)
+        .lte('tracking_date', fitCircle.end_date)
+        .not(column, 'is', null)
+        .order('tracking_date', { ascending: false })
+        .limit(10);
 
       if (entriesError) {
         console.error('Fallback query also failed:', entriesError);
@@ -111,8 +124,15 @@ export default function CheckInPage() {
         return;
       }
 
-      console.log('Fallback entries received:', entriesData?.length || 0, 'entries');
-      setRecentEntries(entriesData || []);
+      // Transform to match expected format
+      const transformedEntries = (entriesData || []).map((entry: any) => ({
+        date: entry.tracking_date,
+        value: entry[column],
+        is_public: true,
+      }));
+
+      console.log('Fallback entries received:', transformedEntries.length, 'entries');
+      setRecentEntries(transformedEntries);
     } catch (err) {
       console.error('Error in fallback fetch:', err);
       setRecentEntries([]);
