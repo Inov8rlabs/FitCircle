@@ -642,6 +642,17 @@ export default function FitCirclePage() {
                                 value={participant.progress}
                                 className={`h-2 bg-slate-800`}
                               />
+                              {participant.starting_value && participant.current_value && participant.target_value && (
+                                <div className="mt-1.5 text-xs text-center">
+                                  <span className="font-semibold bg-gradient-to-r from-green-400 to-emerald-500 bg-clip-text text-transparent">
+                                    {(participant.starting_value - participant.current_value).toFixed(1)} kg
+                                  </span>
+                                  <span className="text-gray-500 mx-1">of</span>
+                                  <span className="font-semibold text-gray-300">
+                                    {(participant.starting_value - participant.target_value).toFixed(1)} kg
+                                  </span>
+                                </div>
+                              )}
                             </div>
                           </div>
                         </motion.div>
