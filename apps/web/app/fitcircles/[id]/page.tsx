@@ -32,7 +32,7 @@ import {
   Check,
   Loader2,
 } from 'lucide-react';
-import { DateRangeDisplay } from '@/components/ui/date-picker';
+import { DateRangeDisplay, DatePicker } from '@/components/ui/date-picker';
 import { motion } from 'framer-motion';
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/stores/auth-store';
@@ -95,6 +95,13 @@ export default function FitCirclePage() {
   const [isEditingName, setIsEditingName] = useState(false);
   const [editedName, setEditedName] = useState('');
   const [isSavingName, setIsSavingName] = useState(false);
+  const [isEditingStartDate, setIsEditingStartDate] = useState(false);
+  const [editedStartDate, setEditedStartDate] = useState('');
+  const [isSavingStartDate, setIsSavingStartDate] = useState(false);
+  const [isEditingEndDate, setIsEditingEndDate] = useState(false);
+  const [editedEndDate, setEditedEndDate] = useState('');
+  const [isSavingEndDate, setIsSavingEndDate] = useState(false);
+  const [removingParticipantId, setRemovingParticipantId] = useState<string | null>(null);
 
   const circleId = params.id as string;
 
@@ -318,12 +325,17 @@ export default function FitCirclePage() {
 
     setIsSavingName(true);
     try {
-      const { error } = await (supabase as any)
-        .from('challenges')
-        .update({ name: editedName.trim() })
-        .eq('id', circleId);
+      const response = await fetch(`/api/fitcircles/${circleId}/update`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: editedName.trim() }),
+      });
 
-      if (error) throw error;
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Failed to update name');
+      }
 
       // Update local state
       setFitCircle({
@@ -333,11 +345,150 @@ export default function FitCirclePage() {
 
       setIsEditingName(false);
       setEditedName('');
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error updating challenge name:', err);
-      alert('Failed to update name');
+      alert(err.message || 'Failed to update name');
     } finally {
       setIsSavingName(false);
+    }
+  };
+
+  const handleStartEditStartDate = () => {
+    // Convert date to YYYY-MM-DD format for the date input
+    const dateValue = fitCircle?.start_date || '';
+    const formattedDate = dateValue.split('T')[0]; // Extract just the date part
+    setEditedStartDate(formattedDate);
+    setIsEditingStartDate(true);
+  };
+
+  const handleCancelEditStartDate = () => {
+    setIsEditingStartDate(false);
+    setEditedStartDate('');
+  };
+
+  const handleSaveStartDate = async () => {
+    if (!editedStartDate || !fitCircle) return;
+
+    // Validate that start date is before end date
+    if (new Date(editedStartDate) >= new Date(fitCircle.end_date)) {
+      alert('Start date must be before end date');
+      return;
+    }
+
+    setIsSavingStartDate(true);
+    try {
+      const response = await fetch(`/api/fitcircles/${circleId}/update`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ start_date: editedStartDate }),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Failed to update start date');
+      }
+
+      // Update local state
+      setFitCircle({
+        ...fitCircle,
+        start_date: editedStartDate,
+      });
+
+      setIsEditingStartDate(false);
+      setEditedStartDate('');
+    } catch (err: any) {
+      console.error('Error saving start date:', err);
+      alert(err.message || 'Failed to update start date');
+    } finally {
+      setIsSavingStartDate(false);
+    }
+  };
+
+  const handleStartEditEndDate = () => {
+    // Convert date to YYYY-MM-DD format for the date input
+    const dateValue = fitCircle?.end_date || '';
+    const formattedDate = dateValue.split('T')[0]; // Extract just the date part
+    setEditedEndDate(formattedDate);
+    setIsEditingEndDate(true);
+  };
+
+  const handleCancelEditEndDate = () => {
+    setIsEditingEndDate(false);
+    setEditedEndDate('');
+  };
+
+  const handleSaveEndDate = async () => {
+    if (!editedEndDate || !fitCircle) return;
+
+    // Validate that end date is after start date
+    if (new Date(editedEndDate) <= new Date(fitCircle.start_date)) {
+      alert('End date must be after start date');
+      return;
+    }
+
+    setIsSavingEndDate(true);
+    try {
+      const response = await fetch(`/api/fitcircles/${circleId}/update`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ end_date: editedEndDate }),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Failed to update end date');
+      }
+
+      // Update local state
+      setFitCircle({
+        ...fitCircle,
+        end_date: editedEndDate,
+      });
+
+      setIsEditingEndDate(false);
+      setEditedEndDate('');
+    } catch (err: any) {
+      console.error('Error saving end date:', err);
+      alert(err.message || 'Failed to update end date');
+    } finally {
+      setIsSavingEndDate(false);
+    }
+  };
+
+  const handleRemoveParticipant = async (participantId: string, participantName: string) => {
+    // Show confirmation dialog
+    const confirmed = window.confirm(
+      `Are you sure you want to remove ${participantName} from this FitCircle?\n\nThis action cannot be undone. The participant will lose access to this challenge.`
+    );
+
+    if (!confirmed) {
+      return; // User cancelled
+    }
+
+    setRemovingParticipantId(participantId);
+    try {
+      const response = await fetch(`/api/fitcircles/${circleId}/participants/${participantId}/remove`, {
+        method: 'POST',
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Failed to remove participant');
+      }
+
+      // Show success message
+      alert(`${participantName} has been removed from the FitCircle`);
+
+      // Refresh participants list
+      await fetchParticipants();
+    } catch (err: any) {
+      console.error('Error removing participant:', err);
+      alert(err.message || 'Failed to remove participant. Please try again.');
+    } finally {
+      setRemovingParticipantId(null);
     }
   };
 
@@ -484,16 +635,38 @@ export default function FitCirclePage() {
                 </p>
               </div>
 
-              {fitCircle.is_creator && (
+              <div className="flex gap-2">
+                {/* Share button - available to all members */}
                 <Button
                   variant="outline"
-                  className="border-orange-500/50 text-orange-400 hover:bg-orange-500/10"
-                  onClick={() => setShowManageModal(true)}
+                  className="border-indigo-500/50 text-indigo-400 hover:bg-indigo-500/10"
+                  onClick={copyInviteCode}
                 >
-                  <Settings className="h-4 w-4 mr-2" />
-                  Manage
+                  {copySuccess ? (
+                    <>
+                      <CheckCircle className="h-4 w-4 mr-2" />
+                      Copied!
+                    </>
+                  ) : (
+                    <>
+                      <Share2 className="h-4 w-4 mr-2" />
+                      Share
+                    </>
+                  )}
                 </Button>
-              )}
+
+                {/* Manage button - only for creators */}
+                {fitCircle.is_creator && (
+                  <Button
+                    variant="outline"
+                    className="border-orange-500/50 text-orange-400 hover:bg-orange-500/10"
+                    onClick={() => setShowManageModal(true)}
+                  >
+                    <Settings className="h-4 w-4 mr-2" />
+                    Manage
+                  </Button>
+                )}
+              </div>
             </div>
           </div>
 
@@ -504,13 +677,13 @@ export default function FitCirclePage() {
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.1 }}
             >
-              <Card className="bg-slate-900/50 border-slate-800/50 backdrop-blur-xl">
-                <CardContent className="p-6">
-                  <div className="flex items-center space-x-4">
-                    <div className="p-3 bg-indigo-500/20 rounded-lg">
+              <Card className="bg-slate-900/50 border-slate-800/50 backdrop-blur-xl h-full">
+                <CardContent className="p-6 h-full min-h-[120px] flex items-center">
+                  <div className="flex items-center space-x-4 w-full">
+                    <div className="flex items-center justify-center w-12 h-12 rounded-xl bg-gradient-to-br from-indigo-500/20 to-blue-500/20 flex-shrink-0">
                       <Users className="h-6 w-6 text-indigo-400" />
                     </div>
-                    <div>
+                    <div className="flex-1 min-w-0">
                       <p className="text-sm text-gray-400">Participants</p>
                       <p className="text-2xl font-bold text-white">
                         {fitCircle.max_participants
@@ -529,13 +702,13 @@ export default function FitCirclePage() {
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.2 }}
             >
-              <Card className="bg-slate-900/50 border-slate-800/50 backdrop-blur-xl">
-                <CardContent className="p-6">
-                  <div className="flex items-center space-x-4">
-                    <div className="p-3 bg-orange-500/20 rounded-lg">
+              <Card className="bg-slate-900/50 border-slate-800/50 backdrop-blur-xl h-full">
+                <CardContent className="p-6 h-full min-h-[120px] flex items-center">
+                  <div className="flex items-center space-x-4 w-full">
+                    <div className="flex items-center justify-center w-12 h-12 rounded-xl bg-gradient-to-br from-orange-500/20 to-red-500/20 flex-shrink-0">
                       <Calendar className="h-6 w-6 text-orange-400" />
                     </div>
-                    <div>
+                    <div className="flex-1 min-w-0">
                       <p className="text-sm text-gray-400">Days Left</p>
                       <p className="text-2xl font-bold text-white">
                         {getDaysRemaining(fitCircle.end_date)}
@@ -551,15 +724,15 @@ export default function FitCirclePage() {
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.3 }}
             >
-              <Card className="bg-slate-900/50 border-slate-800/50 backdrop-blur-xl">
-                <CardContent className="p-6">
-                  <div className="flex items-center space-x-4">
-                    <div className="p-3 bg-green-500/20 rounded-lg">
+              <Card className="bg-slate-900/50 border-slate-800/50 backdrop-blur-xl h-full">
+                <CardContent className="p-6 h-full min-h-[120px] flex items-center">
+                  <div className="flex items-center space-x-4 w-full">
+                    <div className="flex items-center justify-center w-12 h-12 rounded-xl bg-gradient-to-br from-green-500/20 to-emerald-500/20 flex-shrink-0">
                       <Trophy className="h-6 w-6 text-green-400" />
                     </div>
-                    <div>
+                    <div className="flex-1 min-w-0">
                       <p className="text-sm text-gray-400">Challenge Type</p>
-                      <p className="text-lg font-semibold text-white capitalize">
+                      <p className="text-2xl font-bold text-white capitalize">
                         {fitCircle.type.replace('_', ' ')}
                       </p>
                     </div>
@@ -573,16 +746,16 @@ export default function FitCirclePage() {
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.4 }}
             >
-              <Card className="bg-slate-900/50 border-slate-800/50 backdrop-blur-xl">
-                <CardContent className="p-6">
-                  <div className="flex items-center gap-4">
-                    <div className="flex items-center justify-center w-12 h-12 rounded-xl bg-gradient-to-br from-purple-500/20 to-indigo-500/20">
+              <Card className="bg-slate-900/50 border-slate-800/50 backdrop-blur-xl h-full">
+                <CardContent className="p-6 h-full min-h-[120px] flex items-center">
+                  <div className="flex items-center gap-4 w-full">
+                    <div className="flex items-center justify-center w-12 h-12 rounded-xl bg-gradient-to-br from-purple-500/20 to-indigo-500/20 flex-shrink-0">
                       <Calendar className="h-6 w-6 text-purple-400" />
                     </div>
                     <DateRangeDisplay
                       startDate={fitCircle.start_date}
                       endDate={fitCircle.end_date}
-                      className="flex-1"
+                      className="flex-1 min-w-0"
                     />
                   </div>
                 </CardContent>
@@ -893,14 +1066,18 @@ export default function FitCirclePage() {
 
         {/* Manage Modal */}
         {showManageModal && fitCircle && (
-          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div
+            className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto"
+            onClick={() => setShowManageModal(false)}
+          >
             <motion.div
               initial={{ opacity: 0, scale: 0.9 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.9 }}
-              className="bg-slate-900/95 border border-slate-800 rounded-lg max-w-lg w-full"
+              className="bg-slate-900/95 border border-slate-800 rounded-lg max-w-lg w-full my-8"
               onClick={(e) => e.stopPropagation()}
             >
+              <div className="max-h-[80vh] overflow-y-auto">
               <div className="p-6">
                 <div className="flex items-center justify-between mb-6">
                   <h2 className="text-2xl font-bold text-white">Manage FitCircle</h2>
@@ -1038,6 +1215,201 @@ export default function FitCirclePage() {
                     </div>
                   </div>
 
+                  {/* Edit Start Date - Creator Only */}
+                  {fitCircle.is_creator && (
+                    <div className="p-4 bg-slate-800/50 rounded-lg border border-slate-700/50">
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center space-x-2">
+                          <Calendar className="h-4 w-4 text-green-400" />
+                          <span className="text-sm font-semibold text-white">Start Date</span>
+                        </div>
+                        {!isEditingStartDate && (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={handleStartEditStartDate}
+                            className="text-indigo-400 hover:text-indigo-300 hover:bg-indigo-500/10"
+                          >
+                            <Edit className="h-3 w-3 mr-1" />
+                            Edit
+                          </Button>
+                        )}
+                      </div>
+                      {isEditingStartDate ? (
+                        <div className="space-y-2">
+                          <DatePicker
+                            value={editedStartDate}
+                            onChange={(value) => setEditedStartDate(value)}
+                            max={fitCircle.end_date}
+                          />
+                          <div className="flex items-center space-x-2">
+                            <Button
+                              size="sm"
+                              onClick={handleSaveStartDate}
+                              disabled={!editedStartDate || isSavingStartDate}
+                              className="bg-green-600 hover:bg-green-700"
+                            >
+                              {isSavingStartDate ? (
+                                <>
+                                  <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                                  Saving...
+                                </>
+                              ) : (
+                                <>
+                                  <Check className="h-3 w-3 mr-1" />
+                                  Save
+                                </>
+                              )}
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={handleCancelEditStartDate}
+                              disabled={isSavingStartDate}
+                              className="text-gray-400 hover:text-white"
+                            >
+                              <X className="h-3 w-3 mr-1" />
+                              Cancel
+                            </Button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="text-white font-medium">
+                          {new Date(fitCircle.start_date).toLocaleDateString('en-US', {
+                            weekday: 'short',
+                            month: 'short',
+                            day: 'numeric',
+                            year: 'numeric'
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Edit End Date - Creator Only */}
+                  {fitCircle.is_creator && (
+                    <div className="p-4 bg-slate-800/50 rounded-lg border border-slate-700/50">
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center space-x-2">
+                          <Calendar className="h-4 w-4 text-orange-400" />
+                          <span className="text-sm font-semibold text-white">End Date</span>
+                        </div>
+                        {!isEditingEndDate && (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={handleStartEditEndDate}
+                            className="text-indigo-400 hover:text-indigo-300 hover:bg-indigo-500/10"
+                          >
+                            <Edit className="h-3 w-3 mr-1" />
+                            Edit
+                          </Button>
+                        )}
+                      </div>
+                      {isEditingEndDate ? (
+                        <div className="space-y-2">
+                          <DatePicker
+                            value={editedEndDate}
+                            onChange={(value) => setEditedEndDate(value)}
+                            min={fitCircle.start_date}
+                          />
+                          <div className="flex items-center space-x-2">
+                            <Button
+                              size="sm"
+                              onClick={handleSaveEndDate}
+                              disabled={!editedEndDate || isSavingEndDate}
+                              className="bg-green-600 hover:bg-green-700"
+                            >
+                              {isSavingEndDate ? (
+                                <>
+                                  <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                                  Saving...
+                                </>
+                              ) : (
+                                <>
+                                  <Check className="h-3 w-3 mr-1" />
+                                  Save
+                                </>
+                              )}
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={handleCancelEditEndDate}
+                              disabled={isSavingEndDate}
+                              className="text-gray-400 hover:text-white"
+                            >
+                              <X className="h-3 w-3 mr-1" />
+                              Cancel
+                            </Button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="text-white font-medium">
+                          {new Date(fitCircle.end_date).toLocaleDateString('en-US', {
+                            weekday: 'short',
+                            month: 'short',
+                            day: 'numeric',
+                            year: 'numeric'
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Remove Participants - Creator Only */}
+                  {fitCircle.is_creator && participants.length > 0 && (
+                    <div className="p-4 bg-slate-800/50 rounded-lg border border-slate-700/50">
+                      <div className="flex items-center space-x-2 mb-3">
+                        <Users className="h-4 w-4 text-red-400" />
+                        <span className="text-sm font-semibold text-white">Manage Participants</span>
+                      </div>
+                      <div className="space-y-2 max-h-60 overflow-y-auto">
+                        {participants.map((participant) => (
+                          <div
+                            key={participant.id}
+                            className="flex items-center justify-between p-2 bg-slate-900/50 rounded border border-slate-700/30"
+                          >
+                            <div className="flex items-center space-x-3">
+                              <div className="w-8 h-8 rounded-full bg-gradient-to-r from-indigo-500 to-purple-600 flex items-center justify-center text-white font-bold text-sm">
+                                {participant.display_name.charAt(0).toUpperCase()}
+                              </div>
+                              <div>
+                                <div className="text-sm font-medium text-white flex items-center gap-2">
+                                  {participant.display_name}
+                                  {participant.is_creator && (
+                                    <Crown className="h-3 w-3 text-yellow-500" />
+                                  )}
+                                  {participant.is_current_user && (
+                                    <span className="text-xs text-gray-400">(You)</span>
+                                  )}
+                                </div>
+                                <div className="text-xs text-gray-400">
+                                  {participant.progress}% progress
+                                </div>
+                              </div>
+                            </div>
+                            {!participant.is_creator && (
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => handleRemoveParticipant(participant.user_id, participant.display_name)}
+                                disabled={removingParticipantId === participant.user_id}
+                                className="text-red-400 hover:text-red-300 hover:bg-red-500/10"
+                              >
+                                {removingParticipantId === participant.user_id ? (
+                                  <Loader2 className="h-3 w-3 animate-spin" />
+                                ) : (
+                                  <X className="h-3 w-3" />
+                                )}
+                              </Button>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
                   {/* Actions */}
                   <div className="space-y-2 pt-2">
                     <Button
@@ -1050,6 +1422,7 @@ export default function FitCirclePage() {
                     </Button>
                   </div>
                 </div>
+              </div>
               </div>
             </motion.div>
           </div>

@@ -35,13 +35,37 @@ export function DatePicker({
 
   const formatDisplayDate = (dateStr: string) => {
     if (!dateStr) return '';
-    const date = new Date(dateStr + 'T00:00:00');
-    return date.toLocaleDateString('en-US', {
-      weekday: 'short',
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric',
-    });
+
+    try {
+      // Extract just the date part (YYYY-MM-DD) from any format
+      const datePart = dateStr.split('T')[0];
+
+      if (!datePart || datePart.length !== 10) {
+        return 'Invalid Date';
+      }
+
+      // Parse the date parts to avoid timezone issues
+      const [year, month, day] = datePart.split('-').map(Number);
+
+      // Create date in UTC to avoid timezone shifts
+      const date = new Date(Date.UTC(year, month - 1, day, 12, 0, 0));
+
+      // Check if date is valid
+      if (isNaN(date.getTime())) {
+        return 'Invalid Date';
+      }
+
+      return date.toLocaleDateString('en-US', {
+        weekday: 'short',
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric',
+        timeZone: 'UTC',
+      });
+    } catch (error) {
+      console.error('Error formatting date:', dateStr, error);
+      return 'Invalid Date';
+    }
   };
 
   return (
@@ -110,10 +134,32 @@ interface DateRangeDisplayProps {
 
 export function DateRangeDisplay({ startDate, endDate, className }: DateRangeDisplayProps) {
   const formatDateRange = (start: string, end: string) => {
-    if (!start || !end) return { duration: '', dateRange: '' };
+    if (!start || !end) return { duration: 'Not set', dateRange: 'No dates selected' };
 
-    const startD = new Date(start + 'T00:00:00');
-    const endD = new Date(end + 'T00:00:00');
+    // Parse dates - extract date part and create UTC dates
+    let startD: Date;
+    let endD: Date;
+
+    try {
+      // Extract just the date part (YYYY-MM-DD)
+      const startPart = start.split('T')[0];
+      const endPart = end.split('T')[0];
+
+      // Parse date components
+      const [startYear, startMonth, startDay] = startPart.split('-').map(Number);
+      const [endYear, endMonth, endDay] = endPart.split('-').map(Number);
+
+      // Create dates in UTC at noon to avoid timezone issues
+      startD = new Date(Date.UTC(startYear, startMonth - 1, startDay, 12, 0, 0));
+      endD = new Date(Date.UTC(endYear, endMonth - 1, endDay, 12, 0, 0));
+
+      // Validate dates
+      if (isNaN(startD.getTime()) || isNaN(endD.getTime())) {
+        return { duration: 'Invalid dates', dateRange: 'Please check your dates' };
+      }
+    } catch (error) {
+      return { duration: 'Invalid dates', dateRange: 'Please check your dates' };
+    }
 
     const diffTime = Math.abs(endD.getTime() - startD.getTime());
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
@@ -129,7 +175,17 @@ export function DateRangeDisplay({ startDate, endDate, className }: DateRangeDis
       duration = `${diffDays} ${diffDays === 1 ? 'day' : 'days'}`;
     }
 
-    const dateRange = `${startD.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} - ${endD.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`;
+    const dateRange = `${startD.toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+      timeZone: 'UTC'
+    })} - ${endD.toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+      timeZone: 'UTC'
+    })}`;
 
     return { duration, dateRange };
   };
