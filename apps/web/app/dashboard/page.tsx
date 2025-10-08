@@ -357,7 +357,7 @@ export default function DashboardPage() {
 
         {/* Activity Rings Dashboard */}
         <div className="space-y-6 mb-8">
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
             {/* Main Activity Ring */}
             <motion.div
               initial={{ opacity: 0, scale: 0.9 }}
@@ -365,7 +365,7 @@ export default function DashboardPage() {
               className="lg:col-span-1"
             >
               <Card className="bg-slate-900/50 border-slate-800 backdrop-blur-xl shadow-2xl">
-              <CardContent className="p-8 flex flex-col items-center justify-center">
+              <CardContent className="p-4 sm:p-8 flex flex-col items-center justify-center">
                 <ActivityRing
                   rings={[
                     {
@@ -381,12 +381,13 @@ export default function DashboardPage() {
                       label: 'Streak'
                     }
                   ]}
-                  size={200}
-                  strokeWidth={16}
+                  size={180}
+                  strokeWidth={14}
+                  className="sm:!w-[200px] sm:!h-[200px]"
                 />
-                <div className="mt-6 text-center">
-                  <h3 className="text-lg font-semibold text-white mb-2">Today's Activity</h3>
-                  <div className="flex gap-4 justify-center text-sm">
+                <div className="mt-4 sm:mt-6 text-center">
+                  <h3 className="text-base sm:text-lg font-semibold text-white mb-2">Today's Activity</h3>
+                  <div className="flex gap-3 sm:gap-4 justify-center text-xs sm:text-sm">
                     <div>
                       <div className="w-3 h-3 bg-indigo-400 rounded-full inline-block mr-1" />
                       <span className="text-gray-400">Steps</span>
@@ -402,7 +403,7 @@ export default function DashboardPage() {
           </motion.div>
 
           {/* Stats Grid - 2x2 layout with goals */}
-          <div className="lg:col-span-2 grid grid-cols-2 gap-4">
+          <div className="lg:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-4">
             {/* Steps with Goal */}
             <motion.div
               initial={{ opacity: 0, scale: 0.9 }}
