@@ -72,9 +72,9 @@ function RegisterForm() {
       });
       showToast('Account created successfully!', 'success');
 
-      // Redirect to returnUrl if provided, otherwise go to onboarding
+      // New users need to complete onboarding first, but preserve returnUrl
       if (returnUrl) {
-        router.push(returnUrl);
+        router.push(`/onboarding?returnUrl=${encodeURIComponent(returnUrl)}`);
       } else {
         router.push('/onboarding');
       }

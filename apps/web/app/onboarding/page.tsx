@@ -1,7 +1,7 @@
 'use client';
 
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState, Suspense } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -66,8 +66,10 @@ const goals = [
   { value: 'health', label: 'General Health', icon: User },
 ];
 
-export default function OnboardingPage() {
+function OnboardingForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const returnUrl = searchParams.get('returnUrl');
   const { user } = useAuthStore();
   const { updateProfile, isLoading } = useProfile();
   const [currentStep, setCurrentStep] = useState(0);
@@ -157,7 +159,12 @@ export default function OnboardingPage() {
   };
 
   const handleCelebrationComplete = () => {
-    router.push('/dashboard');
+    // Redirect to returnUrl if provided (e.g., from invite link), otherwise go to dashboard
+    if (returnUrl) {
+      router.push(returnUrl);
+    } else {
+      router.push('/dashboard');
+    }
   };
 
   const handleBack = () => {
@@ -471,5 +478,17 @@ export default function OnboardingPage() {
       </div>
     </div>
     </>
+  );
+}
+
+export default function OnboardingPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-gradient-to-br from-background via-background to-primary/5 flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    }>
+      <OnboardingForm />
+    </Suspense>
   );
 }
