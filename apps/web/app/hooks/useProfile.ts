@@ -51,16 +51,17 @@ export function useProfile() {
       }
 
       // First check if profile exists
-      const { data: existingProfile, error: checkError } = await supabase
+      const { data: profilesData, error: checkError } = await supabase
         .from('profiles')
         .select('*')
-        .eq('id', user.id)
-        .single();
+        .eq('id', user.id);
 
-      if (checkError && checkError.code !== 'PGRST116') {
+      if (checkError) {
         console.error('Error checking profile:', checkError);
         throw new Error(`Database check failed: ${checkError.message} (${checkError.code})`);
       }
+
+      const existingProfile = profilesData && profilesData.length > 0 ? profilesData[0] : null;
 
       let result;
       if (existingProfile) {
