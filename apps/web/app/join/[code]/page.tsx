@@ -86,7 +86,6 @@ export default function JoinCirclePage() {
           status,
           start_date,
           end_date,
-          participant_count,
           max_participants,
           creator_id,
           invite_code,
@@ -108,6 +107,13 @@ export default function JoinCirclePage() {
       }
 
       const circleInfo = circleData as any;
+
+      // Get actual participant count from challenge_participants table
+      const { count: participantCount } = await supabase
+        .from('challenge_participants')
+        .select('*', { count: 'exact', head: true })
+        .eq('challenge_id', circleInfo.id)
+        .eq('status', 'active');
       const circle: CircleDetails = {
         id: circleInfo.id,
         name: circleInfo.name,
@@ -116,7 +122,7 @@ export default function JoinCirclePage() {
         status: circleInfo.status,
         start_date: circleInfo.start_date,
         end_date: circleInfo.end_date,
-        participant_count: circleInfo.participant_count || 0,
+        participant_count: participantCount || 0,
         max_participants: circleInfo.max_participants,
         creator: {
           display_name: circleInfo.profiles?.display_name || 'Circle Creator',
