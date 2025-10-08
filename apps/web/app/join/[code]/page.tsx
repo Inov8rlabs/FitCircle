@@ -188,23 +188,7 @@ export default function JoinCirclePage() {
 
     setIsJoining(true);
     try {
-      // Join the circle with goal data
-      const { error: joinError } = await supabase
-        .from('fitcircle_members')
-        .insert({
-          circle_id: circleDetails.id,
-          user_id: user.id,
-          goal_type: goalData.type,
-          goal_config: goalData,
-          starting_value: goalData.current_value,
-          target_value: goalData.target_value,
-          current_value: goalData.current_value,
-          progress_percentage: 0,
-        } as any);
-
-      if (joinError) throw joinError;
-
-      // Also add to challenge_participants for compatibility
+      // Join the circle by adding to challenge_participants
       const { error: participantError } = await supabase
         .from('challenge_participants')
         .insert({
