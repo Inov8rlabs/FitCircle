@@ -317,7 +317,7 @@ export default function FitCirclePage() {
 
     setIsSavingName(true);
     try {
-      const { error } = await supabase
+      const { error } = await (supabase as any)
         .from('challenges')
         .update({ name: editedName.trim() })
         .eq('id', circleId);

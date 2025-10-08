@@ -335,12 +335,24 @@ export const setUserProperties = (properties: {
   total_fitcircles?: number;
   unit_preference?: 'metric' | 'imperial';
 }) => {
-  amplitude.setUserProperties(properties);
+  const identifyEvent = new amplitude.Identify();
+  Object.entries(properties).forEach(([key, value]) => {
+    if (value !== undefined) {
+      identifyEvent.set(key, value);
+    }
+  });
+  amplitude.identify(identifyEvent);
 };
 
 export const identifyUser = (userId: string, userProperties?: Record<string, any>) => {
   amplitude.setUserId(userId);
   if (userProperties) {
-    amplitude.setUserProperties(userProperties);
+    const identifyEvent = new amplitude.Identify();
+    Object.entries(userProperties).forEach(([key, value]) => {
+      if (value !== undefined) {
+        identifyEvent.set(key, value);
+      }
+    });
+    amplitude.identify(identifyEvent);
   }
 };

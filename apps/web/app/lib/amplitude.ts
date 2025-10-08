@@ -2,6 +2,7 @@
 'use client';
 
 import * as amplitude from '@amplitude/analytics-browser';
+import { Identify } from '@amplitude/analytics-browser';
 import { sessionReplayPlugin } from '@amplitude/plugin-session-replay-browser';
 
 function initAmplitude() {

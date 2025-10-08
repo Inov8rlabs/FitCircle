@@ -103,14 +103,15 @@ interface ActivityRingProps {
   }[];
   size?: number;
   strokeWidth?: number;
+  className?: string;
 }
 
-export function ActivityRing({ rings, size = 160, strokeWidth = 12 }: ActivityRingProps) {
+export function ActivityRing({ rings, size = 160, strokeWidth = 12, className }: ActivityRingProps) {
   const center = size / 2;
   const gap = strokeWidth + 4;
 
   return (
-    <div className="relative" style={{ width: size, height: size }}>
+    <div className={`relative ${className || ''}`} style={{ width: size, height: size }}>
       <svg width={size} height={size} className="transform -rotate-90">
         {rings.map((ring, index) => {
           const radius = center - strokeWidth / 2 - gap * index;
