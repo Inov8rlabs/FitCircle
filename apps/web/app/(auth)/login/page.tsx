@@ -1,7 +1,7 @@
 'use client';
 
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState, Suspense } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
 import { useForm } from 'react-hook-form';
@@ -23,8 +23,10 @@ const loginSchema = z.object({
 
 type LoginFormData = z.infer<typeof loginSchema>;
 
-export default function LoginPage() {
+function LoginForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const returnUrl = searchParams.get('returnUrl');
   const { login, isLoading } = useAuthStore();
   const { showToast } = useUIStore();
   const [showPassword, setShowPassword] = useState(false);
@@ -46,7 +48,13 @@ export default function LoginPage() {
     try {
       await login(data.email, data.password);
       showToast('Welcome back!', 'success');
-      router.push('/dashboard');
+
+      // Redirect to returnUrl if provided, otherwise go to dashboard
+      if (returnUrl) {
+        router.push(returnUrl);
+      } else {
+        router.push('/dashboard');
+      }
     } catch (error) {
       showToast('Invalid email or password', 'error');
     }
@@ -134,7 +142,10 @@ export default function LoginPage() {
 
             <div className="mt-6 text-center text-sm">
               <span className="text-gray-400">Don't have an account? </span>
-              <Link href="/register" className="text-indigo-400 hover:underline font-medium">
+              <Link
+                href={returnUrl ? `/register?returnUrl=${encodeURIComponent(returnUrl)}` : '/register'}
+                className="text-indigo-400 hover:underline font-medium"
+              >
                 Sign up
               </Link>
             </div>
@@ -154,5 +165,17 @@ export default function LoginPage() {
         </motion.div>
       </div>
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950">
+        <Loader2 className="h-8 w-8 animate-spin text-purple-400" />
+      </div>
+    }>
+      <LoginForm />
+    </Suspense>
   );
 }

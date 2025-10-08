@@ -1,7 +1,7 @@
 'use client';
 
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState, Suspense } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
 import { useForm } from 'react-hook-form';
@@ -19,6 +19,7 @@ import {
   Users,
   TrendingUp,
   Check,
+  Loader2,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -42,8 +43,10 @@ const benefits = [
   { icon: Sparkles, text: 'AI-powered coaching' },
 ];
 
-export default function RegisterPage() {
+function RegisterForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const returnUrl = searchParams.get('returnUrl');
   const { register: registerUser, isLoading } = useAuthStore();
   const { showToast } = useUIStore();
   const [showPassword, setShowPassword] = useState(false);
@@ -68,7 +71,13 @@ export default function RegisterPage() {
         username: data.email.split('@')[0], // Generate username from email
       });
       showToast('Account created successfully!', 'success');
-      router.push('/onboarding');
+
+      // Redirect to returnUrl if provided, otherwise go to onboarding
+      if (returnUrl) {
+        router.push(returnUrl);
+      } else {
+        router.push('/onboarding');
+      }
     } catch (error) {
       showToast('Registration failed. Please try again.', 'error');
     }
@@ -227,7 +236,10 @@ export default function RegisterPage() {
           <div className="text-center">
             <span className="text-sm text-gray-400">
               Already have an account?{' '}
-              <Link href="/login" className="font-medium text-indigo-400 hover:underline">
+              <Link
+                href={returnUrl ? `/login?returnUrl=${encodeURIComponent(returnUrl)}` : '/login'}
+                className="font-medium text-indigo-400 hover:underline"
+              >
                 Sign in
               </Link>
             </span>
@@ -272,5 +284,17 @@ export default function RegisterPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function RegisterPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950">
+        <Loader2 className="h-8 w-8 animate-spin text-purple-400" />
+      </div>
+    }>
+      <RegisterForm />
+    </Suspense>
   );
 }
