@@ -320,7 +320,10 @@ export class LeaderboardService {
     if (challengeType === 'weight_loss') {
       const totalToLose = startValue - targetValue;
       if (totalToLose <= 0) return 0;
-      const lostSoFar = startValue - currentValue;
+
+      // If no progress logged (currentValue is 0), treat as no progress made (0%)
+      const effectiveCurrentValue = currentValue > 0 ? currentValue : startValue;
+      const lostSoFar = startValue - effectiveCurrentValue;
       return Math.max(0, Math.min(100, (lostSoFar / totalToLose) * 100));
     }
 
