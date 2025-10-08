@@ -790,10 +790,15 @@ export default function FitCirclePage() {
                   <span className="text-sm text-gray-400">Weight Progress</span>
                   <div className="text-right">
                     <div className="text-lg font-bold text-white">
-                      {selectedParticipant.starting_value?.toFixed(1)} kg → {selectedParticipant.current_value?.toFixed(1)} kg → {selectedParticipant.target_value?.toFixed(1)} kg
+                      {(() => {
+                        const current = selectedParticipant.current_value && selectedParticipant.current_value > 0
+                          ? selectedParticipant.current_value
+                          : selectedParticipant.starting_value;
+                        return `${selectedParticipant.starting_value?.toFixed(1)} kg → ${current?.toFixed(1)} kg → ${selectedParticipant.target_value?.toFixed(1)} kg`;
+                      })()}
                     </div>
                     <div className="text-sm text-gray-400">
-                      {selectedParticipant.starting_value && selectedParticipant.current_value &&
+                      {selectedParticipant.starting_value && selectedParticipant.current_value && selectedParticipant.current_value > 0 &&
                         `${(selectedParticipant.starting_value - selectedParticipant.current_value).toFixed(1)} kg lost`
                       }
                     </div>
