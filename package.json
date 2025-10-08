@@ -25,5 +25,9 @@
   "engines": {
     "node": ">=20.0.0"
   },
-  "packageManager": "bun@1.0.0"
+  "packageManager": "bun@1.0.0",
+  "dependencies": {
+    "@amplitude/analytics-browser": "^2.25.4",
+    "@amplitude/plugin-session-replay-browser": "^1.22.21"
+  }
 }
