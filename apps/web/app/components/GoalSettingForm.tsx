@@ -257,12 +257,12 @@ export default function GoalSettingForm({
                         }`}
                         placeholder="180"
                       />
-                      <div className="absolute right-3 top-3 text-gray-400">
+                      <div className="absolute right-2 top-3 text-gray-400">
                         <Select
                           value={goalData.unit}
                           onValueChange={(value: GoalUnit) => setGoalData({ ...goalData, unit: value })}
                         >
-                          <SelectTrigger className="border-0 bg-transparent h-auto p-0 text-sm w-12">
+                          <SelectTrigger className="border-0 bg-transparent h-auto p-0 text-sm w-16 gap-1">
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
