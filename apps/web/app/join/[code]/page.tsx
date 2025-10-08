@@ -188,6 +188,33 @@ export default function JoinCirclePage() {
 
     setIsJoining(true);
     try {
+      // First ensure profile exists
+      const { data: profileData } = await supabase
+        .from('profiles')
+        .select('id')
+        .eq('id', user.id);
+
+      const existingProfile = profileData && profileData.length > 0 ? profileData[0] : null;
+
+      // If profile doesn't exist, create a basic one
+      if (!existingProfile) {
+        console.log('Creating profile for user:', user.id);
+        const { error: profileError } = await (supabase as any)
+          .from('profiles')
+          .insert({
+            id: user.id,
+            email: user.email,
+            username: user.username,
+            display_name: user.name,
+            onboarding_completed: true,
+          });
+
+        if (profileError) {
+          console.error('Error creating profile:', profileError);
+          throw new Error('Failed to create user profile. Please complete your profile first.');
+        }
+      }
+
       // Join the circle by adding to challenge_participants
       const { error: participantError } = await supabase
         .from('challenge_participants')
