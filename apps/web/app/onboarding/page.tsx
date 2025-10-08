@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
+import { DatePicker } from '@/components/ui/date-picker';
 import {
   User,
   Target,
@@ -261,14 +262,13 @@ function OnboardingForm() {
                         onChange={(e) => updateFormData('displayName', e.target.value)}
                       />
                     </div>
-                    <div>
-                      <label className="text-sm font-medium mb-2 block">Date of Birth</label>
-                      <Input
-                        type="date"
-                        value={formData.dateOfBirth}
-                        onChange={(e) => updateFormData('dateOfBirth', e.target.value)}
-                      />
-                    </div>
+                    <DatePicker
+                      label="Date of Birth"
+                      value={formData.dateOfBirth}
+                      onChange={(value) => updateFormData('dateOfBirth', value)}
+                      max={new Date().toISOString().split('T')[0]}
+                      placeholder="Your date of birth"
+                    />
                     <div className="grid grid-cols-2 gap-4">
                       <div>
                         <label className="text-sm font-medium mb-2 block">
@@ -344,16 +344,13 @@ function OnboardingForm() {
                           onChange={(e) => updateFormData('targetWeight', e.target.value)}
                         />
                       </div>
-                      <div>
-                        <label className="text-sm font-medium mb-2 block">
-                          Target Date
-                        </label>
-                        <Input
-                          type="date"
-                          value={formData.targetDate}
-                          onChange={(e) => updateFormData('targetDate', e.target.value)}
-                        />
-                      </div>
+                      <DatePicker
+                        label="Target Date"
+                        value={formData.targetDate}
+                        onChange={(value) => updateFormData('targetDate', value)}
+                        min={new Date().toISOString().split('T')[0]}
+                        placeholder="When do you want to reach your goal?"
+                      />
                     </div>
                   </div>
                 )}

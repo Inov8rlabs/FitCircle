@@ -9,6 +9,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { DatePicker } from '@/components/ui/date-picker';
 // import { Switch } from '@/components/ui/switch'; // Temporarily disabled
 import {
   Trophy,
@@ -536,42 +537,30 @@ export default function CircleCreationWizard({ isOpen, onClose, onSuccess }: Cir
             {currentStep === 2 && (
               <div className="space-y-6">
                 <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="startDate" className="text-white">
-                      Start Date <span className="text-red-400">*</span>
-                    </Label>
-                    <div className="relative">
-                      <Calendar className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
-                      <Input
-                        id="startDate"
-                        type="date"
-                        value={formData.startDate}
-                        onChange={(e) => setFormData({ ...formData, startDate: e.target.value })}
-                        className="pl-10 bg-slate-800/50 border-slate-700 text-white"
-                        min={new Date().toISOString().split('T')[0]}
-                      />
-                    </div>
-                    <p className="text-xs text-gray-400">
+                  <div className="space-y-1">
+                    <DatePicker
+                      label="Start Date"
+                      value={formData.startDate}
+                      onChange={(value) => setFormData({ ...formData, startDate: value })}
+                      min={new Date().toISOString().split('T')[0]}
+                      placeholder="When does your challenge start?"
+                      required
+                    />
+                    <p className="text-xs text-gray-400 pl-1">
                       Can start today or any future date
                     </p>
                   </div>
 
-                  <div className="space-y-2">
-                    <Label htmlFor="endDate" className="text-white">
-                      End Date <span className="text-red-400">*</span>
-                    </Label>
-                    <div className="relative">
-                      <Calendar className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
-                      <Input
-                        id="endDate"
-                        type="date"
-                        value={formData.endDate}
-                        onChange={(e) => setFormData({ ...formData, endDate: e.target.value })}
-                        className="pl-10 bg-slate-800/50 border-slate-700 text-white"
-                        min={formData.startDate}
-                      />
-                    </div>
-                    <p className="text-xs text-gray-400">
+                  <div className="space-y-1">
+                    <DatePicker
+                      label="End Date"
+                      value={formData.endDate}
+                      onChange={(value) => setFormData({ ...formData, endDate: value })}
+                      min={formData.startDate}
+                      placeholder="When does it end?"
+                      required
+                    />
+                    <p className="text-xs text-gray-400 pl-1">
                       Minimum 7 days duration
                     </p>
                   </div>

@@ -32,6 +32,7 @@ import {
   Check,
   Loader2,
 } from 'lucide-react';
+import { DateRangeDisplay } from '@/components/ui/date-picker';
 import { motion } from 'framer-motion';
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/stores/auth-store';
@@ -574,16 +575,15 @@ export default function FitCirclePage() {
             >
               <Card className="bg-slate-900/50 border-slate-800/50 backdrop-blur-xl">
                 <CardContent className="p-6">
-                  <div className="flex items-center space-x-4">
-                    <div className="p-3 bg-purple-500/20 rounded-lg">
-                      <Target className="h-6 w-6 text-purple-400" />
+                  <div className="flex items-center gap-4">
+                    <div className="flex items-center justify-center w-12 h-12 rounded-xl bg-gradient-to-br from-purple-500/20 to-indigo-500/20">
+                      <Calendar className="h-6 w-6 text-purple-400" />
                     </div>
-                    <div>
-                      <p className="text-sm text-gray-400">Duration</p>
-                      <p className="text-lg font-semibold text-white">
-                        {formatDate(fitCircle.start_date)} - {formatDate(fitCircle.end_date)}
-                      </p>
-                    </div>
+                    <DateRangeDisplay
+                      startDate={fitCircle.start_date}
+                      endDate={fitCircle.end_date}
+                      className="flex-1"
+                    />
                   </div>
                 </CardContent>
               </Card>
