@@ -67,7 +67,15 @@ export default function JoinCirclePage() {
   const validateInviteCode = async () => {
     setIsLoading(true);
     try {
-      // Fetch circle details using invite code
+      // If user is not logged in, skip validation and show welcome screen
+      if (!user) {
+        setIsLoading(false);
+        return;
+      }
+
+      console.log('Validating invite code:', inviteCode);
+
+      // Fetch circle details using invite code (only for authenticated users)
       const { data: circleData, error: circleError } = await supabase
         .from('challenges')
         .select(`
@@ -81,6 +89,7 @@ export default function JoinCirclePage() {
           participant_count,
           max_participants,
           creator_id,
+          invite_code,
           profiles:creator_id (
             display_name,
             avatar_url
@@ -88,6 +97,8 @@ export default function JoinCirclePage() {
         `)
         .eq('invite_code', inviteCode.toUpperCase())
         .single();
+
+      console.log('Circle query result:', { data: circleData, error: circleError });
 
       if (circleError || !circleData) {
         setJoinError('Invalid or expired invite code');
@@ -257,6 +268,102 @@ export default function JoinCirclePage() {
         <div className="text-center">
           <Loader2 className="h-8 w-8 animate-spin text-orange-400 mx-auto mb-4" />
           <p className="text-gray-400">Validating invite code...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Show welcome screen for unauthenticated users
+  if (!user) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950">
+        {/* Background decoration */}
+        <div className="fixed inset-0 overflow-hidden pointer-events-none">
+          <div className="absolute top-20 left-10 w-96 h-96 bg-purple-500/5 rounded-full blur-3xl" />
+          <div className="absolute bottom-20 right-20 w-[500px] h-[500px] bg-orange-500/5 rounded-full blur-3xl" />
+        </div>
+
+        <div className="relative max-w-2xl mx-auto px-4 py-16 flex items-center min-h-screen">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5 }}
+            className="w-full"
+          >
+            <Card className="bg-slate-900/50 border-slate-800 backdrop-blur-xl overflow-hidden">
+              <div className="h-2 bg-gradient-to-r from-orange-500 to-purple-600" />
+
+              <CardContent className="p-8 sm:p-12 text-center">
+                {/* Icon */}
+                <div className="mb-6">
+                  <div className="p-4 bg-gradient-to-br from-orange-500/20 to-purple-600/20 rounded-full inline-flex mb-4">
+                    <Users className="h-16 w-16 text-orange-400" />
+                  </div>
+                </div>
+
+                {/* Heading */}
+                <h1 className="text-3xl sm:text-4xl font-bold text-white mb-4">
+                  You've Been Invited!
+                </h1>
+
+                <p className="text-lg text-gray-300 mb-8">
+                  A friend has invited you to join their FitCircle challenge.
+                  Sign up or log in to see the details and join the fun!
+                </p>
+
+                {/* Benefits */}
+                <div className="bg-slate-800/30 rounded-lg p-6 mb-8 text-left">
+                  <h3 className="text-lg font-semibold text-white mb-4 text-center">
+                    What is FitCircle?
+                  </h3>
+                  <ul className="space-y-3 text-gray-300">
+                    <li className="flex items-start gap-3">
+                      <CheckCircle2 className="h-5 w-5 text-green-400 mt-0.5 flex-shrink-0" />
+                      <span>Compete with friends in weight loss and fitness challenges</span>
+                    </li>
+                    <li className="flex items-start gap-3">
+                      <CheckCircle2 className="h-5 w-5 text-green-400 mt-0.5 flex-shrink-0" />
+                      <span>Track your progress while keeping your data private</span>
+                    </li>
+                    <li className="flex items-start gap-3">
+                      <CheckCircle2 className="h-5 w-5 text-green-400 mt-0.5 flex-shrink-0" />
+                      <span>Stay motivated with friendly competition and accountability</span>
+                    </li>
+                  </ul>
+                </div>
+
+                {/* CTA Buttons */}
+                <div className="space-y-4">
+                  <Button
+                    size="lg"
+                    onClick={() => router.push(`/register?returnUrl=/join/${inviteCode}`)}
+                    className="w-full bg-gradient-to-r from-orange-600 to-purple-600 hover:from-orange-700 hover:to-purple-700 text-lg py-6"
+                  >
+                    Sign Up to Join
+                    <ArrowRight className="h-5 w-5 ml-2" />
+                  </Button>
+
+                  <div className="text-center text-sm text-gray-400">
+                    Already have an account?{' '}
+                    <Button
+                      variant="link"
+                      className="text-orange-400 hover:text-orange-300 p-0"
+                      onClick={() => router.push(`/login?returnUrl=/join/${inviteCode}`)}
+                    >
+                      Log in
+                    </Button>
+                  </div>
+                </div>
+
+                {/* Invite code display */}
+                <div className="mt-8 pt-6 border-t border-slate-700">
+                  <p className="text-xs text-gray-500">
+                    Invite code: <span className="font-mono text-gray-400">{inviteCode.toUpperCase()}</span>
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+          </motion.div>
         </div>
       </div>
     );
