@@ -52,7 +52,9 @@ export default function InviteFriendsModal({
   const [qrCode, setQrCode] = useState('');
   const [showQR, setShowQR] = useState(false);
 
-  const inviteLink = `${window.location.origin}/join/${inviteCode}`;
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL ||
+    (typeof window !== 'undefined' ? window.location.origin : '');
+  const inviteLink = `${baseUrl}/join/${inviteCode}`;
 
   const copyToClipboard = async () => {
     try {

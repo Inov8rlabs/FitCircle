@@ -94,6 +94,11 @@ export default function FitCirclePage() {
   const [showManageModal, setShowManageModal] = useState(false);
   const [showShareDialog, setShowShareDialog] = useState(false);
   const [copySuccess, setCopySuccess] = useState(false);
+
+  // Generate invite URL using environment variable or window location
+  const inviteUrl = fitCircle?.invite_code
+    ? `${process.env.NEXT_PUBLIC_APP_URL || (typeof window !== 'undefined' ? window.location.origin : '')}/join/${fitCircle.invite_code}`
+    : '';
   const [isEditingName, setIsEditingName] = useState(false);
   const [editedName, setEditedName] = useState('');
   const [isSavingName, setIsSavingName] = useState(false);
@@ -284,9 +289,8 @@ export default function FitCirclePage() {
   };
 
   const copyInviteCode = async () => {
-    if (!fitCircle?.invite_code) return;
+    if (!inviteUrl) return;
 
-    const inviteUrl = `${window.location.origin}/join/${fitCircle.invite_code}`;
     await navigator.clipboard.writeText(inviteUrl);
     setCopySuccess(true);
     setTimeout(() => setCopySuccess(false), 2000);
@@ -1160,7 +1164,7 @@ export default function FitCirclePage() {
                     </div>
                     <div className="flex items-center space-x-2">
                       <div className="flex-1 px-3 py-2 bg-slate-900 rounded border border-slate-700 text-sm text-gray-300 overflow-x-auto">
-                        {`${window.location.origin}/join/${fitCircle.invite_code}`}
+                        {inviteUrl}
                       </div>
                       <Button
                         size="sm"

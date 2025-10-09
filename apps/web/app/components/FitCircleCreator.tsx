@@ -253,7 +253,9 @@ export default function FitCircleCreator() {
   };
 
   const copyInviteLink = () => {
-    const link = `${window.location.origin}/join/${inviteCode}`;
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL ||
+      (typeof window !== 'undefined' ? window.location.origin : '');
+    const link = `${baseUrl}/join/${inviteCode}`;
     navigator.clipboard.writeText(link);
     toast.success('Invite link copied to clipboard!');
   };

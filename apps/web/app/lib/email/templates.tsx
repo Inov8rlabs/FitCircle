@@ -4,8 +4,8 @@
  * Design-forward, on-brand email templates with dark theme and bright accents
  */
 
-// Production domain
-const PRODUCTION_URL = 'https://www.fitcircle.ai';
+// Production domain - use environment variable or fallback to hardcoded value
+const PRODUCTION_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://www.fitcircle.ai';
 
 // Base styles for all emails - matches FitCircle's brand
 const baseStyles = `

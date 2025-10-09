@@ -19,6 +19,7 @@ import {
   Send,
   Plus,
   X,
+  MessageCircle,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -38,13 +39,15 @@ export function ShareFitCircleDialog({
   inviteCode,
 }: ShareFitCircleDialogProps) {
   const [copySuccess, setCopySuccess] = useState(false);
+  const [messageCopySuccess, setMessageCopySuccess] = useState(false);
   const [isSending, setIsSending] = useState(false);
   const [emails, setEmails] = useState<string[]>(['']);
   const [emailErrors, setEmailErrors] = useState<Record<number, string>>({});
 
-  const inviteUrl = typeof window !== 'undefined'
-    ? `${window.location.origin}/join/${inviteCode}`
-    : '';
+  // Use environment variable for production URLs, fallback to window.location.origin for development
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL ||
+    (typeof window !== 'undefined' ? window.location.origin : '');
+  const inviteUrl = baseUrl ? `${baseUrl}/join/${inviteCode}` : '';
 
   const copyToClipboard = async () => {
     try {
@@ -54,6 +57,34 @@ export function ShareFitCircleDialog({
       setTimeout(() => setCopySuccess(false), 2000);
     } catch (error) {
       toast.error('Failed to copy link');
+    }
+  };
+
+  const generateShareMessage = () => {
+    return `🏆 Join me on FitCircle!
+
+I'm competing in "${fitCircleName}" and I want YOU to join!
+
+💪 Let's crush our fitness goals together
+🎯 Track progress & stay accountable
+🏅 Compete on the leaderboard
+🎉 Make staying healthy fun!
+
+Join here:
+${inviteUrl}
+
+Let's do this! 🚀`;
+  };
+
+  const copyShareMessage = async () => {
+    try {
+      const message = generateShareMessage();
+      await navigator.clipboard.writeText(message);
+      setMessageCopySuccess(true);
+      toast.success('Message copied! Ready to share on WhatsApp, Instagram, or anywhere!');
+      setTimeout(() => setMessageCopySuccess(false), 3000);
+    } catch (error) {
+      toast.error('Failed to copy message');
     }
   };
 
@@ -180,14 +211,18 @@ export function ShareFitCircleDialog({
         </DialogHeader>
 
         <Tabs defaultValue="link" className="w-full">
-          <TabsList className="grid w-full grid-cols-2 bg-slate-800/50">
+          <TabsList className="grid w-full grid-cols-3 bg-slate-800/50">
             <TabsTrigger value="link" className="data-[state=active]:bg-slate-700">
               <Copy className="h-4 w-4 mr-2" />
-              Copy Link
+              Link
+            </TabsTrigger>
+            <TabsTrigger value="message" className="data-[state=active]:bg-slate-700">
+              <MessageCircle className="h-4 w-4 mr-2" />
+              Message
             </TabsTrigger>
             <TabsTrigger value="email" className="data-[state=active]:bg-slate-700">
               <Mail className="h-4 w-4 mr-2" />
-              Send Email
+              Email
             </TabsTrigger>
           </TabsList>
 
@@ -230,6 +265,60 @@ export function ShareFitCircleDialog({
                 <p className="text-sm text-indigo-300">
                   💡 <strong>Pro tip:</strong> Anyone with this link can join your FitCircle.
                   Share it on social media, group chats, or anywhere you connect with friends!
+                </p>
+              </div>
+            </div>
+          </TabsContent>
+
+          {/* Copy Message Tab */}
+          <TabsContent value="message" className="space-y-4 mt-4">
+            <div className="space-y-3">
+              <p className="text-sm text-gray-400">
+                Copy this pre-formatted message to share on WhatsApp, Instagram, or any social platform:
+              </p>
+
+              <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-4">
+                <pre className="text-sm text-gray-300 whitespace-pre-wrap font-sans leading-relaxed">
+                  {generateShareMessage()}
+                </pre>
+              </div>
+
+              <Button
+                onClick={copyShareMessage}
+                className={`w-full ${
+                  messageCopySuccess
+                    ? 'bg-green-600 hover:bg-green-700'
+                    : 'bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700'
+                }`}
+              >
+                {messageCopySuccess ? (
+                  <>
+                    <CheckCircle className="h-4 w-4 mr-2" />
+                    Copied to Clipboard!
+                  </>
+                ) : (
+                  <>
+                    <Copy className="h-4 w-4 mr-2" />
+                    Copy Message
+                  </>
+                )}
+              </Button>
+
+              <div className="grid grid-cols-2 gap-3 mt-4">
+                <div className="bg-green-500/10 border border-green-500/20 rounded-lg p-3 text-center">
+                  <p className="text-xs text-green-400 font-semibold mb-1">📱 WhatsApp</p>
+                  <p className="text-xs text-gray-400">Paste in chat or status</p>
+                </div>
+                <div className="bg-pink-500/10 border border-pink-500/20 rounded-lg p-3 text-center">
+                  <p className="text-xs text-pink-400 font-semibold mb-1">📸 Instagram</p>
+                  <p className="text-xs text-gray-400">Share in DM or story</p>
+                </div>
+              </div>
+
+              <div className="bg-purple-500/10 border border-purple-500/20 rounded-lg p-4">
+                <p className="text-sm text-purple-300">
+                  💡 <strong>Tip:</strong> This message is ready to paste anywhere! Works great for group chats,
+                  social media posts, or direct messages.
                 </p>
               </div>
             </div>

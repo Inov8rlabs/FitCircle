@@ -67,15 +67,9 @@ export default function JoinCirclePage() {
   const validateInviteCode = async () => {
     setIsLoading(true);
     try {
-      // If user is not logged in, skip validation and show welcome screen
-      if (!user) {
-        setIsLoading(false);
-        return;
-      }
-
       console.log('Validating invite code:', inviteCode);
 
-      // Fetch circle details using invite code (only for authenticated users)
+      // Fetch circle details using invite code (works for both authenticated and anonymous users)
       const { data: circleData, error: circleError } = await supabase
         .from('challenges')
         .select(`
@@ -292,6 +286,9 @@ export default function JoinCirclePage() {
 
   // Show welcome screen for unauthenticated users
   if (!user) {
+    const ChallengeIcon = circleDetails ? getChallengeIcon(circleDetails.type) : Users;
+    const challengeColor = circleDetails ? getChallengeColor(circleDetails.type) : 'from-orange-500 to-purple-600';
+
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950">
         {/* Background decoration */}
@@ -308,13 +305,13 @@ export default function JoinCirclePage() {
             className="w-full"
           >
             <Card className="bg-slate-900/50 border-slate-800 backdrop-blur-xl overflow-hidden">
-              <div className="h-2 bg-gradient-to-r from-orange-500 to-purple-600" />
+              <div className={`h-2 bg-gradient-to-r ${challengeColor}`} />
 
               <CardContent className="p-8 sm:p-12 text-center">
                 {/* Icon */}
                 <div className="mb-6">
                   <div className="p-4 bg-gradient-to-br from-orange-500/20 to-purple-600/20 rounded-full inline-flex mb-4">
-                    <Users className="h-16 w-16 text-orange-400" />
+                    <ChallengeIcon className="h-16 w-16 text-orange-400" />
                   </div>
                 </div>
 
@@ -323,10 +320,21 @@ export default function JoinCirclePage() {
                   You've Been Invited!
                 </h1>
 
-                <p className="text-lg text-gray-300 mb-8">
-                  A friend has invited you to join their FitCircle challenge.
-                  Sign up or log in to see the details and join the fun!
-                </p>
+                {circleDetails ? (
+                  <>
+                    <p className="text-lg text-gray-300 mb-4">
+                      Join <strong className="text-white">{circleDetails.name}</strong>
+                    </p>
+                    <p className="text-base text-gray-400 mb-8">
+                      {circleDetails.description || 'A FitCircle challenge created by ' + circleDetails.creator.display_name}
+                    </p>
+                  </>
+                ) : (
+                  <p className="text-lg text-gray-300 mb-8">
+                    A friend has invited you to join their FitCircle challenge.
+                    Sign up or log in to see the details and join the fun!
+                  </p>
+                )}
 
                 {/* Benefits */}
                 <div className="bg-slate-800/30 rounded-lg p-6 mb-8 text-left">

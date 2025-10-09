@@ -16,9 +16,9 @@ This document provides a comprehensive overview of the test suite for FitCircle,
 |----------|-----------|------------|---------------|---------|
 | Unit Tests - Services | 1 | 25+ | 90%+ | ✅ Implemented |
 | Integration Tests - API Routes | 2 | 30+ | 85%+ | ✅ Implemented |
-| Integration Tests - Components | 1 | 20+ | 80%+ | ✅ Implemented |
+| Integration Tests - Components | 2 | 50+ | 80%+ | ✅ Implemented |
 | E2E Tests | 2 | 15+ | Critical Paths | ✅ Implemented |
-| **Total** | **6** | **90+** | **85%+** | **✅ Ready** |
+| **Total** | **7** | **120+** | **85%+** | **✅ Ready** |
 
 ---
 
@@ -147,7 +147,69 @@ This document provides a comprehensive overview of the test suite for FitCircle,
 
 ### 3. Integration Tests - Components
 
-#### 3.1 DatePicker Component (`date-picker.test.tsx`)
+#### 3.1 ShareFitCircleDialog Component (`share-fitcircle-dialog.test.tsx`)
+
+**Purpose:** Test social share dialog with link copying, message generation, and email functionality.
+
+**Test Cases:**
+
+##### Rendering (3 tests)
+- ✅ Render dialog when open
+- ✅ Render all three tabs (Link, Message, Email)
+- ✅ Not render when closed
+
+##### Link Tab (4 tests)
+- ✅ Display invite URL
+- ✅ Copy link to clipboard when button clicked
+- ✅ Show success state after copying link
+- ✅ Handle clipboard copy failure gracefully
+
+##### Message Tab - Social Share (9 tests) **NEW FEATURE**
+- ✅ Switch to message tab when clicked
+- ✅ Display pre-formatted message with FitCircle name
+- ✅ Include invite URL in message
+- ✅ Generate correct message format
+- ✅ Copy formatted message to clipboard
+- ✅ Show success state after copying message
+- ✅ Display WhatsApp platform indicator
+- ✅ Display Instagram platform indicator
+- ✅ Show helpful tip for message usage
+
+##### Email Tab (3 tests)
+- ✅ Switch to email tab when clicked
+- ✅ Allow adding email addresses
+- ✅ Show add another email button
+
+##### Message Content Validation (3 tests)
+- ✅ Include emojis in the message (🏆💪🎯🏅🎉🚀)
+- ✅ Format message with proper line breaks
+- ✅ Include call-to-action in message
+
+##### Accessibility (2 tests)
+- ✅ Have accessible tab navigation
+- ✅ Have accessible button labels
+
+##### Edge Cases (3 tests)
+- ✅ Handle very long FitCircle names
+- ✅ Handle special characters in FitCircle name
+- ✅ Reset success state when switching tabs
+
+**Component File:** `app/components/ShareFitCircleDialog.tsx`
+**Test Count:** 27 tests
+**Coverage Goal:** 80%+
+**Critical Paths Covered:** Social sharing, message generation, clipboard operations, user interactions
+
+**Critical Features Tested:**
+- ✅ Social media message generation with proper formatting
+- ✅ Clipboard API integration for copy functionality
+- ✅ Platform-specific indicators (WhatsApp, Instagram)
+- ✅ Tab navigation and state management
+- ✅ Error handling for clipboard failures
+- ✅ Success feedback for user actions
+
+---
+
+#### 3.2 DatePicker Component (`date-picker.test.tsx`)
 
 **Purpose:** Test date picker UI component and date range display with proper formatting and timezone handling.
 

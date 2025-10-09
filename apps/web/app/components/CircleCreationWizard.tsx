@@ -185,7 +185,9 @@ export default function CircleCreationWizard({ isOpen, onClose, onSuccess }: Cir
   };
 
   const copyInviteURL = () => {
-    const url = `${window.location.origin}/join/${inviteLink}`;
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL ||
+      (typeof window !== 'undefined' ? window.location.origin : '');
+    const url = `${baseUrl}/join/${inviteLink}`;
     navigator.clipboard.writeText(url);
     toast.success('Invite link copied to clipboard!');
   };

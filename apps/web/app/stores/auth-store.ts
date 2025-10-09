@@ -220,11 +220,13 @@ export const useAuthStore = create<AuthState>()(
         set({ isLoading: true, error: null });
         try {
           // Create user with Supabase Auth
+          const baseUrl = process.env.NEXT_PUBLIC_APP_URL ||
+            (typeof window !== 'undefined' ? window.location.origin : '');
           const { data: authData, error: authError } = await supabase.auth.signUp({
             email: data.email,
             password: data.password,
             options: {
-              emailRedirectTo: `${window.location.origin}/onboarding`,
+              emailRedirectTo: `${baseUrl}/onboarding`,
               data: {
                 name: data.name,
                 username: data.username,
