@@ -963,27 +963,83 @@ export default function FitCirclePage() {
               {/* Scrollable Content */}
               <div className="flex-1 overflow-y-auto p-6">
 
-              {/* Progress Overview */}
-              <div className="mb-6">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-sm text-gray-400">Weight Progress</span>
-                  <div className="text-right">
-                    <div className="text-lg font-bold text-white">
+              {/* Progress Overview - Redesigned */}
+              <div className="mb-6 p-6 bg-gradient-to-br from-slate-800/40 to-slate-800/20 rounded-xl border border-slate-700/50">
+                <div className="flex items-center justify-between mb-6">
+                  <span className="text-sm font-semibold text-white flex items-center gap-2">
+                    <BathroomScale className="h-4 w-4 text-purple-400" size={16} />
+                    Weight Progress
+                  </span>
+                  <div className="px-3 py-1 bg-purple-500/20 rounded-full border border-purple-500/30">
+                    <span className="text-sm font-bold text-purple-300">{selectedParticipant.progress}%</span>
+                  </div>
+                </div>
+
+                {/* Weight Stats Grid */}
+                <div className="grid grid-cols-3 gap-4 mb-6">
+                  {/* Starting Weight */}
+                  <div className="text-center p-3 bg-slate-900/50 rounded-lg border border-slate-700/30">
+                    <div className="text-xs text-gray-500 mb-1">Starting</div>
+                    <div className="text-lg font-bold text-gray-300">
+                      {selectedParticipant.starting_value?.toFixed(1)}
+                      <span className="text-xs text-gray-500 ml-1">kg</span>
+                    </div>
+                  </div>
+
+                  {/* Current Weight */}
+                  <div className="text-center p-3 bg-gradient-to-br from-purple-500/20 to-purple-600/20 rounded-lg border border-purple-500/30">
+                    <div className="text-xs text-purple-400 mb-1 font-medium">Current</div>
+                    <div className="text-xl font-bold text-white">
                       {(() => {
                         const current = selectedParticipant.current_value && selectedParticipant.current_value > 0
                           ? selectedParticipant.current_value
                           : selectedParticipant.starting_value;
-                        return `${selectedParticipant.starting_value?.toFixed(1)} kg → ${current?.toFixed(1)} kg → ${selectedParticipant.target_value?.toFixed(1)} kg`;
+                        return current?.toFixed(1);
                       })()}
+                      <span className="text-xs text-gray-400 ml-1">kg</span>
                     </div>
-                    <div className="text-sm text-gray-400">
-                      {selectedParticipant.starting_value && selectedParticipant.current_value && selectedParticipant.current_value > 0 &&
-                        `${(selectedParticipant.starting_value - selectedParticipant.current_value).toFixed(1)} kg lost`
-                      }
+                  </div>
+
+                  {/* Target Weight */}
+                  <div className="text-center p-3 bg-slate-900/50 rounded-lg border border-slate-700/30">
+                    <div className="text-xs text-gray-500 mb-1">Target</div>
+                    <div className="text-lg font-bold text-gray-300">
+                      {selectedParticipant.target_value?.toFixed(1)}
+                      <span className="text-xs text-gray-500 ml-1">kg</span>
                     </div>
                   </div>
                 </div>
-                <Progress value={selectedParticipant.progress} className="h-3 bg-slate-800" />
+
+                {/* Progress Bar */}
+                <div className="mb-4">
+                  <Progress value={selectedParticipant.progress} className="h-3 bg-slate-800" />
+                </div>
+
+                {/* Progress Summary */}
+                <div className="flex items-center justify-between text-sm">
+                  <div className="flex items-center gap-2">
+                    <TrendingDown className="h-4 w-4 text-green-400" />
+                    <span className="text-gray-400">Lost:</span>
+                    <span className="font-bold text-green-400">
+                      {selectedParticipant.starting_value && selectedParticipant.current_value && selectedParticipant.current_value > 0
+                        ? `${(selectedParticipant.starting_value - selectedParticipant.current_value).toFixed(1)} kg`
+                        : '0.0 kg'
+                      }
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Target className="h-4 w-4 text-orange-400" />
+                    <span className="text-gray-400">To Go:</span>
+                    <span className="font-bold text-orange-400">
+                      {selectedParticipant.current_value && selectedParticipant.target_value && selectedParticipant.current_value > 0
+                        ? `${(selectedParticipant.current_value - selectedParticipant.target_value).toFixed(1)} kg`
+                        : selectedParticipant.starting_value && selectedParticipant.target_value
+                        ? `${(selectedParticipant.starting_value - selectedParticipant.target_value).toFixed(1)} kg`
+                        : '0.0 kg'
+                      }
+                    </span>
+                  </div>
+                </div>
               </div>
 
               {/* Progress Chart/Entries */}
