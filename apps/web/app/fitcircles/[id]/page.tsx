@@ -490,13 +490,13 @@ export default function FitCirclePage() {
       }
 
       // Show success message
-      alert(`${participantName} has been removed from the FitCircle`);
+      toast.success(`${participantName} has been removed from the FitCircle`);
 
       // Refresh participants list
       await fetchParticipants();
     } catch (err: any) {
       console.error('Error removing participant:', err);
-      alert(err.message || 'Failed to remove participant. Please try again.');
+      toast.error(err.message || 'Failed to remove participant. Please try again.');
     } finally {
       setRemovingParticipantId(null);
     }

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerSupabase } from '@/lib/supabase-server';
+import { createAdminSupabase } from '@/lib/supabase-admin';
 
 export async function POST(
   request: NextRequest,
@@ -37,19 +38,21 @@ export async function POST(
       return NextResponse.json({ error: 'Cannot remove the creator' }, { status: 400 });
     }
 
-    // Update participant status to 'removed'
-    const { error: updateError } = await supabase
+    // Use admin client to actually delete the participant (bypasses RLS)
+    const supabaseAdmin = createAdminSupabase();
+
+    const { error: deleteError } = await supabaseAdmin
       .from('challenge_participants')
-      .update({ status: 'removed' })
+      .delete()
       .eq('challenge_id', challengeId)
       .eq('user_id', participantId);
 
-    if (updateError) {
-      console.error('Error removing participant:', updateError);
+    if (deleteError) {
+      console.error('Error removing participant:', deleteError);
       return NextResponse.json({ error: 'Failed to remove participant' }, { status: 500 });
     }
 
-    return NextResponse.json({ success: true });
+    return NextResponse.json({ success: true, message: 'Participant removed successfully' });
   } catch (error) {
     console.error('Error in remove participant API:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
