@@ -70,12 +70,12 @@ export function CircularProgress({
         </svg>
 
         {/* Center content */}
-        <div className="absolute inset-0 flex flex-col items-center justify-center">
+        <div className="absolute inset-0 flex flex-col items-center justify-center leading-none">
           {Icon && (
             <Icon className="w-6 h-6 mb-1" style={{ color }} />
           )}
           {showValue && (
-            <span className="text-xl font-bold" style={{ color }}>
+            <span className="text-xl font-bold leading-none" style={{ color }}>
               {Math.round(percentage)}%
             </span>
           )}
@@ -151,11 +151,11 @@ export function ActivityRing({ rings, size = 160, strokeWidth = 12, className }:
 
       {/* Center content */}
       <div className="absolute inset-0 flex items-center justify-center">
-        <div className="text-center">
-          <p className="text-2xl font-bold text-white">
+        <div className="text-center leading-none">
+          <p className="text-2xl font-bold text-white leading-none mb-1">
             {Math.round((rings[0]?.value / rings[0]?.max) * 100 || 0)}%
           </p>
-          <p className="text-xs text-gray-400">Complete</p>
+          <p className="text-xs text-gray-400 leading-none">Complete</p>
         </div>
       </div>
     </div>
