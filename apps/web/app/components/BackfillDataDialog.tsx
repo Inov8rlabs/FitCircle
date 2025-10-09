@@ -58,7 +58,7 @@ export function BackfillDataDialog({
 
       await onSubmit({
         date,
-        weight: weightInKg,
+        weight: weightInKg ?? undefined,
         steps: stepsNum,
       });
 
