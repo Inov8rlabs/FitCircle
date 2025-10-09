@@ -36,6 +36,7 @@ import { DateRangeDisplay, DatePicker } from '@/components/ui/date-picker';
 import { motion } from 'framer-motion';
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/stores/auth-store';
+import { ShareFitCircleDialog } from '@/components/ShareFitCircleDialog';
 
 interface FitCircle {
   id: string;
@@ -91,6 +92,7 @@ export default function FitCirclePage() {
   const [selectedParticipant, setSelectedParticipant] = useState<Participant | null>(null);
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [showManageModal, setShowManageModal] = useState(false);
+  const [showShareDialog, setShowShareDialog] = useState(false);
   const [copySuccess, setCopySuccess] = useState(false);
   const [isEditingName, setIsEditingName] = useState(false);
   const [editedName, setEditedName] = useState('');
@@ -640,19 +642,10 @@ export default function FitCirclePage() {
                 <Button
                   variant="outline"
                   className="border-indigo-500/50 text-indigo-400 hover:bg-indigo-500/10"
-                  onClick={copyInviteCode}
+                  onClick={() => setShowShareDialog(true)}
                 >
-                  {copySuccess ? (
-                    <>
-                      <CheckCircle className="h-4 w-4 mr-2" />
-                      Copied!
-                    </>
-                  ) : (
-                    <>
-                      <Share2 className="h-4 w-4 mr-2" />
-                      Share
-                    </>
-                  )}
+                  <Share2 className="h-4 w-4 mr-2" />
+                  Share
                 </Button>
 
                 {/* Manage button - only for creators */}
@@ -1426,6 +1419,17 @@ export default function FitCirclePage() {
               </div>
             </motion.div>
           </div>
+        )}
+
+        {/* Share Dialog */}
+        {fitCircle && (
+          <ShareFitCircleDialog
+            open={showShareDialog}
+            onOpenChange={setShowShareDialog}
+            fitCircleId={fitCircle.id}
+            fitCircleName={fitCircle.name}
+            inviteCode={fitCircle.invite_code}
+          />
         )}
       </div>
     </>

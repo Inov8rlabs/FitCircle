@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { z } from 'zod';
+import { sendWelcomeEmail } from '@/lib/email/email-service';
 
 // Validation schema
 const registerSchema = z.object({
@@ -72,6 +73,15 @@ export async function POST(request: NextRequest) {
       // It can be created later
     }
 
+    // Send welcome email (don't wait for it, send async)
+    sendWelcomeEmail({
+      to: validatedData.email,
+      userName: validatedData.fullName,
+    }).catch((error) => {
+      // Log error but don't fail registration if email fails
+      console.error('Failed to send welcome email:', error);
+    });
+
     // Return success response
     return NextResponse.json({
       user: {
@@ -80,7 +90,7 @@ export async function POST(request: NextRequest) {
         fullName: validatedData.fullName,
       },
       session: authData.session,
-      message: 'Registration successful! Please check your email to verify your account.'
+      message: 'Registration successful! Check your email for a welcome message.'
     });
 
   } catch (error) {
