@@ -96,21 +96,33 @@ export function SubmitProgressDialog({
   const showWeight = challengeType === 'weight_loss' || challengeType === 'custom';
   const showSteps = challengeType === 'step_count' || challengeType === 'custom';
 
+  // Count how many cards to show
+  const cardCount = (showWeight ? 1 : 0) + (showSteps ? 1 : 0);
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="bg-slate-900/95 border-slate-800 backdrop-blur-xl max-w-2xl">
-        <DialogHeader>
-          <DialogTitle className="text-2xl font-bold text-white flex items-center gap-2">
-            <TrendingUp className="h-6 w-6 text-green-400" />
+      <DialogContent className="bg-slate-900/95 border-slate-800 backdrop-blur-xl max-w-3xl">
+        <DialogHeader className="pb-2">
+          <DialogTitle className="text-2xl sm:text-3xl font-bold text-white flex items-center gap-3">
+            <div className="p-2 bg-green-500/10 rounded-lg">
+              <TrendingUp className="h-6 w-6 text-green-400" />
+            </div>
             Submit Progress
           </DialogTitle>
-          <DialogDescription className="text-gray-400">
+          <DialogDescription className="text-gray-400 text-base pt-1">
             Log your progress for <span className="text-white font-semibold">{challengeName}</span>
           </DialogDescription>
         </DialogHeader>
 
-        <div className="mt-6">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div className="py-6">
+          {/* Cards Container - centered if single card */}
+          <div
+            className={`grid gap-6 ${
+              cardCount === 1
+                ? 'grid-cols-1 max-w-md mx-auto'
+                : 'grid-cols-1 sm:grid-cols-2'
+            }`}
+          >
             {showWeight && (
               <QuickEntryCard
                 icon={BathroomScale}
@@ -147,11 +159,21 @@ export function SubmitProgressDialog({
           </div>
 
           {/* Info Box */}
-          <div className="mt-6 bg-green-500/10 border border-green-500/20 rounded-lg p-4">
-            <p className="text-sm text-green-300">
-              💡 <strong>Tip:</strong> Your progress will be logged for today and will automatically update
-              the leaderboard for this challenge.
-            </p>
+          <div className="mt-8 bg-gradient-to-r from-green-500/10 to-emerald-500/10 border border-green-500/30 rounded-xl p-4 backdrop-blur-sm">
+            <div className="flex items-start gap-3">
+              <div className="flex-shrink-0 mt-0.5">
+                <div className="p-1.5 bg-green-500/20 rounded-lg">
+                  <svg className="w-4 h-4 text-green-400" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                  </svg>
+                </div>
+              </div>
+              <div className="flex-1">
+                <p className="text-sm font-medium text-green-300 leading-relaxed">
+                  <span className="font-semibold">Tip:</span> Your progress will be logged for today and will automatically update the leaderboard for this challenge.
+                </p>
+              </div>
+            </div>
           </div>
         </div>
       </DialogContent>
