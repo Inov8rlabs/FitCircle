@@ -37,6 +37,7 @@ import { motion } from 'framer-motion';
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/stores/auth-store';
 import { ShareFitCircleDialog } from '@/components/ShareFitCircleDialog';
+import { toast } from 'sonner';
 
 interface FitCircle {
   id: string;
