@@ -46,6 +46,7 @@ import {
 import DashboardNav from '@/components/DashboardNav';
 import { GoalProgressIndicator } from '@/components/GoalProgressIndicator';
 import { StepsGoalCard } from '@/components/StepsGoalCard';
+import { QuickEntryCard } from '@/components/QuickEntryCard';
 import { useUnitPreference } from '@/hooks/useUnitPreference';
 import {
   formatWeight,
@@ -101,6 +102,10 @@ export default function DashboardPage() {
     energy: 3,
     notes: '',
   });
+
+  // Quick entry states
+  const [quickWeight, setQuickWeight] = useState('');
+  const [quickSteps, setQuickSteps] = useState('');
 
   // Fetch check-ins and profile on mount
   useEffect(() => {
@@ -317,6 +322,55 @@ export default function DashboardPage() {
     }
   };
 
+  // Quick entry for weight
+  const handleQuickWeightSubmit = async () => {
+    if (!user || !quickWeight) return;
+
+    const today = new Date().toISOString().split('T')[0];
+    const weightInKg = parseWeightToKg(quickWeight, unitSystem);
+
+    const { error } = await supabase
+      .from('daily_tracking')
+      .upsert({
+        user_id: user.id,
+        tracking_date: today,
+        weight_kg: weightInKg,
+      } as any, {
+        onConflict: 'user_id,tracking_date'
+      });
+
+    if (error) throw error;
+
+    toast.success('Weight logged!');
+    setQuickWeight('');
+    fetchCheckIns();
+    fetchDailyStats();
+  };
+
+  // Quick entry for steps
+  const handleQuickStepsSubmit = async () => {
+    if (!user || !quickSteps) return;
+
+    const today = new Date().toISOString().split('T')[0];
+
+    const { error } = await supabase
+      .from('daily_tracking')
+      .upsert({
+        user_id: user.id,
+        tracking_date: today,
+        steps: parseInt(quickSteps),
+      } as any, {
+        onConflict: 'user_id,tracking_date'
+      });
+
+    if (error) throw error;
+
+    toast.success('Steps logged!');
+    setQuickSteps('');
+    fetchCheckIns();
+    fetchDailyStats();
+  };
+
   const chartData = checkIns
     .slice(0, 14)
     .reverse()
@@ -345,7 +399,7 @@ export default function DashboardPage() {
         <motion.div
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="mb-8 sm:mb-12"
+          className="mb-6 sm:mb-8"
         >
           <h1 className="text-3xl sm:text-4xl lg:text-5xl font-bold bg-gradient-to-r from-indigo-300 via-fuchsia-400 to-orange-400 bg-clip-text text-transparent mb-2">
             Welcome back, {user?.name || 'Champion'}!
@@ -354,6 +408,44 @@ export default function DashboardPage() {
             Track your progress and stay consistent 🎯
           </p>
         </motion.div>
+
+        {/* Quick Entry Section */}
+        <div className="mb-8">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg sm:text-xl font-semibold text-white">Quick Log</h2>
+            <p className="text-xs sm:text-sm text-gray-400">Log today's data instantly</p>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <QuickEntryCard
+              icon={BathroomScale}
+              label="Weight"
+              value={quickWeight}
+              onChange={setQuickWeight}
+              onSubmit={handleQuickWeightSubmit}
+              placeholder="0.0"
+              unit={getWeightUnit(unitSystem)}
+              color="purple-500"
+              type="number"
+              step="0.1"
+              min="0"
+              helperText={`Today's weight in ${getWeightUnit(unitSystem)}`}
+            />
+            <QuickEntryCard
+              icon={Footprints as any}
+              label="Steps"
+              value={quickSteps}
+              onChange={setQuickSteps}
+              onSubmit={handleQuickStepsSubmit}
+              placeholder="10000"
+              unit="steps"
+              color="indigo-500"
+              type="number"
+              step="1"
+              min="0"
+              helperText="Today's step count"
+            />
+          </div>
+        </div>
 
         {/* Activity Rings Dashboard */}
         <div className="space-y-6 mb-8">
