@@ -15,6 +15,7 @@ import {
   Crown,
   Medal,
   TrendingUp,
+  TrendingDown,
   Clock,
   ArrowLeft,
   Settings,
@@ -32,6 +33,7 @@ import {
   Check,
   Loader2,
 } from 'lucide-react';
+import { BathroomScale } from '@/components/icons/BathroomScale';
 import { DateRangeDisplay, DatePicker } from '@/components/ui/date-picker';
 import { motion } from 'framer-motion';
 import { supabase } from '@/lib/supabase';
