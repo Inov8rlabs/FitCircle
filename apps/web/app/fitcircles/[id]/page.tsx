@@ -37,6 +37,8 @@ import { motion } from 'framer-motion';
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/stores/auth-store';
 import { ShareFitCircleDialog } from '@/components/ShareFitCircleDialog';
+import { SubmitProgressDialog } from '@/components/SubmitProgressDialog';
+import { useUnitPreference } from '@/hooks/useUnitPreference';
 import { toast } from 'sonner';
 
 interface FitCircle {
@@ -86,6 +88,7 @@ export default function FitCirclePage() {
   const params = useParams();
   const router = useRouter();
   const { user } = useAuthStore();
+  const { unitSystem } = useUnitPreference();
   const [fitCircle, setFitCircle] = useState<FitCircle | null>(null);
   const [participants, setParticipants] = useState<Participant[]>([]);
   const [loading, setLoading] = useState(true);
@@ -94,6 +97,7 @@ export default function FitCirclePage() {
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [showManageModal, setShowManageModal] = useState(false);
   const [showShareDialog, setShowShareDialog] = useState(false);
+  const [showSubmitProgressDialog, setShowSubmitProgressDialog] = useState(false);
   const [copySuccess, setCopySuccess] = useState(false);
 
   // Generate invite URL using environment variable or window location
@@ -893,7 +897,7 @@ export default function FitCirclePage() {
             {fitCircle.is_participant && (
               <Button
                 size="lg"
-                onClick={() => router.push(`/fitcircles/${circleId}/checkin`)}
+                onClick={() => setShowSubmitProgressDialog(true)}
                 className="bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800"
               >
                 <TrendingUp className="h-5 w-5 mr-2" />
@@ -1438,6 +1442,23 @@ export default function FitCirclePage() {
             fitCircleId={fitCircle.id}
             fitCircleName={fitCircle.name}
             inviteCode={fitCircle.invite_code}
+          />
+        )}
+
+        {/* Submit Progress Dialog */}
+        {fitCircle && user && (
+          <SubmitProgressDialog
+            open={showSubmitProgressDialog}
+            onOpenChange={setShowSubmitProgressDialog}
+            challengeId={fitCircle.id}
+            challengeName={fitCircle.name}
+            challengeType={fitCircle.type as 'weight_loss' | 'step_count' | 'workout_frequency' | 'custom'}
+            userId={user.id}
+            unitSystem={unitSystem}
+            onSubmitSuccess={() => {
+              // Refresh participants/leaderboard after submitting progress
+              fetchParticipants();
+            }}
           />
         )}
       </div>
