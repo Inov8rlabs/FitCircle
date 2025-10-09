@@ -19,7 +19,8 @@
     "test:e2e:debug": "playwright test --debug",
     "test:ci": "vitest run && playwright test",
     "test:email": "bun scripts/test-welcome-email.ts",
-    "test:email:invite": "bun scripts/test-invitation-email.ts"
+    "test:email:invite": "bun scripts/test-invitation-email.ts",
+    "generate:icons": "node scripts/generate-icons.mjs && node scripts/generate-favicon.mjs"
   },
   "dependencies": {
     "@amplitude/analytics-browser": "^2.11.8",
