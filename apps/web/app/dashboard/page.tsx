@@ -20,12 +20,8 @@ import {
   Calendar,
   Trophy,
   Flame,
-  Plus,
   Check,
-  Loader2,
-  Sparkles,
-  Smile,
-  Zap
+  Loader2
 } from 'lucide-react';
 import { useAuthStore } from '@/stores/auth-store';
 import { supabase } from '@/lib/supabase';
@@ -47,6 +43,7 @@ import DashboardNav from '@/components/DashboardNav';
 import { GoalProgressIndicator } from '@/components/GoalProgressIndicator';
 import { StepsGoalCard } from '@/components/StepsGoalCard';
 import { QuickEntryCard } from '@/components/QuickEntryCard';
+import { BackfillDataDialog } from '@/components/BackfillDataDialog';
 import { useUnitPreference } from '@/hooks/useUnitPreference';
 import {
   formatWeight,
@@ -81,7 +78,6 @@ export default function DashboardPage() {
   const { unitSystem, setUnitSystem, isLoading: isLoadingUnits } = useUnitPreference();
   const [checkIns, setCheckIns] = useState<CheckIn[]>([]);
   const [isLoadingCheckIns, setIsLoadingCheckIns] = useState(true);
-  const [isSubmitting, setIsSubmitting] = useState(false);
   const [goalWeightKg, setGoalWeightKg] = useState<number | undefined>();
   const [startingWeightKg, setStartingWeightKg] = useState<number | undefined>();
   const [dailyStepsGoal, setDailyStepsGoal] = useState<number>(10000); // Default 10k steps
@@ -94,19 +90,11 @@ export default function DashboardPage() {
     totalCheckIns: 0,
   });
 
-  const [checkInForm, setCheckInForm] = useState({
-    date: new Date().toISOString().split('T')[0], // Today's date
-    weight: '',
-    steps: '',
-    mood: 3,
-    energy: 3,
-    notes: '',
-  });
-
   // Quick entry states
   const [quickWeight, setQuickWeight] = useState('');
   const [quickSteps, setQuickSteps] = useState('');
   const [previousUnitSystem, setPreviousUnitSystem] = useState(unitSystem);
+  const [showBackfillDialog, setShowBackfillDialog] = useState(false);
 
   // Convert weight value when unit system changes
   useEffect(() => {
@@ -288,67 +276,6 @@ export default function DashboardPage() {
     }
   };
 
-  const handleCheckIn = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!user) {
-      toast.error('Please log in to check in');
-      return;
-    }
-
-    setIsSubmitting(true);
-    try {
-      // Use the date from the form
-      const trackingDate = checkInForm.date;
-
-      // Convert weight to kg if in imperial units
-      const weightInKg = checkInForm.weight
-        ? parseWeightToKg(checkInForm.weight, unitSystem)
-        : null;
-
-      const checkInData = {
-        user_id: user.id,
-        tracking_date: trackingDate,
-        weight_kg: weightInKg,
-        steps: checkInForm.steps ? parseInt(checkInForm.steps) : null,
-        mood_score: checkInForm.mood <= 5 ? checkInForm.mood * 2 : checkInForm.mood, // Convert 1-5 to 2-10 for DB
-        energy_level: checkInForm.energy <= 5 ? checkInForm.energy * 2 : checkInForm.energy, // Convert 1-5 to 2-10 for DB
-        notes: checkInForm.notes || null,
-      };
-
-      const { error } = await supabase
-        .from('daily_tracking')
-        .upsert(checkInData as any, {
-          onConflict: 'user_id,tracking_date'
-        });
-
-      if (error) throw error;
-
-      const isToday = trackingDate === new Date().toISOString().split('T')[0];
-      const dateDisplay = isToday
-        ? 'today'
-        : new Date(trackingDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-
-      toast.success(`Check-in saved for ${dateDisplay}!`);
-
-      setCheckInForm({
-        date: new Date().toISOString().split('T')[0], // Reset to today
-        weight: '',
-        steps: '',
-        mood: 3,
-        energy: 3,
-        notes: '',
-      });
-
-      fetchCheckIns();
-      fetchDailyStats();
-    } catch (error: any) {
-      console.error('Check-in error:', error);
-      toast.error(error.message || 'Failed to save check-in');
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
   // Quick entry for weight
   const handleQuickWeightSubmit = async () => {
     if (!user || !quickWeight) return;
@@ -398,6 +325,34 @@ export default function DashboardPage() {
     fetchDailyStats();
   };
 
+  // Backfill past data
+  const handleBackfillSubmit = async (data: { date: string; weight?: number; steps?: number }) => {
+    if (!user) return;
+
+    const { error } = await supabase
+      .from('daily_tracking')
+      .upsert({
+        user_id: user.id,
+        tracking_date: data.date,
+        weight_kg: data.weight || null,
+        steps: data.steps || null,
+      } as any, {
+        onConflict: 'user_id,tracking_date'
+      });
+
+    if (error) throw error;
+
+    const dateDisplay = new Date(data.date).toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric'
+    });
+
+    toast.success(`Data saved for ${dateDisplay}!`);
+    fetchCheckIns();
+    fetchDailyStats();
+  };
+
   const chartData = checkIns
     .slice(0, 14)
     .reverse()
@@ -440,7 +395,13 @@ export default function DashboardPage() {
         <div className="mb-8">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg sm:text-xl font-semibold text-white">Quick Log</h2>
-            <p className="text-xs sm:text-sm text-gray-400">Log today's data instantly</p>
+            <button
+              onClick={() => setShowBackfillDialog(true)}
+              className="text-xs sm:text-sm text-indigo-400 hover:text-indigo-300 transition-colors flex items-center gap-1"
+            >
+              <Calendar className="h-3 w-3" />
+              Log past date
+            </button>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <QuickEntryCard
@@ -612,232 +573,17 @@ export default function DashboardPage() {
         </div>
 
         {/* Main Content Tabs */}
-        <Tabs defaultValue="checkin" className="space-y-6">
-          <TabsList className="w-full sm:w-auto grid grid-cols-2 sm:grid-cols-3 gap-2 bg-slate-900/50 border border-slate-800">
-            <TabsTrigger value="checkin" className="text-sm data-[state=active]:bg-indigo-500/20 data-[state=active]:text-indigo-400">
-              <Plus className="h-4 w-4 mr-2" />
-              Check-in
+        <Tabs defaultValue="weight" className="space-y-6">
+          <TabsList className="w-full sm:w-auto grid grid-cols-2 gap-2 bg-slate-900/50 border border-slate-800">
+            <TabsTrigger value="weight" className="text-sm data-[state=active]:bg-purple-500/20 data-[state=active]:text-purple-400">
+              <BathroomScale className="h-4 w-4 mr-2" size={16} />
+              Weight Trends
             </TabsTrigger>
-            <TabsTrigger value="weight" className="text-sm data-[state=active]:bg-purple-500/20 data-[state=active]:text-purple-400">Weight</TabsTrigger>
-            <TabsTrigger value="steps" className="text-sm data-[state=active]:bg-indigo-500/20 data-[state=active]:text-indigo-400">Steps</TabsTrigger>
+            <TabsTrigger value="steps" className="text-sm data-[state=active]:bg-indigo-500/20 data-[state=active]:text-indigo-400">
+              <Footprints className="h-4 w-4 mr-2" />
+              Steps Trends
+            </TabsTrigger>
           </TabsList>
-
-          {/* Daily Check-in Tab */}
-          <TabsContent value="checkin" className="space-y-6">
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-            >
-              <Card className="bg-slate-900/50 border-slate-800 backdrop-blur-xl shadow-2xl">
-                <CardHeader className="pb-4">
-                  <div className="flex items-center gap-2">
-                    <Sparkles className="h-5 w-5 text-indigo-400" />
-                    <CardTitle className="text-xl sm:text-2xl text-white">Quick Check-in</CardTitle>
-                  </div>
-                  <CardDescription className="text-gray-400">
-                    Log today's progress in seconds
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <form onSubmit={handleCheckIn} className="space-y-6">
-                    {/* Date Picker */}
-                    <div className="space-y-2">
-                      <Label htmlFor="tracking-date" className="text-sm font-medium text-gray-300">
-                        Date
-                      </Label>
-                      <div className="relative">
-                        <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-500" />
-                        <Input
-                          id="tracking-date"
-                          type="date"
-                          max={new Date().toISOString().split('T')[0]}
-                          value={checkInForm.date}
-                          onChange={(e) => setCheckInForm({ ...checkInForm, date: e.target.value })}
-                          className="pl-10 h-12 bg-slate-800/50 border-slate-700 text-white"
-                        />
-                      </div>
-                      <p className="text-xs text-gray-400">
-                        Submit data for past dates if you missed tracking
-                      </p>
-                    </div>
-
-                    {/* Weight and Steps */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <div className="flex items-center justify-between">
-                          <Label htmlFor="weight" className="text-sm font-medium text-gray-300">
-                            Weight ({getWeightUnit(unitSystem)})
-                          </Label>
-                          <UnitToggle
-                            value={unitSystem}
-                            onChange={setUnitSystem}
-                            isLoading={isLoadingUnits}
-                            size="sm"
-                          />
-                        </div>
-                        <div className="relative">
-                          <BathroomScale className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-500" size={16} />
-                          <Input
-                            id="weight"
-                            type="number"
-                            step="0.01"
-                            placeholder={getWeightPlaceholder(unitSystem)}
-                            className="pl-10 h-12 bg-slate-800/50 border-slate-700 text-white placeholder:text-gray-500"
-                            value={checkInForm.weight}
-                            onChange={(e) => setCheckInForm({ ...checkInForm, weight: e.target.value })}
-                          />
-                        </div>
-                      </div>
-
-                      <div className="space-y-2">
-                        <Label htmlFor="steps" className="text-sm font-medium text-gray-300">Steps</Label>
-                        <div className="relative">
-                          <Footprints className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-500" />
-                          <Input
-                            id="steps"
-                            type="number"
-                            placeholder="10000"
-                            className="pl-10 h-12 bg-slate-800/50 border-slate-700 text-white placeholder:text-gray-500"
-                            value={checkInForm.steps}
-                            onChange={(e) => setCheckInForm({ ...checkInForm, steps: e.target.value })}
-                          />
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Circular Sliders for Mood & Energy */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-8 py-6">
-                      <div className="flex justify-center">
-                        <CircularSlider
-                          value={checkInForm.mood}
-                          onChange={(value) => setCheckInForm({ ...checkInForm, mood: value })}
-                          min={1}
-                          max={5}
-                          size={160}
-                          strokeWidth={14}
-                          color="#6366f1"
-                          label="Mood"
-                          icon={Smile}
-                        />
-                      </div>
-
-                      <div className="flex justify-center">
-                        <CircularSlider
-                          value={checkInForm.energy}
-                          onChange={(value) => setCheckInForm({ ...checkInForm, energy: value })}
-                          min={1}
-                          max={5}
-                          size={160}
-                          strokeWidth={14}
-                          color="#f97316"
-                          label="Energy"
-                          icon={Zap}
-                        />
-                      </div>
-                    </div>
-
-                    {/* Notes */}
-                    <div className="space-y-2">
-                      <Label htmlFor="notes" className="text-sm font-medium text-gray-300">Notes (Optional)</Label>
-                      <textarea
-                        id="notes"
-                        className="w-full px-4 py-3 bg-slate-800/50 border border-slate-700 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm text-white placeholder:text-gray-500"
-                        rows={2}
-                        placeholder="How are you feeling today?"
-                        value={checkInForm.notes}
-                        onChange={(e) => setCheckInForm({ ...checkInForm, notes: e.target.value })}
-                      />
-                    </div>
-
-                    {/* Save Button */}
-                    <div className="flex justify-end pt-2">
-                      <Button
-                        type="submit"
-                        disabled={isSubmitting}
-                        size="lg"
-                        className="w-full sm:w-auto px-8 bg-purple-600 hover:bg-purple-700 shadow-lg hover:shadow-purple-500/50 transition-all"
-                      >
-                        {isSubmitting ? (
-                          <>
-                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                            Saving...
-                          </>
-                        ) : (
-                          <>
-                            <Check className="mr-2 h-4 w-4" />
-                            Save Check-in
-                          </>
-                        )}
-                      </Button>
-                    </div>
-                  </form>
-                </CardContent>
-              </Card>
-            </motion.div>
-
-            {/* Recent Check-ins */}
-            <Card className="bg-slate-900/50 border-slate-800 backdrop-blur-xl shadow-2xl">
-              <CardHeader>
-                <CardTitle className="text-lg text-white">Recent Activity</CardTitle>
-                <CardDescription className="text-gray-400">Last 7 check-ins</CardDescription>
-              </CardHeader>
-              <CardContent>
-                {isLoadingCheckIns ? (
-                  <div className="flex justify-center py-12">
-                    <Loader2 className="h-8 w-8 animate-spin text-indigo-400" />
-                  </div>
-                ) : checkIns.length === 0 ? (
-                  <div className="text-center py-12">
-                    <Activity className="h-12 w-12 text-gray-600 mx-auto mb-3" />
-                    <p className="text-gray-400">No check-ins yet. Start tracking today!</p>
-                  </div>
-                ) : (
-                  <div className="space-y-2">
-                    {checkIns.slice(0, 7).map((checkIn) => (
-                      <div
-                        key={checkIn.id}
-                        className="flex items-center justify-between p-3 sm:p-4 bg-slate-800/30 hover:bg-slate-800/50 rounded-lg transition-colors"
-                      >
-                        <div className="flex items-center gap-3">
-                          <Calendar className="h-4 w-4 text-gray-500 flex-shrink-0" />
-                          <div className="min-w-0">
-                            <p className="font-medium text-sm sm:text-base text-white">
-                              {new Date(checkIn.tracking_date).toLocaleDateString('en-US', {
-                                weekday: 'short',
-                                month: 'short',
-                                day: 'numeric',
-                              })}
-                            </p>
-                            {checkIn.notes && (
-                              <p className="text-xs sm:text-sm text-gray-400 truncate">
-                                {checkIn.notes}
-                              </p>
-                            )}
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-3 sm:gap-4 flex-shrink-0">
-                          {checkIn.weight_kg && (
-                            <div className="flex items-center gap-1 text-xs sm:text-sm">
-                              <BathroomScale className="h-3 w-3 sm:h-4 sm:w-4 text-purple-400" size={14} />
-                              <span className="font-medium text-white">
-                                {formatWeight(checkIn.weight_kg, unitSystem)}
-                              </span>
-                            </div>
-                          )}
-                          {checkIn.steps && (
-                            <div className="flex items-center gap-1 text-xs sm:text-sm">
-                              <Footprints className="h-3 w-3 sm:h-4 sm:w-4 text-indigo-400" />
-                              <span className="font-medium text-white">{checkIn.steps.toLocaleString()}</span>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </TabsContent>
 
           {/* Weight Trends Tab */}
           <TabsContent value="weight">
@@ -937,6 +683,15 @@ export default function DashboardPage() {
         </Tabs>
         </div>
       </div>
+
+      {/* Backfill Data Dialog */}
+      <BackfillDataDialog
+        open={showBackfillDialog}
+        onOpenChange={setShowBackfillDialog}
+        onSubmit={handleBackfillSubmit}
+        unitSystem={unitSystem}
+        weightUnit={getWeightUnit(unitSystem)}
+      />
     </>
   );
 }
