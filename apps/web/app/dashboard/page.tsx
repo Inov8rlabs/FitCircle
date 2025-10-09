@@ -106,6 +106,33 @@ export default function DashboardPage() {
   // Quick entry states
   const [quickWeight, setQuickWeight] = useState('');
   const [quickSteps, setQuickSteps] = useState('');
+  const [previousUnitSystem, setPreviousUnitSystem] = useState(unitSystem);
+
+  // Convert weight value when unit system changes
+  useEffect(() => {
+    if (quickWeight && unitSystem !== previousUnitSystem) {
+      // Convert the displayed weight to the new unit system
+      const currentValue = parseFloat(quickWeight);
+      if (!isNaN(currentValue)) {
+        let convertedValue: number;
+
+        if (previousUnitSystem === 'metric' && unitSystem === 'imperial') {
+          // kg to lbs
+          convertedValue = currentValue * 2.20462;
+        } else if (previousUnitSystem === 'imperial' && unitSystem === 'metric') {
+          // lbs to kg
+          convertedValue = currentValue / 2.20462;
+        } else {
+          convertedValue = currentValue;
+        }
+
+        setQuickWeight(convertedValue.toFixed(1));
+      }
+      setPreviousUnitSystem(unitSystem);
+    } else if (unitSystem !== previousUnitSystem) {
+      setPreviousUnitSystem(unitSystem);
+    }
+  }, [unitSystem, quickWeight, previousUnitSystem]);
 
   // Fetch check-ins and profile on mount
   useEffect(() => {
@@ -422,13 +449,21 @@ export default function DashboardPage() {
               value={quickWeight}
               onChange={setQuickWeight}
               onSubmit={handleQuickWeightSubmit}
-              placeholder="0.0"
+              placeholder={unitSystem === 'metric' ? '70.0' : '154.0'}
               unit={getWeightUnit(unitSystem)}
               color="purple-500"
               type="number"
               step="0.1"
               min="0"
               helperText={`Today's weight in ${getWeightUnit(unitSystem)}`}
+              headerAction={
+                <UnitToggle
+                  value={unitSystem}
+                  onChange={setUnitSystem}
+                  isLoading={isLoadingUnits}
+                  size="sm"
+                />
+              }
             />
             <QuickEntryCard
               icon={Footprints as any}

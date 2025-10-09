@@ -22,6 +22,7 @@ interface QuickEntryCardProps {
   max?: string;
   disabled?: boolean;
   helperText?: string;
+  headerAction?: React.ReactNode;
 }
 
 export function QuickEntryCard({
@@ -39,6 +40,7 @@ export function QuickEntryCard({
   max,
   disabled = false,
   helperText,
+  headerAction,
 }: QuickEntryCardProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
@@ -124,18 +126,21 @@ export function QuickEntryCard({
                 )}
               </div>
             </div>
-            <AnimatePresence mode="wait">
-              {showSuccess && (
-                <motion.div
-                  initial={{ scale: 0 }}
-                  animate={{ scale: 1 }}
-                  exit={{ scale: 0 }}
-                  className="p-1.5 bg-green-500/20 rounded-full"
-                >
-                  <Check className="h-4 w-4 text-green-400" />
-                </motion.div>
-              )}
-            </AnimatePresence>
+            <div className="flex items-center gap-2">
+              {headerAction}
+              <AnimatePresence mode="wait">
+                {showSuccess && (
+                  <motion.div
+                    initial={{ scale: 0 }}
+                    animate={{ scale: 1 }}
+                    exit={{ scale: 0 }}
+                    className="p-1.5 bg-green-500/20 rounded-full"
+                  >
+                    <Check className="h-4 w-4 text-green-400" />
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
           </div>
 
           {/* Input Area */}
