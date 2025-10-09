@@ -302,17 +302,21 @@ export default function FitCirclePage() {
     }
 
     try {
-      const { error } = await supabase
-        .from('challenges')
-        .delete()
-        .eq('id', circleId);
+      const response = await fetch(`/api/fitcircles/${circleId}/delete`, {
+        method: 'DELETE',
+      });
 
-      if (error) throw error;
+      const data = await response.json();
 
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to delete challenge');
+      }
+
+      toast.success('FitCircle deleted successfully');
       router.push('/fitcircles');
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error deleting challenge:', err);
-      alert('Failed to delete challenge');
+      toast.error(err.message || 'Failed to delete challenge');
     }
   };
 
