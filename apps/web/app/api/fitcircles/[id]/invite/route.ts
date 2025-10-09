@@ -69,6 +69,9 @@ export async function POST(
       return NextResponse.json({ error: 'Challenge not found' }, { status: 404 });
     }
 
+    // Cast to any for type flexibility with Supabase joins
+    const challengeData = challenge as any;
+
     // Get current participant count
     const { count: participantCount } = await supabase
       .from('challenge_participants')
@@ -77,7 +80,7 @@ export async function POST(
       .eq('status', 'active');
 
     // Get inviter's name
-    const inviterName = challenge.profiles?.display_name || user.email?.split('@')[0] || 'A friend';
+    const inviterName = challengeData.profiles?.display_name || user.email?.split('@')[0] || 'A friend';
 
     // Send invitations
     if (isBatch) {
@@ -85,12 +88,12 @@ export async function POST(
       const invitations = emails.map((email) => ({
         to: email,
         invitedByName: inviterName,
-        circleName: challenge.name,
-        circleType: challenge.type as 'weight_loss' | 'step_count' | 'workout_frequency' | 'custom',
-        startDate: challenge.start_date,
-        endDate: challenge.end_date,
+        circleName: challengeData.name,
+        circleType: challengeData.type as 'weight_loss' | 'step_count' | 'workout_frequency' | 'custom',
+        startDate: challengeData.start_date,
+        endDate: challengeData.end_date,
         participantCount: participantCount || 1,
-        inviteCode: challenge.invite_code,
+        inviteCode: challengeData.invite_code,
       }));
 
       const results = await sendBatchInvitationEmails(invitations);
@@ -106,12 +109,12 @@ export async function POST(
       const result = await sendInvitationEmail({
         to: emails[0],
         invitedByName: inviterName,
-        circleName: challenge.name,
-        circleType: challenge.type as 'weight_loss' | 'step_count' | 'workout_frequency' | 'custom',
-        startDate: challenge.start_date,
-        endDate: challenge.end_date,
+        circleName: challengeData.name,
+        circleType: challengeData.type as 'weight_loss' | 'step_count' | 'workout_frequency' | 'custom',
+        startDate: challengeData.start_date,
+        endDate: challengeData.end_date,
         participantCount: participantCount || 1,
-        inviteCode: challenge.invite_code,
+        inviteCode: challengeData.invite_code,
       });
 
       if (!result.success) {
