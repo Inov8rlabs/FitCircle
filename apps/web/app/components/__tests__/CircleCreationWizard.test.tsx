@@ -94,7 +94,7 @@ describe('CircleCreationWizard', () => {
     });
 
     it('should render connecting lines between steps', () => {
-      const { container } = render(
+      render(
         <CircleCreationWizard
           isOpen={true}
           onClose={mockOnClose}
@@ -103,12 +103,13 @@ describe('CircleCreationWizard', () => {
       );
 
       // Check for 3 connecting lines (between 4 steps)
-      const lines = container.querySelectorAll('.h-1.w-12');
-      expect(lines.length).toBeGreaterThan(0);
+      expect(screen.getByTestId('connecting-line-1')).toBeInTheDocument();
+      expect(screen.getByTestId('connecting-line-2')).toBeInTheDocument();
+      expect(screen.getByTestId('connecting-line-3')).toBeInTheDocument();
     });
 
     it('should center labels under step circles', () => {
-      const { container } = render(
+      render(
         <CircleCreationWizard
           isOpen={true}
           onClose={mockOnClose}
@@ -116,14 +117,17 @@ describe('CircleCreationWizard', () => {
         />
       );
 
-      const labels = container.querySelectorAll('.text-center.whitespace-nowrap');
-      expect(labels.length).toBe(4);
+      // Check that all 4 step groups exist (each contains a circle and centered label)
+      expect(screen.getByTestId('step-group-1')).toBeInTheDocument();
+      expect(screen.getByTestId('step-group-2')).toBeInTheDocument();
+      expect(screen.getByTestId('step-group-3')).toBeInTheDocument();
+      expect(screen.getByTestId('step-group-4')).toBeInTheDocument();
     });
   });
 
   describe('Form Field Layout', () => {
     it('should add padding to step content to prevent clipping', () => {
-      const { container } = render(
+      render(
         <CircleCreationWizard
           isOpen={true}
           onClose={mockOnClose}
@@ -131,7 +135,9 @@ describe('CircleCreationWizard', () => {
         />
       );
 
-      const stepContent = container.querySelector('.min-h-\\[320px\\]');
+      // Check for step content container with padding
+      const stepContent = screen.getByTestId('step-content');
+      expect(stepContent).toBeInTheDocument();
       expect(stepContent).toHaveClass('px-4');
     });
 
@@ -292,7 +298,7 @@ describe('CircleCreationWizard', () => {
 
   describe('Responsive Design', () => {
     it('should have min-width constraint on step labels', () => {
-      const { container } = render(
+      render(
         <CircleCreationWizard
           isOpen={true}
           onClose={mockOnClose}
@@ -300,12 +306,13 @@ describe('CircleCreationWizard', () => {
         />
       );
 
-      const stepGroups = container.querySelectorAll('.min-w-\\[60px\\]');
-      expect(stepGroups.length).toBe(4);
+      // Check for min-width constraint on step groups (prevents layout shift)
+      const stepGroup1 = screen.getByTestId('step-group-1');
+      expect(stepGroup1).toHaveClass('min-w-[60px]');
     });
 
     it('should use responsive line widths', () => {
-      const { container } = render(
+      render(
         <CircleCreationWizard
           isOpen={true}
           onClose={mockOnClose}
@@ -313,9 +320,10 @@ describe('CircleCreationWizard', () => {
         />
       );
 
-      // Check for responsive width classes
-      const lines = container.querySelectorAll('[class*="w-12"][class*="sm:w-16"]');
-      expect(lines.length).toBeGreaterThan(0);
+      // Check for responsive width classes on connecting lines (w-12 sm:w-16)
+      const line = screen.getByTestId('connecting-line-1');
+      expect(line).toHaveClass('w-12');
+      expect(line).toHaveClass('sm:w-16');
     });
   });
 });

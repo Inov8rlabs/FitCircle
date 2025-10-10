@@ -30,7 +30,9 @@ describe('Terms of Service Page', () => {
   describe('Contact Information', () => {
     it('should display support email address', () => {
       render(<TermsPage />);
-      expect(screen.getByText(/support@fitcircle\.ai/i)).toBeInTheDocument();
+      // Use getAllByText since email appears in multiple sections (dispute resolution and contact)
+      const emailElements = screen.getAllByText(/support@fitcircle\.ai/i);
+      expect(emailElements.length).toBeGreaterThan(0);
     });
 
     it('should have mailto link for support email', () => {

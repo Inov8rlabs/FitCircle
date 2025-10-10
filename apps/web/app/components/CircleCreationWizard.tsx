@@ -387,12 +387,12 @@ export default function CircleCreationWizard({ isOpen, onClose, onSuccess }: Cir
 
         <div className="overflow-y-auto">
           {/* Progress Indicator */}
-          <div className="mb-6 px-4">
-            <div className="flex items-start justify-center gap-2">
+          <div className="mb-6 px-4" data-testid="progress-indicator">
+            <div className="flex items-start justify-center gap-2" data-testid="step-container">
               {[1, 2, 3, 4].map((step, index) => (
                 <React.Fragment key={step}>
                   {/* Step circle and label group */}
-                  <div className="flex flex-col items-center min-w-[60px]">
+                  <div className="flex flex-col items-center min-w-[60px]" data-testid={`step-group-${step}`}>
                     <div
                       className={`w-10 h-10 rounded-full flex items-center justify-center font-semibold transition-all ${
                         step <= currentStep
@@ -418,6 +418,7 @@ export default function CircleCreationWizard({ isOpen, onClose, onSuccess }: Cir
                   {index < 3 && (
                     <div className="flex items-center pt-5">
                       <div
+                        data-testid={`connecting-line-${step}`}
                         className={`h-1 w-12 sm:w-16 rounded transition-all ${
                           step < currentStep
                             ? 'bg-gradient-to-r from-orange-500 to-purple-600'
@@ -442,6 +443,7 @@ export default function CircleCreationWizard({ isOpen, onClose, onSuccess }: Cir
             exit="exit"
             transition={{ duration: 0.3 }}
             className="min-h-[320px] px-4"
+            data-testid="step-content"
           >
             {/* Step 1: Basic Info */}
             {currentStep === 1 && (
