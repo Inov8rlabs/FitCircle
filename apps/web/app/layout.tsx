@@ -5,7 +5,7 @@ import { Providers } from './providers';
 import { Toaster } from 'sonner';
 import { PWAInstall } from '@/components/pwa/pwa-install';
 import { OfflineIndicator } from '@/components/pwa/offline-indicator';
-import { Amplitude } from '@/lib/amplitude';
+import { CookieConsentBanner } from '@/components/CookieConsentBanner';
 
 const inter = Inter({
   subsets: ['latin'],
@@ -122,7 +122,6 @@ export default function RootLayout({
         <meta name="msapplication-tap-highlight" content="no" />
       </head>
       <body className={`${inter.variable} font-sans antialiased`}>
-        <Amplitude />
         <Providers>
           {children}
           <Toaster
@@ -138,6 +137,7 @@ export default function RootLayout({
           />
           <PWAInstall />
           <OfflineIndicator />
+          <CookieConsentBanner />
         </Providers>
       </body>
     </html>
