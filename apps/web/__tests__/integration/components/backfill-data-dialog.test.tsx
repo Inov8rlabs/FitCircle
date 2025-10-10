@@ -10,6 +10,9 @@ vi.mock('sonner', () => ({
   },
 }));
 
+// Import the mocked toast
+import { toast as mockToast } from 'sonner';
+
 describe('BackfillDataDialog', () => {
   const mockOnSubmit = vi.fn();
   const mockOnOpenChange = vi.fn();
@@ -75,19 +78,17 @@ describe('BackfillDataDialog', () => {
   describe('Form Validation', () => {
     it('should require date selection', async () => {
       const user = userEvent.setup();
-      const { toast } = await import('sonner');
 
       render(<BackfillDataDialog {...defaultProps} />);
 
       const submitButton = screen.getByRole('button', { name: /Save Data/i });
       await user.click(submitButton);
 
-      expect(toast.error).toHaveBeenCalledWith('Please select a date');
+      expect(mockToast.error).toHaveBeenCalledWith('Please select a date');
     });
 
     it('should require at least weight or steps', async () => {
       const user = userEvent.setup();
-      const { toast } = await import('sonner');
 
       render(<BackfillDataDialog {...defaultProps} />);
 
@@ -97,7 +98,7 @@ describe('BackfillDataDialog', () => {
       const submitButton = screen.getByRole('button', { name: /Save Data/i });
       await user.click(submitButton);
 
-      expect(toast.error).toHaveBeenCalledWith('Please enter weight or steps');
+      expect(mockToast.error).toHaveBeenCalledWith('Please enter weight or steps');
     });
 
     it('should allow submitting with only weight', async () => {
