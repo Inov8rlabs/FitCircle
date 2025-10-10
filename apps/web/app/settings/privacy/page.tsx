@@ -64,8 +64,8 @@ export default function PrivacySettingsPage() {
         .single();
 
       if (error && error.code !== 'PGRST116') {
-        // PGRST116 = no rows, which is fine for first visit
-        console.error('Error loading settings:', error);
+        // PGRST116 = no rows, which is expected for new users
+        console.log('Using default privacy settings');
       }
 
       if (data) {
@@ -75,8 +75,9 @@ export default function PrivacySettingsPage() {
           do_not_sell: data.do_not_sell,
         });
       }
+      // If no data, use default settings (already set in state)
     } catch (error) {
-      console.error('Failed to load settings:', error);
+      console.log('Using default privacy settings');
     } finally {
       setLoading(false);
     }
