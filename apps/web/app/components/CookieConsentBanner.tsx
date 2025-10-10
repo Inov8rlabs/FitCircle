@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { Shield, BarChart3, Megaphone, ChevronDown, ChevronUp } from 'lucide-react';
 import { createBrowserSupabase } from '@/lib/supabase';
+import { initializeAmplitude } from '@/lib/amplitude';
 
 interface ConsentPreferences {
   essential: boolean; // Always true, cannot be disabled
@@ -148,13 +149,13 @@ export function CookieConsentBanner() {
 
   const initializeScripts = (prefs: ConsentPreferences) => {
     if (prefs.analytics) {
-      // Dynamically load Amplitude
-      import('@/lib/amplitude').then((module) => {
-        if (module.initializeAmplitude) {
-          module.initializeAmplitude();
-          console.log('✅ Analytics enabled - Amplitude initialized');
-        }
-      });
+      // Initialize Amplitude with user consent
+      try {
+        initializeAmplitude();
+        console.log('✅ Analytics enabled - Amplitude initialized');
+      } catch (error) {
+        console.error('❌ Failed to initialize analytics:', error);
+      }
     } else {
       console.log('❌ Analytics disabled by user consent');
     }
