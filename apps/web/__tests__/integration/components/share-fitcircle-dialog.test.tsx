@@ -10,6 +10,8 @@ vi.mock('sonner', () => ({
   },
 }));
 
+import { toast } from 'sonner';
+
 describe('ShareFitCircleDialog', () => {
   const mockProps = {
     open: true,
@@ -20,23 +22,25 @@ describe('ShareFitCircleDialog', () => {
   };
 
   // Mock clipboard API
-  const mockClipboard = {
-    writeText: vi.fn(),
-  };
+  let mockWriteText: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
-    vi.clearAllMocks();
+    mockWriteText = vi.fn().mockResolvedValue(undefined);
+
     // Use defineProperty to mock the clipboard API (readonly property)
     Object.defineProperty(navigator, 'clipboard', {
-      value: mockClipboard,
+      value: {
+        writeText: mockWriteText,
+        readText: vi.fn(),
+      },
       writable: true,
       configurable: true,
     });
-    mockClipboard.writeText.mockResolvedValue(undefined);
   });
 
   afterEach(() => {
-    vi.restoreAllMocks();
+    // Don't restore mocks as it breaks the clipboard mock
+    vi.clearAllMocks();
   });
 
   describe('Rendering', () => {
@@ -74,18 +78,19 @@ describe('ShareFitCircleDialog', () => {
       const user = userEvent.setup();
       render(<ShareFitCircleDialog {...mockProps} />);
 
-      // Wait for the copy button to be rendered
-      const copyButton = await screen.findByRole('button', { name: /Copy/ });
+      // Find and click the copy button
+      const copyButton = screen.getByRole('button', { name: /^Copy$/ });
+      expect(copyButton).toBeInTheDocument();
 
-      // Click and wait for the async operation
-      await user.click(copyButton);
+      // Trigger the click
+      copyButton.click();
 
-      // Flush all promises
-      await new Promise(resolve => setTimeout(resolve, 0));
+      // Give it time to execute the async function
+      await new Promise(resolve => setTimeout(resolve, 100));
 
-      // Verify clipboard was called
+      // Verify clipboard API was called with correct URL
       const expectedUrl = `${window.location.origin}/join/ABC123`;
-      expect(mockClipboard.writeText).toHaveBeenCalledWith(expectedUrl);
+      expect(mockWriteText).toHaveBeenCalledWith(expectedUrl);
     });
 
     it('should show success state after copying link', async () => {
@@ -102,7 +107,7 @@ describe('ShareFitCircleDialog', () => {
 
     it('should handle clipboard copy failure gracefully', async () => {
       const user = userEvent.setup();
-      mockClipboard.writeText.mockRejectedValueOnce(new Error('Clipboard error'));
+      mockWriteText.mockRejectedValueOnce(new Error('Clipboard error'));
 
       render(<ShareFitCircleDialog {...mockProps} />);
 
@@ -110,7 +115,7 @@ describe('ShareFitCircleDialog', () => {
       await user.click(copyButton);
 
       // Should not crash, error handling should work
-      expect(mockClipboard.writeText).toHaveBeenCalled();
+      expect(mockWriteText).toHaveBeenCalled();
     });
   });
 
@@ -181,8 +186,8 @@ describe('ShareFitCircleDialog', () => {
       const copyButton = screen.getByRole('button', { name: /Copy Message/ });
       await user.click(copyButton);
 
-      expect(mockClipboard.writeText).toHaveBeenCalled();
-      const copiedText = mockClipboard.writeText.mock.calls[0][0];
+      expect(mockWriteText).toHaveBeenCalled();
+      const copiedText = mockWriteText.mock.calls[0][0];
 
       // Verify message structure
       expect(copiedText).toContain('🏆 Join me on FitCircle!');
@@ -296,10 +301,10 @@ describe('ShareFitCircleDialog', () => {
       await user.click(copyButton);
 
       await waitFor(() => {
-        expect(mockClipboard.writeText).toHaveBeenCalled();
+        expect(mockWriteText).toHaveBeenCalled();
       });
 
-      const copiedText = mockClipboard.writeText.mock.calls[0][0];
+      const copiedText = mockWriteText.mock.calls[0][0];
 
       expect(copiedText).toContain('🏆');
       expect(copiedText).toContain('💪');
@@ -324,10 +329,10 @@ describe('ShareFitCircleDialog', () => {
       await user.click(copyButton);
 
       await waitFor(() => {
-        expect(mockClipboard.writeText).toHaveBeenCalled();
+        expect(mockWriteText).toHaveBeenCalled();
       });
 
-      const copiedText = mockClipboard.writeText.mock.calls[0][0];
+      const copiedText = mockWriteText.mock.calls[0][0];
 
       // Should have multiple line breaks for readability
       expect(copiedText.split('\n').length).toBeGreaterThan(5);
@@ -348,10 +353,10 @@ describe('ShareFitCircleDialog', () => {
       await user.click(copyButton);
 
       await waitFor(() => {
-        expect(mockClipboard.writeText).toHaveBeenCalled();
+        expect(mockWriteText).toHaveBeenCalled();
       });
 
-      const copiedText = mockClipboard.writeText.mock.calls[0][0];
+      const copiedText = mockWriteText.mock.calls[0][0];
 
       expect(copiedText).toContain('Join here:');
       expect(copiedText).toContain("Let's do this!");
@@ -402,10 +407,10 @@ describe('ShareFitCircleDialog', () => {
       await user.click(copyButton);
 
       await waitFor(() => {
-        expect(mockClipboard.writeText).toHaveBeenCalled();
+        expect(mockWriteText).toHaveBeenCalled();
       });
 
-      const copiedText = mockClipboard.writeText.mock.calls[0][0];
+      const copiedText = mockWriteText.mock.calls[0][0];
       expect(copiedText).toContain(longName);
     });
 
@@ -426,10 +431,10 @@ describe('ShareFitCircleDialog', () => {
       await user.click(copyButton);
 
       await waitFor(() => {
-        expect(mockClipboard.writeText).toHaveBeenCalled();
+        expect(mockWriteText).toHaveBeenCalled();
       });
 
-      const copiedText = mockClipboard.writeText.mock.calls[0][0];
+      const copiedText = mockWriteText.mock.calls[0][0];
       expect(copiedText).toContain(specialName);
     });
 
