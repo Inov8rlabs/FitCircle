@@ -41,7 +41,9 @@ export function useUnitPreference(): UseUnitPreferenceReturn {
         .single();
 
       if (error) {
-        console.error('Error loading preferences:', error);
+        // Silently use default if preferences don't exist yet
+        console.log('Using default unit system (metric)');
+        setUnitSystemState('metric');
         return;
       }
 
@@ -50,7 +52,9 @@ export function useUnitPreference(): UseUnitPreferenceReturn {
       const system = preferences.unitSystem || 'metric';
       setUnitSystemState(system);
     } catch (err) {
-      console.error('Error in loadUserPreferences:', err);
+      // Fallback to metric on any error
+      console.log('Using default unit system (metric)');
+      setUnitSystemState('metric');
     }
   };
 
