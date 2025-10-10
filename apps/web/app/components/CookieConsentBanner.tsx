@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
-import { Cookie, Shield, BarChart3, Megaphone, ChevronDown, ChevronUp } from 'lucide-react';
+import { Shield, BarChart3, Megaphone, ChevronDown, ChevronUp } from 'lucide-react';
 import { createBrowserSupabase } from '@/lib/supabase';
 
 interface ConsentPreferences {
@@ -190,18 +190,12 @@ export function CookieConsentBanner() {
           <div className="max-w-7xl mx-auto">
             <div className="bg-gradient-to-br from-slate-900/98 via-slate-900/95 to-slate-800/98 backdrop-blur-xl rounded-2xl border border-slate-700/50 shadow-2xl overflow-hidden">
               {/* Header Section */}
-              <div className="p-6 sm:p-8">
-                <div className="flex items-start gap-4">
-                  <div className="flex-shrink-0">
-                    <div className="h-12 w-12 rounded-full bg-gradient-to-br from-purple-500/20 to-indigo-500/20 border border-purple-500/30 flex items-center justify-center">
-                      <Cookie className="h-6 w-6 text-purple-400" />
-                    </div>
-                  </div>
-
+              <div className="p-6">
+                <div className="flex items-start justify-between gap-4">
                   <div className="flex-1">
-                    <h3 className="text-xl font-bold text-white mb-2 flex items-center gap-2">
+                    <h3 className="text-lg font-semibold text-white mb-2 flex items-center gap-2">
+                      <Shield className="h-4 w-4 text-cyan-400" />
                       We value your privacy
-                      <Shield className="h-5 w-5 text-cyan-400" />
                     </h3>
                     <p className="text-sm text-slate-300 leading-relaxed">
                       We use cookies to enhance your experience and analyze site usage. Essential
@@ -209,7 +203,7 @@ export function CookieConsentBanner() {
                       improve FitCircle.{' '}
                       <button
                         onClick={() => setShowDetails(!showDetails)}
-                        className="text-cyan-400 hover:text-cyan-300 underline underline-offset-2 transition-colors inline-flex items-center gap-1 font-medium"
+                        className="text-cyan-400 hover:text-cyan-300 underline underline-offset-2 transition-colors inline-flex items-center gap-1"
                       >
                         Customize preferences
                         {showDetails ? (
@@ -220,25 +214,27 @@ export function CookieConsentBanner() {
                       </button>
                     </p>
                   </div>
-                </div>
 
-                {/* Action Buttons (Mobile/Desktop) */}
-                <div className="mt-6 flex flex-col sm:flex-row gap-3">
-                  <Button
-                    onClick={() => handleRejectAll()}
-                    variant="outline"
-                    disabled={isSubmitting}
-                    className="flex-1 sm:flex-none border-slate-600 text-slate-300 hover:bg-slate-800 hover:text-white transition-all"
-                  >
-                    Reject All
-                  </Button>
-                  <Button
-                    onClick={() => handleAcceptAll()}
-                    disabled={isSubmitting}
-                    className="flex-1 sm:flex-auto bg-gradient-to-r from-cyan-500 to-purple-500 hover:from-cyan-600 hover:to-purple-600 text-white font-semibold transition-all shadow-lg shadow-purple-500/20"
-                  >
-                    {isSubmitting ? 'Saving...' : 'Accept All'}
-                  </Button>
+                  {/* Action Buttons - Compact */}
+                  <div className="flex gap-2 flex-shrink-0">
+                    <Button
+                      onClick={() => handleRejectAll()}
+                      variant="outline"
+                      disabled={isSubmitting}
+                      size="sm"
+                      className="border-slate-600 text-slate-300 hover:bg-slate-800 hover:text-white transition-all"
+                    >
+                      Reject All
+                    </Button>
+                    <Button
+                      onClick={() => handleAcceptAll()}
+                      disabled={isSubmitting}
+                      size="sm"
+                      className="bg-gradient-to-r from-cyan-500 to-purple-500 hover:from-cyan-600 hover:to-purple-600 text-white font-semibold transition-all"
+                    >
+                      {isSubmitting ? 'Saving...' : 'Accept All'}
+                    </Button>
+                  </div>
                 </div>
               </div>
 
