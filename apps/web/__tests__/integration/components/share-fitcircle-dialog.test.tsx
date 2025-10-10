@@ -26,8 +26,11 @@ describe('ShareFitCircleDialog', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    Object.assign(navigator, {
-      clipboard: mockClipboard,
+    // Use defineProperty to mock the clipboard API (readonly property)
+    Object.defineProperty(navigator, 'clipboard', {
+      value: mockClipboard,
+      writable: true,
+      configurable: true,
     });
     mockClipboard.writeText.mockResolvedValue(undefined);
   });
@@ -71,11 +74,15 @@ describe('ShareFitCircleDialog', () => {
       const user = userEvent.setup();
       render(<ShareFitCircleDialog {...mockProps} />);
 
-      const copyButton = screen.getByRole('button', { name: /Copy/ });
+      // Wait for the copy button to be rendered
+      const copyButton = await screen.findByRole('button', { name: /Copy/ });
       await user.click(copyButton);
 
-      const expectedUrl = `${window.location.origin}/join/ABC123`;
-      expect(mockClipboard.writeText).toHaveBeenCalledWith(expectedUrl);
+      // Wait for clipboard to be called
+      await waitFor(() => {
+        const expectedUrl = `${window.location.origin}/join/ABC123`;
+        expect(mockClipboard.writeText).toHaveBeenCalledWith(expectedUrl);
+      });
     });
 
     it('should show success state after copying link', async () => {

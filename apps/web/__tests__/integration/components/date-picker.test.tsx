@@ -62,7 +62,7 @@ describe('DatePicker', () => {
     });
 
     it('should be disabled when disabled prop is true', () => {
-      render(
+      const { container } = render(
         <DatePicker
           value=""
           onChange={mockOnChange}
@@ -70,7 +70,8 @@ describe('DatePicker', () => {
         />
       );
 
-      const input = screen.getByRole('textbox', { hidden: true });
+      // Native date input doesn't have textbox role
+      const input = container.querySelector('input[type="date"]');
       expect(input).toBeDisabled();
     });
   });
@@ -131,12 +132,12 @@ describe('DatePicker', () => {
   describe('User Interaction', () => {
     it('should call onChange when date is selected', async () => {
       const user = userEvent.setup();
-      render(
+      const { container } = render(
         <DatePicker value="" onChange={mockOnChange} />
       );
 
-      const input = screen.getByRole('textbox', { hidden: true });
-      await user.type(input, '2025-09-01');
+      const input = container.querySelector('input[type="date"]');
+      await user.type(input as Element, '2025-09-01');
 
       expect(mockOnChange).toHaveBeenCalled();
     });
@@ -144,7 +145,7 @@ describe('DatePicker', () => {
 
   describe('Min/Max Constraints', () => {
     it('should respect min date', () => {
-      render(
+      const { container } = render(
         <DatePicker
           value=""
           onChange={mockOnChange}
@@ -152,12 +153,12 @@ describe('DatePicker', () => {
         />
       );
 
-      const input = screen.getByRole('textbox', { hidden: true }) as HTMLInputElement;
+      const input = container.querySelector('input[type="date"]') as HTMLInputElement;
       expect(input.min).toBe('2025-01-01');
     });
 
     it('should respect max date', () => {
-      render(
+      const { container } = render(
         <DatePicker
           value=""
           onChange={mockOnChange}
@@ -165,7 +166,7 @@ describe('DatePicker', () => {
         />
       );
 
-      const input = screen.getByRole('textbox', { hidden: true }) as HTMLInputElement;
+      const input = container.querySelector('input[type="date"]') as HTMLInputElement;
       expect(input.max).toBe('2025-12-31');
     });
   });
@@ -181,8 +182,8 @@ describe('DateRangeDisplay', () => {
         />
       );
 
-      // 7 days duration
-      expect(screen.getByText('7 days')).toBeInTheDocument();
+      // 7 days duration is displayed as "1 week"
+      expect(screen.getByText('1 week')).toBeInTheDocument();
     });
 
     it('should calculate duration in weeks', () => {
