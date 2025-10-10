@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
@@ -387,52 +387,49 @@ export default function CircleCreationWizard({ isOpen, onClose, onSuccess }: Cir
 
         <div className="overflow-y-auto">
           {/* Progress Indicator */}
-          <div className="flex items-center justify-between mb-6">
-          {[1, 2, 3, 4].map((step) => (
-            <div key={step} className="flex items-center flex-1">
-              <div className="relative">
-                <div
-                  className={`w-10 h-10 rounded-full flex items-center justify-center font-semibold transition-all ${
-                    step <= currentStep
-                      ? 'bg-gradient-to-r from-orange-500 to-purple-600 text-white'
-                      : 'bg-slate-800 text-gray-500'
-                  }`}
-                >
-                  {step < currentStep ? (
-                    <CheckCircle2 className="h-5 w-5" />
-                  ) : (
-                    step
-                  )}
-                </div>
-              </div>
-              {step < 4 && (
-                <div
-                  className={`flex-1 h-1 mx-2 rounded transition-all ${
-                    step < currentStep
-                      ? 'bg-gradient-to-r from-orange-500 to-purple-600'
-                      : 'bg-slate-800'
-                  }`}
-                />
-              )}
-            </div>
-          ))}
-        </div>
+          <div className="mb-6 px-4">
+            <div className="flex items-start justify-center gap-2">
+              {[1, 2, 3, 4].map((step, index) => (
+                <React.Fragment key={step}>
+                  {/* Step circle and label group */}
+                  <div className="flex flex-col items-center min-w-[60px]">
+                    <div
+                      className={`w-10 h-10 rounded-full flex items-center justify-center font-semibold transition-all ${
+                        step <= currentStep
+                          ? 'bg-gradient-to-r from-orange-500 to-purple-600 text-white'
+                          : 'bg-slate-800 text-gray-500'
+                      }`}
+                    >
+                      {step < currentStep ? (
+                        <CheckCircle2 className="h-5 w-5" />
+                      ) : (
+                        step
+                      )}
+                    </div>
+                    <span className={`text-xs font-medium text-center whitespace-nowrap mt-2 ${currentStep >= step ? 'text-orange-400' : 'text-gray-500'}`}>
+                      {step === 1 && 'Basic Info'}
+                      {step === 2 && 'Timeline'}
+                      {step === 3 && 'Settings'}
+                      {step === 4 && 'Invite'}
+                    </span>
+                  </div>
 
-        {/* Step Labels */}
-        <div className="flex justify-between mb-6 px-2">
-          <span className={`text-xs ${currentStep >= 1 ? 'text-orange-400' : 'text-gray-500'}`}>
-            Basic Info
-          </span>
-          <span className={`text-xs ${currentStep >= 2 ? 'text-purple-400' : 'text-gray-500'}`}>
-            Timeline
-          </span>
-          <span className={`text-xs ${currentStep >= 3 ? 'text-indigo-400' : 'text-gray-500'}`}>
-            Settings
-          </span>
-          <span className={`text-xs ${currentStep >= 4 ? 'text-green-400' : 'text-gray-500'}`}>
-            Invite
-          </span>
-        </div>
+                  {/* Connecting line */}
+                  {index < 3 && (
+                    <div className="flex items-center pt-5">
+                      <div
+                        className={`h-1 w-12 sm:w-16 rounded transition-all ${
+                          step < currentStep
+                            ? 'bg-gradient-to-r from-orange-500 to-purple-600'
+                            : 'bg-slate-800'
+                        }`}
+                      />
+                    </div>
+                  )}
+                </React.Fragment>
+              ))}
+            </div>
+          </div>
 
         {/* Step Content */}
         <AnimatePresence mode="wait" custom={currentStep}>
@@ -444,7 +441,7 @@ export default function CircleCreationWizard({ isOpen, onClose, onSuccess }: Cir
             animate="center"
             exit="exit"
             transition={{ duration: 0.3 }}
-            className="min-h-[320px]"
+            className="min-h-[320px] px-4"
           >
             {/* Step 1: Basic Info */}
             {currentStep === 1 && (
