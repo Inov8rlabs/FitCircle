@@ -630,36 +630,37 @@ export default function FitCirclePage() {
           <div className="absolute bottom-20 left-1/3 w-[400px] h-[400px] bg-orange-500/5 rounded-full blur-3xl" />
         </div>
 
-        <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 lg:py-12">
+        <div className="relative max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-8 lg:py-12 overflow-x-hidden">
           {/* Header */}
-          <div className="mb-8">
+          <div className="mb-6 sm:mb-8">
             <Button
               onClick={() => router.push('/fitcircles')}
               variant="ghost"
-              className="mb-4 text-gray-400 hover:text-white hover:bg-slate-800/50"
+              className="mb-3 sm:mb-4 text-gray-400 hover:text-white hover:bg-slate-800/50 text-xs sm:text-sm"
             >
-              <ArrowLeft className="h-4 w-4 mr-2" />
+              <ArrowLeft className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
               Back to FitCircles
             </Button>
 
-            <div className="flex items-center justify-between">
-              <div>
-                <h1 className="text-3xl sm:text-4xl lg:text-5xl font-bold bg-gradient-to-r from-indigo-300 via-fuchsia-400 to-orange-400 bg-clip-text text-transparent mb-2">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex-1 min-w-0">
+                <h1 className="text-2xl sm:text-3xl lg:text-5xl font-bold bg-gradient-to-r from-indigo-300 via-fuchsia-400 to-orange-400 bg-clip-text text-transparent mb-1.5 sm:mb-2 break-words">
                   {fitCircle.name}
                 </h1>
-                <p className="text-gray-400 text-sm sm:text-base max-w-2xl">
+                <p className="text-gray-400 text-xs sm:text-sm lg:text-base max-w-2xl">
                   {fitCircle.description}
                 </p>
               </div>
 
-              <div className="flex gap-2">
+              <div className="flex gap-2 flex-shrink-0">
                 {/* Share button - available to all members */}
                 <Button
                   variant="outline"
-                  className="border-indigo-500/50 text-indigo-400 hover:bg-indigo-500/10"
+                  size="sm"
+                  className="border-indigo-500/50 text-indigo-400 hover:bg-indigo-500/10 text-xs sm:text-sm"
                   onClick={() => setShowShareDialog(true)}
                 >
-                  <Share2 className="h-4 w-4 mr-2" />
+                  <Share2 className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
                   Share
                 </Button>
 
@@ -667,10 +668,11 @@ export default function FitCirclePage() {
                 {fitCircle.is_creator && (
                   <Button
                     variant="outline"
-                    className="border-orange-500/50 text-orange-400 hover:bg-orange-500/10"
+                    size="sm"
+                    className="border-orange-500/50 text-orange-400 hover:bg-orange-500/10 text-xs sm:text-sm"
                     onClick={() => setShowManageModal(true)}
                   >
-                    <Settings className="h-4 w-4 mr-2" />
+                    <Settings className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
                     Manage
                   </Button>
                 )}
@@ -679,21 +681,21 @@ export default function FitCirclePage() {
           </div>
 
           {/* FitCircle Stats Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+          <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4 lg:gap-6 mb-6 sm:mb-8">
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.1 }}
             >
               <Card className="bg-slate-900/50 border-slate-800/50 backdrop-blur-xl h-full">
-                <CardContent className="p-6 h-full min-h-[120px] flex items-center">
-                  <div className="flex items-center space-x-4 w-full">
-                    <div className="flex items-center justify-center w-12 h-12 rounded-xl bg-gradient-to-br from-indigo-500/20 to-blue-500/20 flex-shrink-0">
-                      <Users className="h-6 w-6 text-indigo-400" />
+                <CardContent className="p-3 sm:p-4 lg:p-6 h-full min-h-[100px] sm:min-h-[120px] flex items-center">
+                  <div className="flex items-center gap-2 sm:gap-3 lg:gap-4 w-full">
+                    <div className="flex items-center justify-center w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-gradient-to-br from-indigo-500/20 to-blue-500/20 flex-shrink-0">
+                      <Users className="h-5 w-5 sm:h-6 sm:w-6 text-indigo-400" />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm text-gray-400">Participants</p>
-                      <p className="text-2xl font-bold text-white">
+                      <p className="text-xs sm:text-sm text-gray-400">Participants</p>
+                      <p className="text-lg sm:text-xl lg:text-2xl font-bold text-white truncate">
                         {fitCircle.max_participants
                           ? `${participants.length}/${fitCircle.max_participants}`
                           : participants.length
@@ -711,14 +713,14 @@ export default function FitCirclePage() {
               transition={{ delay: 0.2 }}
             >
               <Card className="bg-slate-900/50 border-slate-800/50 backdrop-blur-xl h-full">
-                <CardContent className="p-6 h-full min-h-[120px] flex items-center">
-                  <div className="flex items-center space-x-4 w-full">
-                    <div className="flex items-center justify-center w-12 h-12 rounded-xl bg-gradient-to-br from-orange-500/20 to-red-500/20 flex-shrink-0">
-                      <Calendar className="h-6 w-6 text-orange-400" />
+                <CardContent className="p-3 sm:p-4 lg:p-6 h-full min-h-[100px] sm:min-h-[120px] flex items-center">
+                  <div className="flex items-center gap-2 sm:gap-3 lg:gap-4 w-full">
+                    <div className="flex items-center justify-center w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-gradient-to-br from-orange-500/20 to-red-500/20 flex-shrink-0">
+                      <Calendar className="h-5 w-5 sm:h-6 sm:w-6 text-orange-400" />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm text-gray-400">Days Left</p>
-                      <p className="text-2xl font-bold text-white">
+                      <p className="text-xs sm:text-sm text-gray-400">Days Left</p>
+                      <p className="text-lg sm:text-xl lg:text-2xl font-bold text-white">
                         {getDaysRemaining(fitCircle.end_date)}
                       </p>
                     </div>
@@ -733,14 +735,14 @@ export default function FitCirclePage() {
               transition={{ delay: 0.3 }}
             >
               <Card className="bg-slate-900/50 border-slate-800/50 backdrop-blur-xl h-full">
-                <CardContent className="p-6 h-full min-h-[120px] flex items-center">
-                  <div className="flex items-center space-x-4 w-full">
-                    <div className="flex items-center justify-center w-12 h-12 rounded-xl bg-gradient-to-br from-green-500/20 to-emerald-500/20 flex-shrink-0">
-                      <Trophy className="h-6 w-6 text-green-400" />
+                <CardContent className="p-3 sm:p-4 lg:p-6 h-full min-h-[100px] sm:min-h-[120px] flex items-center">
+                  <div className="flex items-center gap-2 sm:gap-3 lg:gap-4 w-full">
+                    <div className="flex items-center justify-center w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-gradient-to-br from-green-500/20 to-emerald-500/20 flex-shrink-0">
+                      <Trophy className="h-5 w-5 sm:h-6 sm:w-6 text-green-400" />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm text-gray-400">Challenge Type</p>
-                      <p className="text-2xl font-bold text-white capitalize">
+                      <p className="text-xs sm:text-sm text-gray-400">Type</p>
+                      <p className="text-lg sm:text-xl lg:text-2xl font-bold text-white capitalize truncate">
                         {fitCircle.type.replace('_', ' ')}
                       </p>
                     </div>
@@ -755,10 +757,10 @@ export default function FitCirclePage() {
               transition={{ delay: 0.4 }}
             >
               <Card className="bg-slate-900/50 border-slate-800/50 backdrop-blur-xl h-full">
-                <CardContent className="p-6 h-full min-h-[120px] flex items-center">
-                  <div className="flex items-center gap-4 w-full">
-                    <div className="flex items-center justify-center w-12 h-12 rounded-xl bg-gradient-to-br from-purple-500/20 to-indigo-500/20 flex-shrink-0">
-                      <Calendar className="h-6 w-6 text-purple-400" />
+                <CardContent className="p-3 sm:p-4 lg:p-6 h-full min-h-[100px] sm:min-h-[120px] flex items-center">
+                  <div className="flex items-center gap-2 sm:gap-3 lg:gap-4 w-full">
+                    <div className="flex items-center justify-center w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-gradient-to-br from-purple-500/20 to-indigo-500/20 flex-shrink-0">
+                      <Calendar className="h-5 w-5 sm:h-6 sm:w-6 text-purple-400" />
                     </div>
                     <DateRangeDisplay
                       startDate={fitCircle.start_date}
@@ -778,15 +780,15 @@ export default function FitCirclePage() {
             transition={{ delay: 0.5 }}
           >
             <Card className="bg-slate-900/50 border-slate-800/50 backdrop-blur-xl">
-              <CardHeader>
-                <CardTitle className="flex items-center space-x-3 text-xl">
-                  <Trophy className="h-6 w-6 text-yellow-500" />
+              <CardHeader className="p-4 sm:p-6">
+                <CardTitle className="flex items-center gap-2 sm:gap-3 text-lg sm:text-xl">
+                  <Trophy className="h-5 w-5 sm:h-6 sm:w-6 text-yellow-500 flex-shrink-0" />
                   <span className="bg-gradient-to-r from-yellow-400 to-orange-400 bg-clip-text text-transparent">
                     Leaderboard
                   </span>
                 </CardTitle>
               </CardHeader>
-              <CardContent>
+              <CardContent className="p-3 sm:p-6">
                 {participants.length === 0 ? (
                   <div className="text-center py-8">
                     <Users className="h-12 w-12 text-gray-600 mx-auto mb-4" />
@@ -794,7 +796,7 @@ export default function FitCirclePage() {
                     <p className="text-sm text-gray-500 mt-2">Be the first to join this challenge!</p>
                   </div>
                 ) : (
-                  <div className="space-y-4">
+                  <div className="space-y-3 sm:space-y-4">
                     {participants.map((participant, index) => {
                       const rank = index + 1;
                       return (
@@ -803,7 +805,7 @@ export default function FitCirclePage() {
                           initial={{ opacity: 0, x: -20 }}
                           animate={{ opacity: 1, x: 0 }}
                           transition={{ delay: 0.1 * index }}
-                          className={`flex items-center space-x-4 p-4 rounded-lg border transition-all ${
+                          className={`flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4 p-3 sm:p-4 rounded-lg border transition-all ${
                             participant.user_id === user?.id || participant.is_public
                               ? 'cursor-pointer hover:bg-slate-800/70'
                               : 'cursor-not-allowed'
@@ -816,48 +818,57 @@ export default function FitCirclePage() {
                           }`}
                           onClick={() => handleParticipantClick(participant)}
                         >
-                          <div className="flex items-center justify-center w-10 h-10 rounded-full bg-slate-800/50">
-                            {getRankIcon(rank)}
-                          </div>
+                          {/* Mobile: Rank + User Info + Progress in one row */}
+                          <div className="flex items-center gap-3 sm:gap-4 flex-1 min-w-0">
+                            <div className="flex items-center justify-center w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-slate-800/50 flex-shrink-0">
+                              {getRankIcon(rank)}
+                            </div>
 
-                          <div className="flex-1">
-                            <div className="flex items-center space-x-3">
-                              <div className="relative">
-                                <div className="w-8 h-8 rounded-full bg-gradient-to-r from-indigo-500 to-purple-600 flex items-center justify-center text-white font-semibold text-sm">
-                                  {participant.display_name.charAt(0).toUpperCase()}
-                                </div>
-                                {!participant.is_public && participant.user_id !== user?.id && (
-                                  <div className="absolute -top-1 -right-1 w-4 h-4 bg-gray-500 rounded-full flex items-center justify-center">
-                                    <Lock className="h-2 w-2 text-white" />
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2 sm:gap-3">
+                                <div className="relative flex-shrink-0">
+                                  <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-gradient-to-r from-indigo-500 to-purple-600 flex items-center justify-center text-white font-semibold text-xs sm:text-sm">
+                                    {participant.display_name.charAt(0).toUpperCase()}
                                   </div>
-                                )}
-                              </div>
-                              <div>
-                                <div className="font-semibold text-white flex items-center space-x-2">
-                                  <span>{participant.display_name}</span>
-                                  {participant.user_id === fitCircle.creator_id && (
-                                    <Crown className="h-4 w-4 text-yellow-500" />
-                                  )}
-                                  {participant.user_id === user?.id && (
-                                    <Badge variant="outline" className="text-xs border-indigo-500/50 text-indigo-400">
-                                      You
-                                    </Badge>
-                                  )}
                                   {!participant.is_public && participant.user_id !== user?.id && (
-                                    <Badge variant="secondary" className="text-xs">
-                                      Private
-                                    </Badge>
+                                    <div className="absolute -top-0.5 -right-0.5 w-3.5 h-3.5 sm:w-4 sm:h-4 bg-gray-500 rounded-full flex items-center justify-center">
+                                      <Lock className="h-2 w-2 text-white" />
+                                    </div>
                                   )}
                                 </div>
-                                <p className="text-sm text-gray-400">
-                                  {participant.current_value ? `${participant.current_value.toFixed(1)} kg` : 'No data'}
-                                  {participant.target_value && ` → ${participant.target_value.toFixed(1)} kg goal`}
-                                </p>
+                                <div className="flex-1 min-w-0">
+                                  <div className="font-semibold text-white text-sm sm:text-base flex items-center gap-1.5 sm:gap-2 flex-wrap">
+                                    <span className="truncate">{participant.display_name}</span>
+                                    {participant.user_id === fitCircle.creator_id && (
+                                      <Crown className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-yellow-500 flex-shrink-0" />
+                                    )}
+                                    {participant.user_id === user?.id && (
+                                      <Badge variant="outline" className="text-xs border-indigo-500/50 text-indigo-400 flex-shrink-0">
+                                        You
+                                      </Badge>
+                                    )}
+                                    {!participant.is_public && participant.user_id !== user?.id && (
+                                      <Badge variant="secondary" className="text-xs flex-shrink-0">
+                                        Private
+                                      </Badge>
+                                    )}
+                                  </div>
+                                  <p className="text-xs sm:text-sm text-gray-400 truncate">
+                                    {participant.current_value ? `${participant.current_value.toFixed(1)} kg` : 'No data'}
+                                    {participant.target_value && ` → ${participant.target_value.toFixed(1)} kg goal`}
+                                  </p>
+                                </div>
                               </div>
+                            </div>
+
+                            {/* Mobile: Show progress percentage inline */}
+                            <div className="text-right sm:hidden flex-shrink-0">
+                              <p className="text-base font-bold text-white">{participant.progress}%</p>
                             </div>
                           </div>
 
-                          <div className="flex items-center space-x-4">
+                          {/* Desktop: Progress section */}
+                          <div className="hidden sm:flex items-center gap-4 flex-shrink-0">
                             <div className="text-right">
                               <p className="text-lg font-bold text-white">{participant.progress}%</p>
                               <p className="text-sm text-gray-400">Progress</p>
@@ -868,7 +879,7 @@ export default function FitCirclePage() {
                                 className={`h-2 bg-slate-800`}
                               />
                               {participant.starting_value && participant.current_value && participant.target_value && (
-                                <div className="mt-1.5 text-xs text-center">
+                                <div className="mt-1.5 text-xs text-center whitespace-nowrap">
                                   <span className="font-semibold bg-gradient-to-r from-green-400 to-emerald-500 bg-clip-text text-transparent">
                                     {(participant.starting_value - participant.current_value).toFixed(1)} kg
                                   </span>
@@ -879,6 +890,25 @@ export default function FitCirclePage() {
                                 </div>
                               )}
                             </div>
+                          </div>
+
+                          {/* Mobile: Progress bar and details */}
+                          <div className="sm:hidden w-full">
+                            <Progress
+                              value={participant.progress}
+                              className={`h-2 bg-slate-800 mb-2`}
+                            />
+                            {participant.starting_value && participant.current_value && participant.target_value && (
+                              <div className="text-xs text-center">
+                                <span className="font-semibold bg-gradient-to-r from-green-400 to-emerald-500 bg-clip-text text-transparent">
+                                  {(participant.starting_value - participant.current_value).toFixed(1)} kg
+                                </span>
+                                <span className="text-gray-500 mx-1">of</span>
+                                <span className="font-semibold text-gray-300">
+                                  {(participant.starting_value - participant.target_value).toFixed(1)} kg
+                                </span>
+                              </div>
+                            )}
                           </div>
                         </motion.div>
                       );
@@ -894,15 +924,15 @@ export default function FitCirclePage() {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.6 }}
-            className="mt-8 flex justify-center space-x-4"
+            className="mt-6 sm:mt-8 flex justify-center gap-3 sm:gap-4 px-3 sm:px-0"
           >
             {fitCircle.is_participant && (
               <Button
                 size="lg"
                 onClick={() => setShowSubmitProgressDialog(true)}
-                className="bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800"
+                className="flex-1 sm:flex-initial bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-sm sm:text-base"
               >
-                <TrendingUp className="h-5 w-5 mr-2" />
+                <TrendingUp className="h-4 w-4 sm:h-5 sm:w-5 mr-1.5 sm:mr-2" />
                 Submit Progress
               </Button>
             )}
@@ -910,9 +940,9 @@ export default function FitCirclePage() {
             {!fitCircle.is_participant && (
               <Button
                 size="lg"
-                className="bg-gradient-to-r from-orange-600 to-orange-700 hover:from-orange-700 hover:to-orange-800"
+                className="flex-1 sm:flex-initial bg-gradient-to-r from-orange-600 to-orange-700 hover:from-orange-700 hover:to-orange-800 text-sm sm:text-base"
               >
-                <UserPlus className="h-5 w-5 mr-2" />
+                <UserPlus className="h-4 w-4 sm:h-5 sm:w-5 mr-1.5 sm:mr-2" />
                 Join Challenge
               </Button>
             )}
