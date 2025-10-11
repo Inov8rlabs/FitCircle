@@ -117,6 +117,19 @@ export default function FitCirclePage() {
   const [isSavingEndDate, setIsSavingEndDate] = useState(false);
   const [removingParticipantId, setRemovingParticipantId] = useState<string | null>(null);
 
+  // Edit states for participant goals
+  const [isEditingStartingValue, setIsEditingStartingValue] = useState(false);
+  const [editedStartingValue, setEditedStartingValue] = useState('');
+  const [isSavingStartingValue, setIsSavingStartingValue] = useState(false);
+  const [isEditingTargetValue, setIsEditingTargetValue] = useState(false);
+  const [editedTargetValue, setEditedTargetValue] = useState('');
+  const [isSavingTargetValue, setIsSavingTargetValue] = useState(false);
+
+  // Edit states for daily entries
+  const [editingEntryDate, setEditingEntryDate] = useState<string | null>(null);
+  const [editedEntryValue, setEditedEntryValue] = useState('');
+  const [isSavingEntry, setIsSavingEntry] = useState(false);
+
   const circleId = params.id as string;
 
   useEffect(() => {
@@ -539,6 +552,218 @@ export default function FitCirclePage() {
         setSelectedParticipant(participant);
       }
       setShowDetailModal(true);
+    }
+  };
+
+  // Handlers for editing starting value
+  const handleStartEditStartingValue = () => {
+    setEditedStartingValue(selectedParticipant?.starting_value?.toString() || '');
+    setIsEditingStartingValue(true);
+  };
+
+  const handleCancelEditStartingValue = () => {
+    setIsEditingStartingValue(false);
+    setEditedStartingValue('');
+  };
+
+  const handleSaveStartingValue = async () => {
+    if (!editedStartingValue || !selectedParticipant) return;
+
+    const value = parseFloat(editedStartingValue);
+    if (isNaN(value) || value <= 0) {
+      toast.error('Please enter a valid starting value');
+      return;
+    }
+
+    setIsSavingStartingValue(true);
+    try {
+      const response = await fetch(`/api/fitcircles/${circleId}/participants/${selectedParticipant.user_id}/update-goals`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ starting_value: value }),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Failed to update starting value');
+      }
+
+      toast.success('Starting value updated successfully');
+
+      // Update local state
+      setSelectedParticipant({
+        ...selectedParticipant,
+        starting_value: value,
+      });
+
+      setIsEditingStartingValue(false);
+      setEditedStartingValue('');
+
+      // Refresh participants to update calculated progress
+      await fetchParticipants();
+    } catch (err: any) {
+      console.error('Error updating starting value:', err);
+      toast.error(err.message || 'Failed to update starting value');
+    } finally {
+      setIsSavingStartingValue(false);
+    }
+  };
+
+  // Handlers for editing target value
+  const handleStartEditTargetValue = () => {
+    setEditedTargetValue(selectedParticipant?.target_value?.toString() || '');
+    setIsEditingTargetValue(true);
+  };
+
+  const handleCancelEditTargetValue = () => {
+    setIsEditingTargetValue(false);
+    setEditedTargetValue('');
+  };
+
+  const handleSaveTargetValue = async () => {
+    if (!editedTargetValue || !selectedParticipant) return;
+
+    const value = parseFloat(editedTargetValue);
+    if (isNaN(value) || value <= 0) {
+      toast.error('Please enter a valid target value');
+      return;
+    }
+
+    setIsSavingTargetValue(true);
+    try {
+      const response = await fetch(`/api/fitcircles/${circleId}/participants/${selectedParticipant.user_id}/update-goals`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ goal_value: value }),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Failed to update target value');
+      }
+
+      toast.success('Target value updated successfully');
+
+      // Update local state
+      setSelectedParticipant({
+        ...selectedParticipant,
+        target_value: value,
+      });
+
+      setIsEditingTargetValue(false);
+      setEditedTargetValue('');
+
+      // Refresh participants to update calculated progress
+      await fetchParticipants();
+    } catch (err: any) {
+      console.error('Error updating target value:', err);
+      toast.error(err.message || 'Failed to update target value');
+    } finally {
+      setIsSavingTargetValue(false);
+    }
+  };
+
+  // Handlers for editing daily entries
+  const handleStartEditEntry = (date: string, value: number) => {
+    setEditingEntryDate(date);
+    setEditedEntryValue(value.toString());
+  };
+
+  const handleCancelEditEntry = () => {
+    setEditingEntryDate(null);
+    setEditedEntryValue('');
+  };
+
+  const handleSaveEntry = async () => {
+    if (!editedEntryValue || !editingEntryDate || !selectedParticipant) return;
+
+    const value = parseFloat(editedEntryValue);
+    if (isNaN(value) || value < 0) {
+      toast.error('Please enter a valid value');
+      return;
+    }
+
+    setIsSavingEntry(true);
+    try {
+      const response = await fetch(`/api/fitcircles/${circleId}/progress/${selectedParticipant.user_id}/update-entry`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tracking_date: editingEntryDate,
+          value: value,
+        }),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Failed to update entry');
+      }
+
+      toast.success('Entry updated successfully');
+
+      // Update local entry in the list
+      if (selectedParticipant.entries) {
+        const updatedEntries = selectedParticipant.entries.map(entry =>
+          entry.tracking_date === editingEntryDate
+            ? { ...entry, value }
+            : entry
+        );
+        setSelectedParticipant({
+          ...selectedParticipant,
+          entries: updatedEntries,
+        });
+      }
+
+      setEditingEntryDate(null);
+      setEditedEntryValue('');
+
+      // Refresh participants to update calculated progress
+      await fetchParticipants();
+    } catch (err: any) {
+      console.error('Error updating entry:', err);
+      toast.error(err.message || 'Failed to update entry');
+    } finally {
+      setIsSavingEntry(false);
+    }
+  };
+
+  const handleDeleteEntry = async (date: string) => {
+    if (!selectedParticipant || !confirm('Are you sure you want to delete this entry?')) return;
+
+    try {
+      const response = await fetch(`/api/fitcircles/${circleId}/progress/${selectedParticipant.user_id}/update-entry`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tracking_date: date }),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Failed to delete entry');
+      }
+
+      toast.success('Entry deleted successfully');
+
+      // Remove entry from local list
+      if (selectedParticipant.entries) {
+        const updatedEntries = selectedParticipant.entries.filter(
+          entry => entry.tracking_date !== date
+        );
+        setSelectedParticipant({
+          ...selectedParticipant,
+          entries: updatedEntries,
+        });
+      }
+
+      // Refresh participants to update calculated progress
+      await fetchParticipants();
+    } catch (err: any) {
+      console.error('Error deleting entry:', err);
+      toast.error(err.message || 'Failed to delete entry');
     }
   };
 
@@ -1009,12 +1234,56 @@ export default function FitCirclePage() {
                 {/* Weight Stats Grid */}
                 <div className="grid grid-cols-3 gap-4 mb-6">
                   {/* Starting Weight */}
-                  <div className="text-center p-3 bg-slate-900/50 rounded-lg border border-slate-700/30">
-                    <div className="text-xs text-gray-500 mb-1">Starting</div>
-                    <div className="text-lg font-bold text-gray-300">
-                      {selectedParticipant.starting_value?.toFixed(1)}
-                      <span className="text-xs text-gray-500 ml-1">kg</span>
+                  <div className="text-center p-3 bg-slate-900/50 rounded-lg border border-slate-700/30 relative group">
+                    <div className="text-xs text-gray-500 mb-1 flex items-center justify-center gap-1">
+                      Starting
+                      {selectedParticipant.user_id === user?.id && !isEditingStartingValue && (
+                        <button
+                          onClick={handleStartEditStartingValue}
+                          className="opacity-0 group-hover:opacity-100 transition-opacity p-1 hover:bg-slate-800 rounded"
+                          aria-label="Edit starting weight"
+                        >
+                          <Edit className="h-3 w-3 text-indigo-400" />
+                        </button>
+                      )}
                     </div>
+                    {isEditingStartingValue && selectedParticipant.user_id === user?.id ? (
+                      <div className="space-y-2">
+                        <input
+                          type="number"
+                          value={editedStartingValue}
+                          onChange={(e) => setEditedStartingValue(e.target.value)}
+                          className="w-full px-2 py-1 bg-slate-800 rounded border border-slate-600 text-white text-center text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                          step="0.1"
+                          min="0"
+                        />
+                        <div className="flex items-center justify-center gap-1">
+                          <button
+                            onClick={handleSaveStartingValue}
+                            disabled={isSavingStartingValue}
+                            className="p-1 bg-green-600 hover:bg-green-700 rounded text-white disabled:opacity-50"
+                          >
+                            {isSavingStartingValue ? (
+                              <Loader2 className="h-3 w-3 animate-spin" />
+                            ) : (
+                              <Check className="h-3 w-3" />
+                            )}
+                          </button>
+                          <button
+                            onClick={handleCancelEditStartingValue}
+                            disabled={isSavingStartingValue}
+                            className="p-1 bg-gray-600 hover:bg-gray-700 rounded text-white"
+                          >
+                            <X className="h-3 w-3" />
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="text-lg font-bold text-gray-300">
+                        {selectedParticipant.starting_value?.toFixed(1)}
+                        <span className="text-xs text-gray-500 ml-1">kg</span>
+                      </div>
+                    )}
                   </div>
 
                   {/* Current Weight */}
@@ -1032,12 +1301,56 @@ export default function FitCirclePage() {
                   </div>
 
                   {/* Target Weight */}
-                  <div className="text-center p-3 bg-slate-900/50 rounded-lg border border-slate-700/30">
-                    <div className="text-xs text-gray-500 mb-1">Target</div>
-                    <div className="text-lg font-bold text-gray-300">
-                      {selectedParticipant.target_value?.toFixed(1)}
-                      <span className="text-xs text-gray-500 ml-1">kg</span>
+                  <div className="text-center p-3 bg-slate-900/50 rounded-lg border border-slate-700/30 relative group">
+                    <div className="text-xs text-gray-500 mb-1 flex items-center justify-center gap-1">
+                      Target
+                      {selectedParticipant.user_id === user?.id && !isEditingTargetValue && (
+                        <button
+                          onClick={handleStartEditTargetValue}
+                          className="opacity-0 group-hover:opacity-100 transition-opacity p-1 hover:bg-slate-800 rounded"
+                          aria-label="Edit target weight"
+                        >
+                          <Edit className="h-3 w-3 text-indigo-400" />
+                        </button>
+                      )}
                     </div>
+                    {isEditingTargetValue && selectedParticipant.user_id === user?.id ? (
+                      <div className="space-y-2">
+                        <input
+                          type="number"
+                          value={editedTargetValue}
+                          onChange={(e) => setEditedTargetValue(e.target.value)}
+                          className="w-full px-2 py-1 bg-slate-800 rounded border border-slate-600 text-white text-center text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                          step="0.1"
+                          min="0"
+                        />
+                        <div className="flex items-center justify-center gap-1">
+                          <button
+                            onClick={handleSaveTargetValue}
+                            disabled={isSavingTargetValue}
+                            className="p-1 bg-green-600 hover:bg-green-700 rounded text-white disabled:opacity-50"
+                          >
+                            {isSavingTargetValue ? (
+                              <Loader2 className="h-3 w-3 animate-spin" />
+                            ) : (
+                              <Check className="h-3 w-3" />
+                            )}
+                          </button>
+                          <button
+                            onClick={handleCancelEditTargetValue}
+                            disabled={isSavingTargetValue}
+                            className="p-1 bg-gray-600 hover:bg-gray-700 rounded text-white"
+                          >
+                            <X className="h-3 w-3" />
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="text-lg font-bold text-gray-300">
+                        {selectedParticipant.target_value?.toFixed(1)}
+                        <span className="text-xs text-gray-500 ml-1">kg</span>
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -1091,43 +1404,121 @@ export default function FitCirclePage() {
 
                 {selectedParticipant.entries && selectedParticipant.entries.length > 0 ? (
                   <div className="space-y-3 max-h-96 overflow-y-auto">
-                    {selectedParticipant.entries.map((entry, entryIndex) => (
-                      <motion.div
-                        key={`${entry.tracking_date}-${entryIndex}`}
-                        initial={{ opacity: 0, y: 10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ delay: entryIndex * 0.05 }}
-                        className={`flex items-center justify-between p-3 rounded-lg border ${
-                          entry.is_public
-                            ? 'bg-slate-800/50 border-slate-700/50'
-                            : 'bg-slate-800/30 border-slate-700/30 opacity-75'
-                        }`}
-                      >
-                        <div className="flex items-center space-x-3">
-                          <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold ${
+                    {selectedParticipant.entries.map((entry, entryIndex) => {
+                      const isEditing = editingEntryDate === entry.tracking_date;
+                      const isOwnEntry = selectedParticipant.user_id === user?.id;
+
+                      return (
+                        <motion.div
+                          key={`${entry.tracking_date}-${entryIndex}`}
+                          initial={{ opacity: 0, y: 10 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          transition={{ delay: entryIndex * 0.05 }}
+                          className={`flex items-center justify-between p-3 rounded-lg border group ${
                             entry.is_public
-                              ? 'bg-green-500/20 text-green-400'
-                              : 'bg-gray-500/20 text-gray-400'
-                          }`}>
-                            {entry.is_public ? '👁️' : '🔒'}
-                          </div>
-                          <div>
-                            <p className="font-semibold text-white">{entry.value} kg</p>
-                            <p className="text-sm text-gray-400">
-                              {new Date(entry.tracking_date).toLocaleDateString()}
-                              {entry.is_public ? ' • Public' : ' • Private'}
-                            </p>
-                          </div>
-                        </div>
-                        <div className="text-right">
-                          <p className="text-sm text-gray-400">
-                            {selectedParticipant.starting_value &&
-                              `${(selectedParticipant.starting_value - entry.value).toFixed(1)} kg lost`
-                            }
-                          </p>
-                        </div>
-                      </motion.div>
-                    ))}
+                              ? 'bg-slate-800/50 border-slate-700/50'
+                              : 'bg-slate-800/30 border-slate-700/30 opacity-75'
+                          }`}
+                        >
+                          {isEditing ? (
+                            // Edit mode
+                            <div className="flex-1 flex items-center gap-3">
+                              <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 ${
+                                entry.is_public
+                                  ? 'bg-green-500/20 text-green-400'
+                                  : 'bg-gray-500/20 text-gray-400'
+                              }`}>
+                                {entry.is_public ? '👁️' : '🔒'}
+                              </div>
+                              <div className="flex-1 space-y-2">
+                                <input
+                                  type="number"
+                                  value={editedEntryValue}
+                                  onChange={(e) => setEditedEntryValue(e.target.value)}
+                                  className="w-full px-3 py-1.5 bg-slate-900 rounded border border-slate-600 text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                                  placeholder="Enter weight (kg)"
+                                  step="0.1"
+                                  min="0"
+                                />
+                                <div className="flex items-center gap-2">
+                                  <button
+                                    onClick={handleSaveEntry}
+                                    disabled={isSavingEntry}
+                                    className="px-3 py-1 bg-green-600 hover:bg-green-700 rounded text-white text-sm disabled:opacity-50 flex items-center gap-1"
+                                  >
+                                    {isSavingEntry ? (
+                                      <>
+                                        <Loader2 className="h-3 w-3 animate-spin" />
+                                        Saving...
+                                      </>
+                                    ) : (
+                                      <>
+                                        <Check className="h-3 w-3" />
+                                        Save
+                                      </>
+                                    )}
+                                  </button>
+                                  <button
+                                    onClick={handleCancelEditEntry}
+                                    disabled={isSavingEntry}
+                                    className="px-3 py-1 bg-gray-600 hover:bg-gray-700 rounded text-white text-sm"
+                                  >
+                                    <X className="h-3 w-3" />
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+                          ) : (
+                            // View mode
+                            <>
+                              <div className="flex items-center space-x-3 flex-1">
+                                <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 ${
+                                  entry.is_public
+                                    ? 'bg-green-500/20 text-green-400'
+                                    : 'bg-gray-500/20 text-gray-400'
+                                }`}>
+                                  {entry.is_public ? '👁️' : '🔒'}
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <p className="font-semibold text-white">{entry.value} kg</p>
+                                  <p className="text-sm text-gray-400">
+                                    {new Date(entry.tracking_date).toLocaleDateString()}
+                                    {entry.is_public ? ' • Public' : ' • Private'}
+                                  </p>
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <div className="text-right">
+                                  <p className="text-sm text-gray-400">
+                                    {selectedParticipant.starting_value &&
+                                      `${(selectedParticipant.starting_value - entry.value).toFixed(1)} kg lost`
+                                    }
+                                  </p>
+                                </div>
+                                {isOwnEntry && (
+                                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                    <button
+                                      onClick={() => handleStartEditEntry(entry.tracking_date, entry.value)}
+                                      className="p-1.5 hover:bg-slate-700 rounded text-indigo-400"
+                                      aria-label="Edit entry"
+                                    >
+                                      <Edit className="h-4 w-4" />
+                                    </button>
+                                    <button
+                                      onClick={() => handleDeleteEntry(entry.tracking_date)}
+                                      className="p-1.5 hover:bg-slate-700 rounded text-red-400"
+                                      aria-label="Delete entry"
+                                    >
+                                      <Trash2 className="h-4 w-4" />
+                                    </button>
+                                  </div>
+                                )}
+                              </div>
+                            </>
+                          )}
+                        </motion.div>
+                      );
+                    })}
                   </div>
                 ) : (
                   <div className="text-center py-8">
