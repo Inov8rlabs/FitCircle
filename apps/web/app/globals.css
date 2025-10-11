@@ -83,6 +83,12 @@
     font-feature-settings: 'rlig' 1, 'calt' 1;
     -webkit-tap-highlight-color: transparent;
     -webkit-touch-callout: none;
+    overflow-x: hidden;
+  }
+
+  /* Prevent horizontal overflow on all devices */
+  html {
+    overflow-x: hidden;
   }
 
   /* Force dark mode by default */

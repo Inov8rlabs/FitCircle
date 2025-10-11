@@ -109,8 +109,7 @@ export function useUnitPreference(): UseUnitPreferenceReturn {
         preferences: updatedPreferences,
       });
 
-      // Show success toast
-      toast.success(`Units changed to ${system === 'imperial' ? 'Imperial (lbs)' : 'Metric (kg)'}`);
+      // No toast needed - visual feedback from toggle is sufficient
     } catch (err: any) {
       console.error('Error updating unit system:', err);
       setError(err.message || 'Failed to update unit preference');

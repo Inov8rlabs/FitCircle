@@ -24,18 +24,18 @@ export function UnitToggle({
 }: UnitToggleProps) {
   const sizes = {
     sm: {
-      container: 'h-7 p-0.5',
-      button: 'px-2 py-0.5 text-xs',
+      container: 'h-8 p-0.5',
+      button: 'px-2.5 py-1 text-xs min-w-[44px]',
       icon: 'h-3 w-3',
     },
     md: {
-      container: 'h-9 p-1',
-      button: 'px-3 py-1 text-sm',
+      container: 'h-10 p-1',
+      button: 'px-3.5 py-1.5 text-sm min-w-[52px]',
       icon: 'h-4 w-4',
     },
     lg: {
       container: 'h-11 p-1',
-      button: 'px-4 py-1.5 text-base',
+      button: 'px-4 py-1.5 text-base min-w-[60px]',
       icon: 'h-5 w-5',
     },
   };
@@ -50,7 +50,7 @@ export function UnitToggle({
   return (
     <div
       className={cn(
-        'inline-flex items-center rounded-lg bg-slate-800/50 border border-slate-700',
+        'inline-flex items-center rounded-lg bg-slate-800/50 border border-slate-700 overflow-hidden',
         sizeClasses.container,
         className
       )}
@@ -60,26 +60,27 @@ export function UnitToggle({
         onClick={() => handleToggle('metric')}
         disabled={disabled || isLoading}
         className={cn(
-          'relative flex items-center justify-center rounded-md font-medium transition-all',
+          'relative flex items-center justify-center rounded-md font-medium transition-all flex-1',
           sizeClasses.button,
           value === 'metric'
-            ? 'bg-indigo-500/20 text-indigo-400'
+            ? 'text-indigo-400'
             : 'text-gray-500 hover:text-gray-400'
         )}
       >
         {value === 'metric' && (
           <motion.div
             layoutId="unit-toggle-indicator"
-            className="absolute inset-0 bg-indigo-500/20 rounded-md"
-            transition={{ type: 'spring', bounce: 0.2, duration: 0.3 }}
+            className="absolute inset-0.5 bg-indigo-500/20 rounded-md"
+            transition={{ type: 'spring', bounce: 0.15, duration: 0.25 }}
+            style={{ zIndex: 0 }}
           />
         )}
         {isLoading && value === 'metric' ? (
-          <Loader2 className={cn(sizeClasses.icon, 'animate-spin mr-1')} />
+          <Loader2 className={cn(sizeClasses.icon, 'animate-spin mr-1 relative z-10')} />
         ) : (
-          <Scale className={cn(sizeClasses.icon, 'mr-1')} />
+          <Scale className={cn(sizeClasses.icon, 'mr-1 relative z-10')} />
         )}
-        <span className="relative">kg</span>
+        <span className="relative z-10">kg</span>
       </button>
 
       <button
@@ -87,26 +88,27 @@ export function UnitToggle({
         onClick={() => handleToggle('imperial')}
         disabled={disabled || isLoading}
         className={cn(
-          'relative flex items-center justify-center rounded-md font-medium transition-all',
+          'relative flex items-center justify-center rounded-md font-medium transition-all flex-1',
           sizeClasses.button,
           value === 'imperial'
-            ? 'bg-purple-500/20 text-purple-400'
+            ? 'text-purple-400'
             : 'text-gray-500 hover:text-gray-400'
         )}
       >
         {value === 'imperial' && (
           <motion.div
             layoutId="unit-toggle-indicator"
-            className="absolute inset-0 bg-purple-500/20 rounded-md"
-            transition={{ type: 'spring', bounce: 0.2, duration: 0.3 }}
+            className="absolute inset-0.5 bg-purple-500/20 rounded-md"
+            transition={{ type: 'spring', bounce: 0.15, duration: 0.25 }}
+            style={{ zIndex: 0 }}
           />
         )}
         {isLoading && value === 'imperial' ? (
-          <Loader2 className={cn(sizeClasses.icon, 'animate-spin mr-1')} />
+          <Loader2 className={cn(sizeClasses.icon, 'animate-spin mr-1 relative z-10')} />
         ) : (
-          <Scale className={cn(sizeClasses.icon, 'mr-1')} />
+          <Scale className={cn(sizeClasses.icon, 'mr-1 relative z-10')} />
         )}
-        <span className="relative">lbs</span>
+        <span className="relative z-10">lbs</span>
       </button>
     </div>
   );

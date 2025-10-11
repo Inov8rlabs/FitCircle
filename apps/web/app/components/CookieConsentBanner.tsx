@@ -186,27 +186,26 @@ export function CookieConsentBanner() {
           animate={{ y: 0, opacity: 1 }}
           exit={{ y: 100, opacity: 0 }}
           transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-          className="fixed bottom-0 left-0 right-0 z-50 p-4 sm:p-6"
+          className="fixed bottom-0 left-0 right-0 z-50 p-3 sm:p-6"
         >
           <div className="max-w-7xl mx-auto">
             <div className="bg-gradient-to-br from-slate-900/98 via-slate-900/95 to-slate-800/98 backdrop-blur-xl rounded-2xl border border-slate-700/50 shadow-2xl overflow-hidden">
               {/* Header Section */}
-              <div className="p-6">
-                <div className="flex items-start justify-between gap-4">
+              <div className="p-4 sm:p-6">
+                <div className="flex flex-col gap-4">
                   <div className="flex-1">
-                    <h3 className="text-lg font-semibold text-white mb-2 flex items-center gap-2">
-                      <Shield className="h-4 w-4 text-cyan-400" />
+                    <h3 className="text-base sm:text-lg font-semibold text-white mb-2 flex items-center gap-2">
+                      <Shield className="h-4 w-4 text-cyan-400 flex-shrink-0" />
                       We value your privacy
                     </h3>
-                    <p className="text-sm text-slate-300 leading-relaxed">
+                    <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
                       We use cookies to enhance your experience and analyze site usage. Essential
-                      cookies are required for the site to function. Analytics cookies help us
-                      improve FitCircle.{' '}
+                      cookies are required for the site to function.{' '}
                       <button
                         onClick={() => setShowDetails(!showDetails)}
                         className="text-cyan-400 hover:text-cyan-300 underline underline-offset-2 transition-colors inline-flex items-center gap-1"
                       >
-                        Customize preferences
+                        Customize
                         {showDetails ? (
                           <ChevronUp className="h-3 w-3" />
                         ) : (
@@ -216,24 +215,24 @@ export function CookieConsentBanner() {
                     </p>
                   </div>
 
-                  {/* Action Buttons - Compact */}
-                  <div className="flex gap-2 flex-shrink-0">
+                  {/* Action Buttons - Full width on mobile */}
+                  <div className="flex gap-2 w-full sm:w-auto">
                     <Button
                       onClick={() => handleRejectAll()}
                       variant="outline"
                       disabled={isSubmitting}
                       size="sm"
-                      className="border-slate-600 text-slate-300 hover:bg-slate-800 hover:text-white transition-all"
+                      className="flex-1 sm:flex-initial border-slate-600 text-slate-300 hover:bg-slate-800 hover:text-white transition-all text-xs sm:text-sm"
                     >
-                      Reject All
+                      Reject
                     </Button>
                     <Button
                       onClick={() => handleAcceptAll()}
                       disabled={isSubmitting}
                       size="sm"
-                      className="bg-gradient-to-r from-cyan-500 to-purple-500 hover:from-cyan-600 hover:to-purple-600 text-white font-semibold transition-all"
+                      className="flex-1 sm:flex-initial bg-gradient-to-r from-cyan-500 to-purple-500 hover:from-cyan-600 hover:to-purple-600 text-white font-semibold transition-all text-xs sm:text-sm"
                     >
-                      {isSubmitting ? 'Saving...' : 'Accept All'}
+                      {isSubmitting ? 'Saving...' : 'Accept'}
                     </Button>
                   </div>
                 </div>
@@ -249,34 +248,32 @@ export function CookieConsentBanner() {
                     transition={{ duration: 0.3 }}
                     className="border-t border-slate-700/50 bg-slate-900/50"
                   >
-                    <div className="p-6 sm:p-8 space-y-5">
+                    <div className="p-4 sm:p-6 lg:p-8 space-y-4 sm:space-y-5">
                       {/* Essential Cookies */}
-                      <div className="flex items-start justify-between gap-4 p-4 rounded-xl bg-slate-800/30 border border-slate-700/30">
-                        <div className="flex items-start gap-3 flex-1">
-                          <Shield className="h-5 w-5 text-green-400 mt-0.5 flex-shrink-0" />
-                          <div>
-                            <p className="font-semibold text-white mb-1">Essential Cookies</p>
+                      <div className="flex items-start justify-between gap-3 p-3 sm:p-4 rounded-xl bg-slate-800/30 border border-slate-700/30">
+                        <div className="flex items-start gap-2 sm:gap-3 flex-1 min-w-0">
+                          <Shield className="h-4 w-4 sm:h-5 sm:w-5 text-green-400 mt-0.5 flex-shrink-0" />
+                          <div className="min-w-0 flex-1">
+                            <p className="font-semibold text-white mb-1 text-sm sm:text-base">Essential</p>
                             <p className="text-xs text-slate-400 leading-relaxed">
-                              Required for authentication, security, and core functionality. These
-                              cookies cannot be disabled.
+                              Required for the site to function.
                             </p>
                           </div>
                         </div>
-                        <div className="flex items-center">
-                          <Switch checked={true} disabled className="opacity-50" />
-                          <span className="ml-2 text-xs text-green-400 font-medium">Always On</span>
+                        <div className="flex items-center flex-shrink-0">
+                          <Switch checked={true} disabled className="opacity-50 scale-90 sm:scale-100" />
+                          <span className="hidden sm:inline ml-2 text-xs text-green-400 font-medium whitespace-nowrap">Always On</span>
                         </div>
                       </div>
 
                       {/* Analytics Cookies */}
-                      <div className="flex items-start justify-between gap-4 p-4 rounded-xl bg-slate-800/30 border border-slate-700/30 hover:border-indigo-500/30 transition-colors">
-                        <div className="flex items-start gap-3 flex-1">
-                          <BarChart3 className="h-5 w-5 text-indigo-400 mt-0.5 flex-shrink-0" />
-                          <div>
-                            <p className="font-semibold text-white mb-1">Analytics Cookies</p>
+                      <div className="flex items-start justify-between gap-3 p-3 sm:p-4 rounded-xl bg-slate-800/30 border border-slate-700/30 hover:border-indigo-500/30 transition-colors">
+                        <div className="flex items-start gap-2 sm:gap-3 flex-1 min-w-0">
+                          <BarChart3 className="h-4 w-4 sm:h-5 sm:w-5 text-indigo-400 mt-0.5 flex-shrink-0" />
+                          <div className="min-w-0 flex-1">
+                            <p className="font-semibold text-white mb-1 text-sm sm:text-base">Analytics</p>
                             <p className="text-xs text-slate-400 leading-relaxed">
-                              Help us understand how you use FitCircle so we can improve your
-                              experience. Powered by Amplitude.
+                              Help us improve your experience.
                             </p>
                           </div>
                         </div>
@@ -285,18 +282,18 @@ export function CookieConsentBanner() {
                           onCheckedChange={(checked) =>
                             setPreferences({ ...preferences, analytics: checked })
                           }
-                          className="flex-shrink-0"
+                          className="flex-shrink-0 scale-90 sm:scale-100"
                         />
                       </div>
 
                       {/* Marketing Cookies */}
-                      <div className="flex items-start justify-between gap-4 p-4 rounded-xl bg-slate-800/30 border border-slate-700/30 hover:border-orange-500/30 transition-colors">
-                        <div className="flex items-start gap-3 flex-1">
-                          <Megaphone className="h-5 w-5 text-orange-400 mt-0.5 flex-shrink-0" />
-                          <div>
-                            <p className="font-semibold text-white mb-1">Marketing Cookies</p>
+                      <div className="flex items-start justify-between gap-3 p-3 sm:p-4 rounded-xl bg-slate-800/30 border border-slate-700/30 hover:border-orange-500/30 transition-colors">
+                        <div className="flex items-start gap-2 sm:gap-3 flex-1 min-w-0">
+                          <Megaphone className="h-4 w-4 sm:h-5 sm:w-5 text-orange-400 mt-0.5 flex-shrink-0" />
+                          <div className="min-w-0 flex-1">
+                            <p className="font-semibold text-white mb-1 text-sm sm:text-base">Marketing</p>
                             <p className="text-xs text-slate-400 leading-relaxed">
-                              Used to show relevant ads and content. Currently not used on FitCircle.
+                              Not currently used.
                             </p>
                           </div>
                         </div>
@@ -306,23 +303,24 @@ export function CookieConsentBanner() {
                             setPreferences({ ...preferences, marketing: checked })
                           }
                           disabled
-                          className="flex-shrink-0 opacity-50"
+                          className="flex-shrink-0 opacity-50 scale-90 sm:scale-100"
                         />
                       </div>
 
                       {/* Save Preferences Button */}
-                      <div className="flex justify-between items-center pt-2">
+                      <div className="flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-3 pt-2">
                         <a
                           href="/privacy"
                           target="_blank"
-                          className="text-xs text-cyan-400 hover:text-cyan-300 underline underline-offset-2"
+                          className="text-xs text-cyan-400 hover:text-cyan-300 underline underline-offset-2 text-center sm:text-left"
                         >
-                          Read our Privacy Policy
+                          Privacy Policy
                         </a>
                         <Button
                           onClick={() => handleSavePreferences()}
                           disabled={isSubmitting}
-                          className="bg-gradient-to-r from-purple-500 to-indigo-500 hover:from-purple-600 hover:to-indigo-600 text-white font-semibold transition-all shadow-lg shadow-purple-500/20"
+                          size="sm"
+                          className="w-full sm:w-auto bg-gradient-to-r from-purple-500 to-indigo-500 hover:from-purple-600 hover:to-indigo-600 text-white font-semibold transition-all shadow-lg shadow-purple-500/20 text-xs sm:text-sm"
                         >
                           {isSubmitting ? 'Saving...' : 'Save Preferences'}
                         </Button>

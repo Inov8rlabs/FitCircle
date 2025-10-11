@@ -368,7 +368,7 @@ export default function DashboardPage() {
   return (
     <>
       <DashboardNav />
-      <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950">
+      <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 overflow-x-hidden">
         {/* Subtle circle background decoration */}
         <div className="fixed inset-0 overflow-hidden pointer-events-none">
           <div className="absolute top-20 left-10 w-96 h-96 bg-indigo-500/5 rounded-full blur-3xl" />
@@ -376,31 +376,32 @@ export default function DashboardPage() {
           <div className="absolute bottom-20 left-1/3 w-[400px] h-[400px] bg-orange-500/5 rounded-full blur-3xl" />
         </div>
 
-        <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 lg:py-12">
+        <div className="relative max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-8 lg:py-12">
         {/* Header */}
         <motion.div
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="mb-6 sm:mb-8"
+          className="mb-4 sm:mb-6 lg:mb-8"
         >
-          <h1 className="text-3xl sm:text-4xl lg:text-5xl font-bold bg-gradient-to-r from-indigo-300 via-fuchsia-400 to-orange-400 bg-clip-text text-transparent mb-2">
+          <h1 className="text-2xl sm:text-3xl lg:text-5xl font-bold bg-gradient-to-r from-indigo-300 via-fuchsia-400 to-orange-400 bg-clip-text text-transparent mb-1.5 sm:mb-2">
             Welcome back, {user?.name || 'Champion'}!
           </h1>
-          <p className="text-gray-400 text-sm sm:text-base">
+          <p className="text-gray-400 text-xs sm:text-sm lg:text-base">
             Track your progress and stay consistent 🎯
           </p>
         </motion.div>
 
         {/* Quick Entry Section */}
-        <div className="mb-8">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg sm:text-xl font-semibold text-white">Quick Log</h2>
+        <div className="mb-6 sm:mb-8">
+          <div className="flex items-center justify-between mb-3 sm:mb-4">
+            <h2 className="text-base sm:text-lg lg:text-xl font-semibold text-white">Quick Log</h2>
             <button
               onClick={() => setShowBackfillDialog(true)}
               className="text-xs sm:text-sm text-indigo-400 hover:text-indigo-300 transition-colors flex items-center gap-1"
             >
-              <Calendar className="h-3 w-3" />
-              Log past date
+              <Calendar className="h-3 w-3 sm:h-4 sm:w-4" />
+              <span className="hidden sm:inline">Log past date</span>
+              <span className="sm:hidden">Past date</span>
             </button>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -444,8 +445,8 @@ export default function DashboardPage() {
         </div>
 
         {/* Activity Rings Dashboard */}
-        <div className="space-y-6 mb-8">
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
+        <div className="space-y-4 sm:space-y-6 mb-6 sm:mb-8">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 sm:gap-4 lg:gap-6">
             {/* Main Activity Ring */}
             <motion.div
               initial={{ opacity: 0, scale: 0.9 }}
@@ -453,7 +454,7 @@ export default function DashboardPage() {
               className="lg:col-span-1"
             >
               <Card className="bg-slate-900/50 border-slate-800 backdrop-blur-xl shadow-2xl">
-              <CardContent className="p-4 sm:p-8 flex flex-col items-center justify-center">
+              <CardContent className="p-4 sm:p-6 lg:p-8 flex flex-col items-center justify-center">
                 <ActivityRing
                   rings={[
                     {
@@ -469,19 +470,19 @@ export default function DashboardPage() {
                       label: 'Streak'
                     }
                   ]}
-                  size={180}
-                  strokeWidth={14}
-                  className="sm:!w-[200px] sm:!h-[200px]"
+                  size={160}
+                  strokeWidth={12}
+                  className="sm:!w-[180px] sm:!h-[180px] lg:!w-[200px] lg:!h-[200px]"
                 />
-                <div className="mt-4 sm:mt-6 text-center">
-                  <h3 className="text-base sm:text-lg font-semibold text-white mb-2">Today's Activity</h3>
-                  <div className="flex gap-3 sm:gap-4 justify-center text-xs sm:text-sm">
+                <div className="mt-3 sm:mt-4 lg:mt-6 text-center">
+                  <h3 className="text-sm sm:text-base lg:text-lg font-semibold text-white mb-1.5 sm:mb-2">Today's Activity</h3>
+                  <div className="flex gap-2 sm:gap-3 lg:gap-4 justify-center text-xs sm:text-sm">
                     <div>
-                      <div className="w-3 h-3 bg-indigo-400 rounded-full inline-block mr-1" />
+                      <div className="w-2.5 h-2.5 sm:w-3 sm:h-3 bg-indigo-400 rounded-full inline-block mr-1" />
                       <span className="text-gray-400">Steps</span>
                     </div>
                     <div>
-                      <div className="w-3 h-3 bg-orange-400 rounded-full inline-block mr-1" />
+                      <div className="w-2.5 h-2.5 sm:w-3 sm:h-3 bg-orange-400 rounded-full inline-block mr-1" />
                       <span className="text-gray-400">Streak</span>
                     </div>
                   </div>
@@ -491,7 +492,7 @@ export default function DashboardPage() {
           </motion.div>
 
           {/* Stats Grid - 2x2 layout with goals */}
-          <div className="lg:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="lg:col-span-2 grid grid-cols-2 gap-3 sm:gap-4">
             {/* Steps with Goal */}
             <motion.div
               initial={{ opacity: 0, scale: 0.9 }}
@@ -573,29 +574,31 @@ export default function DashboardPage() {
         </div>
 
         {/* Main Content Tabs */}
-        <Tabs defaultValue="weight" className="space-y-6">
+        <Tabs defaultValue="weight" className="space-y-4 sm:space-y-6">
           <TabsList className="w-full sm:w-auto grid grid-cols-2 gap-2 bg-slate-900/50 border border-slate-800">
-            <TabsTrigger value="weight" className="text-sm data-[state=active]:bg-purple-500/20 data-[state=active]:text-purple-400">
-              <BathroomScale className="h-4 w-4 mr-2" size={16} />
-              Weight Trends
+            <TabsTrigger value="weight" className="text-xs sm:text-sm data-[state=active]:bg-purple-500/20 data-[state=active]:text-purple-400">
+              <BathroomScale className="h-3.5 w-3.5 sm:h-4 sm:w-4 mr-1.5 sm:mr-2" size={16} />
+              <span className="hidden sm:inline">Weight Trends</span>
+              <span className="sm:hidden">Weight</span>
             </TabsTrigger>
-            <TabsTrigger value="steps" className="text-sm data-[state=active]:bg-indigo-500/20 data-[state=active]:text-indigo-400">
-              <Footprints className="h-4 w-4 mr-2" />
-              Steps Trends
+            <TabsTrigger value="steps" className="text-xs sm:text-sm data-[state=active]:bg-indigo-500/20 data-[state=active]:text-indigo-400">
+              <Footprints className="h-3.5 w-3.5 sm:h-4 sm:w-4 mr-1.5 sm:mr-2" />
+              <span className="hidden sm:inline">Steps Trends</span>
+              <span className="sm:hidden">Steps</span>
             </TabsTrigger>
           </TabsList>
 
           {/* Weight Trends Tab */}
           <TabsContent value="weight">
             <Card className="bg-slate-900/50 border-slate-800 backdrop-blur-xl shadow-2xl">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-white">
-                  <BathroomScale className="h-5 w-5" size={20} />
+              <CardHeader className="p-4 sm:p-6">
+                <CardTitle className="flex items-center gap-2 text-white text-base sm:text-lg">
+                  <BathroomScale className="h-4 w-4 sm:h-5 sm:w-5" size={20} />
                   Weight Progress ({getWeightUnit(unitSystem)})
                 </CardTitle>
-                <CardDescription className="text-gray-400">Last 14 days</CardDescription>
+                <CardDescription className="text-gray-400 text-xs sm:text-sm">Last 14 days</CardDescription>
               </CardHeader>
-              <CardContent className="h-80">
+              <CardContent className="h-64 sm:h-80 p-3 sm:p-6">
                 {chartData.filter(d => d.weight).length === 0 ? (
                   <div className="flex items-center justify-center h-full">
                     <div className="text-center">
@@ -644,14 +647,14 @@ export default function DashboardPage() {
           {/* Steps Trends Tab */}
           <TabsContent value="steps">
             <Card className="bg-slate-900/50 border-slate-800 backdrop-blur-xl shadow-2xl">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-white">
-                  <Footprints className="h-5 w-5" />
+              <CardHeader className="p-4 sm:p-6">
+                <CardTitle className="flex items-center gap-2 text-white text-base sm:text-lg">
+                  <Footprints className="h-4 w-4 sm:h-5 sm:w-5" />
                   Steps Progress
                 </CardTitle>
-                <CardDescription className="text-gray-400">Last 14 days</CardDescription>
+                <CardDescription className="text-gray-400 text-xs sm:text-sm">Last 14 days</CardDescription>
               </CardHeader>
-              <CardContent className="h-80">
+              <CardContent className="h-64 sm:h-80 p-3 sm:p-6">
                 {chartData.filter(d => d.steps > 0).length === 0 ? (
                   <div className="flex items-center justify-center h-full">
                     <div className="text-center">
