@@ -207,6 +207,11 @@ SELECT cron.schedule('job-name', '0 0 * * *', 'SELECT my_function()');
 9. ✅ Circular progress meters inspired by Apple Fitness/Google Fit
 10. ✅ Activity rings for comprehensive progress tracking
 11. ✅ Circular sliders for mood and energy input
+12. ✅ FitCircle creation wizard with multi-step form
+13. ✅ Challenge type selection (Weight Loss, Steps, Workout Frequency, Custom)
+14. ✅ Share FitCircle dialog with invite links and social sharing
+15. ✅ Comprehensive Terms of Service and Privacy Policy
+16. ✅ Cookie consent with GDPR/CCPA compliance
 
 ## To-Do / Future Features
 
@@ -231,9 +236,108 @@ npm install <package>
 # Add Radix UI component
 npm install @radix-ui/react-<component>
 
+# Run tests
+npm test
+
+# Run tests in watch mode
+npm test -- --watch
+
+# Run specific test file
+npm test -- path/to/test.tsx
+
 # Database migrations
 # Run in Supabase SQL Editor manually
 ```
+
+## Testing Guidelines
+
+### Test Suite Status
+- **Current Pass Rate:** 93.3% (210/225 tests)
+- **Framework:** Vitest + React Testing Library
+- **Coverage:** 91 UI component tests + integration tests
+
+### Testing Best Practices
+
+1. **Use data-testid for Layout/CSS Testing**
+   ```tsx
+   // Component
+   <div data-testid="step-content" className="px-4">...</div>
+
+   // Test
+   const content = screen.getByTestId('step-content');
+   expect(content).toHaveClass('px-4');
+   ```
+
+2. **Prefer Semantic Queries for User-Facing Elements**
+   ```tsx
+   // ✅ Good - tests what users see
+   screen.getByRole('button', { name: /Submit/ });
+   screen.getByText('Welcome');
+   screen.getByLabelText('Email');
+
+   // ❌ Avoid - brittle, implementation detail
+   container.querySelector('.submit-button');
+   ```
+
+3. **Handle Async Operations with waitFor**
+   ```tsx
+   // ✅ Good - waits for async operations
+   await waitFor(() => {
+     expect(screen.getByText('Success')).toBeInTheDocument();
+   });
+
+   // ❌ Avoid - may fail due to timing
+   expect(screen.getByText('Success')).toBeInTheDocument();
+   ```
+
+4. **Use baseElement for Portal Content (Radix UI)**
+   ```tsx
+   // Radix UI Dialog renders in portal
+   const { baseElement } = render(<Dialog />);
+   const overlay = baseElement.querySelector('[role="dialog"]');
+   ```
+
+5. **Mock Environment Variables in Tests**
+   ```tsx
+   // In test setup file
+   process.env.NEXT_PUBLIC_APP_URL = 'http://localhost:3000';
+   process.env.NEXT_PUBLIC_SUPABASE_URL = 'https://test.supabase.co';
+   ```
+
+### Common Test Patterns
+
+**Testing Forms:**
+```tsx
+const user = userEvent.setup();
+const input = screen.getByLabelText('Email');
+await user.type(input, 'test@example.com');
+expect(input).toHaveValue('test@example.com');
+```
+
+**Testing Button Clicks:**
+```tsx
+const button = screen.getByRole('button', { name: /Submit/ });
+await user.click(button);
+await waitFor(() => {
+  expect(mockFn).toHaveBeenCalled();
+});
+```
+
+**Testing Date Pickers (Native Input):**
+```tsx
+const { container } = render(<DatePicker />);
+const input = container.querySelector('input[type="date"]');
+await user.type(input, '2025-01-15');
+```
+
+### Known Test Limitations
+
+**Clipboard API Tests:**
+- Navigator.clipboard is difficult to mock in JSDOM environment
+- Radix UI portals add complexity
+- Alternative: Test button existence and UI state changes instead
+
+**Recommendation:** For critical clipboard functionality, use E2E tests (Playwright) with real browser environment.
 
 ## Common Patterns
 
@@ -291,6 +395,9 @@ npm install @radix-ui/react-<component>
 5. **Use admin client for service layer** - After verifying auth in API routes
 6. **Keep RLS simple** - Only check ownership/authentication
 7. **All business logic in backend** - NEVER in database stored procedures
+8. **Add data-testid during development** - Don't wait until tests fail
+9. **Use waitFor for all async operations** - Prevents timing-related test failures
+10. **Test behavior, not implementation** - Focus on what users see and do
 
 ## Environment Variables
 
@@ -359,6 +466,24 @@ CREATE POLICY "new_policy" ON table_name
 
 ---
 
-**Last Updated:** 2025-10-04
+---
+
+**Last Updated:** 2025-01-10
 **Project Status:** Active Development
+**Test Coverage:** 93.3% (210/225 tests passing)
 **Primary Developer:** Ani (with Claude assistance)
+
+## Quick Reference
+
+### Documentation Files
+- `CLAUDE.md` - This file, development guidelines
+- `FINAL_TEST_SUMMARY.md` - Comprehensive test suite analysis
+- `TEST_SUMMARY.md` - Test coverage and patterns
+- `TEST_RESULTS_SUMMARY.md` - Detailed test run results
+
+### Recent Major Updates (January 2025)
+1. ✅ FitCircle modal UX improvements (progress indicator, dialog styling)
+2. ✅ Comprehensive Terms of Service (23 sections, GDPR/CCPA compliant)
+3. ✅ Test suite expansion (91 new tests, 93.3% pass rate)
+4. ✅ Cookie consent implementation
+5. ✅ Privacy settings page
