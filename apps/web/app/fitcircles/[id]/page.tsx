@@ -681,21 +681,21 @@ export default function FitCirclePage() {
           </div>
 
           {/* FitCircle Stats Cards */}
-          <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4 lg:gap-6 mb-6 sm:mb-8">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5 sm:gap-3 lg:gap-4 mb-6 sm:mb-8">
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.1 }}
             >
               <Card className="bg-slate-900/50 border-slate-800/50 backdrop-blur-xl h-full">
-                <CardContent className="p-3 sm:p-4 lg:p-6 h-full min-h-[100px] sm:min-h-[120px] flex items-center">
-                  <div className="flex items-center gap-2 sm:gap-3 lg:gap-4 w-full">
-                    <div className="flex items-center justify-center w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-gradient-to-br from-indigo-500/20 to-blue-500/20 flex-shrink-0">
-                      <Users className="h-5 w-5 sm:h-6 sm:w-6 text-indigo-400" />
+                <CardContent className="p-3 sm:p-4 lg:p-5 h-full min-h-[90px] sm:min-h-[110px] flex items-center">
+                  <div className="flex items-center gap-2 sm:gap-3 w-full">
+                    <div className="flex items-center justify-center w-9 h-9 sm:w-11 sm:h-11 rounded-lg sm:rounded-xl bg-gradient-to-br from-indigo-500/20 to-blue-500/20 flex-shrink-0">
+                      <Users className="h-4 w-4 sm:h-5 sm:w-5 text-indigo-400" />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-xs sm:text-sm text-gray-400">Participants</p>
-                      <p className="text-lg sm:text-xl lg:text-2xl font-bold text-white truncate">
+                      <p className="text-xs text-gray-400 mb-0.5">Participants</p>
+                      <p className="text-base sm:text-lg lg:text-xl font-bold text-white truncate">
                         {fitCircle.max_participants
                           ? `${participants.length}/${fitCircle.max_participants}`
                           : participants.length
@@ -713,14 +713,14 @@ export default function FitCirclePage() {
               transition={{ delay: 0.2 }}
             >
               <Card className="bg-slate-900/50 border-slate-800/50 backdrop-blur-xl h-full">
-                <CardContent className="p-3 sm:p-4 lg:p-6 h-full min-h-[100px] sm:min-h-[120px] flex items-center">
-                  <div className="flex items-center gap-2 sm:gap-3 lg:gap-4 w-full">
-                    <div className="flex items-center justify-center w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-gradient-to-br from-orange-500/20 to-red-500/20 flex-shrink-0">
-                      <Calendar className="h-5 w-5 sm:h-6 sm:w-6 text-orange-400" />
+                <CardContent className="p-3 sm:p-4 lg:p-5 h-full min-h-[90px] sm:min-h-[110px] flex items-center">
+                  <div className="flex items-center gap-2 sm:gap-3 w-full">
+                    <div className="flex items-center justify-center w-9 h-9 sm:w-11 sm:h-11 rounded-lg sm:rounded-xl bg-gradient-to-br from-orange-500/20 to-red-500/20 flex-shrink-0">
+                      <Calendar className="h-4 w-4 sm:h-5 sm:w-5 text-orange-400" />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-xs sm:text-sm text-gray-400">Days Left</p>
-                      <p className="text-lg sm:text-xl lg:text-2xl font-bold text-white">
+                      <p className="text-xs text-gray-400 mb-0.5">Days Left</p>
+                      <p className="text-base sm:text-lg lg:text-xl font-bold text-white">
                         {getDaysRemaining(fitCircle.end_date)}
                       </p>
                     </div>
@@ -735,14 +735,14 @@ export default function FitCirclePage() {
               transition={{ delay: 0.3 }}
             >
               <Card className="bg-slate-900/50 border-slate-800/50 backdrop-blur-xl h-full">
-                <CardContent className="p-3 sm:p-4 lg:p-6 h-full min-h-[100px] sm:min-h-[120px] flex items-center">
-                  <div className="flex items-center gap-2 sm:gap-3 lg:gap-4 w-full">
-                    <div className="flex items-center justify-center w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-gradient-to-br from-green-500/20 to-emerald-500/20 flex-shrink-0">
-                      <Trophy className="h-5 w-5 sm:h-6 sm:w-6 text-green-400" />
+                <CardContent className="p-3 sm:p-4 lg:p-5 h-full min-h-[90px] sm:min-h-[110px] flex items-center">
+                  <div className="flex items-center gap-2 sm:gap-3 w-full">
+                    <div className="flex items-center justify-center w-9 h-9 sm:w-11 sm:h-11 rounded-lg sm:rounded-xl bg-gradient-to-br from-green-500/20 to-emerald-500/20 flex-shrink-0">
+                      <Trophy className="h-4 w-4 sm:h-5 sm:w-5 text-green-400" />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-xs sm:text-sm text-gray-400">Type</p>
-                      <p className="text-lg sm:text-xl lg:text-2xl font-bold text-white capitalize truncate">
+                      <p className="text-xs text-gray-400 mb-0.5">Type</p>
+                      <p className="text-base sm:text-lg lg:text-xl font-bold text-white capitalize truncate">
                         {fitCircle.type.replace('_', ' ')}
                       </p>
                     </div>
@@ -757,15 +757,14 @@ export default function FitCirclePage() {
               transition={{ delay: 0.4 }}
             >
               <Card className="bg-slate-900/50 border-slate-800/50 backdrop-blur-xl h-full">
-                <CardContent className="p-3 sm:p-4 lg:p-6 h-full min-h-[100px] sm:min-h-[120px] flex items-center">
-                  <div className="flex items-center gap-2 sm:gap-3 lg:gap-4 w-full">
-                    <div className="flex items-center justify-center w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-gradient-to-br from-purple-500/20 to-indigo-500/20 flex-shrink-0">
-                      <Calendar className="h-5 w-5 sm:h-6 sm:w-6 text-purple-400" />
+                <CardContent className="p-3 sm:p-4 lg:p-5 h-full min-h-[90px] sm:min-h-[110px] flex items-center">
+                  <div className="flex items-center gap-2 sm:gap-3 w-full">
+                    <div className="flex items-center justify-center w-9 h-9 sm:w-11 sm:h-11 rounded-lg sm:rounded-xl bg-gradient-to-br from-purple-500/20 to-indigo-500/20 flex-shrink-0">
+                      <Calendar className="h-4 w-4 sm:h-5 sm:w-5 text-purple-400" />
                     </div>
                     <DateRangeDisplay
                       startDate={fitCircle.start_date}
                       endDate={fitCircle.end_date}
-                      className="flex-1 min-w-0"
                     />
                   </div>
                 </CardContent>

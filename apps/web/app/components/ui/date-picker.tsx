@@ -193,12 +193,10 @@ export function DateRangeDisplay({ startDate, endDate, className }: DateRangeDis
   const { duration, dateRange } = formatDateRange(startDate, endDate);
 
   return (
-    <div className={cn('space-y-1', className)}>
-      <p className="text-sm text-gray-400">Duration</p>
-      <div className="flex items-baseline gap-2">
-        <p className="text-2xl font-bold text-white">{duration}</p>
-      </div>
-      <p className="text-sm text-gray-400">{dateRange}</p>
+    <div className={cn('flex-1 min-w-0', className)}>
+      <p className="text-xs text-gray-400 mb-0.5">Duration</p>
+      <p className="text-base sm:text-lg lg:text-xl font-bold text-white truncate">{duration}</p>
+      <p className="text-[10px] sm:text-xs text-gray-400 leading-tight mt-0.5 break-words">{dateRange}</p>
     </div>
   );
 }
