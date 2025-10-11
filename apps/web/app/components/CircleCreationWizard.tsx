@@ -387,26 +387,26 @@ export default function CircleCreationWizard({ isOpen, onClose, onSuccess }: Cir
 
         <div className="overflow-y-auto">
           {/* Progress Indicator */}
-          <div className="mb-6 px-4" data-testid="progress-indicator">
-            <div className="flex items-start justify-center gap-2" data-testid="step-container">
+          <div className="mb-4 sm:mb-6 px-2 sm:px-4" data-testid="progress-indicator">
+            <div className="flex items-start justify-center gap-1 sm:gap-2" data-testid="step-container">
               {[1, 2, 3, 4].map((step, index) => (
                 <React.Fragment key={step}>
                   {/* Step circle and label group */}
-                  <div className="flex flex-col items-center min-w-[60px]" data-testid={`step-group-${step}`}>
+                  <div className="flex flex-col items-center min-w-[50px] sm:min-w-[60px]" data-testid={`step-group-${step}`}>
                     <div
-                      className={`w-10 h-10 rounded-full flex items-center justify-center font-semibold transition-all ${
+                      className={`w-8 h-8 sm:w-10 sm:h-10 rounded-full flex items-center justify-center text-sm sm:text-base font-semibold transition-all ${
                         step <= currentStep
                           ? 'bg-gradient-to-r from-orange-500 to-purple-600 text-white'
                           : 'bg-slate-800 text-gray-500'
                       }`}
                     >
                       {step < currentStep ? (
-                        <CheckCircle2 className="h-5 w-5" />
+                        <CheckCircle2 className="h-4 w-4 sm:h-5 sm:w-5" />
                       ) : (
                         step
                       )}
                     </div>
-                    <span className={`text-xs font-medium text-center whitespace-nowrap mt-2 ${currentStep >= step ? 'text-orange-400' : 'text-gray-500'}`}>
+                    <span className={`text-[10px] sm:text-xs font-medium text-center whitespace-nowrap mt-1.5 sm:mt-2 ${currentStep >= step ? 'text-orange-400' : 'text-gray-500'}`}>
                       {step === 1 && 'Basic Info'}
                       {step === 2 && 'Timeline'}
                       {step === 3 && 'Settings'}
@@ -416,10 +416,10 @@ export default function CircleCreationWizard({ isOpen, onClose, onSuccess }: Cir
 
                   {/* Connecting line */}
                   {index < 3 && (
-                    <div className="flex items-center pt-5">
+                    <div className="flex items-center pt-4 sm:pt-5">
                       <div
                         data-testid={`connecting-line-${step}`}
-                        className={`h-1 w-12 sm:w-16 rounded transition-all ${
+                        className={`h-0.5 sm:h-1 w-6 sm:w-12 md:w-16 rounded transition-all ${
                           step < currentStep
                             ? 'bg-gradient-to-r from-orange-500 to-purple-600'
                             : 'bg-slate-800'
@@ -442,12 +442,12 @@ export default function CircleCreationWizard({ isOpen, onClose, onSuccess }: Cir
             animate="center"
             exit="exit"
             transition={{ duration: 0.3 }}
-            className="min-h-[320px] px-4"
+            className="min-h-[320px] px-3 sm:px-4"
             data-testid="step-content"
           >
             {/* Step 1: Basic Info */}
             {currentStep === 1 && (
-              <div className="space-y-6">
+              <div className="space-y-4 sm:space-y-6">
                 <div className="space-y-2">
                   <Label htmlFor="name" className="text-white">
                     Circle Name <span className="text-red-400">*</span>
@@ -484,7 +484,7 @@ export default function CircleCreationWizard({ isOpen, onClose, onSuccess }: Cir
 
                 <div className="space-y-2">
                   <Label className="text-white">Challenge Type</Label>
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-2 gap-2 sm:gap-3">
                     {challengeTypes.map((type) => (
                       <motion.div
                         key={type.value}
@@ -499,8 +499,8 @@ export default function CircleCreationWizard({ isOpen, onClose, onSuccess }: Cir
                           }`}
                           onClick={() => setFormData({ ...formData, type: type.value })}
                         >
-                          <CardContent className="p-4">
-                            <div className="flex items-start gap-3">
+                          <CardContent className="p-3 sm:p-4">
+                            <div className="flex items-start gap-2 sm:gap-3">
                               <div
                                 className={`p-2 rounded-lg ${
                                   formData.type === type.value
@@ -536,8 +536,8 @@ export default function CircleCreationWizard({ isOpen, onClose, onSuccess }: Cir
 
             {/* Step 2: Timeline */}
             {currentStep === 2 && (
-              <div className="space-y-6">
-                <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-4 sm:space-y-6">
+                <div className="grid grid-cols-2 gap-3 sm:gap-4">
                   <div className="space-y-1">
                     <DatePicker
                       label="Start Date"
@@ -598,7 +598,7 @@ export default function CircleCreationWizard({ isOpen, onClose, onSuccess }: Cir
 
             {/* Step 3: Settings */}
             {currentStep === 3 && (
-              <div className="space-y-6">
+              <div className="space-y-4 sm:space-y-6">
                 <div className="space-y-4">
                   <div className="flex items-center justify-between p-4 bg-slate-800/30 rounded-lg">
                     <div className="flex items-center gap-3">
@@ -788,7 +788,7 @@ export default function CircleCreationWizard({ isOpen, onClose, onSuccess }: Cir
 
             {/* Step 4: Invite Members */}
             {currentStep === 4 && (
-              <div className="space-y-6">
+              <div className="space-y-4 sm:space-y-6">
                 <div className="text-center mb-4">
                   <motion.div
                     initial={{ scale: 0 }}
@@ -991,15 +991,16 @@ export default function CircleCreationWizard({ isOpen, onClose, onSuccess }: Cir
         </AnimatePresence>
 
         {/* Navigation Buttons */}
-        <div className="flex justify-between mt-6">
+        <div className="flex justify-between gap-2 mt-4 sm:mt-6 px-3 sm:px-0">
           <Button
             variant="outline"
             onClick={currentStep === 1 ? onClose : handleBack}
-            className="border-slate-700 hover:bg-slate-800"
+            size="sm"
+            className="border-slate-700 hover:bg-slate-800 text-xs sm:text-sm"
             disabled={currentStep === 4} // Can't go back from invite step
             aria-label={currentStep === 1 ? 'Cancel' : 'Go back'}
           >
-            <ChevronLeft className="h-4 w-4 mr-2" />
+            <ChevronLeft className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
             {currentStep === 1 ? 'Cancel' : 'Back'}
           </Button>
 
@@ -1007,36 +1008,48 @@ export default function CircleCreationWizard({ isOpen, onClose, onSuccess }: Cir
             <Button
               onClick={handleNext}
               disabled={!validateStep(currentStep)}
-              className="bg-gradient-to-r from-orange-600 to-purple-600 hover:from-orange-700 hover:to-purple-700"
+              size="sm"
+              className="bg-gradient-to-r from-orange-600 to-purple-600 hover:from-orange-700 hover:to-purple-700 text-xs sm:text-sm"
             >
               Next
-              <ChevronRight className="h-4 w-4 ml-2" />
+              <ChevronRight className="h-3 w-3 sm:h-4 sm:w-4 ml-1 sm:ml-2" />
             </Button>
           ) : currentStep === 3 ? (
             <Button
               onClick={handleCreateAndContinue}
               disabled={isCreating || !validateStep(2)}
-              className="bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800"
+              size="sm"
+              className="bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-xs sm:text-sm"
             >
               {isCreating ? (
                 <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Creating...
+                  <Loader2 className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2 animate-spin" />
+                  <span className="hidden sm:inline">Creating...</span>
+                  <span className="sm:hidden">Creating</span>
                 </>
               ) : (
                 <>
-                  <CheckCircle2 className="h-4 w-4 mr-2" />
-                  Create & Continue
+                  <CheckCircle2 className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
+                  <span className="hidden sm:inline">Create & Continue</span>
+                  <span className="sm:hidden">Create</span>
                 </>
               )}
             </Button>
           ) : (
             <Button
               onClick={handleFinish}
-              className="bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800"
+              size="sm"
+              className="bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-xs sm:text-sm"
             >
-              <CheckCircle2 className="h-4 w-4 mr-2" />
-              {formData.inviteEmails.length > 0 ? 'Send Invites & Finish' : 'Finish'}
+              <CheckCircle2 className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
+              {formData.inviteEmails.length > 0 ? (
+                <>
+                  <span className="hidden sm:inline">Send Invites & Finish</span>
+                  <span className="sm:hidden">Finish</span>
+                </>
+              ) : (
+                'Finish'
+              )}
             </Button>
           )}
         </div>

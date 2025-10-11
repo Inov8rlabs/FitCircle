@@ -148,14 +148,35 @@ export default function CirclesPage() {
           <div className="absolute bottom-20 left-1/3 w-[400px] h-[400px] bg-orange-500/5 rounded-full blur-3xl" />
         </div>
 
-        <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 lg:py-12">
-          <div className="mb-8">
-            <h1 className="text-3xl sm:text-4xl lg:text-5xl font-bold bg-gradient-to-r from-indigo-300 via-fuchsia-400 to-orange-400 bg-clip-text text-transparent mb-2">
+        <div className="relative max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-8 lg:py-12 overflow-x-hidden">
+          <div className="mb-6 sm:mb-8">
+            <h1 className="text-2xl sm:text-3xl lg:text-5xl font-bold bg-gradient-to-r from-indigo-300 via-fuchsia-400 to-orange-400 bg-clip-text text-transparent mb-1.5 sm:mb-2">
               FitCircles
             </h1>
-            <p className="text-gray-400 text-sm sm:text-base">
+            <p className="text-gray-400 text-xs sm:text-sm lg:text-base mb-4 sm:mb-6">
               Join groups and compete with friends
             </p>
+
+            {/* Action Buttons */}
+            <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 justify-center sm:justify-start max-w-2xl">
+              <Button
+                onClick={() => setIsJoinDialogOpen(true)}
+                variant="outline"
+                size="lg"
+                className="border-slate-700 bg-slate-800/50 hover:bg-slate-800 text-white group w-full sm:w-auto"
+              >
+                <Hash className="h-4 w-4 sm:h-5 sm:w-5 mr-2 group-hover:text-orange-400 transition-colors" />
+                Join with Code
+              </Button>
+              <Button
+                onClick={() => setIsCreateDialogOpen(true)}
+                size="lg"
+                className="bg-gradient-to-r from-orange-600 to-purple-600 hover:from-orange-700 hover:to-purple-700 w-full sm:w-auto"
+              >
+                <Plus className="h-4 w-4 sm:h-5 sm:w-5 mr-2" />
+                Create New Circle
+              </Button>
+            </div>
           </div>
 
           {/* Error State */}
@@ -226,28 +247,9 @@ export default function CirclesPage() {
                 </div>
 
                 <h3 className="text-2xl font-semibold text-orange-200 mb-2">No Active FitCircles</h3>
-                <p className="text-gray-400 mb-8 max-w-lg mx-auto">
+                <p className="text-gray-400 max-w-lg mx-auto">
                   Create your first FitCircle to start competing with friends, track progress together, and achieve your fitness goals
                 </p>
-
-                <div className="flex flex-col sm:flex-row gap-4 justify-center">
-                  <Button
-                    onClick={() => setIsCreateDialogOpen(true)}
-                    className="bg-gradient-to-r from-orange-600 to-orange-700 hover:from-orange-700 hover:to-orange-800 shadow-lg hover:shadow-orange-500/50 text-white border-0 px-8 py-6 text-lg"
-                  >
-                    <Plus className="w-5 h-5 mr-2" />
-                    Create Your First Circle
-                  </Button>
-
-                  <Button
-                    onClick={() => setIsJoinDialogOpen(true)}
-                    variant="outline"
-                    className="border-slate-700 bg-slate-800/50 hover:bg-slate-800 text-white px-8 py-6 text-lg group"
-                  >
-                    <Hash className="w-5 h-5 mr-2 group-hover:text-orange-400 transition-colors" />
-                    Join with Code
-                  </Button>
-                </div>
               </CardContent>
             </Card>
           )}
@@ -255,25 +257,6 @@ export default function CirclesPage() {
           {/* Active Circles View */}
           {!isLoading && hasActiveCircles && !hasError && (
             <div className="space-y-6">
-              {/* Action buttons */}
-              <div className="flex gap-4 justify-end mb-6">
-                <Button
-                  onClick={() => setIsJoinDialogOpen(true)}
-                  variant="outline"
-                  className="border-slate-700 hover:bg-slate-800"
-                >
-                  <Hash className="h-4 w-4 mr-2" />
-                  Join with Code
-                </Button>
-                <Button
-                  onClick={() => setIsCreateDialogOpen(true)}
-                  className="bg-gradient-to-r from-orange-600 to-purple-600 hover:from-orange-700 hover:to-purple-700"
-                >
-                  <Plus className="h-4 w-4 mr-2" />
-                  Create New Circle
-                </Button>
-              </div>
-
               {/* Loading state */}
               {isLoading ? (
                 <div className="flex items-center justify-center py-12">
