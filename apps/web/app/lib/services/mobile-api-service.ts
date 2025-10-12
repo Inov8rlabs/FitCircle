@@ -46,7 +46,7 @@ export class MobileAPIService {
     }
 
     // Access token (short-lived: 15 minutes)
-    const accessTokenExpiry = process.env.JWT_ACCESS_TOKEN_EXPIRY || '15m';
+    const accessTokenExpiry: string = process.env.JWT_ACCESS_TOKEN_EXPIRY || '15m';
     const accessToken = jwt.sign(
       {
         userId,
@@ -54,11 +54,11 @@ export class MobileAPIService {
         type: 'access',
       },
       jwtSecret,
-      { expiresIn: accessTokenExpiry }
+      { expiresIn: accessTokenExpiry } as jwt.SignOptions
     );
 
     // Refresh token (long-lived: 7 days)
-    const refreshTokenExpiry = process.env.JWT_REFRESH_TOKEN_EXPIRY || '7d';
+    const refreshTokenExpiry: string = process.env.JWT_REFRESH_TOKEN_EXPIRY || '7d';
     const refreshToken = jwt.sign(
       {
         userId,
@@ -66,7 +66,7 @@ export class MobileAPIService {
         type: 'refresh',
       },
       jwtRefreshSecret,
-      { expiresIn: refreshTokenExpiry }
+      { expiresIn: refreshTokenExpiry } as jwt.SignOptions
     );
 
     // Calculate expires_at timestamp (15 minutes from now)

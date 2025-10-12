@@ -19,13 +19,13 @@ const updateTrackingSchema = z.object({
  */
 export async function GET(
   request: NextRequest,
-  { params }: { params: { date: string } }
+  context: { params: Promise<{ date: string }> }
 ) {
   try {
     // Verify authentication
     const user = await requireMobileAuth(request);
 
-    const date = params.date;
+    const { date } = await context.params;
 
     // Validate date format
     if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
@@ -97,13 +97,13 @@ export async function GET(
  */
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { date: string } }
+  context: { params: Promise<{ date: string }> }
 ) {
   try {
     // Verify authentication
     const user = await requireMobileAuth(request);
 
-    const date = params.date;
+    const { date } = await context.params;
 
     // Validate date format
     if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
@@ -173,13 +173,13 @@ export async function PUT(
  */
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { date: string } }
+  context: { params: Promise<{ date: string }> }
 ) {
   try {
     // Verify authentication
     const user = await requireMobileAuth(request);
 
-    const date = params.date;
+    const { date } = await context.params;
 
     // Validate date format
     if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {

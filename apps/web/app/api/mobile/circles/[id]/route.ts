@@ -35,7 +35,7 @@ export async function GET(
           current_value: userMember.current_value,
           goal_target_value: userMember.goal_target_value,
           streak_days: userMember.streak_days,
-          total_check_ins: userMember.total_check_ins,
+          check_ins_count: userMember.check_ins_count,
         }
       : null;
 
