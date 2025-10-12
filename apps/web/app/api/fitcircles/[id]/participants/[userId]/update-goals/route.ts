@@ -24,21 +24,26 @@ export async function PATCH(
     }
 
     const body = await request.json();
-    const { starting_value, goal_value } = body;
+    const { goal_start_value, goal_target_value, goal_type, goal_unit } = body;
 
     // Validate input
-    if (starting_value !== undefined && (typeof starting_value !== 'number' || starting_value <= 0)) {
+    if (goal_start_value !== undefined && (typeof goal_start_value !== 'number' || goal_start_value <= 0)) {
       return NextResponse.json({ error: 'Invalid starting value' }, { status: 400 });
     }
 
-    if (goal_value !== undefined && (typeof goal_value !== 'number' || goal_value <= 0)) {
+    if (goal_target_value !== undefined && (typeof goal_target_value !== 'number' || goal_target_value <= 0)) {
       return NextResponse.json({ error: 'Invalid goal value' }, { status: 400 });
     }
 
     // Prepare update data
     const updateData: any = {};
-    if (starting_value !== undefined) updateData.starting_value = starting_value;
-    if (goal_value !== undefined) updateData.goal_value = goal_value;
+    if (goal_start_value !== undefined) {
+      updateData.goal_start_value = goal_start_value;
+      updateData.current_value = goal_start_value; // Initialize current_value
+    }
+    if (goal_target_value !== undefined) updateData.goal_target_value = goal_target_value;
+    if (goal_type !== undefined) updateData.goal_type = goal_type;
+    if (goal_unit !== undefined) updateData.goal_unit = goal_unit;
 
     if (Object.keys(updateData).length === 0) {
       return NextResponse.json({ error: 'No valid fields to update' }, { status: 400 });
@@ -64,8 +69,11 @@ export async function PATCH(
     return NextResponse.json({
       success: true,
       data: {
-        starting_value: data.starting_value,
-        goal_value: data.goal_value,
+        goal_start_value: data.goal_start_value,
+        goal_target_value: data.goal_target_value,
+        goal_type: data.goal_type,
+        goal_unit: data.goal_unit,
+        current_value: data.current_value,
       }
     });
 

@@ -57,7 +57,7 @@ export interface CircleMember {
   goal_description?: string;
   current_value?: number;
   progress_percentage: number;
-  total_check_ins: number;
+  check_ins_count: number;
   streak_days: number;
   longest_streak: number;
   last_check_in_at?: string;
@@ -175,11 +175,16 @@ export interface LeaderboardEntry {
   checked_in_today: boolean;
   high_fives_received: number;
   is_current_user?: boolean;
+  current_value?: number;
+  starting_value?: number;
+  target_value?: number;
+  goal_type?: GoalType;
+  goal_unit?: string;
 }
 
 export interface CircleStats {
   average_progress: number;
-  total_check_ins: number;
+  check_ins_count: number;
   completion_rate: number;
   average_streak: number;
   most_consistent_member_id?: string;

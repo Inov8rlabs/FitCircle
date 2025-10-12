@@ -54,8 +54,11 @@ export class LeaderboardService {
       .select(`
         user_id,
         status,
-        starting_value,
-        goal_value,
+        goal_start_value,
+        goal_target_value,
+        goal_type,
+        goal_unit,
+        current_value,
         profiles!challenge_participants_user_id_fkey (
           display_name,
           avatar_url,
@@ -80,8 +83,8 @@ export class LeaderboardService {
         );
 
         // Get goal from profile if not set in participant record
-        let goalValue = participant.goal_value;
-        let startingValue = participant.starting_value;
+        let goalValue = participant.goal_target_value;
+        let startingValue = participant.goal_start_value;
 
         if (!goalValue && participant.profiles?.goals) {
           const profileGoals = Array.isArray(participant.profiles.goals)
@@ -99,14 +102,20 @@ export class LeaderboardService {
         const finalStartingValue = trackingData.starting_value || startingValue || trackingData.current_value || 0;
         const finalGoalValue = goalValue || 0;
 
+        // Use participant.current_value as fallback when no tracking data exists
+        const finalCurrentValue = trackingData.current_value > 0
+          ? trackingData.current_value
+          : (participant.current_value || 0);
+
         console.log('Leaderboard entry for user:', participant.user_id, {
           trackingDataStarting: trackingData.starting_value,
           trackingDataCurrent: trackingData.current_value,
-          participantStarting: participant.starting_value,
-          participantGoal: participant.goal_value,
+          participantStarting: participant.goal_start_value,
+          participantGoal: participant.goal_target_value,
+          participantCurrent: participant.current_value,
           profileGoal: goalValue,
           finalStarting: finalStartingValue,
-          finalCurrent: trackingData.current_value,
+          finalCurrent: finalCurrentValue,
           finalGoal: finalGoalValue,
           totalEntries: trackingData.total_entries
         });
@@ -115,12 +124,12 @@ export class LeaderboardService {
           user_id: participant.user_id,
           display_name: participant.profiles?.display_name || participant.profiles?.[0]?.display_name || 'Unknown User',
           avatar_url: participant.profiles?.avatar_url || participant.profiles?.[0]?.avatar_url || null,
-          current_value: trackingData.current_value,
+          current_value: finalCurrentValue,
           starting_value: finalStartingValue,
           target_value: finalGoalValue,
           progress_percentage: this.calculateProgress(
             finalStartingValue,
-            trackingData.current_value,
+            finalCurrentValue,
             finalGoalValue,
             challenge.type
           ),

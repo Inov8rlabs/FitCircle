@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerSupabase } from '@/lib/supabase-server';
-import { LeaderboardService } from '@/lib/services/leaderboard-service';
+import { CircleService } from '@/lib/services/circle-service';
 
 export async function GET(
   request: NextRequest,
@@ -15,8 +15,8 @@ export async function GET(
 
     console.log('Fetching leaderboard for challenge:', challengeId);
 
-    // Get leaderboard data from daily_tracking
-    const leaderboard = await LeaderboardService.getLeaderboard(challengeId, supabase);
+    // Get leaderboard data directly from challenge_participants (same as mobile API)
+    const leaderboard = await CircleService.getLeaderboard(challengeId);
 
     console.log('Leaderboard entries:', leaderboard.length);
 
