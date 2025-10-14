@@ -59,7 +59,7 @@ export async function POST(
 
     console.log(`[Circle Check-In] User ${user.id} checked in to circle ${circleId}`);
 
-    let response = NextResponse.json({
+    const response = NextResponse.json({
       success: true,
       data: {
         progress_percentage: result.progress_percentage,
@@ -73,8 +73,7 @@ export async function POST(
       meta: null,
     });
 
-    response = await addAutoRefreshHeaders(request, response, user);
-    return response;
+    return await addAutoRefreshHeaders(request, response, user);
   } catch (error: any) {
     console.error('Circle check-in error:', error);
 

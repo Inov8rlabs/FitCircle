@@ -96,7 +96,7 @@ export async function GET(
       is_creator: member.user_id === circle.creator_id,
     }));
 
-    let response = NextResponse.json({
+    const response = NextResponse.json({
       success: true,
       data: {
         members: membersData,
@@ -106,8 +106,7 @@ export async function GET(
       meta: null,
     });
 
-    response = await addAutoRefreshHeaders(request, response, user);
-    return response;
+    return await addAutoRefreshHeaders(request, response, user);
   } catch (error: any) {
     console.error('Get circle members error:', error);
 

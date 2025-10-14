@@ -76,7 +76,7 @@ export async function GET(request: NextRequest) {
         expires_at: invite.expires_at,
       }));
 
-    let response = NextResponse.json({
+    const response = NextResponse.json({
       success: true,
       data: {
         invites: validInvites,
@@ -86,8 +86,7 @@ export async function GET(request: NextRequest) {
       meta: null,
     });
 
-    response = await addAutoRefreshHeaders(request, response, user);
-    return response;
+    return await addAutoRefreshHeaders(request, response, user);
   } catch (error: any) {
     console.error('Get pending invites error:', error);
 

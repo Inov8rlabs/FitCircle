@@ -79,7 +79,7 @@ export async function GET(request: NextRequest) {
       .eq('id', user.id)
       .single();
 
-    let response = NextResponse.json({
+    const response = NextResponse.json({
       success: true,
       data: {
         total_circles: totalCircles || 0,
@@ -98,8 +98,7 @@ export async function GET(request: NextRequest) {
       meta: null,
     });
 
-    response = await addAutoRefreshHeaders(request, response, user);
-    return response;
+    return await addAutoRefreshHeaders(request, response, user);
   } catch (error: any) {
     console.error('Get profile stats error:', error);
 

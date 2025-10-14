@@ -91,7 +91,7 @@ export async function PUT(request: NextRequest) {
 
     console.log(`[Profile Settings] Updated for user ${user.id}`);
 
-    let response = NextResponse.json({
+    const response = NextResponse.json({
       success: true,
       data: {
         height_cm: updated.height_cm,
@@ -104,8 +104,7 @@ export async function PUT(request: NextRequest) {
       meta: null,
     });
 
-    response = await addAutoRefreshHeaders(request, response, user);
-    return response;
+    return await addAutoRefreshHeaders(request, response, user);
   } catch (error: any) {
     console.error('Update profile settings error:', error);
 

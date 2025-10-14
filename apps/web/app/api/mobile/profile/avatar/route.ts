@@ -64,7 +64,7 @@ export async function DELETE(request: NextRequest) {
 
     console.log(`[Delete Avatar] Avatar removed for user ${user.id}`);
 
-    let response = NextResponse.json({
+    const response = NextResponse.json({
       success: true,
       data: {
         message: 'Avatar deleted successfully',
@@ -74,8 +74,7 @@ export async function DELETE(request: NextRequest) {
       meta: null,
     });
 
-    response = await addAutoRefreshHeaders(request, response, user);
-    return response;
+    return await addAutoRefreshHeaders(request, response, user);
   } catch (error: any) {
     console.error('Delete avatar error:', error);
 

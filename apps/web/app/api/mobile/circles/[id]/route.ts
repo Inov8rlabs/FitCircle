@@ -54,7 +54,7 @@ export async function GET(
     // Get circle stats
     const stats = await CircleService.getCircleStats(circleId);
 
-    let response = NextResponse.json({
+    const response = NextResponse.json({
       success: true,
       data: {
         ...circle,
@@ -74,9 +74,7 @@ export async function GET(
       },
     });
 
-    // Add auto-refresh headers
-    response = await addAutoRefreshHeaders(request, response, user);
-    return response;
+    return await addAutoRefreshHeaders(request, response, user);
   } catch (error: any) {
     console.error('Get circle details error:', error);
 
@@ -231,15 +229,14 @@ export async function PUT(
 
     console.log(`[Circle Update] Circle ${circleId} updated by creator ${user.id}`);
 
-    let response = NextResponse.json({
+    const response = NextResponse.json({
       success: true,
       data: updated,
       error: null,
       meta: null,
     });
 
-    response = await addAutoRefreshHeaders(request, response, user);
-    return response;
+    return await addAutoRefreshHeaders(request, response, user);
   } catch (error: any) {
     console.error('Update circle error:', error);
 
@@ -400,7 +397,7 @@ export async function DELETE(
 
     console.log(`[Circle Delete] Circle ${circleId} deleted by creator ${user.id}`);
 
-    let response = NextResponse.json({
+    const response = NextResponse.json({
       success: true,
       data: {
         message: 'Circle deleted successfully',
@@ -410,8 +407,7 @@ export async function DELETE(
       meta: null,
     });
 
-    response = await addAutoRefreshHeaders(request, response, user);
-    return response;
+    return await addAutoRefreshHeaders(request, response, user);
   } catch (error: any) {
     console.error('Delete circle error:', error);
 

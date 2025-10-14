@@ -88,7 +88,7 @@ export async function GET(request: NextRequest) {
       streak_days: circle.streak_days || 0,
     }));
 
-    let response = NextResponse.json({
+    const response = NextResponse.json({
       success: true,
       data: {
         personal_streak: personalStreak,
@@ -102,8 +102,7 @@ export async function GET(request: NextRequest) {
       },
     });
 
-    response = await addAutoRefreshHeaders(request, response, user);
-    return response;
+    return await addAutoRefreshHeaders(request, response, user);
   } catch (error: any) {
     console.error('Get streak error:', error);
 

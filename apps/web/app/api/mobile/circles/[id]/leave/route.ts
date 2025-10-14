@@ -146,7 +146,7 @@ export async function POST(
 
     console.log(`[Leave Circle] User ${user.id} left circle ${circleId}`);
 
-    let response = NextResponse.json({
+    const response = NextResponse.json({
       success: true,
       data: {
         message: 'Successfully left the circle',
@@ -157,8 +157,7 @@ export async function POST(
       meta: null,
     });
 
-    response = await addAutoRefreshHeaders(request, response, user);
-    return response;
+    return await addAutoRefreshHeaders(request, response, user);
   } catch (error: any) {
     console.error('Leave circle error:', error);
 

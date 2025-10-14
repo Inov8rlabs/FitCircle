@@ -85,7 +85,7 @@ export async function GET(
     // Generate invite URL for iOS deep linking
     const inviteUrl = `fitcircle://join?code=${circle.invite_code}`;
 
-    let response = NextResponse.json({
+    const response = NextResponse.json({
       success: true,
       data: {
         invite_code: circle.invite_code,
@@ -97,8 +97,7 @@ export async function GET(
       meta: null,
     });
 
-    response = await addAutoRefreshHeaders(request, response, user);
-    return response;
+    return await addAutoRefreshHeaders(request, response, user);
   } catch (error: any) {
     console.error('Get invite link error:', error);
 

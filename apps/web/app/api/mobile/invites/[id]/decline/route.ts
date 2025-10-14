@@ -106,7 +106,7 @@ export async function POST(
 
     console.log(`[Decline Invite] User ${user.id} declined invite ${inviteId}`);
 
-    let response = NextResponse.json({
+    const response = NextResponse.json({
       success: true,
       data: {
         message: 'Invite declined successfully',
@@ -116,8 +116,7 @@ export async function POST(
       meta: null,
     });
 
-    response = await addAutoRefreshHeaders(request, response, user);
-    return response;
+    return await addAutoRefreshHeaders(request, response, user);
   } catch (error: any) {
     console.error('Decline invite error:', error);
 

@@ -78,7 +78,7 @@ export async function GET(request: NextRequest) {
       },
     };
 
-    let apiResponse = NextResponse.json({
+    const apiResponse = NextResponse.json({
       success: true,
       data: response,
       error: null,
@@ -86,9 +86,7 @@ export async function GET(request: NextRequest) {
     });
 
     // Add auto-refresh headers if token expiring soon
-    apiResponse = await addAutoRefreshHeaders(request, apiResponse, user);
-
-    return apiResponse;
+    return await addAutoRefreshHeaders(request, apiResponse, user);
   } catch (error: any) {
     console.error('Get preferences error:', error);
 
@@ -197,7 +195,7 @@ export async function PUT(request: NextRequest) {
 
     console.log(`[Preferences] Updated for user ${user.id}`);
 
-    let apiResponse = NextResponse.json({
+    const apiResponse = NextResponse.json({
       success: true,
       data: updated.preferences,
       error: null,
@@ -205,9 +203,7 @@ export async function PUT(request: NextRequest) {
     });
 
     // Add auto-refresh headers if token expiring soon
-    apiResponse = await addAutoRefreshHeaders(request, apiResponse, user);
-
-    return apiResponse;
+    return await addAutoRefreshHeaders(request, apiResponse, user);
   } catch (error: any) {
     console.error('Update preferences error:', error);
 
