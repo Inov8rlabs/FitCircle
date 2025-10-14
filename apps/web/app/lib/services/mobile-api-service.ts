@@ -45,8 +45,8 @@ export class MobileAPIService {
       throw new Error('JWT secrets not configured');
     }
 
-    // Access token (short-lived: 15 minutes)
-    const accessTokenExpiry: string = process.env.JWT_ACCESS_TOKEN_EXPIRY || '15m';
+    // Access token (1 hour by default, configurable via env)
+    const accessTokenExpiry: string = process.env.JWT_ACCESS_TOKEN_EXPIRY || '1h';
     const accessToken = jwt.sign(
       {
         userId,
@@ -57,8 +57,8 @@ export class MobileAPIService {
       { expiresIn: accessTokenExpiry } as jwt.SignOptions
     );
 
-    // Refresh token (long-lived: 7 days)
-    const refreshTokenExpiry: string = process.env.JWT_REFRESH_TOKEN_EXPIRY || '7d';
+    // Refresh token (365 days = 1 year by default, configurable via env)
+    const refreshTokenExpiry: string = process.env.JWT_REFRESH_TOKEN_EXPIRY || '365d';
     const refreshToken = jwt.sign(
       {
         userId,
@@ -69,8 +69,24 @@ export class MobileAPIService {
       { expiresIn: refreshTokenExpiry } as jwt.SignOptions
     );
 
-    // Calculate expires_at timestamp (15 minutes from now)
-    const expiresAt = Math.floor(Date.now() / 1000) + 15 * 60;
+    // Calculate expires_at timestamp based on actual access token expiry
+    // Parse expiry string (e.g., "1h", "15m", "7d") and convert to seconds
+    const expiryMatch = accessTokenExpiry.match(/^(\d+)([smhd])$/);
+    let expirySeconds = 3600; // Default to 1 hour
+
+    if (expiryMatch) {
+      const value = parseInt(expiryMatch[1]);
+      const unit = expiryMatch[2];
+
+      switch (unit) {
+        case 's': expirySeconds = value; break;
+        case 'm': expirySeconds = value * 60; break;
+        case 'h': expirySeconds = value * 3600; break;
+        case 'd': expirySeconds = value * 86400; break;
+      }
+    }
+
+    const expiresAt = Math.floor(Date.now() / 1000) + expirySeconds;
 
     return {
       access_token: accessToken,
@@ -82,6 +98,7 @@ export class MobileAPIService {
 
   /**
    * Verify and decode an access token
+   * Checks JWT validity AND blacklist status
    */
   static async verifyAccessToken(token: string): Promise<JWTPayload | null> {
     const jwtSecret = process.env.JWT_SECRET;
@@ -97,11 +114,89 @@ export class MobileAPIService {
         return null;
       }
 
+      // Check if token is blacklisted
+      const isBlacklisted = await this.isTokenBlacklisted(token);
+      if (isBlacklisted) {
+        console.log('[verifyAccessToken] Token is blacklisted');
+        return null;
+      }
+
       return decoded;
     } catch (error) {
       // Token is invalid or expired
       return null;
     }
+  }
+
+  /**
+   * Check if a token is blacklisted
+   */
+  static async isTokenBlacklisted(token: string): Promise<boolean> {
+    const supabaseAdmin = createAdminSupabase();
+
+    // Generate SHA-256 hash of the token
+    const tokenHash = await this.hashToken(token);
+
+    // Check if hash exists in blacklist
+    const { data, error } = await supabaseAdmin
+      .from('token_blacklist')
+      .select('id')
+      .eq('token_hash', tokenHash)
+      .single();
+
+    if (error && error.code !== 'PGRST116') {
+      // PGRST116 = not found (which is fine)
+      console.error('[isTokenBlacklisted] Database error:', error);
+      return false; // Fail open - don't block valid tokens due to DB errors
+    }
+
+    return !!data;
+  }
+
+  /**
+   * Hash a token using SHA-256
+   */
+  static async hashToken(token: string): Promise<string> {
+    // Use Node.js crypto for SHA-256 hashing
+    const crypto = await import('crypto');
+    return crypto.createHash('sha256').update(token).digest('hex');
+  }
+
+  /**
+   * Blacklist a token
+   */
+  static async blacklistToken(
+    token: string,
+    userId: string,
+    reason: 'logout' | 'security' | 'account_deleted'
+  ): Promise<void> {
+    const supabaseAdmin = createAdminSupabase();
+
+    // Decode token to get expiry
+    const decoded = jwt.decode(token) as JWTPayload | null;
+
+    if (!decoded || !decoded.exp) {
+      throw new Error('Invalid token: cannot determine expiry');
+    }
+
+    const tokenHash = await this.hashToken(token);
+    const expiresAt = new Date(decoded.exp * 1000).toISOString();
+
+    const { error } = await supabaseAdmin
+      .from('token_blacklist')
+      .insert({
+        user_id: userId,
+        token_hash: tokenHash,
+        expires_at: expiresAt,
+        reason,
+      });
+
+    if (error) {
+      console.error('[blacklistToken] Failed to blacklist token:', error);
+      throw error;
+    }
+
+    console.log(`[blacklistToken] Token blacklisted for user ${userId}, reason: ${reason}`);
   }
 
   /**
@@ -324,6 +419,10 @@ export class MobileAPIService {
   ): Promise<any> {
     const supabaseAdmin = createAdminSupabase();
 
+    // Sanitize notes
+    const { sanitizeNote } = await import('../utils/sanitize');
+    const sanitizedNotes = data.notes ? sanitizeNote(data.notes) : undefined;
+
     // Check if entry exists for this date
     const { data: existing } = await supabaseAdmin
       .from('daily_tracking')
@@ -341,7 +440,7 @@ export class MobileAPIService {
           steps: data.steps,
           mood_score: data.mood_score,
           energy_level: data.energy_level,
-          notes: data.notes,
+          notes: sanitizedNotes,
           updated_at: new Date().toISOString(),
         })
         .eq('id', existing.id)
@@ -361,7 +460,7 @@ export class MobileAPIService {
           steps: data.steps,
           mood_score: data.mood_score,
           energy_level: data.energy_level,
-          notes: data.notes,
+          notes: sanitizedNotes,
         })
         .select()
         .single();
@@ -434,10 +533,31 @@ export class MobileAPIService {
   ): Promise<any> {
     const supabaseAdmin = createAdminSupabase();
 
+    // Sanitize inputs
+    const { sanitizeBio, sanitizeDisplayName, sanitizeUsername, sanitizeUrl } = await import(
+      '../utils/sanitize'
+    );
+
+    const sanitizedUpdates: any = {};
+
+    if (updates.display_name !== undefined) {
+      sanitizedUpdates.display_name = sanitizeDisplayName(updates.display_name);
+    }
+    if (updates.username !== undefined) {
+      sanitizedUpdates.username = sanitizeUsername(updates.username);
+    }
+    if (updates.bio !== undefined) {
+      sanitizedUpdates.bio = sanitizeBio(updates.bio);
+    }
+    if (updates.avatar_url !== undefined) {
+      // URLs should be validated elsewhere, but sanitize just in case
+      sanitizedUpdates.avatar_url = updates.avatar_url;
+    }
+
     const { data, error } = await supabaseAdmin
       .from('profiles')
       .update({
-        ...updates,
+        ...sanitizedUpdates,
         updated_at: new Date().toISOString(),
       })
       .eq('id', userId)

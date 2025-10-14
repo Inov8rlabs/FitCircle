@@ -35,6 +35,15 @@ export class CircleService {
   static async createCircle(userId: string, data: CreateCircleInput): Promise<Circle> {
     const supabaseAdmin = createAdminSupabase();
 
+    // Sanitize user inputs
+    const { sanitizeCircleName, sanitizeDescription } = await import('../utils/sanitize');
+    const sanitizedName = sanitizeCircleName(data.name);
+    const sanitizedDescription = data.description ? sanitizeDescription(data.description) : null;
+
+    if (!sanitizedName || sanitizedName.length === 0) {
+      throw new Error('Circle name cannot be empty');
+    }
+
     // Generate unique invite code
     const inviteCode = await this.generateInviteCode();
 
@@ -42,8 +51,8 @@ export class CircleService {
     const { data: circle, error } = await supabaseAdmin
       .from('challenges')
       .insert({
-        name: data.name,
-        description: data.description,
+        name: sanitizedName,
+        description: sanitizedDescription,
         creator_id: userId,
         start_date: data.start_date,
         end_date: data.end_date,

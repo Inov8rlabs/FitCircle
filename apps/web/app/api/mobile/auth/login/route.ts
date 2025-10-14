@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { z } from 'zod';
 import { MobileAPIService } from '@/lib/services/mobile-api-service';
+import { authRateLimiter, getIdentifier, applyRateLimit } from '@/lib/middleware/rate-limit';
 
 // Validation schema
 const loginSchema = z.object({
@@ -11,6 +12,10 @@ const loginSchema = z.object({
 
 export async function POST(request: NextRequest) {
   try {
+    // Apply rate limiting (5 attempts per 15 minutes per IP)
+    const identifier = getIdentifier(request);
+    const rateLimitResponse = await applyRateLimit(request, authRateLimiter, identifier);
+    if (rateLimitResponse) return rateLimitResponse;
     // Parse and validate request body
     const body = await request.json();
     const validatedData = loginSchema.parse(body);
