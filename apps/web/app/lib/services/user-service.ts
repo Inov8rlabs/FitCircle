@@ -264,9 +264,9 @@ export class UserService {
     let query = supabaseAdmin
       .from('challenge_participants')
       .select(`
-        starting_weight_kg,
-        current_weight_kg,
-        goal_weight_kg,
+        goal_start_value,
+        current_value,
+        goal_target_value,
         progress_percentage,
         updated_at
       `)
@@ -308,9 +308,9 @@ export class UserService {
     }
 
     // Calculate derived values
-    const startingWeight = progressData.starting_weight_kg || 0;
-    const currentWeight = progressData.current_weight_kg || 0;
-    const targetWeight = progressData.goal_weight_kg || 0;
+    const startingWeight = progressData.goal_start_value || 0;
+    const currentWeight = progressData.current_value || 0;
+    const targetWeight = progressData.goal_target_value || 0;
     const weightLost = startingWeight - currentWeight;
     const weightToGo = currentWeight - targetWeight;
 
