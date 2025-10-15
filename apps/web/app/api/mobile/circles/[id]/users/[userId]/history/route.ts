@@ -27,7 +27,11 @@ export async function GET(
     console.log(`[Circle User History] User ${user.id} viewing history ${userId} in circle ${circleId} (limit: ${limit}, offset: ${offset})`);
 
     // Get user history with circle context
-    const history = await UserService.getUserHistory(userId, user.id, circleId, limit, offset);
+    const history = await UserService.getUserHistory(userId, user.id, {
+      circleId,
+      limit,
+      offset,
+    });
 
     const response = NextResponse.json(
       {
