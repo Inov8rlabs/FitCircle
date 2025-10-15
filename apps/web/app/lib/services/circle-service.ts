@@ -789,6 +789,38 @@ export class CircleService {
 
     console.log(`[CircleService.getLeaderboard] Found ${members?.length || 0} active participants`);
 
+    // Get latest check-in values for each member
+    for (const member of members || []) {
+      // Try circle_check_ins first
+      const { data: latestCircleCheckIn } = await supabaseAdmin
+        .from('circle_check_ins')
+        .select('check_in_value')
+        .eq('user_id', member.user_id)
+        .eq('circle_id', circleId)
+        .order('check_in_date', { ascending: false })
+        .limit(1)
+        .single();
+
+      if (latestCircleCheckIn) {
+        member.current_value = latestCircleCheckIn.check_in_value;
+        continue;
+      }
+
+      // Fall back to daily_tracking
+      const { data: latestTracking } = await supabaseAdmin
+        .from('daily_tracking')
+        .select('weight_kg')
+        .eq('user_id', member.user_id)
+        .not('weight_kg', 'is', null)
+        .order('tracking_date', { ascending: false })
+        .limit(1)
+        .single();
+
+      if (latestTracking && latestTracking.weight_kg) {
+        member.current_value = latestTracking.weight_kg;
+      }
+    }
+
     // Sort by progress, then by consistency, then by total check-ins, then by join date
     const sorted = (members || []).sort((a, b) => {
       // Primary: Progress percentage
