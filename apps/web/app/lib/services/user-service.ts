@@ -294,6 +294,43 @@ export class UserService {
       };
     }
 
+    // Get the most recent check-in to get current weight
+    let currentWeightValue = progressData.current_value;
+
+    // Try to get from circle_check_ins first
+    if (circleId) {
+      const { data: latestCheckIn } = await supabaseAdmin
+        .from('circle_check_ins')
+        .select('check_in_value, check_in_date')
+        .eq('user_id', userId)
+        .eq('circle_id', circleId)
+        .order('check_in_date', { ascending: false })
+        .limit(1)
+        .single();
+
+      if (latestCheckIn) {
+        currentWeightValue = latestCheckIn.check_in_value;
+        console.log(`[UserService.getUserProgress] Using latest circle check-in: ${currentWeightValue}kg`);
+      }
+    }
+
+    // Fall back to daily_tracking if no circle check-in
+    if (!currentWeightValue || currentWeightValue === progressData.current_value) {
+      const { data: latestTracking } = await supabaseAdmin
+        .from('daily_tracking')
+        .select('weight_kg, tracking_date')
+        .eq('user_id', userId)
+        .not('weight_kg', 'is', null)
+        .order('tracking_date', { ascending: false })
+        .limit(1)
+        .single();
+
+      if (latestTracking && latestTracking.weight_kg) {
+        currentWeightValue = latestTracking.weight_kg;
+        console.log(`[UserService.getUserProgress] Using latest daily tracking: ${currentWeightValue}kg`);
+      }
+    }
+
     // If show_progress is false, return only percentage
     if (!privacy.show_progress && userId !== requesterId) {
       return {
@@ -309,7 +346,7 @@ export class UserService {
 
     // Calculate derived values
     const startingWeight = progressData.goal_start_value || 0;
-    const currentWeight = progressData.current_value || 0;
+    const currentWeight = currentWeightValue || 0;
     const targetWeight = progressData.goal_target_value || 0;
     const weightLost = startingWeight - currentWeight;
     const weightToGo = currentWeight - targetWeight;
@@ -387,31 +424,37 @@ export class UserService {
         throw error;
       }
 
-      // Calculate weight changes
-      const entries: UserHistoryEntry[] = [];
-      for (let i = 0; i < (checkIns || []).length; i++) {
-        const checkIn = checkIns![i];
-        const prevCheckIn = i < checkIns!.length - 1 ? checkIns![i + 1] : null;
+      // If we have circle check-ins, return them
+      if (checkIns && checkIns.length > 0) {
+        // Calculate weight changes
+        const entries: UserHistoryEntry[] = [];
+        for (let i = 0; i < checkIns.length; i++) {
+          const checkIn = checkIns[i];
+          const prevCheckIn = i < checkIns.length - 1 ? checkIns[i + 1] : null;
 
-        entries.push({
-          id: checkIn.id,
-          date: checkIn.check_in_date,
-          weight: checkIn.check_in_value,
-          weight_change: prevCheckIn
-            ? Math.round((checkIn.check_in_value - prevCheckIn.check_in_value) * 100) / 100
-            : null,
-          is_public: true, // Circle check-ins are visible to circle members
-          note: checkIn.note,
-        });
+          entries.push({
+            id: checkIn.id,
+            date: checkIn.check_in_date,
+            weight: checkIn.check_in_value,
+            weight_change: prevCheckIn
+              ? Math.round((checkIn.check_in_value - prevCheckIn.check_in_value) * 100) / 100
+              : null,
+            is_public: true, // Circle check-ins are visible to circle members
+            note: checkIn.note,
+          });
+        }
+
+        console.log(`[UserService.getUserHistory] Returning ${entries.length} circle check-in entries`);
+
+        return {
+          entries,
+          total_count: count || 0,
+          has_more: (count || 0) > offset + limit,
+        };
       }
 
-      console.log(`[UserService.getUserHistory] Returning ${entries.length} circle check-in entries`);
-
-      return {
-        entries,
-        total_count: count || 0,
-        has_more: (count || 0) > offset + limit,
-      };
+      // No circle check-ins found, fall through to daily_tracking
+      console.log(`[UserService.getUserHistory] No circle check-ins found, falling back to daily_tracking`);
     }
 
     // Build query for daily tracking (no circleId)
