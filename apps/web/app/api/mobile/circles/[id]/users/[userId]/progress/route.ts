@@ -23,7 +23,11 @@ export async function GET(
     const response = NextResponse.json(
       {
         success: true,
-        data: progress,
+        data: {
+          ...progress,
+          weight_unit: 'kg',
+          can_view: true,
+        },
         error: null,
         meta: {
           requestTime: Date.now(),

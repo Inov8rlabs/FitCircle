@@ -36,7 +36,10 @@ export async function GET(
     const response = NextResponse.json(
       {
         success: true,
-        data: history,
+        data: {
+          ...history,
+          can_view: true,
+        },
         error: null,
         meta: {
           requestTime: Date.now(),

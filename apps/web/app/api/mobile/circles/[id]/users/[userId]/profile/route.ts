@@ -23,7 +23,10 @@ export async function GET(
     const response = NextResponse.json(
       {
         success: true,
-        data: profile,
+        data: {
+          ...profile,
+          is_current_user: userId === user.id,
+        },
         error: null,
         meta: {
           requestTime: Date.now(),
