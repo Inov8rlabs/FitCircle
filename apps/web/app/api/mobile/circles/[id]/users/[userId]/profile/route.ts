@@ -20,12 +20,29 @@ export async function GET(
     // Get user profile with circle context
     const profile = await UserService.getUserPublicProfile(userId, user.id);
 
+    // Get user progress to include weight data in profile
+    let progressData = null;
+    try {
+      progressData = await UserService.getUserProgress(userId, user.id, circleId);
+    } catch (error) {
+      // Progress data is optional, ignore errors
+      console.log(`[Circle User Profile] Could not fetch progress data: ${error}`);
+    }
+
     const response = NextResponse.json(
       {
         success: true,
         data: {
-          ...profile,
+          user_id: profile.user_id,
+          display_name: profile.display_name,
+          avatar_url: profile.avatar_url,
           is_current_user: userId === user.id,
+          privacy_settings: profile.privacy,
+          progress_percentage: progressData?.progress_percentage || null,
+          current_weight: progressData?.current_weight || null,
+          starting_weight: progressData?.starting_weight || null,
+          target_weight: progressData?.target_weight || null,
+          weight_unit: progressData ? 'kg' : null,
         },
         error: null,
         meta: {
