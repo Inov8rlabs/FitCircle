@@ -1271,7 +1271,7 @@ export class CircleService {
     // Get member record
     const { data: member, error: memberError } = await supabaseAdmin
       .from('challenge_participants')
-      .select('id')
+      .select('id, longest_streak')
       .eq('challenge_id', circleId)
       .eq('user_id', userId)
       .single();
