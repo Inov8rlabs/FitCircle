@@ -1,33 +1,35 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createServerSupabase } from '@/lib/supabase-server';
+import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { MetricStreakService } from '@/lib/services/metric-streak-service';
 
 /**
- * GET /api/streaks/metrics
+ * GET /api/mobile/streaks/metrics
  * Get all metric streaks for user (weight, steps, mood, measurements, photos)
  */
 export async function GET(request: NextRequest) {
   try {
-    const supabase = await createServerSupabase();
+    // Verify authentication
+    const user = await requireMobileAuth(request);
 
-    // Get authenticated user
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-
-    if (authError || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    console.log('[GET /api/streaks/metrics] Fetching all metric streaks for user:', user.id);
+    console.log('[GET /api/mobile/streaks/metrics] Fetching all metric streaks for user:', user.id);
 
     // Get all metric streaks
     const streaks = await MetricStreakService.getMetricStreaks(user.id);
 
     return NextResponse.json({ success: true, data: streaks });
 
-  } catch (error) {
-    console.error('[GET /api/streaks/metrics] Error:', error);
+  } catch (error: any) {
+    console.error('[GET /api/mobile/streaks/metrics] Error:', error);
+
+    if (error.message === 'Unauthorized') {
+      return NextResponse.json(
+        { success: false, error: 'Unauthorized', data: null },
+        { status: 401 }
+      );
+    }
+
     return NextResponse.json(
-      { error: 'Failed to fetch metric streaks', details: error instanceof Error ? error.message : 'Unknown error' },
+      { success: false, error: 'Failed to fetch metric streaks', data: null },
       { status: 500 }
     );
   }

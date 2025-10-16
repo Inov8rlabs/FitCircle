@@ -1,42 +1,43 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createServerSupabase } from '@/lib/supabase-server';
+import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { EngagementStreakService } from '@/lib/services/engagement-streak-service';
 
 /**
- * POST /api/streaks/engagement/resume
+ * POST /api/mobile/streaks/engagement/resume
  * Resume paused engagement streak
  */
 export async function POST(request: NextRequest) {
   try {
-    const supabase = await createServerSupabase();
+    // Verify authentication
+    const user = await requireMobileAuth(request);
 
-    // Get authenticated user
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-
-    if (authError || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    console.log('[POST /api/streaks/engagement/resume] User:', user.id);
+    console.log('[POST /api/mobile/streaks/engagement/resume] User:', user.id);
 
     // Resume streak
     await EngagementStreakService.resumeStreak(user.id);
 
     return NextResponse.json({ success: true, message: 'Streak resumed successfully' });
 
-  } catch (error) {
-    console.error('[POST /api/streaks/engagement/resume] Error:', error);
+  } catch (error: any) {
+    console.error('[POST /api/mobile/streaks/engagement/resume] Error:', error);
+
+    if (error.message === 'Unauthorized') {
+      return NextResponse.json(
+        { success: false, error: 'Unauthorized', data: null },
+        { status: 401 }
+      );
+    }
 
     // Handle specific error types
     if (error instanceof Error && error.message.includes('not currently paused')) {
       return NextResponse.json(
-        { error: error.message },
+        { success: false, error: error.message, data: null },
         { status: 400 }
       );
     }
 
     return NextResponse.json(
-      { error: 'Failed to resume streak', details: error instanceof Error ? error.message : 'Unknown error' },
+      { success: false, error: 'Failed to resume streak', data: null },
       { status: 500 }
     );
   }
