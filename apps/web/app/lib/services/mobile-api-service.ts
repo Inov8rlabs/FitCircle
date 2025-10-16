@@ -1,5 +1,7 @@
 import jwt from 'jsonwebtoken';
 import { createAdminSupabase } from '../supabase-admin';
+import { EngagementStreakService } from './engagement-streak-service';
+import { MetricStreakService } from './metric-streak-service';
 
 // Types for JWT tokens
 export interface JWTPayload {
@@ -431,6 +433,8 @@ export class MobileAPIService {
       .eq('tracking_date', trackingDate)
       .single();
 
+    let result: any;
+
     if (existing) {
       // Update existing entry
       const { data: updated, error } = await supabaseAdmin
@@ -448,7 +452,7 @@ export class MobileAPIService {
         .single();
 
       if (error) throw error;
-      return updated;
+      result = updated;
     } else {
       // Insert new entry
       const { data: inserted, error } = await supabaseAdmin
@@ -466,8 +470,54 @@ export class MobileAPIService {
         .single();
 
       if (error) throw error;
-      return inserted;
+      result = inserted;
     }
+
+    // ============================================================================
+    // STREAK SYSTEM INTEGRATION
+    // ============================================================================
+
+    try {
+      // Record engagement activities and update metric streaks
+      if (data.weight_kg !== undefined) {
+        console.log(`[upsertDailyTracking] Recording weight log engagement for user ${userId}`);
+        await EngagementStreakService.recordActivity(
+          userId,
+          'weight_log',
+          result.id,
+          trackingDate
+        );
+        await MetricStreakService.updateMetricStreak(userId, 'weight', trackingDate);
+      }
+
+      if (data.steps !== undefined) {
+        console.log(`[upsertDailyTracking] Recording steps log engagement for user ${userId}`);
+        await EngagementStreakService.recordActivity(
+          userId,
+          'steps_log',
+          result.id,
+          trackingDate
+        );
+        await MetricStreakService.updateMetricStreak(userId, 'steps', trackingDate);
+      }
+
+      if (data.mood_score !== undefined) {
+        console.log(`[upsertDailyTracking] Recording mood log engagement for user ${userId}`);
+        await EngagementStreakService.recordActivity(
+          userId,
+          'mood_log',
+          result.id,
+          trackingDate
+        );
+        await MetricStreakService.updateMetricStreak(userId, 'mood', trackingDate);
+      }
+    } catch (streakError) {
+      // Log streak errors but don't fail the main operation
+      console.error('[upsertDailyTracking] Streak update error:', streakError);
+      // Continue execution - tracking data was saved successfully
+    }
+
+    return result;
   }
 
   // ============================================================================

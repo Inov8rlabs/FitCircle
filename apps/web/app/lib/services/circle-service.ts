@@ -645,6 +645,9 @@ export class CircleService {
 
     console.log(`[CircleService.submitCheckIn] Successfully updated participant stats`);
 
+    // Update circle streak tracking (team collective streak)
+    await this.updateCircleStreak(userId, circleId);
+
     // Get new rank
     const newRank = await this.getUserRank(userId, circleId);
     const rankChange = previousRank - newRank;
@@ -1247,5 +1250,208 @@ export class CircleService {
       average_streak: Math.round((totalStreak / members.length) * 10) / 10,
       most_consistent_member_id: mostConsistent?.user_id,
     };
+  }
+
+  // ============================================================================
+  // CIRCLE STREAK TRACKING (TIER 3)
+  // ============================================================================
+
+  /**
+   * Update circle-specific streak when user checks in
+   * Streaks are per-circle, grace varies by challenge duration
+   */
+  static async updateCircleStreak(
+    userId: string,
+    circleId: string
+  ): Promise<void> {
+    const supabaseAdmin = createAdminSupabase();
+
+    console.log(`[CircleService.updateCircleStreak] Updating circle streak for user ${userId} in circle ${circleId}`);
+
+    // Get member record
+    const { data: member, error: memberError } = await supabaseAdmin
+      .from('challenge_participants')
+      .select('id')
+      .eq('challenge_id', circleId)
+      .eq('user_id', userId)
+      .single();
+
+    if (memberError || !member) {
+      console.error(`[CircleService.updateCircleStreak] Member not found:`, memberError);
+      throw new Error('Member not found in circle');
+    }
+
+    // Calculate streak based on circle check-ins
+    const newStreak = await this.calculateStreak(member.id);
+
+    // Update member's circle streak
+    const { error: updateError } = await supabaseAdmin
+      .from('challenge_participants')
+      .update({
+        streak_days: newStreak,
+        longest_streak: Math.max(newStreak, member.longest_streak || 0),
+      })
+      .eq('id', member.id);
+
+    if (updateError) {
+      console.error(`[CircleService.updateCircleStreak] Error updating streak:`, updateError);
+      throw updateError;
+    }
+
+    console.log(`[CircleService.updateCircleStreak] Updated circle streak to ${newStreak} days`);
+
+    // Update team collective streak
+    await this.updateTeamCollectiveStreak(circleId);
+  }
+
+  /**
+   * Get team collective streak (days entire team has checked in)
+   */
+  static async getTeamCollectiveStreak(circleId: string): Promise<number> {
+    const supabaseAdmin = createAdminSupabase();
+
+    console.log(`[CircleService.getTeamCollectiveStreak] Fetching team streak for circle ${circleId}`);
+
+    // Get or create circle streak tracking record
+    let { data: streakTracking, error: fetchError } = await supabaseAdmin
+      .from('circle_streak_tracking')
+      .select('*')
+      .eq('circle_id', circleId)
+      .single();
+
+    if (fetchError && fetchError.code === 'PGRST116') {
+      // No record exists, create one
+      console.log(`[CircleService.getTeamCollectiveStreak] Creating new streak tracking record`);
+
+      // Calculate grace days based on challenge duration
+      const { data: circle } = await supabaseAdmin
+        .from('challenges')
+        .select('start_date, end_date')
+        .eq('id', circleId)
+        .single();
+
+      const graceDays = circle
+        ? this.calculateCircleGraceDays(circle.start_date, circle.end_date)
+        : 1;
+
+      const { data: newRecord, error: createError } = await supabaseAdmin
+        .from('circle_streak_tracking')
+        .insert({
+          circle_id: circleId,
+          team_collective_streak: 0,
+          longest_team_streak: 0,
+          grace_days_available: graceDays,
+        })
+        .select()
+        .single();
+
+      if (createError) throw createError;
+      streakTracking = newRecord;
+    } else if (fetchError) {
+      throw fetchError;
+    }
+
+    if (!streakTracking) {
+      throw new Error('Failed to get or create circle streak tracking');
+    }
+
+    return streakTracking.team_collective_streak;
+  }
+
+  /**
+   * Update team collective streak
+   * Team streak = consecutive days where ALL members checked in
+   */
+  private static async updateTeamCollectiveStreak(circleId: string): Promise<void> {
+    const supabaseAdmin = createAdminSupabase();
+
+    console.log(`[CircleService.updateTeamCollectiveStreak] Updating team streak for circle ${circleId}`);
+
+    // Get all active members
+    const { data: members } = await supabaseAdmin
+      .from('challenge_participants')
+      .select('id, user_id')
+      .eq('challenge_id', circleId)
+      .eq('status', 'active');
+
+    if (!members || members.length === 0) {
+      console.log(`[CircleService.updateTeamCollectiveStreak] No active members found`);
+      return;
+    }
+
+    // Calculate team streak: count consecutive days where ALL members checked in
+    let teamStreak = 0;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    for (let i = 0; i < 90; i++) {
+      const checkDate = new Date(today);
+      checkDate.setDate(checkDate.getDate() - i);
+      const checkDateStr = checkDate.toISOString().split('T')[0];
+
+      // Check if ALL members checked in on this date
+      let allCheckedIn = true;
+
+      for (const member of members) {
+        const { data: checkIn } = await supabaseAdmin
+          .from('circle_check_ins')
+          .select('id')
+          .eq('member_id', member.id)
+          .eq('check_in_date', checkDateStr)
+          .single();
+
+        if (!checkIn) {
+          allCheckedIn = false;
+          break;
+        }
+      }
+
+      if (allCheckedIn) {
+        teamStreak++;
+      } else if (i > 0) {
+        // Team streak broken (day 0 doesn't count)
+        break;
+      }
+    }
+
+    console.log(`[CircleService.updateTeamCollectiveStreak] Team streak calculated: ${teamStreak} days`);
+
+    // Update circle streak tracking
+    const { data: currentTracking } = await supabaseAdmin
+      .from('circle_streak_tracking')
+      .select('longest_team_streak')
+      .eq('circle_id', circleId)
+      .single();
+
+    const longestStreak = Math.max(teamStreak, currentTracking?.longest_team_streak || 0);
+
+    await supabaseAdmin
+      .from('circle_streak_tracking')
+      .update({
+        team_collective_streak: teamStreak,
+        longest_team_streak: longestStreak,
+        last_full_team_checkin_date: teamStreak > 0 ? new Date().toISOString().split('T')[0] : null,
+      })
+      .eq('circle_id', circleId);
+
+    console.log(`[CircleService.updateTeamCollectiveStreak] Updated team streak: current=${teamStreak}, longest=${longestStreak}`);
+  }
+
+  /**
+   * Calculate grace days for circle based on challenge duration
+   */
+  private static calculateCircleGraceDays(startDate: string, endDate: string): number {
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+    const durationDays = Math.floor((end.getTime() - start.getTime()) / (24 * 60 * 60 * 1000));
+
+    // Minimum 2 weeks for grace days
+    if (durationDays < 14) {
+      return 0;
+    }
+
+    // 1 grace day per week of challenge
+    const weeks = Math.floor(durationDays / 7);
+    return Math.max(1, weeks);
   }
 }
