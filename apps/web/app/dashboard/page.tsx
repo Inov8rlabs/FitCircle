@@ -44,6 +44,7 @@ import { GoalProgressIndicator } from '@/components/GoalProgressIndicator';
 import { StepsGoalCard } from '@/components/StepsGoalCard';
 import { QuickEntryCard } from '@/components/QuickEntryCard';
 import { BackfillDataDialog } from '@/components/BackfillDataDialog';
+import { EngagementStreakCard } from '@/components/EngagementStreakCard';
 import { useUnitPreference } from '@/hooks/useUnitPreference';
 import {
   formatWeight,
@@ -442,6 +443,11 @@ export default function DashboardPage() {
               helperText="Today's step count"
             />
           </div>
+        </div>
+
+        {/* Engagement Streak Highlight - Full Width on Mobile, Prominent on Desktop */}
+        <div className="mb-6 sm:mb-8">
+          <EngagementStreakCard />
         </div>
 
         {/* Activity Rings Dashboard */}
