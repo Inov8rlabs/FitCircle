@@ -683,6 +683,9 @@ export class MobileAPIService {
     // Calculate streak
     const currentStreak = this.calculateStreak(trackingData || []);
 
+    // Sanitize goals array - filter out invalid string entries
+    const sanitizedGoals = this.sanitizeGoalsArray(profile.goals || []);
+
     return {
       ...profile,
       stats: {
@@ -690,9 +693,36 @@ export class MobileAPIService {
         currentStreak,
         challengesCompleted: challengesCompleted || 0,
       },
-      goals: profile.goals || [],
+      goals: sanitizedGoals,
       preferences: profile.preferences || {},
     };
+  }
+
+  /**
+   * Sanitize goals array to ensure all entries are valid Goal objects
+   * iOS expects: { type: string, target_weight_kg?: number, starting_weight_kg?: number, daily_steps_target?: number }
+   */
+  private static sanitizeGoalsArray(goals: any[]): any[] {
+    if (!Array.isArray(goals)) {
+      return [];
+    }
+
+    return goals
+      .filter((goal) => {
+        // Filter out invalid entries (strings, nulls, etc)
+        return (
+          goal &&
+          typeof goal === 'object' &&
+          goal.type &&
+          typeof goal.type === 'string'
+        );
+      })
+      .map((goal) => ({
+        type: goal.type,
+        target_weight_kg: goal.target_weight_kg || null,
+        starting_weight_kg: goal.starting_weight_kg || null,
+        daily_steps_target: goal.daily_steps_target || null,
+      }));
   }
 
   /**
