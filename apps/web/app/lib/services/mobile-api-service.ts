@@ -417,6 +417,9 @@ export class MobileAPIService {
       mood_score?: number;
       energy_level?: number;
       notes?: string;
+      steps_source?: 'manual' | 'healthkit' | 'google_fit';
+      steps_synced_at?: string;
+      is_override?: boolean;
     }
   ): Promise<any> {
     const supabaseAdmin = createAdminSupabase();
@@ -428,25 +431,102 @@ export class MobileAPIService {
     // Check if entry exists for this date
     const { data: existing } = await supabaseAdmin
       .from('daily_tracking')
-      .select('id')
+      .select('id, steps, steps_source, is_override, steps_synced_at')
       .eq('user_id', userId)
       .eq('tracking_date', trackingDate)
       .single();
+
+    // ============================================================================
+    // HEALTHKIT CONFLICT RESOLUTION LOGIC
+    // ============================================================================
+    // Rules:
+    // 1. Manual entry always wins over auto-sync (unless user explicitly sets is_override=false)
+    // 2. If existing entry has is_override=true, never overwrite with auto-sync
+    // 3. Only update if incoming data is newer than existing steps_synced_at
+    // ============================================================================
+
+    let finalSteps = data.steps;
+    let finalStepsSource = data.steps_source || 'manual';
+    let finalStepsSyncedAt = data.steps_synced_at;
+    let finalIsOverride = data.is_override !== undefined ? data.is_override : false;
+
+    if (existing && data.steps !== undefined) {
+      const isIncomingAutoSync = data.steps_source === 'healthkit' || data.steps_source === 'google_fit';
+      const isExistingManual = existing.steps_source === 'manual';
+      const isExistingOverride = existing.is_override === true;
+
+      // Case 1: Existing entry is a manual override - never overwrite with auto-sync
+      if (isExistingOverride && isIncomingAutoSync) {
+        console.log(
+          `[upsertDailyTracking] Preserving manual override for user ${userId} on ${trackingDate}`
+        );
+        finalSteps = existing.steps;
+        finalStepsSource = 'manual';
+        finalStepsSyncedAt = existing.steps_synced_at;
+        finalIsOverride = true;
+      }
+      // Case 2: Existing manual entry + new auto-sync (no override flag) - keep manual
+      else if (isExistingManual && isIncomingAutoSync && !data.is_override) {
+        console.log(
+          `[upsertDailyTracking] Preserving manual entry over auto-sync for user ${userId} on ${trackingDate}`
+        );
+        finalSteps = existing.steps;
+        finalStepsSource = 'manual';
+        finalStepsSyncedAt = existing.steps_synced_at;
+        finalIsOverride = false;
+      }
+      // Case 3: Auto-sync update - only if newer than existing
+      else if (isIncomingAutoSync && existing.steps_synced_at && data.steps_synced_at) {
+        const existingSyncTime = new Date(existing.steps_synced_at).getTime();
+        const incomingSyncTime = new Date(data.steps_synced_at).getTime();
+
+        if (incomingSyncTime <= existingSyncTime) {
+          console.log(
+            `[upsertDailyTracking] Skipping stale auto-sync for user ${userId} on ${trackingDate} (existing: ${existing.steps_synced_at}, incoming: ${data.steps_synced_at})`
+          );
+          finalSteps = existing.steps;
+          finalStepsSource = existing.steps_source;
+          finalStepsSyncedAt = existing.steps_synced_at;
+          finalIsOverride = existing.is_override;
+        }
+        // Otherwise use incoming data (implicitly set above)
+      }
+      // Case 4: Manual entry overriding auto-sync - mark as override
+      else if (!isIncomingAutoSync && (existing.steps_source === 'healthkit' || existing.steps_source === 'google_fit')) {
+        console.log(
+          `[upsertDailyTracking] User manually overriding auto-synced data for ${trackingDate}`
+        );
+        finalIsOverride = true;
+        finalStepsSource = 'manual';
+        finalStepsSyncedAt = undefined;
+      }
+    }
 
     let result: any;
 
     if (existing) {
       // Update existing entry
+      const updatePayload: any = {
+        updated_at: new Date().toISOString(),
+      };
+
+      // Only update fields that are provided
+      if (data.weight_kg !== undefined) updatePayload.weight_kg = data.weight_kg;
+      if (data.mood_score !== undefined) updatePayload.mood_score = data.mood_score;
+      if (data.energy_level !== undefined) updatePayload.energy_level = data.energy_level;
+      if (data.notes !== undefined) updatePayload.notes = sanitizedNotes;
+
+      // Update steps-related fields if steps data is provided
+      if (data.steps !== undefined) {
+        updatePayload.steps = finalSteps;
+        updatePayload.steps_source = finalStepsSource;
+        updatePayload.steps_synced_at = finalStepsSyncedAt;
+        updatePayload.is_override = finalIsOverride;
+      }
+
       const { data: updated, error } = await supabaseAdmin
         .from('daily_tracking')
-        .update({
-          weight_kg: data.weight_kg,
-          steps: data.steps,
-          mood_score: data.mood_score,
-          energy_level: data.energy_level,
-          notes: sanitizedNotes,
-          updated_at: new Date().toISOString(),
-        })
+        .update(updatePayload)
         .eq('id', existing.id)
         .select()
         .single();
@@ -461,10 +541,13 @@ export class MobileAPIService {
           user_id: userId,
           tracking_date: trackingDate,
           weight_kg: data.weight_kg,
-          steps: data.steps,
+          steps: finalSteps,
           mood_score: data.mood_score,
           energy_level: data.energy_level,
           notes: sanitizedNotes,
+          steps_source: finalStepsSource,
+          steps_synced_at: finalStepsSyncedAt,
+          is_override: finalIsOverride,
         })
         .select()
         .single();
@@ -477,43 +560,86 @@ export class MobileAPIService {
     // STREAK SYSTEM INTEGRATION
     // ============================================================================
 
+    // Track which streak operations succeeded/failed
+    const streakResults = {
+      weight: { attempted: false, success: false, error: null as any },
+      steps: { attempted: false, success: false, error: null as any },
+      mood: { attempted: false, success: false, error: null as any },
+    };
+
     try {
       // Record engagement activities and update metric streaks
       if (data.weight_kg !== undefined) {
+        streakResults.weight.attempted = true;
         console.log(`[upsertDailyTracking] Recording weight log engagement for user ${userId}`);
-        await EngagementStreakService.recordActivity(
-          userId,
-          'weight_log',
-          result.id,
-          trackingDate
-        );
-        await MetricStreakService.updateMetricStreak(userId, 'weight', trackingDate);
+        try {
+          await EngagementStreakService.recordActivity(
+            userId,
+            'weight_log',
+            result.id,
+            trackingDate
+          );
+          await MetricStreakService.updateMetricStreak(userId, 'weight', trackingDate);
+          streakResults.weight.success = true;
+        } catch (error) {
+          streakResults.weight.error = error;
+          console.error('[upsertDailyTracking] Weight streak error:', error);
+        }
       }
 
       if (data.steps !== undefined) {
+        streakResults.steps.attempted = true;
         console.log(`[upsertDailyTracking] Recording steps log engagement for user ${userId}`);
-        await EngagementStreakService.recordActivity(
-          userId,
-          'steps_log',
-          result.id,
-          trackingDate
-        );
-        await MetricStreakService.updateMetricStreak(userId, 'steps', trackingDate);
+        try {
+          await EngagementStreakService.recordActivity(
+            userId,
+            'steps_log',
+            result.id,
+            trackingDate
+          );
+          await MetricStreakService.updateMetricStreak(userId, 'steps', trackingDate);
+          streakResults.steps.success = true;
+        } catch (error) {
+          streakResults.steps.error = error;
+          console.error('[upsertDailyTracking] Steps streak error:', error);
+        }
       }
 
       if (data.mood_score !== undefined) {
+        streakResults.mood.attempted = true;
         console.log(`[upsertDailyTracking] Recording mood log engagement for user ${userId}`);
-        await EngagementStreakService.recordActivity(
-          userId,
-          'mood_log',
-          result.id,
-          trackingDate
+        try {
+          await EngagementStreakService.recordActivity(
+            userId,
+            'mood_log',
+            result.id,
+            trackingDate
+          );
+          await MetricStreakService.updateMetricStreak(userId, 'mood', trackingDate);
+          streakResults.mood.success = true;
+        } catch (error) {
+          streakResults.mood.error = error;
+          console.error('[upsertDailyTracking] Mood streak error:', error);
+        }
+      }
+
+      // Log summary of streak operations
+      const attemptedCount = Object.values(streakResults).filter((r) => r.attempted).length;
+      const successCount = Object.values(streakResults).filter((r) => r.success).length;
+      console.log(
+        `[upsertDailyTracking] Streak operations: ${successCount}/${attemptedCount} succeeded`
+      );
+
+      // If ALL streak operations failed, log a warning (but don't fail the request)
+      if (attemptedCount > 0 && successCount === 0) {
+        console.warn(
+          '[upsertDailyTracking] WARNING: All streak operations failed. Tracking data saved but streaks not updated.',
+          { streakResults }
         );
-        await MetricStreakService.updateMetricStreak(userId, 'mood', trackingDate);
       }
     } catch (streakError) {
-      // Log streak errors but don't fail the main operation
-      console.error('[upsertDailyTracking] Streak update error:', streakError);
+      // This catch is a fallback for unexpected errors
+      console.error('[upsertDailyTracking] Unexpected streak system error:', streakError);
       // Continue execution - tracking data was saved successfully
     }
 

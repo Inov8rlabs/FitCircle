@@ -11,6 +11,10 @@ const trackingSchema = z.object({
   moodScore: z.number().int().min(1).max(10).optional(),
   energyLevel: z.number().int().min(1).max(10).optional(),
   notes: z.string().optional(),
+  // HealthKit integration fields
+  stepsSource: z.enum(['manual', 'healthkit', 'google_fit']).optional(),
+  stepsSyncedAt: z.string().datetime().optional(),
+  isOverride: z.boolean().optional(),
 });
 
 /**
@@ -128,6 +132,9 @@ export async function POST(request: NextRequest) {
         mood_score: validatedData.moodScore,
         energy_level: validatedData.energyLevel,
         notes: validatedData.notes,
+        steps_source: validatedData.stepsSource,
+        steps_synced_at: validatedData.stepsSyncedAt,
+        is_override: validatedData.isOverride,
       }
     );
 
