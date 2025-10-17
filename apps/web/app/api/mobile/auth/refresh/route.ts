@@ -26,9 +26,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Return new token pair
+    // Return new token pair (iOS expects just { session: {...} })
     return NextResponse.json({
-      success: true,
       session: tokens,
     });
   } catch (error) {
