@@ -86,11 +86,19 @@ export default function FitCircleCreator() {
   const [participants, setParticipants] = useState<Participant[]>([]);
   const [inviteCode, setInviteCode] = useState('');
 
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<{
+    name: string;
+    description: string;
+    type: 'weight_loss' | 'step_count' | 'workout_minutes' | 'custom';
+    visibility: 'public' | 'private' | 'invite_only';
+    startDate: string;
+    endDate: string;
+    maxParticipants: string;
+  }>({
     name: '',
     description: '',
-    type: 'weight_loss' as const,
-    visibility: 'public' as const,
+    type: 'weight_loss',
+    visibility: 'public',
     startDate: '',
     endDate: '',
     maxParticipants: '',
@@ -314,60 +322,102 @@ export default function FitCircleCreator() {
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>Challenge Type</Label>
-                  <Select
-                    value={formData.type}
-                    onValueChange={(value: any) => setFormData({ ...formData, type: value })}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {challengeTypes.map((type) => (
-                        <SelectItem key={type.value} value={type.value}>
-                          <div className="flex items-center gap-2">
-                            <type.icon className="h-4 w-4" />
-                            {type.label}
+              {/* Challenge Type Selection - Enhanced with visual cards */}
+              <div className="space-y-3">
+                <Label>What type of challenge?</Label>
+                <p className="text-sm text-muted-foreground">This determines what participants will track</p>
+
+                <div className="grid grid-cols-2 gap-3">
+                  {challengeTypes.map((type) => {
+                    const Icon = type.icon;
+                    const isSelected = formData.type === type.value;
+                    return (
+                      <motion.div
+                        key={type.value}
+                        className={`
+                          relative p-4 rounded-lg border-2 cursor-pointer transition-all
+                          ${isSelected
+                            ? 'border-purple-500 bg-purple-500/20'
+                            : 'border-slate-700 bg-slate-800/50 hover:bg-slate-800 hover:border-slate-600'
+                          }
+                        `}
+                        whileHover={{ scale: 1.02 }}
+                        whileTap={{ scale: 0.98 }}
+                        onClick={() => setFormData({ ...formData, type: type.value as typeof formData.type })}
+                      >
+                        <div className="flex flex-col items-center text-center gap-2">
+                          <Icon className={`h-8 w-8 ${isSelected ? 'text-purple-400' : 'text-slate-400'}`} />
+                          <div>
+                            <p className="font-semibold text-sm">{type.label}</p>
+                            <p className="text-xs text-muted-foreground mt-1">
+                              {type.value === 'weight_loss' && 'Track weight progress daily'}
+                              {type.value === 'step_count' && 'Track daily steps'}
+                              {type.value === 'workout_minutes' && 'Track workout time'}
+                              {type.value === 'custom' && 'Track multiple metrics'}
+                            </p>
                           </div>
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                          {isSelected && (
+                            <CheckCircle2 className="absolute top-2 right-2 h-5 w-5 text-purple-400" />
+                          )}
+                        </div>
+                      </motion.div>
+                    );
+                  })}
                 </div>
 
-                <div className="space-y-2">
-                  <Label>Visibility</Label>
-                  <Select
-                    value={formData.visibility}
-                    onValueChange={(value: any) => setFormData({ ...formData, visibility: value })}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="public">
-                        <div className="flex items-center gap-2">
-                          <Globe className="h-4 w-4" />
-                          Public
-                        </div>
-                      </SelectItem>
-                      <SelectItem value="invite_only">
-                        <div className="flex items-center gap-2">
-                          <UserPlus className="h-4 w-4" />
-                          Invite Only
-                        </div>
-                      </SelectItem>
-                      <SelectItem value="private">
-                        <div className="flex items-center gap-2">
-                          <Lock className="h-4 w-4" />
-                          Private
-                        </div>
-                      </SelectItem>
-                    </SelectContent>
-                  </Select>
+                {/* Educational Info Box */}
+                <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-3 text-sm">
+                  <div className="flex gap-2">
+                    <span className="text-blue-400 flex-shrink-0">💡</span>
+                    <div className="text-blue-200/90 space-y-1">
+                      <p className="font-medium text-blue-300">Participants will log:</p>
+                      {formData.type === 'weight_loss' && (
+                        <p className="text-xs">✅ <strong>Weight</strong>, Mood, Energy, Notes</p>
+                      )}
+                      {formData.type === 'step_count' && (
+                        <p className="text-xs">✅ <strong>Steps</strong>, Mood, Energy, Notes</p>
+                      )}
+                      {formData.type === 'workout_minutes' && (
+                        <p className="text-xs">✅ <strong>Workout Minutes</strong>, Mood, Energy, Notes</p>
+                      )}
+                      {formData.type === 'custom' && (
+                        <p className="text-xs">✅ <strong>Weight, Steps</strong>, Mood, Energy, Notes (all optional)</p>
+                      )}
+                    </div>
+                  </div>
                 </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Visibility</Label>
+                <Select
+                  value={formData.visibility}
+                  onValueChange={(value: any) => setFormData({ ...formData, visibility: value })}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="public">
+                      <div className="flex items-center gap-2">
+                        <Globe className="h-4 w-4" />
+                        Public
+                      </div>
+                    </SelectItem>
+                    <SelectItem value="invite_only">
+                      <div className="flex items-center gap-2">
+                        <UserPlus className="h-4 w-4" />
+                        Invite Only
+                      </div>
+                    </SelectItem>
+                    <SelectItem value="private">
+                      <div className="flex items-center gap-2">
+                        <Lock className="h-4 w-4" />
+                        Private
+                      </div>
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
