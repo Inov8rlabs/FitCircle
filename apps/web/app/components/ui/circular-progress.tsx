@@ -155,7 +155,7 @@ export function ActivityRing({ rings, size = 160, strokeWidth = 12, className }:
           <p className="text-2xl font-bold text-white leading-none mb-1">
             {Math.round((rings[0]?.value / rings[0]?.max) * 100 || 0)}%
           </p>
-          <p className="text-xs text-gray-400 leading-none">Complete</p>
+          <p className="text-xs text-gray-400 leading-tight">Complete</p>
         </div>
       </div>
     </div>
