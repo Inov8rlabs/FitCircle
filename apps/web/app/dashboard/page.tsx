@@ -53,6 +53,7 @@ import {
   getWeightUnit,
   getWeightPlaceholder,
 } from '@/lib/utils/units';
+import { CheckInCard, CheckInDetailModal, CheckInDetailSheet } from '@/components/check-ins';
 
 interface CheckIn {
   id: string;
@@ -96,6 +97,10 @@ export default function DashboardPage() {
   const [quickSteps, setQuickSteps] = useState('');
   const [previousUnitSystem, setPreviousUnitSystem] = useState(unitSystem);
   const [showBackfillDialog, setShowBackfillDialog] = useState(false);
+
+  // Check-in detail modal states
+  const [selectedCheckIn, setSelectedCheckIn] = useState<CheckIn | null>(null);
+  const [showCheckInDetail, setShowCheckInDetail] = useState(false);
 
   // Convert weight value when unit system changes
   useEffect(() => {
@@ -365,6 +370,51 @@ export default function DashboardPage() {
       mood: checkIn.mood_score || 0,
       energy: checkIn.energy_level || 0,
     }));
+
+  const handleCheckInClick = (checkIn: CheckIn) => {
+    setSelectedCheckIn(checkIn);
+    setShowCheckInDetail(true);
+  };
+
+  const handleDeleteCheckIn = async (checkInId: string) => {
+    try {
+      const response = await fetch(`/api/check-ins/${checkInId}`, {
+        method: 'DELETE',
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to delete check-in');
+      }
+
+      toast.success('Check-in deleted successfully');
+      fetchCheckIns();
+      fetchDailyStats();
+      setShowCheckInDetail(false);
+    } catch (error) {
+      console.error('Error deleting check-in:', error);
+      toast.error('Failed to delete check-in');
+    }
+  };
+
+  const handleTogglePrivacy = async (checkInId: string, isPublic: boolean) => {
+    try {
+      const response = await fetch(`/api/check-ins/${checkInId}/privacy`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ isPublic }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to update privacy');
+      }
+
+      toast.success(isPublic ? 'Check-in is now public' : 'Check-in is now private');
+      fetchCheckIns();
+    } catch (error) {
+      console.error('Error updating privacy:', error);
+      toast.error('Failed to update privacy');
+    }
+  };
 
   return (
     <>
@@ -690,6 +740,39 @@ export default function DashboardPage() {
             </Card>
           </TabsContent>
         </Tabs>
+
+        {/* Recent Check-Ins Section */}
+        {checkIns.length > 0 && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.7 }}
+            className="mt-6 sm:mt-8"
+          >
+            <h2 className="text-base sm:text-lg lg:text-xl font-semibold text-white mb-3 sm:mb-4">Recent Check-Ins</h2>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
+              {checkIns.slice(0, 6).map((checkIn) => (
+                <CheckInCard
+                  key={checkIn.id}
+                  checkIn={{
+                    id: checkIn.id,
+                    user_id: user?.id || '',
+                    tracking_date: checkIn.tracking_date,
+                    weight_kg: checkIn.weight_kg ?? null,
+                    steps: checkIn.steps ?? null,
+                    mood_score: checkIn.mood_score ?? null,
+                    energy_level: checkIn.energy_level ?? null,
+                    notes: checkIn.notes ?? null,
+                    is_public: true, // Assume public for user's own check-ins
+                    created_at: checkIn.created_at,
+                    updated_at: checkIn.created_at,
+                  }}
+                  onClick={() => handleCheckInClick(checkIn)}
+                />
+              ))}
+            </div>
+          </motion.div>
+        )}
         </div>
       </div>
 
@@ -701,6 +784,64 @@ export default function DashboardPage() {
         unitSystem={unitSystem}
         weightUnit={getWeightUnit(unitSystem)}
       />
+
+      {/* Check-In Detail Modal (Desktop) */}
+      {selectedCheckIn && (
+        <>
+          <CheckInDetailModal
+            checkIn={{
+              id: selectedCheckIn.id,
+              user_id: user?.id || '',
+              tracking_date: selectedCheckIn.tracking_date,
+              weight_kg: selectedCheckIn.weight_kg ?? null,
+              steps: selectedCheckIn.steps ?? null,
+              mood_score: selectedCheckIn.mood_score ?? null,
+              energy_level: selectedCheckIn.energy_level ?? null,
+              notes: selectedCheckIn.notes ?? null,
+              is_public: true,
+              created_at: selectedCheckIn.created_at,
+              updated_at: selectedCheckIn.created_at,
+              profile: {
+                username: user?.email?.split('@')[0] || 'user',
+                display_name: user?.name || 'You',
+                avatar_url: null,
+              },
+            }}
+            isOpen={showCheckInDetail}
+            onClose={() => setShowCheckInDetail(false)}
+            onDelete={() => handleDeleteCheckIn(selectedCheckIn.id)}
+            onTogglePrivacy={(isPublic) => handleTogglePrivacy(selectedCheckIn.id, isPublic)}
+            canEdit={true}
+          />
+
+          {/* Check-In Detail Sheet (Mobile) */}
+          <CheckInDetailSheet
+            checkIn={{
+              id: selectedCheckIn.id,
+              user_id: user?.id || '',
+              tracking_date: selectedCheckIn.tracking_date,
+              weight_kg: selectedCheckIn.weight_kg ?? null,
+              steps: selectedCheckIn.steps ?? null,
+              mood_score: selectedCheckIn.mood_score ?? null,
+              energy_level: selectedCheckIn.energy_level ?? null,
+              notes: selectedCheckIn.notes ?? null,
+              is_public: true,
+              created_at: selectedCheckIn.created_at,
+              updated_at: selectedCheckIn.created_at,
+              profile: {
+                username: user?.email?.split('@')[0] || 'user',
+                display_name: user?.name || 'You',
+                avatar_url: null,
+              },
+            }}
+            isOpen={showCheckInDetail}
+            onClose={() => setShowCheckInDetail(false)}
+            onDelete={() => handleDeleteCheckIn(selectedCheckIn.id)}
+            onTogglePrivacy={(isPublic) => handleTogglePrivacy(selectedCheckIn.id, isPublic)}
+            canEdit={true}
+          />
+        </>
+      )}
     </>
   );
 }

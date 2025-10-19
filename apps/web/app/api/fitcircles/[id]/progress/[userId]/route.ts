@@ -50,7 +50,7 @@ export async function GET(
     // Fetch tracking entries for this user within challenge period
     const { data: entries, error: entriesError } = await supabase
       .from('daily_tracking')
-      .select(`tracking_date, ${column}`)
+      .select(`tracking_date, ${column}, is_public`)
       .eq('user_id', userId)
       .gte('tracking_date', challenge.start_date)
       .lte('tracking_date', challenge.end_date)
@@ -72,11 +72,10 @@ export async function GET(
     }
 
     // Transform entries to match expected format
-    // Note: daily_tracking doesn't have is_public column, all entries are public for now
     const progressEntries = (entries || []).map((entry: any) => ({
       tracking_date: entry.tracking_date,
       value: entry[column],
-      is_public: true, // TODO: Add privacy settings for daily tracking
+      is_public: entry.is_public ?? true, // Default to public if not set
     }));
 
     return NextResponse.json({

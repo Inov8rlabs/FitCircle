@@ -407,6 +407,36 @@ export class UserService {
       };
     }
 
+    // Fetch challenge type if circleId provided to filter data appropriately
+    let challengeType: string | null = null;
+    let challengeStartDate: string | null = null;
+    let challengeEndDate: string | null = null;
+
+    if (circleId) {
+      const { data: challenge } = await supabaseAdmin
+        .from('challenges')
+        .select('type, start_date, end_date')
+        .eq('id', circleId)
+        .single();
+
+      if (challenge) {
+        challengeType = challenge.type;
+        challengeStartDate = challenge.start_date;
+        challengeEndDate = challenge.end_date;
+        console.log(`[UserService.getUserHistory] Challenge type: ${challengeType}`);
+      }
+    }
+
+    // Determine which column to filter by based on challenge type
+    const columnMap: Record<string, 'weight_kg' | 'steps'> = {
+      weight_loss: 'weight_kg',
+      step_count: 'steps',
+      workout_frequency: 'steps',
+      custom: 'weight_kg',
+    };
+
+    const dataColumn = challengeType ? columnMap[challengeType] || 'weight_kg' : 'weight_kg';
+
     // Build query for circle check-ins if circleId provided
     if (circleId) {
       let query = supabaseAdmin
@@ -453,17 +483,23 @@ export class UserService {
         };
       }
 
-      // No circle check-ins found, fall through to daily_tracking
-      console.log(`[UserService.getUserHistory] No circle check-ins found, falling back to daily_tracking`);
+      // No circle check-ins found, fall through to daily_tracking with filtering
+      console.log(`[UserService.getUserHistory] No circle check-ins found, falling back to daily_tracking with column: ${dataColumn}`);
     }
 
-    // Build query for daily tracking (no circleId)
+    // Build query for daily tracking (fallback or no circleId)
     let query = supabaseAdmin
       .from('daily_tracking')
-      .select('id, tracking_date, weight_kg, notes, created_at', { count: 'exact' })
+      .select(`id, tracking_date, ${dataColumn}, notes, created_at`, { count: 'exact' })
       .eq('user_id', userId)
+      .not(dataColumn, 'is', null) // Only entries with the relevant metric
       .order('tracking_date', { ascending: false })
       .range(offset, offset + limit - 1);
+
+    // If we have challenge date range, filter by it
+    if (challengeStartDate && challengeEndDate) {
+      query = query.gte('tracking_date', challengeStartDate).lte('tracking_date', challengeEndDate);
+    }
 
     const { data: trackingData, error, count } = await query;
 
@@ -491,22 +527,25 @@ export class UserService {
     // Calculate weight changes
     const entries: UserHistoryEntry[] = [];
     for (let i = 0; i < filteredData.length; i++) {
-      const entry = filteredData[i];
-      const prevEntry = i < filteredData.length - 1 ? filteredData[i + 1] : null;
+      const entry = filteredData[i] as any;
+      const prevEntry = i < filteredData.length - 1 ? (filteredData[i + 1] as any) : null;
+
+      const currentValue = entry[dataColumn] as number | null;
+      const prevValue = prevEntry ? (prevEntry[dataColumn] as number | null) : null;
 
       entries.push({
         id: entry.id,
         date: entry.tracking_date,
-        weight: entry.weight_kg,
-        weight_change: prevEntry && entry.weight_kg && prevEntry.weight_kg
-          ? Math.round((entry.weight_kg - prevEntry.weight_kg) * 100) / 100
+        weight: currentValue,
+        weight_change: prevValue && currentValue
+          ? Math.round((currentValue - prevValue) * 100) / 100
           : null,
         is_public: true, // For now, all entries are considered public to friends
         note: entry.notes,
       });
     }
 
-    console.log(`[UserService.getUserHistory] Returning ${entries.length} daily tracking entries`);
+    console.log(`[UserService.getUserHistory] Returning ${entries.length} daily tracking entries (column: ${dataColumn})`);
 
     return {
       entries,

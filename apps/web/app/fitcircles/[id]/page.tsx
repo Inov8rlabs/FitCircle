@@ -42,6 +42,7 @@ import { ShareFitCircleDialog } from '@/components/ShareFitCircleDialog';
 import { SubmitProgressDialog } from '@/components/SubmitProgressDialog';
 import { useUnitPreference } from '@/hooks/useUnitPreference';
 import { toast } from 'sonner';
+import { CheckInCard } from '@/components/check-ins';
 
 interface FitCircle {
   id: string;
@@ -1403,122 +1404,30 @@ export default function FitCirclePage() {
                 </div>
 
                 {selectedParticipant.entries && selectedParticipant.entries.length > 0 ? (
-                  <div className="space-y-3 max-h-96 overflow-y-auto">
-                    {selectedParticipant.entries.map((entry, entryIndex) => {
-                      const isEditing = editingEntryDate === entry.tracking_date;
-                      const isOwnEntry = selectedParticipant.user_id === user?.id;
-
-                      return (
-                        <motion.div
-                          key={`${entry.tracking_date}-${entryIndex}`}
-                          initial={{ opacity: 0, y: 10 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          transition={{ delay: entryIndex * 0.05 }}
-                          className={`flex items-center justify-between p-3 rounded-lg border group ${
-                            entry.is_public
-                              ? 'bg-slate-800/50 border-slate-700/50'
-                              : 'bg-slate-800/30 border-slate-700/30 opacity-75'
-                          }`}
-                        >
-                          {isEditing ? (
-                            // Edit mode
-                            <div className="flex-1 flex items-center gap-3">
-                              <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 ${
-                                entry.is_public
-                                  ? 'bg-green-500/20 text-green-400'
-                                  : 'bg-gray-500/20 text-gray-400'
-                              }`}>
-                                {entry.is_public ? '👁️' : '🔒'}
-                              </div>
-                              <div className="flex-1 space-y-2">
-                                <input
-                                  type="number"
-                                  value={editedEntryValue}
-                                  onChange={(e) => setEditedEntryValue(e.target.value)}
-                                  className="w-full px-3 py-1.5 bg-slate-900 rounded border border-slate-600 text-white text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                                  placeholder="Enter weight (kg)"
-                                  step="0.1"
-                                  min="0"
-                                />
-                                <div className="flex items-center gap-2">
-                                  <button
-                                    onClick={handleSaveEntry}
-                                    disabled={isSavingEntry}
-                                    className="px-3 py-1 bg-green-600 hover:bg-green-700 rounded text-white text-sm disabled:opacity-50 flex items-center gap-1"
-                                  >
-                                    {isSavingEntry ? (
-                                      <>
-                                        <Loader2 className="h-3 w-3 animate-spin" />
-                                        Saving...
-                                      </>
-                                    ) : (
-                                      <>
-                                        <Check className="h-3 w-3" />
-                                        Save
-                                      </>
-                                    )}
-                                  </button>
-                                  <button
-                                    onClick={handleCancelEditEntry}
-                                    disabled={isSavingEntry}
-                                    className="px-3 py-1 bg-gray-600 hover:bg-gray-700 rounded text-white text-sm"
-                                  >
-                                    <X className="h-3 w-3" />
-                                  </button>
-                                </div>
-                              </div>
-                            </div>
-                          ) : (
-                            // View mode
-                            <>
-                              <div className="flex items-center space-x-3 flex-1">
-                                <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 ${
-                                  entry.is_public
-                                    ? 'bg-green-500/20 text-green-400'
-                                    : 'bg-gray-500/20 text-gray-400'
-                                }`}>
-                                  {entry.is_public ? '👁️' : '🔒'}
-                                </div>
-                                <div className="flex-1 min-w-0">
-                                  <p className="font-semibold text-white">{entry.value} kg</p>
-                                  <p className="text-sm text-gray-400">
-                                    {new Date(entry.tracking_date).toLocaleDateString()}
-                                    {entry.is_public ? ' • Public' : ' • Private'}
-                                  </p>
-                                </div>
-                              </div>
-                              <div className="flex items-center gap-2">
-                                <div className="text-right">
-                                  <p className="text-sm text-gray-400">
-                                    {selectedParticipant.starting_value &&
-                                      `${(selectedParticipant.starting_value - entry.value).toFixed(1)} kg lost`
-                                    }
-                                  </p>
-                                </div>
-                                {isOwnEntry && (
-                                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                    <button
-                                      onClick={() => handleStartEditEntry(entry.tracking_date, entry.value)}
-                                      className="p-1.5 hover:bg-slate-700 rounded text-indigo-400"
-                                      aria-label="Edit entry"
-                                    >
-                                      <Edit className="h-4 w-4" />
-                                    </button>
-                                    <button
-                                      onClick={() => handleDeleteEntry(entry.tracking_date)}
-                                      className="p-1.5 hover:bg-slate-700 rounded text-red-400"
-                                      aria-label="Delete entry"
-                                    >
-                                      <Trash2 className="h-4 w-4" />
-                                    </button>
-                                  </div>
-                                )}
-                              </div>
-                            </>
-                          )}
-                        </motion.div>
-                      );
-                    })}
+                  <div className="grid grid-cols-1 gap-3 max-h-96 overflow-y-auto">
+                    {selectedParticipant.entries.map((entry) => (
+                      <CheckInCard
+                        key={`${entry.tracking_date}`}
+                        checkIn={{
+                          id: `${selectedParticipant.user_id}-${entry.tracking_date}`,
+                          user_id: selectedParticipant.user_id,
+                          tracking_date: entry.tracking_date,
+                          weight_kg: entry.value,
+                          steps: null,
+                          mood_score: null,
+                          energy_level: null,
+                          notes: null,
+                          is_public: entry.is_public,
+                          created_at: entry.tracking_date,
+                          updated_at: entry.tracking_date,
+                        }}
+                        onClick={() => {
+                          // For now, just show a toast - full modal integration can be added later
+                          toast.info(`${selectedParticipant.display_name}'s check-in on ${new Date(entry.tracking_date).toLocaleDateString()}`);
+                        }}
+                        compact={true}
+                      />
+                    ))}
                   </div>
                 ) : (
                   <div className="text-center py-8">
