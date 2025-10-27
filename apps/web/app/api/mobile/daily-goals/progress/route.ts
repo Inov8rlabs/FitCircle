@@ -47,15 +47,42 @@ export async function GET(request: NextRequest) {
       );
     }
 
+    // Get completion history for the target date
+    const { data: completions } = await supabaseAdmin
+      .from('goal_completion_history')
+      .select('daily_goal_id, completion_percentage, is_completed')
+      .eq('user_id', user.id)
+      .eq('completion_date', targetDate);
+
+    const completionMap = new Map(
+      (completions || []).map(c => [c.daily_goal_id, c])
+    );
+
+    // Calculate completion stats
+    const completedCount = (completions || []).filter(c => c.is_completed).length;
     const totalCount = goals?.length || 0;
-    const completedCount = 0; // TODO: Calculate from goal_completion_history table
     const progressPercentage = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
+
+    // Build goals array with completion status
+    const goalsWithProgress = (goals || []).map(goal => {
+      const completion = completionMap.get(goal.id);
+      return {
+        id: goal.id,
+        goal_type: goal.goal_type,
+        target_value: goal.target_value,
+        unit: goal.unit,
+        is_completed: completion?.is_completed || false,
+        completion_percentage: completion?.completion_percentage || 0,
+        is_primary: goal.is_primary,
+      };
+    });
 
     const summary = {
       totalCount,
       completedCount,
       progressPercentage,
       date: targetDate,
+      goals: goalsWithProgress, // Include goals array for iOS
     };
 
     console.log(`[Mobile Daily Goals Progress] Summary: ${completedCount}/${totalCount} goals complete (${progressPercentage}%)`);
