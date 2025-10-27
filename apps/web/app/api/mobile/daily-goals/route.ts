@@ -148,6 +148,35 @@ export async function POST(request: NextRequest) {
 
     console.log(`[Mobile Daily Goals] Normalized dates - start: ${startDate}, end: ${endDate}`);
 
+    // Check for existing active goal of same type (prevent duplicates)
+    const { data: existingGoal } = await supabaseAdmin
+      .from('daily_goals')
+      .select('id')
+      .eq('user_id', user.id)
+      .eq('goal_type', goalData.goal_type)
+      .eq('is_active', true)
+      .lte('start_date', today)
+      .or(`end_date.is.null,end_date.gte.${today}`)
+      .maybeSingle();
+
+    if (existingGoal) {
+      console.log(`[Mobile Daily Goals] User already has active ${goalData.goal_type} goal: ${existingGoal.id}`);
+      return NextResponse.json(
+        {
+          success: false,
+          data: null,
+          error: {
+            code: 'DUPLICATE_GOAL',
+            message: `You already have an active ${goalData.goal_type} goal`,
+            details: {},
+            timestamp: new Date().toISOString(),
+          },
+          meta: null,
+        },
+        { status: 409 }
+      );
+    }
+
     // Insert goal
     const { data, error } = await supabaseAdmin
       .from('daily_goals')
