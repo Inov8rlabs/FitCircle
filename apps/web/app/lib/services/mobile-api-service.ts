@@ -709,6 +709,11 @@ export class MobileAPIService {
         allow_team_invites: dbPreferences.privacy?.allowTeamInvites ?? dbPreferences.privacy?.allow_team_invites ?? true,
         allow_challenge_invites: dbPreferences.privacy?.allowChallengeInvites ?? dbPreferences.privacy?.allow_challenge_invites ?? true,
       },
+      display: {
+        theme: dbPreferences.display?.theme || 'dark',
+        language: dbPreferences.display?.language || 'en',
+        units: dbPreferences.display?.units || dbPreferences.unitSystem || 'metric',
+      },
       units: {
         height: dbPreferences.units?.height || (dbPreferences.unitSystem === 'imperial' ? 'inches' : 'cm'),
         weight: dbPreferences.units?.weight || (dbPreferences.unitSystem === 'imperial' ? 'lbs' : 'kg'),
