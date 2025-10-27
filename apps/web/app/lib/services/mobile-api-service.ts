@@ -703,9 +703,9 @@ export class MobileAPIService {
         weekly_insights: dbPreferences.notifications?.weekly_insights ?? true,
       },
       privacy: {
-        profileVisibility: dbPreferences.privacy?.profileVisibility || dbPreferences.privacy?.profile_visibility || 'public',
-        showWeight: dbPreferences.privacy?.showWeight ?? dbPreferences.privacy?.show_weight ?? true,
-        showProgress: dbPreferences.privacy?.showProgress ?? dbPreferences.privacy?.show_progress ?? true,
+        profile_visibility: dbPreferences.privacy?.profileVisibility || dbPreferences.privacy?.profile_visibility || 'public',
+        show_weight: dbPreferences.privacy?.showWeight ?? dbPreferences.privacy?.show_weight ?? true,
+        show_progress: dbPreferences.privacy?.showProgress ?? dbPreferences.privacy?.show_progress ?? true,
       },
       units: {
         height: dbPreferences.units?.height || (dbPreferences.unitSystem === 'imperial' ? 'inches' : 'cm'),
