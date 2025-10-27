@@ -686,6 +686,34 @@ export class MobileAPIService {
     // Sanitize goals array - filter out invalid string entries
     const sanitizedGoals = this.sanitizeGoalsArray(profile.goals || []);
 
+    // Transform preferences to match iOS expected format
+    const dbPreferences = profile.preferences || {};
+    const transformedPreferences = {
+      notifications: {
+        push: dbPreferences.notifications?.push ?? true,
+        email: dbPreferences.notifications?.email ?? true,
+        sms: dbPreferences.notifications?.sms ?? false,
+        challenge_invite: dbPreferences.notifications?.challenge_invite ?? true,
+        team_invite: dbPreferences.notifications?.team_invite ?? true,
+        check_in_reminder: dbPreferences.notifications?.check_in_reminder ?? true,
+        achievement: dbPreferences.notifications?.achievement ?? true,
+        comment: dbPreferences.notifications?.comment ?? true,
+        reaction: dbPreferences.notifications?.reaction ?? true,
+        leaderboard_update: dbPreferences.notifications?.leaderboard_update ?? true,
+        weekly_insights: dbPreferences.notifications?.weekly_insights ?? true,
+      },
+      privacy: {
+        profileVisibility: dbPreferences.privacy?.profileVisibility || dbPreferences.privacy?.profile_visibility || 'public',
+        showWeight: dbPreferences.privacy?.showWeight ?? dbPreferences.privacy?.show_weight ?? true,
+        showProgress: dbPreferences.privacy?.showProgress ?? dbPreferences.privacy?.show_progress ?? true,
+      },
+      units: {
+        height: dbPreferences.units?.height || (dbPreferences.unitSystem === 'imperial' ? 'inches' : 'cm'),
+        weight: dbPreferences.units?.weight || (dbPreferences.unitSystem === 'imperial' ? 'lbs' : 'kg'),
+      },
+      unitSystem: dbPreferences.unitSystem || 'metric',
+    };
+
     return {
       ...profile,
       stats: {
@@ -694,7 +722,7 @@ export class MobileAPIService {
         challengesCompleted: challengesCompleted || 0,
       },
       goals: sanitizedGoals,
-      preferences: profile.preferences || {},
+      preferences: transformedPreferences,
     };
   }
 
