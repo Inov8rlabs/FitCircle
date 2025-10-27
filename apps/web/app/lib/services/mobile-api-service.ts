@@ -706,6 +706,8 @@ export class MobileAPIService {
         profile_visibility: dbPreferences.privacy?.profileVisibility || dbPreferences.privacy?.profile_visibility || 'public',
         show_weight: dbPreferences.privacy?.showWeight ?? dbPreferences.privacy?.show_weight ?? true,
         show_progress: dbPreferences.privacy?.showProgress ?? dbPreferences.privacy?.show_progress ?? true,
+        allow_team_invites: dbPreferences.privacy?.allowTeamInvites ?? dbPreferences.privacy?.allow_team_invites ?? true,
+        allow_challenge_invites: dbPreferences.privacy?.allowChallengeInvites ?? dbPreferences.privacy?.allow_challenge_invites ?? true,
       },
       units: {
         height: dbPreferences.units?.height || (dbPreferences.unitSystem === 'imperial' ? 'inches' : 'cm'),
