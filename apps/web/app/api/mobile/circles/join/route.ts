@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { CircleService } from '@/lib/services/circle-service';
 import { createAdminSupabase } from '@/lib/supabase-admin';
+import { DailyGoalService } from '@/lib/services/daily-goals';
 
 // Validation schema
 const joinCircleSchema = z.object({
@@ -114,6 +115,18 @@ export async function POST(request: NextRequest) {
           participant_count: (currentCircle?.participant_count || 0) + 1,
         })
         .eq('id', circle.id);
+    }
+
+    // Create daily goals for the user based on the challenge
+    try {
+      await DailyGoalService.createDailyGoalsForChallenge(
+        user.id,
+        circle.id,
+        supabaseAdmin
+      );
+    } catch (goalError) {
+      // Log but don't fail the request if goal creation fails
+      console.error('[Mobile API] Failed to create daily goals:', goalError);
     }
 
     // Get updated circle details

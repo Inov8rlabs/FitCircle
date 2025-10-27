@@ -52,8 +52,13 @@ import {
   weightKgToDisplay,
   getWeightUnit,
   getWeightPlaceholder,
+  isValidWeight,
+  getWeightValidationMessage,
+  detectWrongUnit,
 } from '@/lib/utils/units';
 import { CheckInCard, CheckInDetailModal, CheckInDetailSheet } from '@/components/check-ins';
+import { DailyProgressMeter } from '@/components/DailyProgressMeter';
+import { useDailyGoals } from '@/hooks/useDailyGoals';
 
 interface CheckIn {
   id: string;
@@ -78,6 +83,7 @@ interface DailyStats {
 export default function DashboardPage() {
   const { user } = useAuthStore();
   const { unitSystem, setUnitSystem, isLoading: isLoadingUnits } = useUnitPreference();
+  const { goals, progress, streak, isLoading: isLoadingGoals, error: goalsError, refresh: refreshGoals } = useDailyGoals();
   const [checkIns, setCheckIns] = useState<CheckIn[]>([]);
   const [isLoadingCheckIns, setIsLoadingCheckIns] = useState(true);
   const [goalWeightKg, setGoalWeightKg] = useState<number | undefined>();
@@ -287,7 +293,28 @@ export default function DashboardPage() {
     if (!user || !quickWeight) return;
 
     const today = new Date().toISOString().split('T')[0];
-    const weightInKg = parseWeightToKg(quickWeight, unitSystem);
+    const numericWeight = parseFloat(quickWeight);
+
+    // Validate weight value
+    if (!isValidWeight(numericWeight, unitSystem)) {
+      const message = getWeightValidationMessage(numericWeight, unitSystem);
+      toast.error(message || 'Invalid weight value');
+      return;
+    }
+
+    const weightInKg = parseWeightToKg(quickWeight, unitSystem)!;
+
+    // Double-check for unit confusion
+    const unitCheck = detectWrongUnit(weightInKg, unitSystem);
+    if (unitCheck.isWrong) {
+      // Show confirmation dialog
+      const confirmed = window.confirm(
+        `${unitCheck.message}\n\nClick OK to save as ${weightInKg.toFixed(1)} kg, or Cancel to fix it.`
+      );
+      if (!confirmed) {
+        return;
+      }
+    }
 
     const { error } = await supabase
       .from('daily_tracking')
@@ -299,12 +326,17 @@ export default function DashboardPage() {
         onConflict: 'user_id,tracking_date'
       });
 
-    if (error) throw error;
+    if (error) {
+      toast.error('Failed to save weight');
+      console.error(error);
+      return;
+    }
 
     toast.success('Weight logged!');
     setQuickWeight('');
     fetchCheckIns();
     fetchDailyStats();
+    refreshGoals(); // Refresh daily goals too
   };
 
   // Quick entry for steps
@@ -335,6 +367,16 @@ export default function DashboardPage() {
   const handleBackfillSubmit = async (data: { date: string; weight?: number; steps?: number }) => {
     if (!user) return;
 
+    // Validate weight if provided
+    if (data.weight) {
+      const weightInKg = data.weight; // Already converted in BackfillDataDialog
+
+      if (weightInKg < 30 || weightInKg > 300) {
+        toast.error(`Weight must be between 30-300 kg (66-650 lbs)`);
+        return;
+      }
+    }
+
     const { error } = await supabase
       .from('daily_tracking')
       .upsert({
@@ -346,7 +388,10 @@ export default function DashboardPage() {
         onConflict: 'user_id,tracking_date'
       });
 
-    if (error) throw error;
+    if (error) {
+      toast.error('Failed to save data');
+      return;
+    }
 
     const dateDisplay = new Date(data.date).toLocaleDateString('en-US', {
       month: 'short',
@@ -500,6 +545,20 @@ export default function DashboardPage() {
           <EngagementStreakCard />
         </div>
 
+        {/* Daily Progress Meter - Hero Section */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.2 }}
+          className="mb-6 sm:mb-8"
+        >
+          <DailyProgressMeter
+            userId={user?.id}
+            onGoalComplete={refreshGoals}
+            className="w-full"
+          />
+        </motion.div>
+
         {/* Activity Rings Dashboard */}
         <div className="space-y-4 sm:space-y-6 mb-6 sm:mb-8">
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 sm:gap-4 lg:gap-6">
@@ -570,17 +629,11 @@ export default function DashboardPage() {
             >
               <Card className="bg-slate-900/50 border-slate-800 backdrop-blur-xl h-full">
                 <CardContent className="p-3 flex flex-col items-center justify-center h-full">
-                  <CircularProgress
-                    value={dailyStats.todayWeight || 0}
-                    max={100}
-                    size={80}
-                    strokeWidth={8}
-                    color="#8b5cf6"
-                    icon={BathroomScale as any}
-                    showValue={false}
-                  />
-                  <p className="text-xs text-gray-400 mt-2">Weight</p>
-                  <p className="text-sm font-bold text-white">
+                  <div className="w-20 h-20 rounded-full bg-purple-500/10 border-2 border-purple-500/30 flex items-center justify-center">
+                    <BathroomScale className="w-10 h-10 text-purple-400" />
+                  </div>
+                  <p className="text-xs text-gray-400 mt-2">Current Weight</p>
+                  <p className="text-lg font-bold text-white">
                     {formatWeight(dailyStats.todayWeight, unitSystem)}
                   </p>
                 </CardContent>

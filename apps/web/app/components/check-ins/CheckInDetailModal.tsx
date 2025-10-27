@@ -18,6 +18,8 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import {
   Scale,
   Footprints,
@@ -29,10 +31,19 @@ import {
   TrendingDown,
   TrendingUp,
   Minus,
+  Save,
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { CheckInWithProfile } from '@/lib/services/check-in-service';
 import { toast } from 'sonner';
+import { useUnitPreference } from '@/hooks/useUnitPreference';
+import {
+  parseWeightToKg,
+  weightKgToDisplay,
+  getWeightUnit,
+  isValidWeight,
+  getWeightValidationMessage,
+} from '@/lib/utils/units';
 
 // Mood mapping
 const MOOD_MAP: Record<number, { emoji: string; label: string; color: string }> = {
@@ -85,6 +96,14 @@ export function CheckInDetailModal({
 }: CheckInDetailModalProps) {
   const [isDeleting, setIsDeleting] = useState(false);
   const [isTogglingPrivacy, setIsTogglingPrivacy] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const { unitSystem } = useUnitPreference();
+
+  // Edit form state
+  const [editWeight, setEditWeight] = useState('');
+  const [editSteps, setEditSteps] = useState('');
+  const [editNotes, setEditNotes] = useState('');
 
   if (!checkIn) return null;
 
@@ -140,6 +159,66 @@ export function CheckInDetailModal({
       toast.error('Failed to update privacy setting');
     } finally {
       setIsTogglingPrivacy(false);
+    }
+  };
+
+  // Handle edit mode toggle
+  const handleEditToggle = () => {
+    if (!isEditing) {
+      // Entering edit mode - populate form
+      const weightUnit = getWeightUnit(unitSystem);
+      setEditWeight(checkIn.weight_kg ? weightKgToDisplay(checkIn.weight_kg, unitSystem).toString() : '');
+      setEditSteps(checkIn.steps?.toString() || '');
+      setEditNotes(checkIn.notes || '');
+    }
+    setIsEditing(!isEditing);
+  };
+
+  // Handle save
+  const handleSave = async () => {
+    setIsSaving(true);
+    try {
+      // Validate weight if provided
+      if (editWeight) {
+        const numericWeight = parseFloat(editWeight);
+        if (!isValidWeight(numericWeight, unitSystem)) {
+          const message = getWeightValidationMessage(numericWeight, unitSystem);
+          toast.error(message || 'Invalid weight value');
+          setIsSaving(false);
+          return;
+        }
+      }
+
+      // Convert weight to kg
+      const weightKg = editWeight ? parseWeightToKg(editWeight, unitSystem) : null;
+      const steps = editSteps ? parseInt(editSteps) : null;
+
+      // Call API to update check-in
+      const response = await fetch(`/api/check-ins/${checkIn.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          weight_kg: weightKg,
+          steps,
+          notes: editNotes || null,
+        }),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Failed to update check-in');
+      }
+
+      toast.success('Check-in updated successfully');
+      setIsEditing(false);
+
+      // Refresh the page or call a callback to reload data
+      window.location.reload();
+    } catch (error: any) {
+      console.error('Error updating check-in:', error);
+      toast.error(error.message || 'Failed to update check-in');
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -220,47 +299,123 @@ export function CheckInDetailModal({
               >
                 {/* Main Metrics */}
                 <motion.div variants={itemVariants} className="p-6 bg-slate-800/50 rounded-lg border border-slate-700">
-                  <div className="grid grid-cols-2 gap-6">
-                    {/* Weight */}
-                    {hasWeight && (
-                      <div>
-                        <p className="text-sm text-slate-400 mb-2">Weight</p>
-                        <div className="flex items-baseline gap-2">
-                          <span className="text-4xl font-bold text-purple-300">
-                            {checkIn.weight_kg!.toFixed(1)}
-                          </span>
-                          <span className="text-xl text-purple-400/70">kg</span>
+                  {isEditing ? (
+                    // Edit Mode
+                    <div className="space-y-4">
+                      <div className="grid grid-cols-2 gap-4">
+                        {/* Edit Weight */}
+                        <div className="space-y-2">
+                          <Label htmlFor="edit-weight" className="text-sm font-medium text-gray-300 flex items-center gap-2">
+                            Weight
+                            <span className="ml-auto px-2 py-0.5 bg-purple-500/20 text-purple-300 rounded text-xs font-semibold border border-purple-500/30">
+                              {getWeightUnit(unitSystem)}
+                            </span>
+                          </Label>
+                          <Input
+                            id="edit-weight"
+                            type="number"
+                            step="0.1"
+                            placeholder={unitSystem === 'metric' ? '70.0' : '154.0'}
+                            value={editWeight}
+                            onChange={(e) => setEditWeight(e.target.value)}
+                            className="bg-slate-700/50 border-slate-600 text-white"
+                          />
                         </div>
-                        {weightDelta !== null && (
-                          <div className={`flex items-center gap-1 mt-2 text-base font-medium ${
-                            weightDelta < 0 ? 'text-green-400' : weightDelta > 0 ? 'text-red-400' : 'text-slate-400'
-                          }`}>
-                            {weightDelta < 0 ? <TrendingDown className="h-4 w-4" /> : weightDelta > 0 ? <TrendingUp className="h-4 w-4" /> : <Minus className="h-4 w-4" />}
-                            {Math.abs(weightDelta).toFixed(1)} kg from yesterday
-                          </div>
-                        )}
-                      </div>
-                    )}
 
-                    {/* Steps */}
-                    {hasSteps && (
-                      <div>
-                        <p className="text-sm text-slate-400 mb-2">Steps</p>
-                        <div className="flex items-baseline gap-2">
-                          <span className="text-3xl font-bold text-indigo-300">
-                            {checkIn.steps!.toLocaleString()}
-                          </span>
-                          <span className="text-lg text-indigo-400/70">steps</span>
+                        {/* Edit Steps */}
+                        <div className="space-y-2">
+                          <Label htmlFor="edit-steps" className="text-sm font-medium text-gray-300">
+                            Steps
+                          </Label>
+                          <Input
+                            id="edit-steps"
+                            type="number"
+                            placeholder="10000"
+                            value={editSteps}
+                            onChange={(e) => setEditSteps(e.target.value)}
+                            className="bg-slate-700/50 border-slate-600 text-white"
+                          />
                         </div>
-                        {stepsDelta !== null && (
-                          <div className={`flex items-center gap-1 mt-2 text-base text-indigo-400`}>
-                            {stepsDelta > 0 ? <TrendingUp className="h-4 w-4" /> : stepsDelta < 0 ? <TrendingDown className="h-4 w-4" /> : <Minus className="h-4 w-4" />}
-                            {stepsDelta > 0 ? '+' : ''}{stepsDelta.toLocaleString()} from yesterday
-                          </div>
-                        )}
                       </div>
-                    )}
-                  </div>
+
+                      {/* Edit Notes */}
+                      <div className="space-y-2">
+                        <Label htmlFor="edit-notes" className="text-sm font-medium text-gray-300">
+                          Notes (optional)
+                        </Label>
+                        <Input
+                          id="edit-notes"
+                          type="text"
+                          placeholder="Add notes..."
+                          value={editNotes}
+                          onChange={(e) => setEditNotes(e.target.value)}
+                          className="bg-slate-700/50 border-slate-600 text-white"
+                        />
+                      </div>
+
+                      {/* Save/Cancel Buttons */}
+                      <div className="flex gap-2 pt-2">
+                        <Button
+                          onClick={handleSave}
+                          disabled={isSaving}
+                          className="flex-1 bg-purple-600 hover:bg-purple-700"
+                        >
+                          {isSaving ? 'Saving...' : 'Save Changes'}
+                        </Button>
+                        <Button
+                          variant="outline"
+                          onClick={() => setIsEditing(false)}
+                          disabled={isSaving}
+                          className="flex-1"
+                        >
+                          Cancel
+                        </Button>
+                      </div>
+                    </div>
+                  ) : (
+                    // View Mode
+                    <div className="grid grid-cols-2 gap-6">
+                      {/* Weight */}
+                      {hasWeight && (
+                        <div>
+                          <p className="text-sm text-slate-400 mb-2">Weight</p>
+                          <div className="flex items-baseline gap-2">
+                            <span className="text-4xl font-bold text-purple-300">
+                              {weightKgToDisplay(checkIn.weight_kg!, unitSystem).toFixed(1)}
+                            </span>
+                            <span className="text-xl text-purple-400/70">{getWeightUnit(unitSystem)}</span>
+                          </div>
+                          {weightDelta !== null && (
+                            <div className={`flex items-center gap-1 mt-2 text-base font-medium ${
+                              weightDelta < 0 ? 'text-green-400' : weightDelta > 0 ? 'text-red-400' : 'text-slate-400'
+                            }`}>
+                              {weightDelta < 0 ? <TrendingDown className="h-4 w-4" /> : weightDelta > 0 ? <TrendingUp className="h-4 w-4" /> : <Minus className="h-4 w-4" />}
+                              {Math.abs(weightDelta).toFixed(1)} kg from yesterday
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Steps */}
+                      {hasSteps && (
+                        <div>
+                          <p className="text-sm text-slate-400 mb-2">Steps</p>
+                          <div className="flex items-baseline gap-2">
+                            <span className="text-3xl font-bold text-indigo-300">
+                              {checkIn.steps!.toLocaleString()}
+                            </span>
+                            <span className="text-lg text-indigo-400/70">steps</span>
+                          </div>
+                          {stepsDelta !== null && (
+                            <div className={`flex items-center gap-1 mt-2 text-base text-indigo-400`}>
+                              {stepsDelta > 0 ? <TrendingUp className="h-4 w-4" /> : stepsDelta < 0 ? <TrendingDown className="h-4 w-4" /> : <Minus className="h-4 w-4" />}
+                              {stepsDelta > 0 ? '+' : ''}{stepsDelta.toLocaleString()} from yesterday
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </motion.div>
 
                 {/* Mood & Energy */}
@@ -346,14 +501,12 @@ export function CheckInDetailModal({
                 )}
 
                 {/* Actions */}
-                {canEdit && (
+                {canEdit && !isEditing && (
                   <motion.div variants={itemVariants} className="flex gap-2 border-t border-slate-800 pt-4">
-                    {onEdit && (
-                      <Button variant="outline" onClick={onEdit} className="gap-2">
-                        <Edit className="h-4 w-4" />
-                        Edit
-                      </Button>
-                    )}
+                    <Button variant="outline" onClick={handleEditToggle} className="gap-2">
+                      <Edit className="h-4 w-4" />
+                      Edit
+                    </Button>
                     {onTogglePrivacy && (
                       <Button
                         variant="outline"

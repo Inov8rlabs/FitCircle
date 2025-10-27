@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { MobileAPIService } from '@/lib/services/mobile-api-service';
+import { DailyGoalService } from '@/lib/services/daily-goals';
 
 // Validation schema for POST
 const trackingSchema = z.object({
@@ -137,6 +138,23 @@ export async function POST(request: NextRequest) {
         is_override: validatedData.isOverride,
       }
     );
+
+    // Update daily goal completion based on tracking data
+    try {
+      await DailyGoalService.updateGoalCompletion(
+        user.id,
+        validatedData.trackingDate,
+        {
+          steps: validatedData.steps,
+          weight_kg: validatedData.weightKg,
+          mood_score: validatedData.moodScore,
+          energy_level: validatedData.energyLevel,
+        }
+      );
+    } catch (goalError) {
+      // Log but don't fail the request if goal update fails
+      console.error('[Mobile API] Failed to update goal completion:', goalError);
+    }
 
     // Get updated stats
     const result = await MobileAPIService.getDailyTrackingWithStats(user.id, { limit: 30 });

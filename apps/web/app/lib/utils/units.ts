@@ -111,14 +111,63 @@ export function getWeightPlaceholder(unitSystem: UnitSystem = 'metric'): string 
 }
 
 /**
- * Validate weight value
+ * Validate weight value with realistic bounds
  */
 export function isValidWeight(
   value: number,
   unitSystem: UnitSystem = 'metric'
 ): boolean {
-  const maxWeight = unitSystem === 'imperial' ? 2200 : 1000; // Max weight in respective units
-  const minWeight = unitSystem === 'imperial' ? 2.2 : 1; // Min weight in respective units
+  const maxWeight = unitSystem === 'imperial' ? 650 : 300; // More realistic max
+  const minWeight = unitSystem === 'imperial' ? 66 : 30;   // More realistic min
+  return value >= minWeight && value <= maxWeight;
+}
 
-  return value > minWeight && value < maxWeight;
+/**
+ * Get a human-readable error message for invalid weights
+ */
+export function getWeightValidationMessage(
+  value: number,
+  unitSystem: UnitSystem = 'metric'
+): string {
+  const maxWeight = unitSystem === 'imperial' ? 650 : 300;
+  const minWeight = unitSystem === 'imperial' ? 66 : 30;
+  const unit = getWeightUnit(unitSystem);
+
+  if (value < minWeight) {
+    return `Weight must be at least ${minWeight} ${unit}`;
+  }
+  if (value > maxWeight) {
+    return `Weight must be less than ${maxWeight} ${unit}`;
+  }
+  return '';
+}
+
+/**
+ * Check if weight might be entered in wrong units
+ * Returns suggested correction if detected
+ */
+export function detectWrongUnit(
+  weightKg: number,
+  expectedUnit: UnitSystem
+): { isWrong: boolean; suggestedValue?: number; message?: string } {
+  // If expecting imperial but got kg value that looks like lbs
+  if (expectedUnit === 'imperial' && weightKg > 150 && weightKg < 400) {
+    const asLbs = kgToLbs(weightKg);
+    return {
+      isWrong: true,
+      suggestedValue: lbsToKg(weightKg),
+      message: `Did you mean ${weightKg} lbs? That would be ${lbsToKg(weightKg).toFixed(1)} kg.`
+    };
+  }
+
+  // If expecting metric but got lbs value that looks like kg
+  if (expectedUnit === 'metric' && weightKg > 150 && weightKg < 400) {
+    return {
+      isWrong: true,
+      suggestedValue: kgToLbs(weightKg),
+      message: `Did you mean ${weightKg} kg? (${kgToLbs(weightKg).toFixed(1)} lbs)`
+    };
+  }
+
+  return { isWrong: false };
 }

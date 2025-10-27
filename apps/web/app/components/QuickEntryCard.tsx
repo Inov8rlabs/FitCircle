@@ -169,7 +169,10 @@ export function QuickEntryCard({
             />
             {unit && value && (
               <div className="absolute right-4 top-1/2 -translate-y-1/2">
-                <span className="text-lg font-medium text-gray-400">{unit}</span>
+                <span className={cn(
+                  "text-xl sm:text-2xl font-bold",
+                  colors.text
+                )}>{unit}</span>
               </div>
             )}
             {value && !isSubmitting && (
@@ -181,6 +184,21 @@ export function QuickEntryCard({
               </button>
             )}
           </div>
+
+          {/* Unit indicator below input for better visibility */}
+          {unit && !value && (
+            <div className="mt-2 text-center">
+              <span className={cn(
+                "inline-flex items-center px-3 py-1 rounded-full text-sm font-semibold",
+                colors.bg,
+                colors.text,
+                "border",
+                colors.border
+              )}>
+                Entering in {unit}
+              </span>
+            </div>
+          )}
 
           {/* Submit Button */}
           <div className="mt-4">

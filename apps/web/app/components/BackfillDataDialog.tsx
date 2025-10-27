@@ -117,8 +117,11 @@ export function BackfillDataDialog({
           {/* Weight and Steps */}
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="backfill-weight" className="text-sm font-medium text-gray-300">
-                Weight ({weightUnit})
+              <Label htmlFor="backfill-weight" className="text-sm font-medium text-gray-300 flex items-center gap-2">
+                Weight
+                <span className="ml-auto px-2 py-0.5 bg-purple-500/20 text-purple-300 rounded text-xs font-semibold border border-purple-500/30">
+                  {weightUnit}
+                </span>
               </Label>
               <div className="relative">
                 <BathroomScale className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-500" size={16} />

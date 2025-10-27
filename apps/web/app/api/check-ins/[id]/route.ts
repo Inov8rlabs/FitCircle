@@ -157,6 +157,101 @@ export async function GET(
 }
 
 /**
+ * PATCH /api/check-ins/[id]
+ *
+ * Update a check-in (owner only)
+ */
+export async function PATCH(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const user = await getAuthenticatedUser(request);
+
+    if (!user) {
+      return NextResponse.json(
+        { error: 'Unauthorized' },
+        { status: 401 }
+      );
+    }
+
+    const { id: checkInId } = await params;
+    const body = await request.json();
+    const { weight_kg, steps, notes, mood_score, energy_level } = body;
+
+    // Validate weight if provided
+    if (weight_kg !== undefined && weight_kg !== null) {
+      if (weight_kg < 30 || weight_kg > 300) {
+        return NextResponse.json(
+          { error: 'Weight must be between 30-300 kg' },
+          { status: 400 }
+        );
+      }
+    }
+
+    const supabase = createAdminSupabase();
+
+    // Verify ownership before updating
+    const { data: checkIn } = await supabase
+      .from('daily_tracking')
+      .select('user_id')
+      .eq('id', checkInId)
+      .single();
+
+    if (!checkIn) {
+      return NextResponse.json(
+        { error: 'Check-in not found' },
+        { status: 404 }
+      );
+    }
+
+    // Only the owner can update their check-in
+    if (checkIn.user_id !== user.id) {
+      return NextResponse.json(
+        { error: 'Not authorized to update this check-in' },
+        { status: 403 }
+      );
+    }
+
+    // Build update object
+    const updateData: any = {
+      updated_at: new Date().toISOString(),
+    };
+
+    if (weight_kg !== undefined) updateData.weight_kg = weight_kg;
+    if (steps !== undefined) updateData.steps = steps;
+    if (notes !== undefined) updateData.notes = notes;
+    if (mood_score !== undefined) updateData.mood_score = mood_score;
+    if (energy_level !== undefined) updateData.energy_level = energy_level;
+
+    // Update the check-in
+    const { data, error } = await supabase
+      .from('daily_tracking')
+      .update(updateData)
+      .eq('id', checkInId)
+      .eq('user_id', user.id) // Ensure user owns this check-in
+      .select()
+      .single();
+
+    if (error) {
+      console.error('Update error:', error);
+      return NextResponse.json(
+        { error: 'Failed to update check-in' },
+        { status: 500 }
+      );
+    }
+
+    return NextResponse.json({ success: true, data });
+  } catch (error) {
+    console.error('Update check-in error:', error);
+    return NextResponse.json(
+      { error: 'Internal server error' },
+      { status: 500 }
+    );
+  }
+}
+
+/**
  * DELETE /api/check-ins/[id]
  *
  * Delete a check-in (owner only)
