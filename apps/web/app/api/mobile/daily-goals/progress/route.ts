@@ -76,11 +76,13 @@ export async function GET(request: NextRequest) {
     });
 
     const summary = {
-      totalCount,
-      completedCount,
-      progressPercentage,
       date: targetDate,
-      goals: goalsWithProgress, // Include goals array for iOS
+      goals: goalsWithProgress,
+      overallProgress: progressPercentage / 100, // iOS expects 0.0-1.0, not 0-100
+      completedCount,
+      totalCount,
+      allCompleted: totalCount > 0 && completedCount === totalCount,
+      streak: 0, // TODO: Calculate actual streak from goal_completion_history
     };
 
     console.log(`[Mobile Daily Goals Progress] Summary: ${completedCount}/${totalCount} goals complete (${progressPercentage}%)`);
