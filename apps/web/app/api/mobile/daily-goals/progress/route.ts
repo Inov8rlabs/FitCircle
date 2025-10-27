@@ -64,16 +64,14 @@ export async function GET(request: NextRequest) {
     const progressPercentage = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
 
     // Build goals array with completion status
+    // iOS expects { goal: DailyGoal, progress: GoalProgress?, completionPercentage, isCompleted }
     const goalsWithProgress = (goals || []).map(goal => {
       const completion = completionMap.get(goal.id);
       return {
-        id: goal.id,
-        goal_type: goal.goal_type,
-        target_value: goal.target_value,
-        unit: goal.unit,
-        is_completed: completion?.is_completed || false,
+        goal: goal, // iOS expects nested goal object
+        progress: null, // TODO: Add actual progress tracking data
         completion_percentage: completion?.completion_percentage || 0,
-        is_primary: goal.is_primary,
+        is_completed: completion?.is_completed || false,
       };
     });
 
