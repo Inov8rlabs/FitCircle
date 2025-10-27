@@ -23,6 +23,7 @@ import {
   MAX_DAILY_STEPS,
   MAX_WEEKLY_WORKOUTS,
 } from '../types/circle';
+import { LeaderboardService } from './leaderboard-service';
 
 export class CircleService {
   // ============================================================================
@@ -671,35 +672,35 @@ export class CircleService {
 
   /**
    * Calculate progress percentage
+   * Uses LeaderboardService for consistent calculation across all platforms
    */
   static calculateProgress(member: CircleMember, currentValue: number): number {
     if (!member.goal_type || !member.goal_target_value) {
       return 0;
     }
 
-    let progress = 0;
+    // Use LeaderboardService for consistent calculation
+    const startValue = member.goal_start_value || 0;
+    const targetValue = member.goal_target_value;
 
-    if (member.goal_type === 'weight_loss') {
-      // For decreasing metrics
-      const startValue = member.goal_start_value || 0;
-      const targetValue = member.goal_target_value;
+    console.log(`[CircleService.calculateProgress] Calculating progress:`, {
+      userId: member.user_id,
+      goalType: member.goal_type,
+      startValue,
+      currentValue,
+      targetValue,
+    });
 
-      if (startValue === targetValue) {
-        progress = 100;
-      } else {
-        progress = ((startValue - currentValue) / (startValue - targetValue)) * 100;
-      }
-    } else {
-      // For increasing metrics
-      if (member.goal_target_value === 0) {
-        progress = 0;
-      } else {
-        progress = (currentValue / member.goal_target_value) * 100;
-      }
-    }
+    const progress = LeaderboardService.calculateProgress(
+      startValue,
+      currentValue,
+      targetValue,
+      member.goal_type
+    );
 
-    // Cap at 0-100 range
-    return Math.min(100, Math.max(0, Math.round(progress * 10) / 10));
+    console.log(`[CircleService.calculateProgress] Result: ${progress}%`);
+
+    return Math.round(progress * 10) / 10; // Round to 1 decimal place
   }
 
   /**
@@ -824,11 +825,22 @@ export class CircleService {
       }
     }
 
-    // Sort by progress, then by consistency, then by total check-ins, then by join date
-    const sorted = (members || []).sort((a, b) => {
-      // Primary: Progress percentage
-      if (a.progress_percentage !== b.progress_percentage) {
-        return b.progress_percentage - a.progress_percentage;
+    // Recalculate progress for all members before sorting
+    const membersWithRecalculatedProgress = (members || []).map(member => ({
+      ...member,
+      recalculated_progress: LeaderboardService.calculateProgress(
+        member.goal_start_value || 0,
+        member.current_value || 0,
+        member.goal_target_value || 0,
+        member.goal_type || 'weight_loss'
+      ),
+    }));
+
+    // Sort by recalculated progress, then by consistency, then by total check-ins, then by join date
+    const sorted = membersWithRecalculatedProgress.sort((a, b) => {
+      // Primary: Recalculated progress percentage (not cached value)
+      if (a.recalculated_progress !== b.recalculated_progress) {
+        return b.recalculated_progress - a.recalculated_progress;
       }
 
       // Secondary: Total check-ins (consistency)
@@ -848,24 +860,34 @@ export class CircleService {
     // Check if checked in today
     const today = new Date().toISOString().split('T')[0];
 
-    return sorted.map((member, index) => ({
-      rank: index + 1,
-      user_id: member.user_id,
-      display_name: (member.profiles as any).display_name,
-      avatar_url: (member.profiles as any).avatar_url,
-      progress_percentage: member.progress_percentage,
-      streak_days: member.streak_days,
-      last_check_in_at: member.last_check_in_at,
-      checked_in_today: member.last_check_in_at
-        ? new Date(member.last_check_in_at).toISOString().split('T')[0] === today
-        : false,
-      high_fives_received: 0, // TODO: Calculate from circle_encouragements table
-      current_value: member.current_value,
-      starting_value: member.goal_start_value,
-      target_value: member.goal_target_value,
-      goal_type: member.goal_type,
-      goal_unit: member.goal_unit,
-    }));
+    return sorted.map((member, index) => {
+      console.log(`[CircleService.getLeaderboard] User ${member.user_id} progress:`, {
+        storedProgress: member.progress_percentage,
+        recalculatedProgress: member.recalculated_progress,
+        startValue: member.goal_start_value,
+        currentValue: member.current_value,
+        targetValue: member.goal_target_value,
+      });
+
+      return {
+        rank: index + 1,
+        user_id: member.user_id,
+        display_name: (member.profiles as any).display_name,
+        avatar_url: (member.profiles as any).avatar_url,
+        progress_percentage: member.recalculated_progress, // Use recalculated value from sorting
+        streak_days: member.streak_days,
+        last_check_in_at: member.last_check_in_at,
+        checked_in_today: member.last_check_in_at
+          ? new Date(member.last_check_in_at).toISOString().split('T')[0] === today
+          : false,
+        high_fives_received: 0, // TODO: Calculate from circle_encouragements table
+        current_value: member.current_value,
+        starting_value: member.goal_start_value,
+        target_value: member.goal_target_value,
+        goal_type: member.goal_type,
+        goal_unit: member.goal_unit,
+      };
+    });
   }
 
   /**

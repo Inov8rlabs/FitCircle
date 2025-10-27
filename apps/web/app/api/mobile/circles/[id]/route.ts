@@ -35,35 +35,42 @@ export async function GET(
     // Get members
     const members = await CircleService.getCircleMembers(circleId);
 
-    // Get leaderboard
+    // Get leaderboard (contains recalculated progress)
     const leaderboard = await CircleService.getLeaderboard(circleId);
 
-    // Get user's progress if they're a member
+    // Get user's progress if they're a member - use recalculated value from leaderboard
+    const userLeaderboardEntry = leaderboard.find((entry) => entry.user_id === user.id);
     const userMember = members.find((m) => m.user_id === user.id);
 
-    const userProgress = userMember
+    const userProgress = userLeaderboardEntry
       ? {
-          progress_percentage: userMember.progress_percentage,
-          current_value: userMember.current_value,
-          goal_target_value: userMember.goal_target_value,
-          streak_days: userMember.streak_days,
-          check_ins_count: userMember.check_ins_count,
+          progress_percentage: userLeaderboardEntry.progress_percentage, // Use recalculated value
+          current_value: userLeaderboardEntry.current_value,
+          goal_target_value: userLeaderboardEntry.target_value,
+          streak_days: userLeaderboardEntry.streak_days,
+          check_ins_count: userMember?.check_ins_count || 0,
         }
       : null;
 
     // Get circle stats
     const stats = await CircleService.getCircleStats(circleId);
 
+    // Map participants to include recalculated progress from leaderboard
+    const participantsWithProgress = members.map((m) => {
+      const leaderboardEntry = leaderboard.find((entry) => entry.user_id === m.user_id);
+      return {
+        user_id: m.user_id,
+        progress_percentage: leaderboardEntry?.progress_percentage || 0, // Use recalculated value
+        streak_days: m.streak_days,
+        joined_at: m.joined_at,
+      };
+    });
+
     const response = NextResponse.json({
       success: true,
       data: {
         ...circle,
-        participants: members.map((m) => ({
-          user_id: m.user_id,
-          progress_percentage: m.progress_percentage,
-          streak_days: m.streak_days,
-          joined_at: m.joined_at,
-        })),
+        participants: participantsWithProgress,
         leaderboard,
         userProgress,
         stats,

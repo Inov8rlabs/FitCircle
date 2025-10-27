@@ -1,4 +1,5 @@
 import { createAdminSupabase } from '../supabase-admin';
+import { LeaderboardService } from './leaderboard-service';
 
 // ============================================================================
 // TYPES
@@ -331,19 +332,6 @@ export class UserService {
       }
     }
 
-    // If show_progress is false, return only percentage
-    if (!privacy.show_progress && userId !== requesterId) {
-      return {
-        starting_weight: null,
-        current_weight: null,
-        target_weight: null,
-        progress_percentage: progressData.progress_percentage || 0,
-        weight_lost: 0,
-        weight_to_go: 0,
-        last_updated: progressData.updated_at,
-      };
-    }
-
     // Calculate derived values
     const startingWeight = progressData.goal_start_value || 0;
     const currentWeight = currentWeightValue || 0;
@@ -351,13 +339,34 @@ export class UserService {
     const weightLost = startingWeight - currentWeight;
     const weightToGo = currentWeight - targetWeight;
 
-    console.log(`[UserService.getUserProgress] Progress: ${progressData.progress_percentage}%, ${weightLost}kg lost`);
+    // Recalculate progress in real-time using LeaderboardService
+    const recalculatedProgress = LeaderboardService.calculateProgress(
+      startingWeight,
+      currentWeight,
+      targetWeight,
+      'weight_loss' // Assume weight loss for user progress
+    );
+
+    console.log(`[UserService.getUserProgress] Progress: ${recalculatedProgress}% (cached: ${progressData.progress_percentage}%), ${weightLost}kg lost`);
+
+    // If show_progress is false, return only percentage
+    if (!privacy.show_progress && userId !== requesterId) {
+      return {
+        starting_weight: null,
+        current_weight: null,
+        target_weight: null,
+        progress_percentage: recalculatedProgress,
+        weight_lost: 0,
+        weight_to_go: 0,
+        last_updated: progressData.updated_at,
+      };
+    }
 
     return {
       starting_weight: startingWeight,
       current_weight: currentWeight,
       target_weight: targetWeight,
-      progress_percentage: progressData.progress_percentage || 0,
+      progress_percentage: recalculatedProgress, // Use recalculated value
       weight_lost: Math.round(weightLost * 10) / 10,
       weight_to_go: Math.round(Math.max(0, weightToGo) * 10) / 10,
       last_updated: progressData.updated_at,
