@@ -12,11 +12,12 @@ const createGoalSchema = z.object({
   goal_type: z.enum(['steps', 'weight_log', 'workout', 'mood', 'energy', 'custom']),
   target_value: z.number().positive().optional(),
   unit: z.string().optional(),
-  start_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
-  end_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().nullable(),
+  start_date: z.string().optional(), // Accept any date string, will normalize to YYYY-MM-DD
+  end_date: z.string().optional().nullable(),
   frequency: z.enum(['daily', 'weekdays', 'weekends', 'custom']).optional(),
   is_primary: z.boolean().optional(),
   challenge_id: z.string().uuid().optional().nullable(),
+  auto_adjust_enabled: z.boolean().optional(), // iOS sends this
 });
 
 /**
@@ -135,6 +136,18 @@ export async function POST(request: NextRequest) {
     const today = new Date().toISOString().split('T')[0];
     const goalData = validationResult.data;
 
+    // Normalize date strings (iOS sends full timestamps, we need YYYY-MM-DD)
+    const normalizeDate = (dateStr: string | undefined | null): string | null => {
+      if (!dateStr) return null;
+      // Extract date part from ISO8601 timestamp or use as-is if already a date
+      return dateStr.split('T')[0];
+    };
+
+    const startDate = normalizeDate(goalData.start_date) || today;
+    const endDate = normalizeDate(goalData.end_date);
+
+    console.log(`[Mobile Daily Goals] Normalized dates - start: ${startDate}, end: ${endDate}`);
+
     // Insert goal
     const { data, error } = await supabaseAdmin
       .from('daily_goals')
@@ -145,10 +158,11 @@ export async function POST(request: NextRequest) {
         target_value: goalData.target_value,
         unit: goalData.unit,
         frequency: goalData.frequency || 'daily',
-        start_date: goalData.start_date || today,
-        end_date: goalData.end_date || null,
+        start_date: startDate,
+        end_date: endDate,
         is_active: true,
         is_primary: goalData.is_primary || false,
+        auto_adjust_enabled: goalData.auto_adjust_enabled || false,
       })
       .select()
       .single();
