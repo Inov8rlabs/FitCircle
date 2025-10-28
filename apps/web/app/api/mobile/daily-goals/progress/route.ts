@@ -47,6 +47,14 @@ export async function GET(request: NextRequest) {
       );
     }
 
+    // Get today's tracking data for actual values
+    const { data: tracking } = await supabaseAdmin
+      .from('daily_tracking')
+      .select('*')
+      .eq('user_id', user.id)
+      .eq('tracking_date', targetDate)
+      .maybeSingle();
+
     // Get completion history for the target date
     const { data: completions } = await supabaseAdmin
       .from('goal_completion_history')
@@ -58,22 +66,57 @@ export async function GET(request: NextRequest) {
       (completions || []).map(c => [c.daily_goal_id, c])
     );
 
-    // Calculate completion stats
-    const completedCount = (completions || []).filter(c => c.is_completed).length;
-    const totalCount = goals?.length || 0;
-    const progressPercentage = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
-
     // Build goals array with completion status
     // iOS expects { goal: DailyGoal, progress: GoalProgress?, completionPercentage, isCompleted }
     const goalsWithProgress = (goals || []).map(goal => {
       const completion = completionMap.get(goal.id);
+
+      // Calculate real-time completion percentage from actual tracking data
+      let completionPercentage = 0;
+      let actualValue: number | null = null;
+
+      if (tracking && goal.target_value) {
+        switch (goal.goal_type) {
+          case 'steps':
+            actualValue = tracking.steps;
+            if (actualValue !== null) {
+              completionPercentage = Math.min((actualValue / goal.target_value) * 100, 100);
+            }
+            break;
+          case 'weight_log':
+            actualValue = tracking.weight_kg !== null ? 1 : 0;
+            completionPercentage = actualValue === 1 ? 100 : 0;
+            break;
+          case 'mood':
+            actualValue = tracking.mood_score;
+            completionPercentage = actualValue !== null ? 100 : 0;
+            break;
+          case 'energy':
+            actualValue = tracking.energy_level;
+            completionPercentage = actualValue !== null ? 100 : 0;
+            break;
+        }
+      }
+
+      const isCompleted = completionPercentage >= 100;
+
       return {
         goal: goal, // iOS expects nested goal object
-        progress: null, // TODO: Add actual progress tracking data
-        completion_percentage: completion?.completion_percentage || 0,
-        is_completed: completion?.is_completed || false,
+        progress: actualValue !== null ? {
+          actual_value: actualValue,
+          target_value: goal.target_value,
+          completion_percentage: parseFloat(completionPercentage.toFixed(2)),
+          is_completed: isCompleted,
+        } : null,
+        completion_percentage: parseFloat(completionPercentage.toFixed(2)),
+        is_completed: isCompleted,
       };
     });
+
+    // Calculate completion stats based on real-time data
+    const completedCount = goalsWithProgress.filter(g => g.is_completed).length;
+    const totalCount = goals?.length || 0;
+    const progressPercentage = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
 
     const summary = {
       date: targetDate,
