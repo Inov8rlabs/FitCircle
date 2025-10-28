@@ -77,10 +77,10 @@ CREATE POLICY "Circle members can view leaderboard entries"
     ON fitcircle_leaderboard_entries FOR SELECT
     USING (
         EXISTS (
-            SELECT 1 FROM circle_members
-            WHERE circle_members.circle_id = fitcircle_leaderboard_entries.fitcircle_id
-            AND circle_members.user_id = auth.uid()
-            AND circle_members.is_active = TRUE
+            SELECT 1 FROM challenge_participants
+            WHERE challenge_participants.challenge_id = fitcircle_leaderboard_entries.fitcircle_id
+            AND challenge_participants.user_id = auth.uid()
+            AND challenge_participants.status = 'active'
         )
     );
 
@@ -112,10 +112,10 @@ CREATE POLICY "Circle members can view submissions"
     ON fitcircle_data_submissions FOR SELECT
     USING (
         EXISTS (
-            SELECT 1 FROM circle_members
-            WHERE circle_members.circle_id = fitcircle_data_submissions.fitcircle_id
-            AND circle_members.user_id = auth.uid()
-            AND circle_members.is_active = TRUE
+            SELECT 1 FROM challenge_participants
+            WHERE challenge_participants.challenge_id = fitcircle_data_submissions.fitcircle_id
+            AND challenge_participants.user_id = auth.uid()
+            AND challenge_participants.status = 'active'
         )
     );
 
