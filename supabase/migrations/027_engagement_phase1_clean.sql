@@ -139,25 +139,7 @@ ADD COLUMN IF NOT EXISTS submission_timestamp TIMESTAMPTZ;
 CREATE INDEX IF NOT EXISTS idx_daily_tracking_submitted ON daily_tracking(user_id, submitted_to_fitcircles, tracking_date DESC);
 
 -- ============================================================================
--- 5. UPDATE TRIGGERS (Simple timestamp updates only)
--- ============================================================================
-
-CREATE OR REPLACE FUNCTION update_weekly_goals_timestamp()
-RETURNS TRIGGER AS $$
-BEGIN
-    NEW.updated_at = NOW();
-    RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;
-
-DROP TRIGGER IF EXISTS weekly_goals_updated_at ON weekly_goals;
-CREATE TRIGGER weekly_goals_updated_at
-    BEFORE UPDATE ON weekly_goals
-    FOR EACH ROW
-    EXECUTE FUNCTION update_weekly_goals_timestamp();
-
--- ============================================================================
--- 6. HELPER VIEWS (For easier querying)
+-- 5. HELPER VIEWS (For easier querying)
 -- ============================================================================
 
 -- View for current weekly goals (most recent week for each user)
