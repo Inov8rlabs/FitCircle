@@ -283,7 +283,10 @@ export class DailyGoalService {
     const supabase = supabaseClient || createAdminSupabase();
 
     try {
-      const today = new Date().toISOString().split('T')[0];
+      // Import timezone utilities to get "today" in user's timezone
+      const { getUserTimezone, getTodayInTimezone } = await import('../utils/timezone');
+      const userTimezone = await getUserTimezone(userId, supabase);
+      const today = getTodayInTimezone(userTimezone);
 
       const { data, error } = await supabase
         .from('daily_goals')
@@ -325,6 +328,8 @@ export class DailyGoalService {
     const supabase = supabaseClient || createAdminSupabase();
 
     try {
+      console.log(`[updateGoalCompletion] Updating goals for user ${userId}, date ${date}`, trackingData);
+
       // 1. Get active daily goals for this date
       const { data: goals, error: goalsError } = await supabase
         .from('daily_goals')
@@ -335,8 +340,11 @@ export class DailyGoalService {
         .or(`end_date.is.null,end_date.gte.${date}`);
 
       if (goalsError || !goals) {
+        console.error('[updateGoalCompletion] Failed to fetch goals:', goalsError);
         return { success: false, completions: [], error: new Error('Failed to fetch goals') };
       }
+
+      console.log(`[updateGoalCompletion] Found ${goals.length} active goals for date ${date}`);
 
       // 2. Calculate completion for each goal
       const completions: Partial<GoalCompletion>[] = [];
@@ -346,32 +354,44 @@ export class DailyGoalService {
         let actualValue: number | null = null;
         let completionPercentage = 0;
         let completedAt: string | null = null;
+        let isCompleted = false;
 
         switch (goal.goal_type) {
           case 'steps':
-            actualValue = trackingData.steps || null;
+            actualValue = trackingData.steps !== undefined ? trackingData.steps : null;
             if (actualValue !== null && goal.target_value) {
               completionPercentage = Math.min((actualValue / goal.target_value) * 100, 100);
-              if (completionPercentage >= 100) completedAt = now;
+              if (completionPercentage >= 100) {
+                completedAt = now;
+                isCompleted = true;
+              }
             }
+            console.log(`[updateGoalCompletion] Steps goal: actual=${actualValue}, target=${goal.target_value}, completion=${completionPercentage.toFixed(2)}%`);
             break;
 
           case 'weight_log':
-            actualValue = trackingData.weight_kg !== undefined ? 1 : 0;
+            // Weight log goal is binary: 1 if weight was logged, 0 if not
+            actualValue = trackingData.weight_kg !== undefined && trackingData.weight_kg !== null ? 1 : 0;
             completionPercentage = actualValue === 1 ? 100 : 0;
-            if (completionPercentage >= 100) completedAt = now;
+            isCompleted = actualValue === 1;
+            if (isCompleted) completedAt = now;
+            console.log(`[updateGoalCompletion] Weight log goal: actual=${actualValue}, completion=${completionPercentage}%`);
             break;
 
           case 'mood':
-            actualValue = trackingData.mood_score || null;
+            actualValue = trackingData.mood_score !== undefined ? trackingData.mood_score : null;
             completionPercentage = actualValue !== null ? 100 : 0;
-            if (completionPercentage >= 100) completedAt = now;
+            isCompleted = actualValue !== null;
+            if (isCompleted) completedAt = now;
+            console.log(`[updateGoalCompletion] Mood goal: actual=${actualValue}, completion=${completionPercentage}%`);
             break;
 
           case 'energy':
-            actualValue = trackingData.energy_level || null;
+            actualValue = trackingData.energy_level !== undefined ? trackingData.energy_level : null;
             completionPercentage = actualValue !== null ? 100 : 0;
-            if (completionPercentage >= 100) completedAt = now;
+            isCompleted = actualValue !== null;
+            if (isCompleted) completedAt = now;
+            console.log(`[updateGoalCompletion] Energy goal: actual=${actualValue}, completion=${completionPercentage}%`);
             break;
         }
 
@@ -382,9 +402,12 @@ export class DailyGoalService {
           target_value: goal.target_value,
           actual_value: actualValue,
           completion_percentage: parseFloat(completionPercentage.toFixed(2)),
+          is_completed: isCompleted,
           completed_at: completedAt,
         });
       }
+
+      console.log(`[updateGoalCompletion] Upserting ${completions.length} goal completions`);
 
       // 3. Upsert completion history
       const { data: savedCompletions, error: upsertError } = await supabase
@@ -395,11 +418,15 @@ export class DailyGoalService {
         .select();
 
       if (upsertError) {
+        console.error('[updateGoalCompletion] Failed to upsert completions:', upsertError);
         return { success: false, completions: [], error: new Error(upsertError.message) };
       }
 
+      console.log(`[updateGoalCompletion] Successfully updated ${savedCompletions?.length || 0} goal completions`);
+
       return { success: true, completions: savedCompletions || [], error: null };
     } catch (error) {
+      console.error('[updateGoalCompletion] Unexpected error:', error);
       return {
         success: false,
         completions: [],
@@ -416,9 +443,15 @@ export class DailyGoalService {
     supabaseClient?: SupabaseClient
   ): Promise<{ data: DailyProgress | null; error: Error | null }> {
     const supabase = supabaseClient || createAdminSupabase();
-    const today = new Date().toISOString().split('T')[0];
 
     try {
+      // Import timezone utilities to get "today" in user's timezone
+      const { getUserTimezone, getTodayInTimezone } = await import('../utils/timezone');
+      const userTimezone = await getUserTimezone(userId, supabase);
+      const today = getTodayInTimezone(userTimezone);
+
+      console.log(`[getTodayProgress] Getting progress for user ${userId}, today=${today} (${userTimezone})`);
+
       // 1. Get active goals
       const { data: goals } = await this.getUserDailyGoals(userId, supabase);
 
@@ -430,12 +463,16 @@ export class DailyGoalService {
         .eq('tracking_date', today)
         .maybeSingle();
 
+      console.log(`[getTodayProgress] Found tracking data:`, tracking);
+
       // 3. Get completion history for today
       const { data: completions } = await supabase
         .from('goal_completion_history')
         .select('*')
         .eq('user_id', userId)
         .eq('completion_date', today);
+
+      console.log(`[getTodayProgress] Found ${completions?.length || 0} goal completions for today`);
 
       // 4. Build progress response
       const goalProgress: GoalProgress[] = goals.map(goal => {
@@ -485,6 +522,7 @@ export class DailyGoalService {
         error: null,
       };
     } catch (error) {
+      console.error('[getTodayProgress] Error:', error);
       return {
         data: null,
         error: error instanceof Error ? error : new Error('Unknown error'),

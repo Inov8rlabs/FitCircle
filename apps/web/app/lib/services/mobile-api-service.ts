@@ -346,24 +346,26 @@ export class MobileAPIService {
     userId: string,
     recentData: any[]
   ): Promise<DailyTrackingStats> {
-    const today = new Date().toISOString().split('T')[0];
+    const supabaseAdmin = createAdminSupabase();
+
+    // Get user's timezone to calculate "today" correctly
+    const { getUserTimezone, getTodayInTimezone, getLastNDays } = await import('../utils/timezone');
+    const userTimezone = await getUserTimezone(userId, supabaseAdmin);
+    const today = getTodayInTimezone(userTimezone);
 
     // Get today's data
     const todayData = recentData.find((d) => d.tracking_date === today);
 
-    // Calculate weekly average steps
-    const oneWeekAgo = new Date();
-    oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
-    const oneWeekAgoStr = oneWeekAgo.toISOString().split('T')[0];
-
-    const weekData = recentData.filter((d) => d.tracking_date >= oneWeekAgoStr && d.steps);
+    // Calculate weekly average steps using user's timezone
+    const last7Days = getLastNDays(7, userTimezone);
+    const weekData = recentData.filter((d) => last7Days.includes(d.tracking_date) && d.steps);
     const weeklyAvgSteps =
       weekData.length > 0
         ? Math.round(weekData.reduce((sum, d) => sum + d.steps, 0) / weekData.length)
         : 0;
 
     // Calculate current streak
-    const streak = this.calculateStreak(recentData);
+    const streak = await this.calculateStreakWithTimezone(recentData, userTimezone);
 
     return {
       todaySteps: todayData?.steps || null,
@@ -375,6 +377,7 @@ export class MobileAPIService {
 
   /**
    * Calculate check-in streak
+   * @deprecated Use calculateStreakWithTimezone instead
    */
   private static calculateStreak(trackingData: any[]): number {
     if (!trackingData || trackingData.length === 0) return 0;
@@ -392,6 +395,43 @@ export class MobileAPIService {
       const targetDate = new Date(today);
       targetDate.setDate(targetDate.getDate() - i);
       const targetDateStr = targetDate.toISOString().split('T')[0];
+
+      const hasEntry = sorted.some((d) => d.tracking_date === targetDateStr);
+
+      if (hasEntry) {
+        streak++;
+      } else if (i > 0) {
+        break; // Streak broken
+      }
+    }
+
+    return streak;
+  }
+
+  /**
+   * Calculate check-in streak using user's timezone
+   */
+  private static async calculateStreakWithTimezone(
+    trackingData: any[],
+    timezone: string
+  ): Promise<number> {
+    if (!trackingData || trackingData.length === 0) return 0;
+
+    const { getTodayInTimezone, getDateInTimezone } = await import('../utils/timezone');
+
+    // Sort by date descending
+    const sorted = [...trackingData].sort(
+      (a, b) => new Date(b.tracking_date).getTime() - new Date(a.tracking_date).getTime()
+    );
+
+    let streak = 0;
+    const today = getTodayInTimezone(timezone);
+
+    // Check consecutive days starting from today
+    for (let i = 0; i < sorted.length; i++) {
+      const targetDate = new Date(today);
+      targetDate.setDate(targetDate.getDate() - i);
+      const targetDateStr = getDateInTimezone(targetDate, timezone);
 
       const hasEntry = sorted.some((d) => d.tracking_date === targetDateStr);
 
