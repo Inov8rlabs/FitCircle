@@ -641,6 +641,7 @@ export async function updateWeeklyGoalProgress(
             daily_breakdown: dailyBreakdown,
             actual_value: actualValue,
             completed,
+            updated_at: new Date().toISOString(), // Explicitly set timestamp (no DB trigger)
           })
           .eq('id', goal.id)
       );
