@@ -58,7 +58,7 @@ export async function GET(request: NextRequest) {
     // Get completion history for the target date
     const { data: completions } = await supabaseAdmin
       .from('goal_completion_history')
-      .select('daily_goal_id, completion_percentage, is_completed')
+      .select('id, daily_goal_id, completion_percentage, is_completed')
       .eq('user_id', user.id)
       .eq('completion_date', targetDate);
 
