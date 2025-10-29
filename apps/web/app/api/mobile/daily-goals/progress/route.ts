@@ -103,6 +103,10 @@ export async function GET(request: NextRequest) {
       return {
         goal: goal, // iOS expects nested goal object
         progress: actualValue !== null ? {
+          id: completion?.id || crypto.randomUUID(), // Generate UUID for iOS requirement
+          daily_goal_id: goal.id,
+          user_id: user.id,
+          completion_date: targetDate,
           actual_value: actualValue,
           target_value: goal.target_value,
           completion_percentage: parseFloat(completionPercentage.toFixed(2)),
