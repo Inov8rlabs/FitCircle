@@ -339,7 +339,7 @@ export class StreakClaimingService {
     await EngagementStreakService.recordActivity(
       userId,
       'weight_log',
-      null,
+      undefined,
       dateStr
     );
 
@@ -356,24 +356,42 @@ export class StreakClaimingService {
 
     console.log('[StreakClaimingService.resetWeeklyFreezes] Resetting weekly freezes');
 
-    // Update all freeze shields to have 1 available (cap at max)
-    const { error } = await supabaseAdmin
+    // Fetch all freeze shields
+    const { data: shields, error: fetchError } = await supabaseAdmin
       .from('streak_shields')
-      .update({
-        available_count: Math.min(
-          CLAIMING_CONSTANTS.MAX_TOTAL_SHIELDS,
-          supabaseAdmin.raw('available_count + 1') as any
-        ),
-        last_reset_at: new Date().toISOString(),
-      })
+      .select('id, available_count')
       .eq('shield_type', 'freeze');
 
-    if (error) {
-      console.error('[StreakClaimingService.resetWeeklyFreezes] Error:', error);
-      throw error;
+    if (fetchError) {
+      console.error('[StreakClaimingService.resetWeeklyFreezes] Error fetching shields:', fetchError);
+      throw fetchError;
     }
 
-    console.log('[StreakClaimingService.resetWeeklyFreezes] Successfully reset weekly freezes');
+    // Update each shield: increment by 1, cap at max
+    const updatePromises = (shields || []).map((shield) => {
+      const newCount = Math.min(
+        CLAIMING_CONSTANTS.MAX_TOTAL_SHIELDS,
+        shield.available_count + 1
+      );
+
+      return supabaseAdmin
+        .from('streak_shields')
+        .update({
+          available_count: newCount,
+          last_reset_at: new Date().toISOString(),
+        })
+        .eq('id', shield.id);
+    });
+
+    const results = await Promise.all(updatePromises);
+    const errors = results.filter((r) => r.error);
+
+    if (errors.length > 0) {
+      console.error('[StreakClaimingService.resetWeeklyFreezes] Errors updating shields:', errors);
+      throw new Error(`Failed to update ${errors.length} shields`);
+    }
+
+    console.log(`[StreakClaimingService.resetWeeklyFreezes] Successfully reset ${shields?.length || 0} freeze shields`);
   }
 
   /**
