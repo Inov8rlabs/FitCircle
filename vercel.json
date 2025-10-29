@@ -1,0 +1,16 @@
+{
+  "crons": [
+    {
+      "path": "/api/cron/streaks/daily-check",
+      "schedule": "0 0 * * *"
+    },
+    {
+      "path": "/api/cron/streaks/weekly-reset",
+      "schedule": "0 0 * * 1"
+    },
+    {
+      "path": "/api/cron/streaks/cleanup-recoveries",
+      "schedule": "0 * * * *"
+    }
+  ]
+}

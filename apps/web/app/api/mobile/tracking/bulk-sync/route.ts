@@ -11,6 +11,7 @@ const bulkSyncSchema = z.object({
       z.object({
         date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Invalid date format (YYYY-MM-DD)'),
         steps: z.number().int().min(0).max(1000000), // Max 1M steps per day (sanity check)
+        is_override: z.boolean().optional(), // Allow client to force override
       })
     )
     .min(1, 'At least one entry required')
@@ -30,11 +31,15 @@ const bulkSyncSchema = z.object({
  * Request body:
  * {
  *   "steps_data": [
- *     { "date": "2025-10-01", "steps": 8247 },
- *     { "date": "2025-10-02", "steps": 10582 }
+ *     { "date": "2025-10-01", "steps": 8247, "is_override": true },
+ *     { "date": "2025-10-02", "steps": 10582, "is_override": false }
  *   ],
  *   "source": "healthkit" | "google_fit"
  * }
+ *
+ * Note: is_override (optional, default: false)
+ * - true: Force overwrite existing data (use for explicit syncs)
+ * - false: Preserve manual entries, only update if no manual override exists
  *
  * Response:
  * {
@@ -70,6 +75,8 @@ export async function POST(request: NextRequest) {
     );
 
     // Process each entry
+    // NOTE: Bulk sync from HealthKit/Google Fit does NOT automatically claim streaks
+    // Users must explicitly claim streaks or claim them via manual data entry
     for (const entry of validatedData.steps_data) {
       try {
         const trackingEntry = await MobileAPIService.upsertDailyTracking(
@@ -79,7 +86,8 @@ export async function POST(request: NextRequest) {
             steps: entry.steps,
             steps_source: validatedData.source,
             steps_synced_at: syncedAt,
-            is_override: false, // Bulk sync never overrides manual entries
+            is_override: entry.is_override ?? false, // FIXED: Use client-provided value, default to false
+            // NO STREAK CLAIMING HERE - this is intentional per requirements
           }
         );
 

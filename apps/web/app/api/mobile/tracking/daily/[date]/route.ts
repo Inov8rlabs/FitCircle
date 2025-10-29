@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { MobileAPIService } from '@/lib/services/mobile-api-service';
 import { createAdminSupabase } from '@/lib/supabase-admin';
+import { StreakClaimingService } from '@/lib/services/streak-claiming-service';
 
 // Validation schema for PUT
 const updateTrackingSchema = z.object({
@@ -11,6 +12,8 @@ const updateTrackingSchema = z.object({
   moodScore: z.number().int().min(1).max(10).optional(),
   energyLevel: z.number().int().min(1).max(10).optional(),
   notes: z.string().optional(),
+  timezone: z.string().optional(), // For automatic streak claiming
+  autoClaimStreak: z.boolean().optional().default(true), // Auto-claim by default
 });
 
 /**
@@ -127,11 +130,44 @@ export async function PUT(
       mood_score: validatedData.moodScore,
       energy_level: validatedData.energyLevel,
       notes: validatedData.notes,
+      is_override: true, // Manual entry is always an override
     });
+
+    // Automatically claim streak if data was manually entered
+    let streakClaimed = false;
+    let streakCount: number | undefined;
+    if (validatedData.autoClaimStreak !== false) {
+      try {
+        const timezone = validatedData.timezone || 'America/Los_Angeles'; // Default to PST
+        const targetDate = new Date(date);
+
+        // Check if can claim (not already claimed)
+        const canClaim = await StreakClaimingService.canClaimStreak(user.id, targetDate, timezone);
+
+        if (canClaim.canClaim && !canClaim.alreadyClaimed) {
+          const claimResult = await StreakClaimingService.claimStreak(
+            user.id,
+            targetDate,
+            timezone,
+            'manual_entry'
+          );
+          streakClaimed = true;
+          streakCount = claimResult.streakCount;
+          console.log(`[PUT /api/mobile/tracking/daily/${date}] Auto-claimed streak for user ${user.id}`);
+        }
+      } catch (error) {
+        // Don't fail the entire request if streak claiming fails
+        console.error('[PUT /api/mobile/tracking/daily/[date]] Streak claiming error:', error);
+      }
+    }
 
     return NextResponse.json({
       success: true,
       data: trackingEntry,
+      streak: {
+        claimed: streakClaimed,
+        count: streakCount,
+      },
     });
   } catch (error: any) {
     console.error('Update tracking by date error:', error);
