@@ -288,6 +288,8 @@ export class DailyGoalService {
       const userTimezone = await getUserTimezone(userId, supabase);
       const today = getTodayInTimezone(userTimezone);
 
+      console.log(`[getUserDailyGoals] User: ${userId}, Timezone: ${userTimezone}, Today: ${today}`);
+
       const { data, error } = await supabase
         .from('daily_goals')
         .select('*')
@@ -298,12 +300,19 @@ export class DailyGoalService {
         .order('is_primary', { ascending: false })
         .order('created_at', { ascending: true });
 
+      console.log(`[getUserDailyGoals] Query result: ${data?.length || 0} goals found`);
+      if (data && data.length > 0) {
+        console.log(`[getUserDailyGoals] Goals:`, data.map(g => ({ id: g.id, type: g.goal_type, start: g.start_date, end: g.end_date })));
+      }
+
       if (error) {
+        console.error(`[getUserDailyGoals] Error:`, error);
         return { data: [], error: new Error(error.message) };
       }
 
       return { data: data || [], error: null };
     } catch (error) {
+      console.error(`[getUserDailyGoals] Exception:`, error);
       return {
         data: [],
         error: error instanceof Error ? error : new Error('Unknown error'),

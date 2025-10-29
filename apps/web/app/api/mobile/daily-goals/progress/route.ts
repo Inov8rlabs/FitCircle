@@ -111,6 +111,8 @@ export async function GET(request: NextRequest) {
           target_value: goal.target_value,
           completion_percentage: parseFloat(completionPercentage.toFixed(2)),
           is_completed: isCompleted,
+          completed_at: isCompleted ? new Date().toISOString() : null,
+          logged_at: new Date().toISOString(),
         } : null,
         completion_percentage: parseFloat(completionPercentage.toFixed(2)),
         is_completed: isCompleted,
