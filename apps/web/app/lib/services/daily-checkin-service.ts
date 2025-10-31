@@ -351,19 +351,24 @@ export async function performDailyCheckIn(
     }
 
     await supabase.from('engagement_streaks').update(updates).eq('user_id', userId);
-
-    // Record check-in activity
-    await supabase.from('engagement_activities').insert({
-      user_id: userId,
-      activity_date: checkInDate,
-      activity_type: 'streak_checkin',
-      metadata: {
-        xp_earned: pointsEarned,
-        new_streak: newStreak,
-        milestone: milestoneAchieved?.name || null,
-      },
-    });
   }
+
+  // Record check-in activity (ALWAYS, for timestamp tracking)
+  // Use unique reference_id to allow multiple check-ins per day
+  const checkInTimestamp = new Date().toISOString();
+  await supabase.from('engagement_activities').insert({
+    user_id: userId,
+    activity_date: checkInDate,
+    activity_type: 'streak_checkin',
+    reference_id: crypto.randomUUID(), // Unique ID for each check-in
+    metadata: {
+      xp_earned: isFirstCheckInToday ? pointsEarned : 0,
+      new_streak: isFirstCheckInToday ? newStreak : streak.current_streak,
+      milestone: isFirstCheckInToday ? (milestoneAchieved?.name || null) : null,
+      checked_in_at: checkInTimestamp,
+      is_first_checkin_today: isFirstCheckInToday,
+    },
+  });
 
   // 4. Update or create daily_tracking entry (always, even for subsequent check-ins)
   const { data: existingTracking } = await supabase
