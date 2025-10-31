@@ -234,8 +234,14 @@ export async function submitToAllFitCircles(
       .eq('user_id', userId)
       .eq('is_active', true);
 
-    if (memberError || !memberships) {
-      return { results: [], error: new Error('Failed to fetch FitCircles') };
+    if (memberError) {
+      console.error('[submitToAllFitCircles] Error fetching memberships:', memberError);
+      return { results: [], error: new Error('Failed to fetch FitCircles: ' + memberError.message) };
+    }
+
+    if (!memberships || memberships.length === 0) {
+      // User has no FitCircles, return empty results (not an error)
+      return { results: [], error: null };
     }
 
     // Submit to each FitCircle
@@ -287,7 +293,7 @@ export async function getPendingSubmissions(
       .from('circle_members')
       .select(`
         circle_id,
-        circles:circle_id (
+        circles!circle_id (
           id,
           name
         )
@@ -295,8 +301,14 @@ export async function getPendingSubmissions(
       .eq('user_id', userId)
       .eq('is_active', true);
 
-    if (memberError || !memberships) {
-      return { pending: [], error: new Error('Failed to fetch FitCircles') };
+    if (memberError) {
+      console.error('[getPendingSubmissions] Error fetching memberships:', memberError);
+      return { pending: [], error: new Error('Failed to fetch FitCircles: ' + memberError.message) };
+    }
+
+    if (!memberships || memberships.length === 0) {
+      // User has no FitCircles, return empty array (not an error)
+      return { pending: [], error: null };
     }
 
     // Check submission status for each FitCircle
