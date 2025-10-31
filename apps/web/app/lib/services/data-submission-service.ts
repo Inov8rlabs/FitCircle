@@ -293,7 +293,7 @@ export async function getPendingSubmissions(
       .from('circle_members')
       .select(`
         circle_id,
-        circles!circle_id (
+        circles:circle_id (
           id,
           name
         )
