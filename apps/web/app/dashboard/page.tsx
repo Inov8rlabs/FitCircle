@@ -2,14 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { CircularProgress, ActivityRing, CircularSlider } from '@/components/ui/circular-progress';
-import { UnitToggle } from '@/components/ui/unit-toggle';
-import { BathroomScale } from '@/components/icons/BathroomScale';
+import { toast } from 'sonner';
 import {
   Scale,
   Footprints,
@@ -23,9 +16,6 @@ import {
   Check,
   Loader2
 } from 'lucide-react';
-import { useAuthStore } from '@/stores/auth-store';
-import { supabase } from '@/lib/supabase';
-import { toast } from 'sonner';
 import {
   LineChart,
   Line,
@@ -39,13 +29,28 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from 'recharts';
+
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { CircularProgress, ActivityRing, CircularSlider } from '@/components/ui/circular-progress';
+import { UnitToggle } from '@/components/ui/unit-toggle';
+import { BathroomScale } from '@/components/icons/BathroomScale';
 import DashboardNav from '@/components/DashboardNav';
 import { GoalProgressIndicator } from '@/components/GoalProgressIndicator';
 import { StepsGoalCard } from '@/components/StepsGoalCard';
 import { QuickEntryCard } from '@/components/QuickEntryCard';
 import { BackfillDataDialog } from '@/components/BackfillDataDialog';
 import { EngagementStreakCard } from '@/components/EngagementStreakCard';
+import { StreakHistoryModal } from '@/components/StreakHistoryModal';
+import { CheckInCard, CheckInDetailModal, CheckInDetailSheet } from '@/components/check-ins';
+import { DailyProgressMeter } from '@/components/DailyProgressMeter';
+import { useAuthStore } from '@/stores/auth-store';
 import { useUnitPreference } from '@/hooks/useUnitPreference';
+import { useDailyGoals } from '@/hooks/useDailyGoals';
+import { supabase } from '@/lib/supabase';
 import {
   formatWeight,
   parseWeightToKg,
@@ -56,9 +61,6 @@ import {
   getWeightValidationMessage,
   detectWrongUnit,
 } from '@/lib/utils/units';
-import { CheckInCard, CheckInDetailModal, CheckInDetailSheet } from '@/components/check-ins';
-import { DailyProgressMeter } from '@/components/DailyProgressMeter';
-import { useDailyGoals } from '@/hooks/useDailyGoals';
 
 interface CheckIn {
   id: string;
@@ -78,6 +80,7 @@ interface DailyStats {
   weightChange: number;
   currentStreak: number;
   totalCheckIns: number;
+  lastWeightDate?: string;
 }
 
 export default function DashboardPage() {
@@ -103,6 +106,7 @@ export default function DashboardPage() {
   const [quickSteps, setQuickSteps] = useState('');
   const [previousUnitSystem, setPreviousUnitSystem] = useState(unitSystem);
   const [showBackfillDialog, setShowBackfillDialog] = useState(false);
+  const [showStreakHistory, setShowStreakHistory] = useState(false);
 
   // Check-in detail modal states
   const [selectedCheckIn, setSelectedCheckIn] = useState<CheckIn | null>(null);
@@ -278,6 +282,7 @@ export default function DashboardPage() {
       setDailyStats({
         todaySteps: todayData?.steps || 0,
         todayWeight: latestWeightData?.weight_kg, // Use latest weight, not just today's
+        lastWeightDate: latestWeightData?.tracking_date,
         weeklyAvgSteps,
         weightChange,
         currentStreak: streak,
@@ -542,7 +547,10 @@ export default function DashboardPage() {
 
         {/* Engagement Streak Highlight - Full Width on Mobile, Prominent on Desktop */}
         <div className="mb-6 sm:mb-8">
-          <EngagementStreakCard />
+          <EngagementStreakCard
+            onOpenHistory={() => setShowStreakHistory(true)}
+            onOpenCheckIn={() => setShowBackfillDialog(true)}
+          />
         </div>
 
         {/* Daily Progress Meter - Hero Section */}
@@ -559,126 +567,104 @@ export default function DashboardPage() {
           />
         </motion.div>
 
-        {/* Activity Rings Dashboard */}
+        {/* Simplified Progress Cards */}
         <div className="space-y-4 sm:space-y-6 mb-6 sm:mb-8">
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 sm:gap-4 lg:gap-6">
-            {/* Main Activity Ring */}
+          <div className="grid grid-cols-2 gap-3 sm:gap-4">
+            {/* Steps Card with Progress Ring */}
             <motion.div
               initial={{ opacity: 0, scale: 0.9 }}
               animate={{ opacity: 1, scale: 1 }}
-              className="lg:col-span-1"
             >
-              <Card className="bg-slate-900/50 border-slate-800 backdrop-blur-xl shadow-2xl">
-              <CardContent className="p-4 sm:p-6 lg:p-8 flex flex-col items-center justify-center">
-                <ActivityRing
-                  rings={[
-                    {
-                      value: dailyStats.todaySteps,
-                      max: dailyStepsGoal,
-                      color: '#6366f1',
-                      label: 'Steps'
-                    },
-                    {
-                      value: dailyStats.currentStreak,
-                      max: 30,
-                      color: '#f97316',
-                      label: 'Streak'
-                    }
-                  ]}
-                  size={160}
-                  strokeWidth={12}
-                  className="sm:!w-[180px] sm:!h-[180px] lg:!w-[200px] lg:!h-[200px]"
-                />
-                <div className="mt-3 sm:mt-4 lg:mt-6 text-center">
-                  <h3 className="text-sm sm:text-base lg:text-lg font-semibold text-white mb-1.5 sm:mb-2">Today's Activity</h3>
-                  <div className="flex gap-2 sm:gap-3 lg:gap-4 justify-center text-xs sm:text-sm">
-                    <div>
-                      <div className="w-2.5 h-2.5 sm:w-3 sm:h-3 bg-indigo-400 rounded-full inline-block mr-1" />
-                      <span className="text-gray-400">Steps</span>
-                    </div>
-                    <div>
-                      <div className="w-2.5 h-2.5 sm:w-3 sm:h-3 bg-orange-400 rounded-full inline-block mr-1" />
-                      <span className="text-gray-400">Streak</span>
+              <Card className="bg-slate-900/50 border-slate-800 backdrop-blur-xl h-full">
+                <CardContent className="p-4 sm:p-6 flex flex-col items-center space-y-3 sm:space-y-4">
+                  {/* Header Icon */}
+                  <div className="w-full flex justify-start">
+                    <div className="w-10 h-10 rounded-full bg-indigo-500/20 flex items-center justify-center">
+                      <Footprints className="w-5 h-5 text-indigo-400" />
                     </div>
                   </div>
-                </div>
-              </CardContent>
-            </Card>
-          </motion.div>
 
-          {/* Stats Grid - 2x2 layout with goals */}
-          <div className="lg:col-span-2 grid grid-cols-2 gap-3 sm:gap-4">
-            {/* Steps with Goal */}
+                  {/* Steps Ring */}
+                  <div className="relative w-28 h-28 sm:w-32 sm:h-32">
+                    <svg className="w-full h-full transform -rotate-90">
+                      {/* Background ring */}
+                      <circle
+                        cx="50%"
+                        cy="50%"
+                        r="45%"
+                        fill="none"
+                        stroke="rgba(99, 102, 241, 0.2)"
+                        strokeWidth="12"
+                      />
+                      {/* Progress ring */}
+                      <circle
+                        cx="50%"
+                        cy="50%"
+                        r="45%"
+                        fill="none"
+                        stroke="#6366f1"
+                        strokeWidth="12"
+                        strokeLinecap="round"
+                        strokeDasharray={`${2 * Math.PI * 45} ${2 * Math.PI * 45}`}
+                        strokeDashoffset={`${2 * Math.PI * 45 * (1 - Math.min(dailyStats.todaySteps / dailyStepsGoal, 1))}`}
+                        className="transition-all duration-1000 ease-out"
+                      />
+                    </svg>
+                    {/* Center content */}
+                    <div className="absolute inset-0 flex flex-col items-center justify-center">
+                      <p className="text-xl sm:text-2xl font-bold text-white">{dailyStats.todaySteps.toLocaleString()}</p>
+                      <p className="text-xs text-gray-400">steps</p>
+                    </div>
+                  </div>
+
+                  {/* Goal */}
+                  <div className="text-center">
+                    <p className="text-sm sm:text-base font-semibold text-white">Steps</p>
+                    <p className="text-xs text-gray-400">Goal: {dailyStepsGoal.toLocaleString()}</p>
+                  </div>
+                </CardContent>
+              </Card>
+            </motion.div>
+
+            {/* Weight Card */}
             <motion.div
               initial={{ opacity: 0, scale: 0.9 }}
               animate={{ opacity: 1, scale: 1 }}
               transition={{ delay: 0.1 }}
             >
-              <StepsGoalCard
-                currentSteps={dailyStats.todaySteps}
-                dailyGoal={dailyStepsGoal}
-                onGoalSaved={fetchGoalWeight}
-              />
-            </motion.div>
-
-            {/* Weight */}
-            <motion.div
-              initial={{ opacity: 0, scale: 0.9 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ delay: 0.15 }}
-            >
               <Card className="bg-slate-900/50 border-slate-800 backdrop-blur-xl h-full">
-                <CardContent className="p-3 flex flex-col items-center justify-center h-full">
-                  <div className="w-20 h-20 rounded-full bg-purple-500/10 border-2 border-purple-500/30 flex items-center justify-center">
-                    <BathroomScale className="w-10 h-10 text-purple-400" />
+                <CardContent className="p-4 sm:p-6 flex flex-col items-center space-y-3 sm:space-y-4">
+                  {/* Header Icon */}
+                  <div className="w-full flex justify-start">
+                    <div className="w-10 h-10 rounded-full bg-purple-500/20 flex items-center justify-center">
+                      <BathroomScale className="w-5 h-5 text-purple-400" />
+                    </div>
                   </div>
-                  <p className="text-xs text-gray-400 mt-2">Current Weight</p>
-                  <p className="text-lg font-bold text-white">
-                    {formatWeight(dailyStats.todayWeight, unitSystem)}
-                  </p>
+
+                  {/* Weight Display (no ring, just value) */}
+                  <div className="h-28 sm:h-32 flex flex-col items-center justify-center space-y-2">
+                    <p className="text-3xl sm:text-4xl font-bold text-white">
+                      {formatWeight(dailyStats.todayWeight, unitSystem)}
+                    </p>
+                    <p className="text-xs text-gray-400">
+                      {dailyStats.lastWeightDate
+                        ? `Logged: ${new Date(dailyStats.lastWeightDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`
+                        : 'No data'}
+                    </p>
+                  </div>
+
+                  {/* Goal */}
+                  <div className="text-center">
+                    <p className="text-sm sm:text-base font-semibold text-white">Weight</p>
+                    <p className="text-xs text-gray-400">
+                      {goalWeightKg
+                        ? `Goal: ${weightKgToDisplay(goalWeightKg, unitSystem).toFixed(1)} ${unitSystem === 'metric' ? 'kg' : 'lbs'}`
+                        : 'Set goal in profile'}
+                    </p>
+                  </div>
                 </CardContent>
               </Card>
             </motion.div>
-
-            {/* Weight Goal Tracker */}
-            <motion.div
-              initial={{ opacity: 0, scale: 0.9 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ delay: 0.2 }}
-            >
-              <GoalProgressIndicator
-                currentWeight={dailyStats.todayWeight ? weightKgToDisplay(dailyStats.todayWeight, unitSystem) : undefined}
-                goalWeight={goalWeightKg ? weightKgToDisplay(goalWeightKg, unitSystem) : undefined}
-                startingWeight={startingWeightKg ? weightKgToDisplay(startingWeightKg, unitSystem) : undefined}
-                unit={unitSystem}
-                onGoalSaved={fetchGoalWeight}
-              />
-            </motion.div>
-
-            {/* Streak */}
-            <motion.div
-              initial={{ opacity: 0, scale: 0.9 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ delay: 0.25 }}
-            >
-              <Card className="bg-slate-900/50 border-slate-800 backdrop-blur-xl h-full">
-                <CardContent className="p-3 flex flex-col items-center justify-center h-full">
-                  <CircularProgress
-                    value={dailyStats.currentStreak}
-                    max={30}
-                    size={80}
-                    strokeWidth={8}
-                    color="#f97316"
-                    icon={Flame}
-                    showValue={false}
-                  />
-                  <p className="text-xs text-gray-400 mt-2">Streak</p>
-                  <p className="text-sm font-bold text-white">{dailyStats.currentStreak} days</p>
-                </CardContent>
-              </Card>
-            </motion.div>
-
-          </div>
           </div>
         </div>
 
@@ -836,6 +822,13 @@ export default function DashboardPage() {
         onSubmit={handleBackfillSubmit}
         unitSystem={unitSystem}
         weightUnit={getWeightUnit(unitSystem)}
+      />
+
+      {/* Streak History Modal */}
+      <StreakHistoryModal
+        isOpen={showStreakHistory}
+        onClose={() => setShowStreakHistory(false)}
+        userId={user?.id}
       />
 
       {/* Check-In Detail Modal (Desktop) */}

@@ -65,6 +65,9 @@ export async function GET(request: NextRequest) {
     // Extract dates that have check-ins
     const loggedDates = new Set(existingCheckIns?.map(d => d.tracking_date) || []);
 
+    console.log(`[Missing Days] Existing check-ins: ${Array.from(loggedDates).join(', ')}`);
+    console.log(`[Missing Days] Checking dates: ${last7Days.join(', ')}`);
+
     // Find missing dates
     const missingDates = last7Days.filter(date => !loggedDates.has(date));
 

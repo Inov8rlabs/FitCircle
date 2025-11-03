@@ -3,7 +3,8 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Card, CardContent } from '@/components/ui/card';
-import { Flame, Trophy, Pause } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Flame, Trophy, Pause, Plus, CheckCircle } from 'lucide-react';
 import { useAuthStore } from '@/stores/auth-store';
 
 interface EngagementStreak {
@@ -15,15 +16,22 @@ interface EngagementStreak {
   last_engagement_date: string | null;
 }
 
-export function EngagementStreakCard() {
+interface EngagementStreakCardProps {
+  onOpenHistory?: () => void;
+  onOpenCheckIn?: () => void;
+}
+
+export function EngagementStreakCard({ onOpenHistory, onOpenCheckIn }: EngagementStreakCardProps) {
   const { user } = useAuthStore();
   const [streak, setStreak] = useState<EngagementStreak | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [pulseAnimation, setPulseAnimation] = useState(false);
+  const [hasCheckedInToday, setHasCheckedInToday] = useState(false);
 
   useEffect(() => {
     if (user) {
       fetchStreak();
+      checkTodayCheckIn();
     }
   }, [user]);
 
@@ -68,6 +76,37 @@ export function EngagementStreakCard() {
     }
   };
 
+  const checkTodayCheckIn = async () => {
+    if (!user) return;
+
+    try {
+      const today = new Date().toISOString().split('T')[0];
+      const response = await fetch(`/api/mobile/tracking/daily?startDate=${today}&endDate=${today}&limit=1`, {
+        credentials: 'include',
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setHasCheckedInToday(data.data && data.data.length > 0);
+      }
+    } catch (error) {
+      console.error('Error checking today check-in:', error);
+    }
+  };
+
+  const handleCardClick = () => {
+    if (onOpenHistory) {
+      onOpenHistory();
+    }
+  };
+
+  const handleCTAClick = (e: React.MouseEvent) => {
+    e.stopPropagation(); // Prevent card click from firing
+    if (onOpenCheckIn) {
+      onOpenCheckIn();
+    }
+  };
+
   if (isLoading || !streak) {
     return (
       <Card className="bg-slate-900/50 border-slate-800 backdrop-blur-xl h-full">
@@ -93,7 +132,10 @@ export function EngagementStreakCard() {
       animate={{ opacity: 1, scale: 1 }}
       transition={{ delay: 0.1 }}
     >
-      <Card className="bg-slate-900/50 border-slate-800 backdrop-blur-xl hover:border-orange-500/50 transition-all duration-300 cursor-pointer group shadow-lg">
+      <Card
+        className="bg-slate-900/50 border-slate-800 backdrop-blur-xl hover:border-orange-500/50 transition-all duration-300 cursor-pointer group shadow-lg"
+        onClick={handleCardClick}
+      >
         <CardContent className="p-4 sm:p-6 lg:p-8">
           {/* Centered circular design */}
           <div className="flex flex-col items-center gap-6">
@@ -208,6 +250,37 @@ export function EngagementStreakCard() {
                 )}
               </div>
             )}
+
+            {/* CTA Button */}
+            <div className="mt-4 pt-4 border-t border-slate-700/50">
+              <Button
+                onClick={handleCTAClick}
+                className={`w-full ${
+                  hasCheckedInToday
+                    ? 'bg-green-600 hover:bg-green-700'
+                    : 'bg-orange-600 hover:bg-orange-700'
+                } text-white font-semibold transition-all duration-200 shadow-lg hover:shadow-xl`}
+                size="lg"
+              >
+                {hasCheckedInToday ? (
+                  <>
+                    <CheckCircle className="h-5 w-5 mr-2" />
+                    Update Today's Stats
+                  </>
+                ) : (
+                  <>
+                    <Plus className="h-5 w-5 mr-2" />
+                    Check In Today
+                  </>
+                )}
+              </Button>
+              <p className="text-xs text-gray-400 text-center mt-2">
+                {hasCheckedInToday
+                  ? 'Checked in today! Keep the streak going'
+                  : 'Log your progress to maintain your streak'
+                }
+              </p>
+            </div>
           </div>
         </CardContent>
       </Card>

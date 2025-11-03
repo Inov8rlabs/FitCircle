@@ -86,11 +86,14 @@ export function getLastNDays(n: number, timezone: string): string[] {
   const today = getTodayInTimezone(timezone);
   const dates: string[] = [today];
 
-  const baseDate = new Date(today);
+  // Create a proper date object at noon in the target timezone to avoid DST issues
+  // Using 'T12:00:00' ensures we're in the middle of the day regardless of timezone
+  const baseDate = new Date(`${today}T12:00:00`);
 
   for (let i = 1; i < n; i++) {
-    const date = new Date(baseDate);
-    date.setDate(date.getDate() - i);
+    // Create a new date by subtracting days
+    const date = new Date(baseDate.getTime() - (i * 24 * 60 * 60 * 1000));
+    // Format this date in the user's timezone
     dates.push(getDateInTimezone(date, timezone));
   }
 
