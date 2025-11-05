@@ -37,15 +37,15 @@ export async function GET(request: NextRequest) {
     console.log(`[Missing Days] Checking ${last7Days.length} days for user ${user.id} in timezone ${userTimezone}`);
     console.log(`[Missing Days] Date range: ${last7Days[last7Days.length - 1]} to ${last7Days[0]}`);
 
-    // Get existing check-ins for these dates
-    const { data: existingCheckIns, error } = await supabaseAdmin
+    // Get existing check-ins from daily_tracking
+    const { data: existingCheckIns, error: trackingError } = await supabaseAdmin
       .from('daily_tracking')
       .select('tracking_date')
       .eq('user_id', user.id)
       .in('tracking_date', last7Days);
 
-    if (error) {
-      console.error('[Missing Days] Database error:', error);
+    if (trackingError) {
+      console.error('[Missing Days] Database error:', trackingError);
       return NextResponse.json(
         {
           success: false,
@@ -62,8 +62,23 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Extract dates that have check-ins
-    const loggedDates = new Set(existingCheckIns?.map(d => d.tracking_date) || []);
+    // Also check engagement_activities for any activity on these dates
+    const { data: engagementActivities, error: engagementError } = await supabaseAdmin
+      .from('engagement_activities')
+      .select('activity_date')
+      .eq('user_id', user.id)
+      .in('activity_date', last7Days);
+
+    if (engagementError) {
+      console.error('[Missing Days] Engagement activities error:', engagementError);
+      // Continue with just daily_tracking data if engagement query fails
+    }
+
+    // Extract dates that have check-ins from either table
+    const loggedDates = new Set([
+      ...(existingCheckIns?.map(d => d.tracking_date) || []),
+      ...(engagementActivities?.map(d => d.activity_date) || [])
+    ]);
 
     console.log(`[Missing Days] Existing check-ins: ${Array.from(loggedDates).join(', ')}`);
     console.log(`[Missing Days] Checking dates: ${last7Days.join(', ')}`);
