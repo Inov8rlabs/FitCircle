@@ -165,11 +165,17 @@ export class EngagementStreakService {
       : streakRecord.last_engagement_date;
 
     // Update streak record
+    // longest_streak is the MAX of (current_streak, existing longest_streak)
+    // This ensures we only update longest_streak when current streak exceeds it
+    const newLongestStreak = Math.max(calculation.current_streak, streakRecord.longest_streak);
+
+    console.log(`[EngagementStreakService.updateEngagementStreak] Updating: current=${calculation.current_streak}, longest=${newLongestStreak} (was ${streakRecord.longest_streak})`);
+
     const { data: updatedStreak, error: updateError } = await supabaseAdmin
       .from('engagement_streaks')
       .update({
         current_streak: calculation.current_streak,
-        longest_streak: Math.max(calculation.longest_streak, streakRecord.longest_streak, calculation.current_streak),
+        longest_streak: newLongestStreak,
         last_engagement_date: lastEngagementDate,
         streak_freezes_available: updatedFreezesAvailable,
         streak_freezes_used_this_week: streakRecord.streak_freezes_used_this_week + calculation.freezes_used,
@@ -438,6 +444,10 @@ export class EngagementStreakService {
 
   /**
    * Calculate streak with grace logic
+   *
+   * NOTE: This function ONLY calculates current_streak.
+   * longest_streak is maintained separately in the database and updated
+   * only when current_streak exceeds it.
    */
   private static calculateStreakWithGrace(
     activities: Array<{ activity_date: string }>,
@@ -449,11 +459,10 @@ export class EngagementStreakService {
     today.setHours(0, 0, 0, 0);
 
     let currentStreak = 0;
-    let longestStreak = 0;
     let freezesUsed = 0;
     let streakBroken = false;
 
-    // Count backwards from today
+    // Count backwards from today to calculate current streak only
     for (let i = 0; i < 90; i++) {
       const checkDate = new Date(today);
       checkDate.setDate(checkDate.getDate() - i);
@@ -464,7 +473,6 @@ export class EngagementStreakService {
       if (hasActivity) {
         // Activity found, increment streak
         currentStreak++;
-        longestStreak = Math.max(longestStreak, currentStreak);
       } else if (i === 0) {
         // Today with no activity doesn't break streak
         continue;
@@ -474,7 +482,6 @@ export class EngagementStreakService {
           // Use a freeze to maintain streak
           freezesUsed++;
           currentStreak++;
-          longestStreak = Math.max(longestStreak, currentStreak);
           console.log(`[calculateStreakWithGrace] Used freeze for ${checkDateStr}, freezes used: ${freezesUsed}`);
         } else {
           // No freezes available, streak broken
@@ -487,7 +494,7 @@ export class EngagementStreakService {
 
     return {
       current_streak: currentStreak,
-      longest_streak: longestStreak,
+      longest_streak: 0, // No longer calculated here - maintained in database
       freezes_used: freezesUsed,
       streak_broken: streakBroken,
     };
