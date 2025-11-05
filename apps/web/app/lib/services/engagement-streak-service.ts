@@ -169,16 +169,16 @@ export class EngagementStreakService {
     // This ensures we only update longest_streak when current streak exceeds it
     const newLongestStreak = Math.max(calculation.current_streak, streakRecord.longest_streak);
 
-    console.log(`[EngagementStreakService.updateEngagementStreak] Updating: current=${calculation.current_streak}, longest=${newLongestStreak} (was ${streakRecord.longest_streak})`);
+    console.log(`[EngagementStreakService.updateEngagementStreak] Updating: current=${calculation.current_streak}, longest=${newLongestStreak} (was ${streakRecord.longest_streak}), broken=${calculation.streak_broken}`);
 
-    const { data: updatedStreak, error: updateError } = await supabaseAdmin
+    const { data: updatedStreak, error: updateError} = await supabaseAdmin
       .from('engagement_streaks')
       .update({
         current_streak: calculation.current_streak,
         longest_streak: newLongestStreak,
         last_engagement_date: lastEngagementDate,
         streak_freezes_available: updatedFreezesAvailable,
-        streak_freezes_used_this_week: streakRecord.streak_freezes_used_this_week + calculation.freezes_used,
+        // Note: streak_freezes_used_this_week is only updated when manually applying freezes
       })
       .eq('user_id', userId)
       .select()
@@ -190,6 +190,102 @@ export class EngagementStreakService {
     console.log(`[EngagementStreakService.updateEngagementStreak] Updated streak: ${calculation.current_streak} days, ${updatedFreezesAvailable} freezes available`);
 
     return this.formatStreakResponse(updatedStreak);
+  }
+
+  /**
+   * Manually apply a freeze to restore a broken streak
+   * User can apply freeze to cover a missed day (up to 7 days ago)
+   */
+  static async applyFreeze(userId: string, missedDate?: string): Promise<EngagementStreakResponse> {
+    const supabaseAdmin = createAdminSupabase();
+
+    console.log(`[EngagementStreakService.applyFreeze] Applying freeze for user ${userId}, missed date: ${missedDate || 'yesterday'}`);
+
+    // Get streak record
+    const { data: streakRecord, error: fetchError } = await supabaseAdmin
+      .from('engagement_streaks')
+      .select('*')
+      .eq('user_id', userId)
+      .single();
+
+    if (fetchError) {
+      throw new StreakError(
+        STREAK_ERROR_CODES.STREAK_NOT_FOUND,
+        'No streak record found for user'
+      );
+    }
+
+    // Check if user has freezes available
+    if (streakRecord.streak_freezes_available <= 0) {
+      throw new StreakError(
+        STREAK_ERROR_CODES.NO_FREEZES_AVAILABLE,
+        'No streak freezes available'
+      );
+    }
+
+    // Determine the missed date (default to yesterday)
+    const targetDate = missedDate || this.formatDate(this.getDaysAgo(1));
+    const targetDateObj = new Date(targetDate);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    // Validate: Can only apply freeze to past 7 days
+    const daysDiff = Math.floor((today.getTime() - targetDateObj.getTime()) / (1000 * 60 * 60 * 24));
+    if (daysDiff < 1 || daysDiff > 7) {
+      throw new StreakError(
+        STREAK_ERROR_CODES.INVALID_DATE_RANGE,
+        'Can only apply freeze to missed days within the past 7 days'
+      );
+    }
+
+    // Check if there's already an activity on that date
+    const { data: existingActivity } = await supabaseAdmin
+      .from('engagement_activities')
+      .select('id')
+      .eq('user_id', userId)
+      .eq('activity_date', targetDate)
+      .single();
+
+    if (existingActivity) {
+      throw new StreakError(
+        STREAK_ERROR_CODES.DATE_HAS_ACTIVITY,
+        'That date already has activity - no freeze needed'
+      );
+    }
+
+    // Create a freeze activity for the missed date
+    const { error: insertError } = await supabaseAdmin
+      .from('engagement_activities')
+      .insert({
+        user_id: userId,
+        activity_date: targetDate,
+        activity_type: 'streak_freeze' as ActivityType,
+        reference_id: null,
+      });
+
+    if (insertError) {
+      console.error('[applyFreeze] Error creating freeze activity:', insertError);
+      throw insertError;
+    }
+
+    // Decrement freezes_available and increment freezes_used_this_week
+    const { error: updateError } = await supabaseAdmin
+      .from('engagement_streaks')
+      .update({
+        streak_freezes_available: streakRecord.streak_freezes_available - 1,
+        streak_freezes_used_this_week: streakRecord.streak_freezes_used_this_week + 1,
+      })
+      .eq('user_id', userId);
+
+    if (updateError) {
+      console.error('[applyFreeze] Error updating streak record:', updateError);
+      throw updateError;
+    }
+
+    console.log(`[applyFreeze] Successfully applied freeze for ${targetDate}`);
+
+    // Recalculate streak (should now include the frozen day)
+    return await this.updateEngagementStreak(userId);
   }
 
   /**
@@ -443,11 +539,11 @@ export class EngagementStreakService {
   // ============================================================================
 
   /**
-   * Calculate streak with grace logic
+   * Calculate current streak WITHOUT auto-applying freezes
    *
-   * NOTE: This function ONLY calculates current_streak.
-   * longest_streak is maintained separately in the database and updated
-   * only when current_streak exceeds it.
+   * NOTE: Freezes must be manually applied by the user.
+   * This function only counts consecutive days with actual activity.
+   * longest_streak is maintained separately in the database.
    */
   private static calculateStreakWithGrace(
     activities: Array<{ activity_date: string }>,
@@ -459,10 +555,10 @@ export class EngagementStreakService {
     today.setHours(0, 0, 0, 0);
 
     let currentStreak = 0;
-    let freezesUsed = 0;
     let streakBroken = false;
 
-    // Count backwards from today to calculate current streak only
+    // Count backwards from today
+    // Stop at first day without activity (streak is broken)
     for (let i = 0; i < 90; i++) {
       const checkDate = new Date(today);
       checkDate.setDate(checkDate.getDate() - i);
@@ -474,28 +570,22 @@ export class EngagementStreakService {
         // Activity found, increment streak
         currentStreak++;
       } else if (i === 0) {
-        // Today with no activity doesn't break streak
+        // Today with no activity doesn't break streak yet
+        // Grace period: day 0 (today) doesn't count against you
         continue;
       } else {
-        // Missed a day - try to use a freeze
-        if (freezesAvailable - freezesUsed > 0) {
-          // Use a freeze to maintain streak
-          freezesUsed++;
-          currentStreak++;
-          console.log(`[calculateStreakWithGrace] Used freeze for ${checkDateStr}, freezes used: ${freezesUsed}`);
-        } else {
-          // No freezes available, streak broken
-          streakBroken = true;
-          console.log(`[calculateStreakWithGrace] Streak broken at ${checkDateStr}, no freezes available`);
-          break;
-        }
+        // Missed a day - streak is broken
+        // User must manually apply a freeze to restore it
+        streakBroken = true;
+        console.log(`[calculateStreakWithGrace] Streak broken at ${checkDateStr} - no activity found`);
+        break;
       }
     }
 
     return {
       current_streak: currentStreak,
       longest_streak: 0, // No longer calculated here - maintained in database
-      freezes_used: freezesUsed,
+      freezes_used: 0, // No auto-freeze application
       streak_broken: streakBroken,
     };
   }

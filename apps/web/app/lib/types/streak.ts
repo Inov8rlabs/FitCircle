@@ -11,7 +11,8 @@ export type ActivityType =
   | 'steps_log'
   | 'mood_log'
   | 'circle_checkin'
-  | 'social_interaction';
+  | 'social_interaction'
+  | 'streak_freeze'; // Manual freeze applied by user to cover missed day
 
 export type MetricType =
   | 'weight'
@@ -267,4 +268,7 @@ export const STREAK_ERROR_CODES = {
   INVALID_METRIC_TYPE: 'INVALID_METRIC_TYPE',
   ALREADY_LOGGED_TODAY: 'ALREADY_LOGGED_TODAY',
   INSUFFICIENT_BALANCE: 'INSUFFICIENT_BALANCE',
+  STREAK_NOT_FOUND: 'STREAK_NOT_FOUND',
+  INVALID_DATE_RANGE: 'INVALID_DATE_RANGE',
+  DATE_HAS_ACTIVITY: 'DATE_HAS_ACTIVITY',
 } as const;
