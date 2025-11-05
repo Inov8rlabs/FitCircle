@@ -193,15 +193,15 @@ export async function performDailyCheckIn(
 
   // Start transaction-like operations
   // 1. Check if already checked in today (for streak purposes)
-  const { data: existingCheckIn } = await supabase
+  // Look for ANY engagement activity on this date, not just streak_checkin
+  const { data: existingActivities } = await supabase
     .from('engagement_activities')
     .select('*')
     .eq('user_id', userId)
     .eq('activity_date', checkInDate)
-    .eq('activity_type', 'streak_checkin')
-    .single();
+    .limit(1);
 
-  const isFirstCheckInToday = !existingCheckIn;
+  const isFirstCheckInToday = !existingActivities || existingActivities.length === 0;
 
   // 2. Get or create streak record
   const { data: streak, error: streakError } = await supabase
@@ -488,16 +488,15 @@ export async function getStreakStatus(
     };
   }
 
-  // Check if checked in today
-  const { data: todayCheckIn } = await supabase
+  // Check if checked in today (ANY engagement activity counts)
+  const { data: todayActivities } = await supabase
     .from('engagement_activities')
     .select('*')
     .eq('user_id', userId)
     .eq('activity_date', today)
-    .eq('activity_type', 'streak_checkin')
-    .single();
+    .limit(1);
 
-  const hasCheckedInToday = !!todayCheckIn;
+  const hasCheckedInToday = !!todayActivities && todayActivities.length > 0;
   const nextMilestone = getNextMilestone(streak.current_streak);
 
   return {
