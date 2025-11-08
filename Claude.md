@@ -477,9 +477,10 @@ CREATE POLICY "new_policy" ON table_name
 
 ### Documentation Files
 - `CLAUDE.md` - This file, development guidelines
-- `FINAL_TEST_SUMMARY.md` - Comprehensive test suite analysis
-- `TEST_SUMMARY.md` - Test coverage and patterns
-- `TEST_RESULTS_SUMMARY.md` - Detailed test run results
+- `docs/FINAL_TEST_SUMMARY.md` - Comprehensive test suite analysis
+- `docs/TEST_SUMMARY.md` - Test coverage and patterns
+- `docs/TEST_RESULTS_SUMMARY.md` - Detailed test run results
+- `docs/` - All implementation summaries, guides, and technical documentation
 
 ### Recent Major Updates (January 2025)
 1. ✅ FitCircle modal UX improvements (progress indicator, dialog styling)
