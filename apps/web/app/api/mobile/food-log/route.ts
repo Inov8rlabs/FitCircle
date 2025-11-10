@@ -89,9 +89,34 @@ export async function GET(request: NextRequest) {
       throw result.error;
     }
 
+    // For entries with images, attach the first image URL
+    const entriesWithImageUrls = await Promise.all(
+      result.data.map(async (entry) => {
+        if (entry.has_images && entry.image_count > 0) {
+          // Fetch first image for this entry
+          const { data: images } = await supabase
+            .from('food_log_images')
+            .select('id')
+            .eq('food_log_entry_id', entry.id)
+            .is('deleted_at', null)
+            .order('display_order', { ascending: true })
+            .limit(1);
+
+          if (images && images.length > 0) {
+            const apiBase = process.env.NEXT_PUBLIC_APP_URL || request.nextUrl.origin;
+            return {
+              ...entry,
+              photo_url: `${apiBase}/api/mobile/food-log/images/${images[0].id}?size=medium`,
+            };
+          }
+        }
+        return entry;
+      })
+    );
+
     const response = NextResponse.json({
       success: true,
-      data: result.data,
+      data: entriesWithImageUrls,
       pagination: {
         page: validatedQuery.page || 1,
         limit: validatedQuery.limit || 20,

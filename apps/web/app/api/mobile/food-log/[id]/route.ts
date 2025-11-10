@@ -53,6 +53,12 @@ export async function GET(
     // Get images for entry
     const imagesResult = await FoodLogImageService.getImagesForEntry(entryId, supabase);
 
+    // Add API URLs to images
+    const imagesWithUrls = FoodLogImageService.addImageUrlsToMany(
+      imagesResult.data,
+      process.env.NEXT_PUBLIC_APP_URL || request.nextUrl.origin
+    );
+
     // Check permissions
     const canEdit = entryResult.data?.user_id === user.id;
     const canShare = canEdit && entryResult.data?.entry_type !== 'supplement';
@@ -61,7 +67,7 @@ export async function GET(
       success: true,
       data: {
         entry: entryResult.data,
-        images: imagesResult.data,
+        images: imagesWithUrls,
         canEdit,
         canShare,
       },

@@ -72,6 +72,10 @@ export interface FoodLogImage {
   created_at: string;
   updated_at: string;
   deleted_at?: string;
+  // API URLs (added by backend, not stored in DB)
+  url?: string; // Medium size URL
+  original_url?: string;
+  thumbnail_url?: string;
 }
 
 export interface FoodLogShare {

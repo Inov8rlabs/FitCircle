@@ -77,10 +77,16 @@ export async function POST(
       );
     }
 
+    // Add API URLs to the image record
+    const imageWithUrls = FoodLogImageService.addImageUrls(
+      result.image!,
+      process.env.NEXT_PUBLIC_APP_URL || request.nextUrl.origin
+    );
+
     return NextResponse.json(
       {
         success: true,
-        data: result.image,
+        data: imageWithUrls,
         meta: {
           requestTime: Date.now() - startTime,
         },

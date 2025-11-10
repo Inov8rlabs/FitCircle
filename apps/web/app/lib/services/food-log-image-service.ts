@@ -326,4 +326,27 @@ export class FoodLogImageService {
       console.error('Storage cleanup error:', error);
     }
   }
+
+  /**
+   * Add API URLs to image records
+   * This transforms storage paths into full API URLs that go through our proxy
+   */
+  static addImageUrls(image: FoodLogImage, baseUrl?: string): FoodLogImage {
+    // Use provided baseUrl or try to get from environment
+    const apiBase = baseUrl || process.env.NEXT_PUBLIC_APP_URL || 'https://www.fitcircle.ai';
+
+    return {
+      ...image,
+      url: `${apiBase}/api/mobile/food-log/images/${image.id}?size=medium`,
+      original_url: `${apiBase}/api/mobile/food-log/images/${image.id}?size=original`,
+      thumbnail_url: `${apiBase}/api/mobile/food-log/images/${image.id}?size=thumbnail`,
+    };
+  }
+
+  /**
+   * Add API URLs to multiple images
+   */
+  static addImageUrlsToMany(images: FoodLogImage[], baseUrl?: string): FoodLogImage[] {
+    return images.map(image => this.addImageUrls(image, baseUrl));
+  }
 }
