@@ -65,11 +65,11 @@ export const ShareFoodLogSchema = z.object({
 );
 
 export const FoodLogQuerySchema = z.object({
-  page: z.string().transform(Number).pipe(z.number().int().positive()).optional(),
-  limit: z.string().transform(Number).pipe(z.number().int().positive().max(100)).optional(),
-  entry_type: z.enum(['food', 'water', 'supplement', 'all']).optional(),
-  start_date: z.string().date().optional(),
-  end_date: z.string().date().optional(),
-  meal_type: z.enum(['breakfast', 'lunch', 'dinner', 'snack', 'other']).optional(),
-  tags: z.string().optional(), // comma-separated
+  page: z.string().transform(Number).pipe(z.number().int().positive()).optional().nullable(),
+  limit: z.string().transform(Number).pipe(z.number().int().positive().max(100)).optional().nullable(),
+  entry_type: z.enum(['food', 'water', 'supplement', 'all']).optional().nullable(),
+  start_date: z.string().date().optional().nullable(),
+  end_date: z.string().date().optional().nullable(),
+  meal_type: z.enum(['breakfast', 'lunch', 'dinner', 'snack', 'other']).optional().nullable(),
+  tags: z.string().optional().nullable(), // comma-separated
 });
