@@ -70,16 +70,16 @@ export async function GET(request: NextRequest) {
     // Parse tags if provided
     const tags = validatedQuery.tags ? validatedQuery.tags.split(',') : undefined;
 
-    // Get entries from service
+    // Get entries from service (convert null to undefined)
     const result = await FoodLogService.getEntries(
       user.id,
       {
-        page: validatedQuery.page,
-        limit: validatedQuery.limit,
-        entry_type: validatedQuery.entry_type,
-        start_date: validatedQuery.start_date,
-        end_date: validatedQuery.end_date,
-        meal_type: validatedQuery.meal_type,
+        page: validatedQuery.page ?? undefined,
+        limit: validatedQuery.limit ?? undefined,
+        entry_type: validatedQuery.entry_type ?? undefined,
+        start_date: validatedQuery.start_date ?? undefined,
+        end_date: validatedQuery.end_date ?? undefined,
+        meal_type: validatedQuery.meal_type ?? undefined,
         tags,
       },
       supabase
