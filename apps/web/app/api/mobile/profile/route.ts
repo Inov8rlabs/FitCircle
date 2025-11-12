@@ -218,16 +218,13 @@ export async function PUT(request: NextRequest) {
  * Delete user account and all associated data
  *
  * IMPORTANT: This is a permanent, irreversible operation required for App Store compliance.
- * Deletes ALL user data including:
- * - Profile information
- * - Daily tracking entries
- * - Food log entries and photos
- * - Daily and weekly goals
- * - Engagement streaks and activities
- * - Challenge participations
- * - Circle memberships
- * - Uploaded files (avatars, photos)
- * - Authentication account
+ * Uses the comprehensive AccountDeletionService which:
+ * - Deletes all user personal data
+ * - Preserves FitCircles with other members (transfers ownership)
+ * - Removes user participation from shared challenges
+ * - Deletes all posts, comments, and activities
+ * - Recalculates leaderboards for affected challenges
+ * - Maintains data integrity for other users
  */
 export async function DELETE(request: NextRequest) {
   const startTime = Date.now();
@@ -240,135 +237,31 @@ export async function DELETE(request: NextRequest) {
     console.log(`🗑️ [Mobile API] ACCOUNT DELETION requested for user: ${userId}`);
     console.log(`⚠️  [Mobile API] This is a permanent, irreversible operation`);
 
-    const { createAdminSupabase } = await import('@/lib/supabase-admin');
-    const supabase = createAdminSupabase();
+    // Use the comprehensive AccountDeletionService
+    const { AccountDeletionService } = await import('@/lib/services/account-deletion-service');
 
-    // Track deletion progress for logging
-    const deletionLog: { [key: string]: number } = {};
-
-    // 1. Delete food log photos from storage
-    console.log('🗑️  [1/10] Deleting food log photos from storage...');
-    const { data: foodLogs } = await supabase
-      .from('food_log')
-      .select('photo_url')
-      .eq('user_id', userId);
-
-    if (foodLogs && foodLogs.length > 0) {
-      const photoUrls = foodLogs
-        .map((log) => log.photo_url)
-        .filter((url): url is string => Boolean(url));
-
-      for (const photoUrl of photoUrls) {
-        try {
-          // Extract path from URL and delete from storage
-          const urlParts = photoUrl.split('/storage/v1/object/public/food-log/');
-          if (urlParts[1]) {
-            await supabase.storage.from('food-log').remove([urlParts[1]]);
-          }
-        } catch (storageError) {
-          console.error('Failed to delete photo:', photoUrl, storageError);
-        }
-      }
-      deletionLog.foodLogPhotos = photoUrls.length;
-    }
-
-    // 2. Delete food log entries
-    console.log('🗑️  [2/10] Deleting food log entries...');
-    const { error: foodLogError, count: foodLogCount } = await supabase
-      .from('food_log')
-      .delete({ count: 'exact' })
-      .eq('user_id', userId);
-    if (foodLogError) throw foodLogError;
-    deletionLog.foodLogEntries = foodLogCount || 0;
-
-    // 3. Delete daily tracking entries
-    console.log('🗑️  [3/10] Deleting daily tracking entries...');
-    const { error: trackingError, count: trackingCount } = await supabase
-      .from('daily_tracking')
-      .delete({ count: 'exact' })
-      .eq('user_id', userId);
-    if (trackingError) throw trackingError;
-    deletionLog.dailyTracking = trackingCount || 0;
-
-    // 4. Delete daily goals
-    console.log('🗑️  [4/10] Deleting daily goals...');
-    const { error: dailyGoalsError, count: dailyGoalsCount } = await supabase
-      .from('daily_goals')
-      .delete({ count: 'exact' })
-      .eq('user_id', userId);
-    if (dailyGoalsError) throw dailyGoalsError;
-    deletionLog.dailyGoals = dailyGoalsCount || 0;
-
-    // 5. Delete weekly goals
-    console.log('🗑️  [5/10] Deleting weekly goals...');
-    const { error: weeklyGoalsError, count: weeklyGoalsCount } = await supabase
-      .from('weekly_goals')
-      .delete({ count: 'exact' })
-      .eq('user_id', userId);
-    if (weeklyGoalsError) throw weeklyGoalsError;
-    deletionLog.weeklyGoals = weeklyGoalsCount || 0;
-
-    // 6. Delete engagement activities
-    console.log('🗑️  [6/10] Deleting engagement activities...');
-    const { error: engagementError, count: engagementCount } = await supabase
-      .from('engagement_activities')
-      .delete({ count: 'exact' })
-      .eq('user_id', userId);
-    if (engagementError) throw engagementError;
-    deletionLog.engagementActivities = engagementCount || 0;
-
-    // 7. Delete metric streaks
-    console.log('🗑️  [7/10] Deleting metric streaks...');
-    const { error: metricStreaksError, count: metricStreaksCount } = await supabase
-      .from('metric_streaks')
-      .delete({ count: 'exact' })
-      .eq('user_id', userId);
-    if (metricStreaksError) throw metricStreaksError;
-    deletionLog.metricStreaks = metricStreaksCount || 0;
-
-    // 8. Delete challenge participations
-    console.log('🗑️  [8/10] Deleting challenge participations...');
-    const { error: challengeError, count: challengeCount } = await supabase
-      .from('challenge_participants')
-      .delete({ count: 'exact' })
-      .eq('user_id', userId);
-    if (challengeError) throw challengeError;
-    deletionLog.challengeParticipations = challengeCount || 0;
-
-    // 9. Delete token blacklist entries
-    console.log('🗑️  [9/10] Deleting token blacklist entries...');
-    const { error: tokenError, count: tokenCount } = await supabase
-      .from('token_blacklist')
-      .delete({ count: 'exact' })
-      .eq('user_id', userId);
-    if (tokenError) throw tokenError;
-    deletionLog.tokenBlacklist = tokenCount || 0;
-
-    // 10. Delete profile (this will cascade delete circle memberships and other related data)
-    console.log('🗑️  [10/10] Deleting user profile...');
-    const { error: profileError } = await supabase
-      .from('profiles')
-      .delete()
-      .eq('id', userId);
-    if (profileError) throw profileError;
-    deletionLog.profile = 1;
-
-    // 11. Finally, delete from Supabase Auth
-    console.log('🗑️  [AUTH] Deleting authentication account...');
-    const { error: authError } = await supabase.auth.admin.deleteUser(userId);
-    if (authError) {
-      console.error('[Mobile API] Failed to delete user from auth:', authError);
-      throw authError;
-    }
+    const result = await AccountDeletionService.deleteAccount(userId, {
+      userEmail: user.email,
+      ipAddress: request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || 'unknown',
+    });
 
     console.log(`✅ [Mobile API] Account deletion completed successfully`);
-    console.log(`📊 [Mobile API] Deletion summary:`, deletionLog);
+    console.log(`📊 [Mobile API] Deletion summary:`, {
+      challenges_transferred: result.challenges_transferred,
+      challenges_deleted: result.challenges_deleted,
+      data_deleted: result.data_summary,
+    });
 
     return NextResponse.json({
       success: true,
       data: {
         message: 'Account and all associated data deleted successfully',
-        deletedItems: deletionLog,
+        deletedAt: result.deleted_at,
+        summary: {
+          challengesTransferred: result.challenges_transferred,
+          challengesDeleted: result.challenges_deleted,
+          dataDeleted: result.data_summary,
+        },
       },
       meta: {
         requestTime: Date.now() - startTime,
@@ -377,7 +270,6 @@ export async function DELETE(request: NextRequest) {
     });
   } catch (error: any) {
     console.error('[Mobile API] Account deletion FAILED:', {
-      userId: error.userId,
       message: error.message,
       stack: process.env.NODE_ENV === 'development' ? error.stack : undefined,
     });

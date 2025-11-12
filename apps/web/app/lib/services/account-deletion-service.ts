@@ -207,70 +207,96 @@ export class AccountDeletionService {
     // ========================================================================
     console.log(`🗑️ [AccountDeletionService] Deleting user-specific data`);
 
+    // Helper function to safely delete from a table (handles missing tables)
+    const safeDelete = async (tableName: string, condition: any) => {
+      try {
+        const { error } = await supabaseAdmin.from(tableName).delete().match(condition);
+        if (error) {
+          // Check if error is due to missing table
+          if (error.message?.includes('does not exist') || error.message?.includes('could not find')) {
+            console.warn(`⚠️ [AccountDeletionService] Table '${tableName}' does not exist - skipping`);
+            return;
+          }
+          throw error;
+        }
+      } catch (err: any) {
+        console.warn(`⚠️ [AccountDeletionService] Error deleting from '${tableName}':`, err.message);
+      }
+    };
+
     const deletionResults = await Promise.allSettled([
       // Notifications
-      supabaseAdmin.from('notifications').delete().eq('user_id', userId),
+      safeDelete('notifications', { user_id: userId }),
 
       // Check-ins
-      supabaseAdmin.from('check_ins').delete().eq('user_id', userId),
+      safeDelete('check_ins', { user_id: userId }),
 
       // Daily tracking
-      supabaseAdmin.from('daily_tracking').delete().eq('user_id', userId),
+      safeDelete('daily_tracking', { user_id: userId }),
 
       // Comments
-      supabaseAdmin.from('comments').delete().eq('user_id', userId),
+      safeDelete('comments', { user_id: userId }),
 
       // Reactions
-      supabaseAdmin.from('reactions').delete().eq('user_id', userId),
+      safeDelete('reactions', { user_id: userId }),
 
       // Achievements
-      supabaseAdmin.from('achievements').delete().eq('user_id', userId),
+      safeDelete('achievements', { user_id: userId }),
 
       // Circle invites (as inviter)
-      supabaseAdmin.from('circle_invites').delete().eq('inviter_id', userId),
+      safeDelete('circle_invites', { inviter_id: userId }),
 
       // Circle members
-      supabaseAdmin.from('circle_members').delete().eq('user_id', userId),
+      safeDelete('circle_members', { user_id: userId }),
 
       // Circle encouragements (sent)
-      supabaseAdmin.from('circle_encouragements').delete().eq('from_user_id', userId),
+      safeDelete('circle_encouragements', { from_user_id: userId }),
 
       // Circle encouragements (received)
-      supabaseAdmin.from('circle_encouragements').delete().eq('to_user_id', userId),
+      safeDelete('circle_encouragements', { to_user_id: userId }),
 
       // Circle check-ins
-      supabaseAdmin.from('circle_check_ins').delete().eq('user_id', userId),
+      safeDelete('circle_check_ins', { user_id: userId }),
 
       // Daily high five limits
-      supabaseAdmin.from('daily_high_five_limits').delete().eq('user_id', userId),
+      safeDelete('daily_high_five_limits', { user_id: userId }),
 
       // Engagement streaks
-      supabaseAdmin.from('engagement_streaks').delete().eq('user_id', userId),
+      safeDelete('engagement_streaks', { user_id: userId }),
 
       // Engagement activities
-      supabaseAdmin.from('engagement_activities').delete().eq('user_id', userId),
+      safeDelete('engagement_activities', { user_id: userId }),
 
       // Metric streaks
-      supabaseAdmin.from('metric_streaks').delete().eq('user_id', userId),
+      safeDelete('metric_streaks', { user_id: userId }),
 
-      // Food log entries
-      supabaseAdmin.from('food_log_entries').delete().eq('user_id', userId),
+      // Food log entries (might not exist if migration not run)
+      safeDelete('food_log_entries', { user_id: userId }),
 
-      // Food log images
-      supabaseAdmin.from('food_log_images').delete().eq('user_id', userId),
+      // Food log images (might not exist if migration not run)
+      safeDelete('food_log_images', { user_id: userId }),
 
-      // Food log shares
-      supabaseAdmin.from('food_log_shares').delete().eq('owner_id', userId),
+      // Food log shares (might not exist if migration not run)
+      safeDelete('food_log_shares', { owner_id: userId }),
 
-      // Food log audit
-      supabaseAdmin.from('food_log_audit').delete().eq('user_id', userId),
+      // Food log audit (might not exist if migration not run)
+      safeDelete('food_log_audit', { user_id: userId }),
 
       // Privacy settings
-      supabaseAdmin.from('privacy_settings').delete().eq('user_id', userId),
+      safeDelete('privacy_settings', { user_id: userId }),
+
+      // Daily goals (mobile-specific)
+      safeDelete('daily_goals', { user_id: userId }),
+
+      // Weekly goals (mobile-specific)
+      safeDelete('weekly_goals', { user_id: userId }),
+
+      // Token blacklist
+      safeDelete('token_blacklist', { user_id: userId }),
 
       // Payments (keep for audit trail, but could be anonymized)
       // Note: We're NOT deleting payments for financial/legal record keeping
-      // supabaseAdmin.from('payments').delete().eq('user_id', userId),
+      // safeDelete('payments', { user_id: userId }),
     ]);
 
     // Check for errors in data deletion
@@ -280,7 +306,7 @@ export class AccountDeletionService {
 
     if (deletionErrors.length > 0) {
       console.warn('⚠️ [AccountDeletionService] Some data deletion operations failed:', deletionErrors);
-      // Continue anyway - some tables might not exist or have no data
+      // Continue anyway - errors are already logged by safeDelete
     }
 
     // ========================================================================
