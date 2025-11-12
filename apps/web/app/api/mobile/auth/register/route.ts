@@ -111,16 +111,20 @@ export async function POST(request: NextRequest) {
     // Generate JWT tokens for mobile
     const tokens = await MobileAPIService.generateTokens(authData.user.id, authData.user.email!);
 
-    // Return mobile-friendly response
+    // Return mobile-friendly response matching login format
     return NextResponse.json(
       {
         success: true,
-        user: {
-          id: authData.user.id,
-          email: authData.user.email,
-          ...profile,
+        data: {
+          access_token: tokens.access_token,
+          refresh_token: tokens.refresh_token,
+          expires_in: Math.floor((tokens.expires_at - Date.now() / 1000)),
+          user: {
+            id: authData.user.id,
+            email: authData.user.email,
+            ...profile,
+          },
         },
-        session: tokens,
       },
       { status: 201 }
     );
