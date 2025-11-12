@@ -212,3 +212,84 @@ export async function PUT(request: NextRequest) {
     );
   }
 }
+
+/**
+ * DELETE /api/mobile/profile
+ * Delete user account
+ */
+export async function DELETE(request: NextRequest) {
+  const startTime = Date.now();
+
+  try {
+    // Verify authentication
+    const user = await requireMobileAuth(request);
+
+    console.log(`🗑️ [Mobile API] Account deletion requested for user: ${user.id}`);
+
+    // Delete the user account
+    // This will cascade delete all related data via database foreign key constraints
+    const { createAdminSupabase } = await import('@/lib/supabase-admin');
+    const supabase = createAdminSupabase();
+
+    // Delete from Supabase Auth
+    const { error: authError } = await supabase.auth.admin.deleteUser(user.id);
+
+    if (authError) {
+      console.error('[Mobile API] Failed to delete user from auth:', authError);
+      throw authError;
+    }
+
+    // Profile and related data will be cascade deleted via database foreign keys
+
+    console.log(`✅ [Mobile API] Successfully deleted user account: ${user.id}`);
+
+    return NextResponse.json({
+      success: true,
+      data: {
+        message: 'Account deleted successfully',
+      },
+      meta: {
+        requestTime: Date.now() - startTime,
+      },
+      error: null,
+    });
+  } catch (error: any) {
+    console.error('[Mobile API] Delete account error:', {
+      userId: error.userId,
+      message: error.message,
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined,
+    });
+
+    if (error.message === 'Unauthorized') {
+      return NextResponse.json(
+        {
+          success: false,
+          data: null,
+          error: {
+            code: 'UNAUTHORIZED',
+            message: 'Invalid or expired token',
+            details: {},
+            timestamp: new Date().toISOString(),
+          },
+          meta: null,
+        },
+        { status: 401 }
+      );
+    }
+
+    return NextResponse.json(
+      {
+        success: false,
+        data: null,
+        error: {
+          code: 'INTERNAL_SERVER_ERROR',
+          message: 'Failed to delete account',
+          details: {},
+          timestamp: new Date().toISOString(),
+        },
+        meta: null,
+      },
+      { status: 500 }
+    );
+  }
+}
