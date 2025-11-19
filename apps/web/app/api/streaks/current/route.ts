@@ -7,7 +7,8 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getAuthenticatedUser, createAdminSupabase } from '@/lib/utils/api-auth';
+import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
+import { createAdminSupabase } from '@/lib/utils/api-auth';
 import { getUserStreak, isFreezeAvailable, getNextMilestone } from '@/lib/services/streak-service-v2';
 
 /**
@@ -17,11 +18,7 @@ import { getUserStreak, isFreezeAvailable, getNextMilestone } from '@/lib/servic
  */
 export async function GET(request: NextRequest) {
   try {
-    const user = await getAuthenticatedUser(request);
-
-    if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+    const user = await requireMobileAuth(request);
 
     const supabase = createAdminSupabase();
 

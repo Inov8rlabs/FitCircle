@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
-import { createServerSupabase } from '@/lib/supabase-server';
+import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { StreakClaimingService } from '@/lib/services/streak-claiming-service';
 import { StreakClaimError } from '@/lib/types/streak-claiming';
 
@@ -29,24 +29,8 @@ const activateFreezeSchema = z.object({
  */
 export async function POST(request: NextRequest) {
   try {
-    // 1. Verify authentication
-    const supabase = await createServerSupabase();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
-    if (!user) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: {
-            code: 'UNAUTHORIZED',
-            message: 'Authentication required',
-          },
-        },
-        { status: 401 }
-      );
-    }
+    // 1. Verify mobile authentication (Bearer token)
+    const user = await requireMobileAuth(request);
 
     // 2. Parse and validate request body
     const body = await request.json();
