@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'sonner';
 import {
@@ -14,7 +15,8 @@ import {
   Trophy,
   Flame,
   Check,
-  Loader2
+  Loader2,
+  Utensils
 } from 'lucide-react';
 import {
   LineChart,
@@ -38,7 +40,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { CircularProgress, ActivityRing, CircularSlider } from '@/components/ui/circular-progress';
 import { UnitToggle } from '@/components/ui/unit-toggle';
 import { BathroomScale } from '@/components/icons/BathroomScale';
-import DashboardNav from '@/components/DashboardNav';
+import { Navbar } from '@/components/layout/navbar';
 import { GoalProgressIndicator } from '@/components/GoalProgressIndicator';
 import { StepsGoalCard } from '@/components/StepsGoalCard';
 import { QuickEntryCard } from '@/components/QuickEntryCard';
@@ -468,7 +470,7 @@ export default function DashboardPage() {
 
   return (
     <>
-      <DashboardNav />
+      <Navbar />
       <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 overflow-x-hidden">
         {/* Subtle circle background decoration */}
         <div className="fixed inset-0 overflow-hidden pointer-events-none">
@@ -478,340 +480,353 @@ export default function DashboardPage() {
         </div>
 
         <div className="relative max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-8 lg:py-12">
-        {/* Header */}
-        <motion.div
-          initial={{ opacity: 0, y: -20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="mb-4 sm:mb-6 lg:mb-8"
-        >
-          <h1 className="text-2xl sm:text-3xl lg:text-5xl font-bold bg-gradient-to-r from-indigo-300 via-fuchsia-400 to-orange-400 bg-clip-text text-transparent mb-1.5 sm:mb-2">
-            Welcome back, {user?.name || 'Champion'}!
-          </h1>
-          <p className="text-gray-400 text-xs sm:text-sm lg:text-base">
-            Track your progress and stay consistent 🎯
-          </p>
-        </motion.div>
+          {/* Header */}
+          <motion.div
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="mb-4 sm:mb-6 lg:mb-8"
+          >
+            <h1 className="text-2xl sm:text-3xl lg:text-5xl font-bold bg-gradient-to-r from-indigo-300 via-fuchsia-400 to-orange-400 bg-clip-text text-transparent mb-1.5 sm:mb-2">
+              Welcome back, {user?.name || 'Champion'}!
+            </h1>
+            <p className="text-gray-400 text-xs sm:text-sm lg:text-base">
+              Track your progress and stay consistent 🎯
+            </p>
+          </motion.div>
 
-        {/* Quick Entry Section */}
-        <div className="mb-6 sm:mb-8">
-          <div className="flex items-center justify-between mb-3 sm:mb-4">
-            <h2 className="text-base sm:text-lg lg:text-xl font-semibold text-white">Quick Log</h2>
-            <button
-              onClick={() => setShowBackfillDialog(true)}
-              className="text-xs sm:text-sm text-indigo-400 hover:text-indigo-300 transition-colors flex items-center gap-1"
-            >
-              <Calendar className="h-3 w-3 sm:h-4 sm:w-4" />
-              <span className="hidden sm:inline">Log past date</span>
-              <span className="sm:hidden">Past date</span>
-            </button>
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <QuickEntryCard
-              icon={BathroomScale}
-              label="Weight"
-              value={quickWeight}
-              onChange={setQuickWeight}
-              onSubmit={handleQuickWeightSubmit}
-              placeholder={unitSystem === 'metric' ? '70.0' : '154.0'}
-              unit={getWeightUnit(unitSystem)}
-              color="purple-500"
-              type="number"
-              step="0.1"
-              min="0"
-              helperText={`Today's weight in ${getWeightUnit(unitSystem)}`}
-              headerAction={
-                <UnitToggle
-                  value={unitSystem}
-                  onChange={setUnitSystem}
-                  isLoading={isLoadingUnits}
-                  size="sm"
-                />
-              }
-            />
-            <QuickEntryCard
-              icon={Footprints as any}
-              label="Steps"
-              value={quickSteps}
-              onChange={setQuickSteps}
-              onSubmit={handleQuickStepsSubmit}
-              placeholder="10000"
-              unit="steps"
-              color="indigo-500"
-              type="number"
-              step="1"
-              min="0"
-              helperText="Today's step count"
-            />
-          </div>
-        </div>
-
-        {/* Engagement Streak Highlight - Full Width on Mobile, Prominent on Desktop */}
-        <div className="mb-6 sm:mb-8">
-          <EngagementStreakCard
-            onOpenHistory={() => setShowStreakHistory(true)}
-            onOpenCheckIn={() => setShowBackfillDialog(true)}
-          />
-        </div>
-
-        {/* Daily Progress Meter - Hero Section */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.2 }}
-          className="mb-6 sm:mb-8"
-        >
-          <DailyProgressMeter
-            userId={user?.id}
-            onGoalComplete={refreshGoals}
-            className="w-full"
-          />
-        </motion.div>
-
-        {/* Simplified Progress Cards */}
-        <div className="space-y-4 sm:space-y-6 mb-6 sm:mb-8">
-          <div className="grid grid-cols-2 gap-3 sm:gap-4">
-            {/* Steps Card with Progress Ring */}
-            <motion.div
-              initial={{ opacity: 0, scale: 0.9 }}
-              animate={{ opacity: 1, scale: 1 }}
-            >
-              <Card className="bg-slate-900/50 border-slate-800 backdrop-blur-xl h-full">
-                <CardContent className="p-4 sm:p-6 flex flex-col items-center space-y-3 sm:space-y-4">
-                  {/* Header Icon */}
-                  <div className="w-full flex justify-start">
-                    <div className="w-10 h-10 rounded-full bg-indigo-500/20 flex items-center justify-center">
-                      <Footprints className="w-5 h-5 text-indigo-400" />
+          {/* Quick Entry Section */}
+          <div className="mb-6 sm:mb-8">
+            <div className="flex items-center justify-between mb-3 sm:mb-4">
+              <h2 className="text-base sm:text-lg lg:text-xl font-semibold text-white">Quick Log</h2>
+              <button
+                onClick={() => setShowBackfillDialog(true)}
+                className="text-xs sm:text-sm text-indigo-400 hover:text-indigo-300 transition-colors flex items-center gap-1"
+              >
+                <Calendar className="h-3 w-3 sm:h-4 sm:w-4" />
+                <span className="hidden sm:inline">Log past date</span>
+                <span className="sm:hidden">Past date</span>
+              </button>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <QuickEntryCard
+                icon={BathroomScale}
+                label="Weight"
+                value={quickWeight}
+                onChange={setQuickWeight}
+                onSubmit={handleQuickWeightSubmit}
+                placeholder={unitSystem === 'metric' ? '70.0' : '154.0'}
+                unit={getWeightUnit(unitSystem)}
+                color="purple-500"
+                type="number"
+                step="0.1"
+                min="0"
+                helperText={`Today's weight in ${getWeightUnit(unitSystem)}`}
+                headerAction={
+                  <UnitToggle
+                    value={unitSystem}
+                    onChange={setUnitSystem}
+                    isLoading={isLoadingUnits}
+                    size="sm"
+                  />
+                }
+              />
+              <QuickEntryCard
+                icon={Footprints as any}
+                label="Steps"
+                value={quickSteps}
+                onChange={setQuickSteps}
+                onSubmit={handleQuickStepsSubmit}
+                placeholder="10000"
+                unit="steps"
+                color="indigo-500"
+                type="number"
+                step="1"
+                min="0"
+                helperText="Today's step count"
+              />
+              <Link href="/food-log" className="block h-full">
+                <Card className="bg-slate-900/50 border-slate-800 backdrop-blur-xl h-full hover:bg-slate-800/50 transition-colors cursor-pointer group">
+                  <CardContent className="p-6 flex flex-col items-center justify-center h-full space-y-4">
+                    <div className="w-12 h-12 rounded-full bg-orange-500/20 flex items-center justify-center group-hover:scale-110 transition-transform">
+                      <Utensils className="w-6 h-6 text-orange-400" />
                     </div>
-                  </div>
-
-                  {/* Steps Ring */}
-                  <div className="relative w-28 h-28 sm:w-32 sm:h-32">
-                    <svg className="w-full h-full transform -rotate-90">
-                      {/* Background ring */}
-                      <circle
-                        cx="50%"
-                        cy="50%"
-                        r="45%"
-                        fill="none"
-                        stroke="rgba(99, 102, 241, 0.2)"
-                        strokeWidth="12"
-                      />
-                      {/* Progress ring */}
-                      <circle
-                        cx="50%"
-                        cy="50%"
-                        r="45%"
-                        fill="none"
-                        stroke="#6366f1"
-                        strokeWidth="12"
-                        strokeLinecap="round"
-                        strokeDasharray={`${2 * Math.PI * 45} ${2 * Math.PI * 45}`}
-                        strokeDashoffset={`${2 * Math.PI * 45 * (1 - Math.min(dailyStats.todaySteps / dailyStepsGoal, 1))}`}
-                        className="transition-all duration-1000 ease-out"
-                      />
-                    </svg>
-                    {/* Center content */}
-                    <div className="absolute inset-0 flex flex-col items-center justify-center">
-                      <p className="text-xl sm:text-2xl font-bold text-white">{dailyStats.todaySteps.toLocaleString()}</p>
-                      <p className="text-xs text-gray-400">steps</p>
-                    </div>
-                  </div>
-
-                  {/* Goal */}
-                  <div className="text-center">
-                    <p className="text-sm sm:text-base font-semibold text-white">Steps</p>
-                    <p className="text-xs text-gray-400">Goal: {dailyStepsGoal.toLocaleString()}</p>
-                  </div>
-                </CardContent>
-              </Card>
-            </motion.div>
-
-            {/* Weight Card */}
-            <motion.div
-              initial={{ opacity: 0, scale: 0.9 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ delay: 0.1 }}
-            >
-              <Card className="bg-slate-900/50 border-slate-800 backdrop-blur-xl h-full">
-                <CardContent className="p-4 sm:p-6 flex flex-col items-center space-y-3 sm:space-y-4">
-                  {/* Header Icon */}
-                  <div className="w-full flex justify-start">
-                    <div className="w-10 h-10 rounded-full bg-purple-500/20 flex items-center justify-center">
-                      <BathroomScale className="w-5 h-5 text-purple-400" />
-                    </div>
-                  </div>
-
-                  {/* Weight Display (no ring, just value) */}
-                  <div className="h-28 sm:h-32 flex flex-col items-center justify-center space-y-2">
-                    <p className="text-3xl sm:text-4xl font-bold text-white">
-                      {formatWeight(dailyStats.todayWeight, unitSystem)}
-                    </p>
-                    <p className="text-xs text-gray-400">
-                      {dailyStats.lastWeightDate
-                        ? `Logged: ${new Date(dailyStats.lastWeightDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`
-                        : 'No data'}
-                    </p>
-                  </div>
-
-                  {/* Goal */}
-                  <div className="text-center">
-                    <p className="text-sm sm:text-base font-semibold text-white">Weight</p>
-                    <p className="text-xs text-gray-400">
-                      {goalWeightKg
-                        ? `Goal: ${weightKgToDisplay(goalWeightKg, unitSystem).toFixed(1)} ${unitSystem === 'metric' ? 'kg' : 'lbs'}`
-                        : 'Set goal in profile'}
-                    </p>
-                  </div>
-                </CardContent>
-              </Card>
-            </motion.div>
-          </div>
-        </div>
-
-        {/* Main Content Tabs */}
-        <Tabs defaultValue="weight" className="space-y-4 sm:space-y-6">
-          <TabsList className="w-full sm:w-auto grid grid-cols-2 gap-2 bg-slate-900/50 border border-slate-800">
-            <TabsTrigger value="weight" className="text-xs sm:text-sm data-[state=active]:bg-purple-500/20 data-[state=active]:text-purple-400">
-              <BathroomScale className="h-3.5 w-3.5 sm:h-4 sm:w-4 mr-1.5 sm:mr-2" size={16} />
-              <span className="hidden sm:inline">Weight Trends</span>
-              <span className="sm:hidden">Weight</span>
-            </TabsTrigger>
-            <TabsTrigger value="steps" className="text-xs sm:text-sm data-[state=active]:bg-indigo-500/20 data-[state=active]:text-indigo-400">
-              <Footprints className="h-3.5 w-3.5 sm:h-4 sm:w-4 mr-1.5 sm:mr-2" />
-              <span className="hidden sm:inline">Steps Trends</span>
-              <span className="sm:hidden">Steps</span>
-            </TabsTrigger>
-          </TabsList>
-
-          {/* Weight Trends Tab */}
-          <TabsContent value="weight">
-            <Card className="bg-slate-900/50 border-slate-800 backdrop-blur-xl shadow-2xl">
-              <CardHeader className="p-4 sm:p-6">
-                <CardTitle className="flex items-center gap-2 text-white text-base sm:text-lg">
-                  <BathroomScale className="h-4 w-4 sm:h-5 sm:w-5" size={20} />
-                  Weight Progress ({getWeightUnit(unitSystem)})
-                </CardTitle>
-                <CardDescription className="text-gray-400 text-xs sm:text-sm">Last 14 days</CardDescription>
-              </CardHeader>
-              <CardContent className="h-64 sm:h-80 p-3 sm:p-6">
-                {chartData.filter(d => d.weight).length === 0 ? (
-                  <div className="flex items-center justify-center h-full">
                     <div className="text-center">
-                      <BathroomScale className="h-12 w-12 text-gray-600 mx-auto mb-3" size={48} />
-                      <p className="text-gray-400">No weight data yet</p>
+                      <h3 className="text-lg font-semibold text-white">Food & Drink</h3>
+                      <p className="text-sm text-gray-400">Log meals and water</p>
                     </div>
-                  </div>
-                ) : (
-                  <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart data={chartData.filter(d => d.weight)}>
-                      <defs>
-                        <linearGradient id="weightGradient" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.4}/>
-                          <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0}/>
-                        </linearGradient>
-                      </defs>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
-                      <XAxis dataKey="date" stroke="#94a3b8" className="text-xs" />
-                      <YAxis stroke="#94a3b8" className="text-xs" />
-                      <Tooltip
-                        contentStyle={{
-                          backgroundColor: '#1e293b',
-                          border: '1px solid #334155',
-                          borderRadius: '8px',
-                          color: '#fff'
-                        }}
-                        formatter={(value: any) => {
-                          if (value === null || value === undefined) return ['--', ''];
-                          return [`${value} ${getWeightUnit(unitSystem)}`, ''];
-                        }}
-                      />
-                      <Area
-                        type="monotone"
-                        dataKey="weight"
-                        stroke="#8b5cf6"
-                        strokeWidth={3}
-                        fill="url(#weightGradient)"
-                      />
-                    </AreaChart>
-                  </ResponsiveContainer>
-                )}
-              </CardContent>
-            </Card>
-          </TabsContent>
+                  </CardContent>
+                </Card>
+              </Link>
+            </div>
+          </div>
 
-          {/* Steps Trends Tab */}
-          <TabsContent value="steps">
-            <Card className="bg-slate-900/50 border-slate-800 backdrop-blur-xl shadow-2xl">
-              <CardHeader className="p-4 sm:p-6">
-                <CardTitle className="flex items-center gap-2 text-white text-base sm:text-lg">
-                  <Footprints className="h-4 w-4 sm:h-5 sm:w-5" />
-                  Steps Progress
-                </CardTitle>
-                <CardDescription className="text-gray-400 text-xs sm:text-sm">Last 14 days</CardDescription>
-              </CardHeader>
-              <CardContent className="h-64 sm:h-80 p-3 sm:p-6">
-                {chartData.filter(d => d.steps > 0).length === 0 ? (
-                  <div className="flex items-center justify-center h-full">
-                    <div className="text-center">
-                      <Footprints className="h-12 w-12 text-gray-600 mx-auto mb-3" />
-                      <p className="text-gray-400">No steps data yet</p>
-                    </div>
-                  </div>
-                ) : (
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={chartData}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
-                      <XAxis dataKey="date" stroke="#94a3b8" className="text-xs" />
-                      <YAxis stroke="#94a3b8" className="text-xs" />
-                      <Tooltip
-                        contentStyle={{
-                          backgroundColor: '#1e293b',
-                          border: '1px solid #334155',
-                          borderRadius: '8px',
-                          color: '#fff'
-                        }}
-                      />
-                      <Bar dataKey="steps" fill="#6366f1" radius={[8, 8, 0, 0]} />
-                    </BarChart>
-                  </ResponsiveContainer>
-                )}
-              </CardContent>
-            </Card>
-          </TabsContent>
-        </Tabs>
+          {/* Engagement Streak Highlight - Full Width on Mobile, Prominent on Desktop */}
+          <div className="mb-6 sm:mb-8">
+            <EngagementStreakCard
+              onOpenHistory={() => setShowStreakHistory(true)}
+              onOpenCheckIn={() => setShowBackfillDialog(true)}
+            />
+          </div>
 
-        {/* Recent Check-Ins Section */}
-        {checkIns.length > 0 && (
+          {/* Daily Progress Meter - Hero Section */}
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.7 }}
-            className="mt-6 sm:mt-8"
+            transition={{ delay: 0.2 }}
+            className="mb-6 sm:mb-8"
           >
-            <h2 className="text-base sm:text-lg lg:text-xl font-semibold text-white mb-3 sm:mb-4">Recent Check-Ins</h2>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
-              {checkIns.slice(0, 6).map((checkIn) => (
-                <CheckInCard
-                  key={checkIn.id}
-                  checkIn={{
-                    id: checkIn.id,
-                    user_id: user?.id || '',
-                    tracking_date: checkIn.tracking_date,
-                    weight_kg: checkIn.weight_kg ?? null,
-                    steps: checkIn.steps ?? null,
-                    mood_score: checkIn.mood_score ?? null,
-                    energy_level: checkIn.energy_level ?? null,
-                    notes: checkIn.notes ?? null,
-                    is_public: true, // Assume public for user's own check-ins
-                    created_at: checkIn.created_at,
-                    updated_at: checkIn.created_at,
-                  }}
-                  onClick={() => handleCheckInClick(checkIn)}
-                />
-              ))}
-            </div>
+            <DailyProgressMeter
+              userId={user?.id}
+              onGoalComplete={refreshGoals}
+              className="w-full"
+            />
           </motion.div>
-        )}
+
+          {/* Simplified Progress Cards */}
+          <div className="space-y-4 sm:space-y-6 mb-6 sm:mb-8">
+            <div className="grid grid-cols-2 gap-3 sm:gap-4">
+              {/* Steps Card with Progress Ring */}
+              <motion.div
+                initial={{ opacity: 0, scale: 0.9 }}
+                animate={{ opacity: 1, scale: 1 }}
+              >
+                <Card className="bg-slate-900/50 border-slate-800 backdrop-blur-xl h-full">
+                  <CardContent className="p-4 sm:p-6 flex flex-col items-center space-y-3 sm:space-y-4">
+                    {/* Header Icon */}
+                    <div className="w-full flex justify-start">
+                      <div className="w-10 h-10 rounded-full bg-indigo-500/20 flex items-center justify-center">
+                        <Footprints className="w-5 h-5 text-indigo-400" />
+                      </div>
+                    </div>
+
+                    {/* Steps Ring */}
+                    <div className="relative w-28 h-28 sm:w-32 sm:h-32">
+                      <svg className="w-full h-full transform -rotate-90">
+                        {/* Background ring */}
+                        <circle
+                          cx="50%"
+                          cy="50%"
+                          r="45%"
+                          fill="none"
+                          stroke="rgba(99, 102, 241, 0.2)"
+                          strokeWidth="12"
+                        />
+                        {/* Progress ring */}
+                        <circle
+                          cx="50%"
+                          cy="50%"
+                          r="45%"
+                          fill="none"
+                          stroke="#6366f1"
+                          strokeWidth="12"
+                          strokeLinecap="round"
+                          strokeDasharray={`${2 * Math.PI * 45} ${2 * Math.PI * 45}`}
+                          strokeDashoffset={`${2 * Math.PI * 45 * (1 - Math.min(dailyStats.todaySteps / dailyStepsGoal, 1))}`}
+                          className="transition-all duration-1000 ease-out"
+                        />
+                      </svg>
+                      {/* Center content */}
+                      <div className="absolute inset-0 flex flex-col items-center justify-center">
+                        <p className="text-xl sm:text-2xl font-bold text-white">{dailyStats.todaySteps.toLocaleString()}</p>
+                        <p className="text-xs text-gray-400">steps</p>
+                      </div>
+                    </div>
+
+                    {/* Goal */}
+                    <div className="text-center">
+                      <p className="text-sm sm:text-base font-semibold text-white">Steps</p>
+                      <p className="text-xs text-gray-400">Goal: {dailyStepsGoal.toLocaleString()}</p>
+                    </div>
+                  </CardContent>
+                </Card>
+              </motion.div>
+
+              {/* Weight Card */}
+              <motion.div
+                initial={{ opacity: 0, scale: 0.9 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ delay: 0.1 }}
+              >
+                <Card className="bg-slate-900/50 border-slate-800 backdrop-blur-xl h-full">
+                  <CardContent className="p-4 sm:p-6 flex flex-col items-center space-y-3 sm:space-y-4">
+                    {/* Header Icon */}
+                    <div className="w-full flex justify-start">
+                      <div className="w-10 h-10 rounded-full bg-purple-500/20 flex items-center justify-center">
+                        <BathroomScale className="w-5 h-5 text-purple-400" />
+                      </div>
+                    </div>
+
+                    {/* Weight Display (no ring, just value) */}
+                    <div className="h-28 sm:h-32 flex flex-col items-center justify-center space-y-2">
+                      <p className="text-3xl sm:text-4xl font-bold text-white">
+                        {formatWeight(dailyStats.todayWeight, unitSystem)}
+                      </p>
+                      <p className="text-xs text-gray-400">
+                        {dailyStats.lastWeightDate
+                          ? `Logged: ${new Date(dailyStats.lastWeightDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`
+                          : 'No data'}
+                      </p>
+                    </div>
+
+                    {/* Goal */}
+                    <div className="text-center">
+                      <p className="text-sm sm:text-base font-semibold text-white">Weight</p>
+                      <p className="text-xs text-gray-400">
+                        {goalWeightKg
+                          ? `Goal: ${weightKgToDisplay(goalWeightKg, unitSystem).toFixed(1)} ${unitSystem === 'metric' ? 'kg' : 'lbs'}`
+                          : 'Set goal in profile'}
+                      </p>
+                    </div>
+                  </CardContent>
+                </Card>
+              </motion.div>
+            </div>
+          </div>
+
+          {/* Main Content Tabs */}
+          <Tabs defaultValue="weight" className="space-y-4 sm:space-y-6">
+            <TabsList className="w-full sm:w-auto grid grid-cols-2 gap-2 bg-slate-900/50 border border-slate-800">
+              <TabsTrigger value="weight" className="text-xs sm:text-sm data-[state=active]:bg-purple-500/20 data-[state=active]:text-purple-400">
+                <BathroomScale className="h-3.5 w-3.5 sm:h-4 sm:w-4 mr-1.5 sm:mr-2" size={16} />
+                <span className="hidden sm:inline">Weight Trends</span>
+                <span className="sm:hidden">Weight</span>
+              </TabsTrigger>
+              <TabsTrigger value="steps" className="text-xs sm:text-sm data-[state=active]:bg-indigo-500/20 data-[state=active]:text-indigo-400">
+                <Footprints className="h-3.5 w-3.5 sm:h-4 sm:w-4 mr-1.5 sm:mr-2" />
+                <span className="hidden sm:inline">Steps Trends</span>
+                <span className="sm:hidden">Steps</span>
+              </TabsTrigger>
+            </TabsList>
+
+            {/* Weight Trends Tab */}
+            <TabsContent value="weight">
+              <Card className="bg-slate-900/50 border-slate-800 backdrop-blur-xl shadow-2xl">
+                <CardHeader className="p-4 sm:p-6">
+                  <CardTitle className="flex items-center gap-2 text-white text-base sm:text-lg">
+                    <BathroomScale className="h-4 w-4 sm:h-5 sm:w-5" size={20} />
+                    Weight Progress ({getWeightUnit(unitSystem)})
+                  </CardTitle>
+                  <CardDescription className="text-gray-400 text-xs sm:text-sm">Last 14 days</CardDescription>
+                </CardHeader>
+                <CardContent className="h-64 sm:h-80 p-3 sm:p-6">
+                  {chartData.filter(d => d.weight).length === 0 ? (
+                    <div className="flex items-center justify-center h-full">
+                      <div className="text-center">
+                        <BathroomScale className="h-12 w-12 text-gray-600 mx-auto mb-3" size={48} />
+                        <p className="text-gray-400">No weight data yet</p>
+                      </div>
+                    </div>
+                  ) : (
+                    <ResponsiveContainer width="100%" height="100%">
+                      <AreaChart data={chartData.filter(d => d.weight)}>
+                        <defs>
+                          <linearGradient id="weightGradient" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.4} />
+                            <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0} />
+                          </linearGradient>
+                        </defs>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
+                        <XAxis dataKey="date" stroke="#94a3b8" className="text-xs" />
+                        <YAxis stroke="#94a3b8" className="text-xs" />
+                        <Tooltip
+                          contentStyle={{
+                            backgroundColor: '#1e293b',
+                            border: '1px solid #334155',
+                            borderRadius: '8px',
+                            color: '#fff'
+                          }}
+                          formatter={(value: any) => {
+                            if (value === null || value === undefined) return ['--', ''];
+                            return [`${value} ${getWeightUnit(unitSystem)}`, ''];
+                          }}
+                        />
+                        <Area
+                          type="monotone"
+                          dataKey="weight"
+                          stroke="#8b5cf6"
+                          strokeWidth={3}
+                          fill="url(#weightGradient)"
+                        />
+                      </AreaChart>
+                    </ResponsiveContainer>
+                  )}
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            {/* Steps Trends Tab */}
+            <TabsContent value="steps">
+              <Card className="bg-slate-900/50 border-slate-800 backdrop-blur-xl shadow-2xl">
+                <CardHeader className="p-4 sm:p-6">
+                  <CardTitle className="flex items-center gap-2 text-white text-base sm:text-lg">
+                    <Footprints className="h-4 w-4 sm:h-5 sm:w-5" />
+                    Steps Progress
+                  </CardTitle>
+                  <CardDescription className="text-gray-400 text-xs sm:text-sm">Last 14 days</CardDescription>
+                </CardHeader>
+                <CardContent className="h-64 sm:h-80 p-3 sm:p-6">
+                  {chartData.filter(d => d.steps > 0).length === 0 ? (
+                    <div className="flex items-center justify-center h-full">
+                      <div className="text-center">
+                        <Footprints className="h-12 w-12 text-gray-600 mx-auto mb-3" />
+                        <p className="text-gray-400">No steps data yet</p>
+                      </div>
+                    </div>
+                  ) : (
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={chartData}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
+                        <XAxis dataKey="date" stroke="#94a3b8" className="text-xs" />
+                        <YAxis stroke="#94a3b8" className="text-xs" />
+                        <Tooltip
+                          contentStyle={{
+                            backgroundColor: '#1e293b',
+                            border: '1px solid #334155',
+                            borderRadius: '8px',
+                            color: '#fff'
+                          }}
+                        />
+                        <Bar dataKey="steps" fill="#6366f1" radius={[8, 8, 0, 0]} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  )}
+                </CardContent>
+              </Card>
+            </TabsContent>
+          </Tabs>
+
+          {/* Recent Check-Ins Section */}
+          {checkIns.length > 0 && (
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.7 }}
+              className="mt-6 sm:mt-8"
+            >
+              <h2 className="text-base sm:text-lg lg:text-xl font-semibold text-white mb-3 sm:mb-4">Recent Check-Ins</h2>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
+                {checkIns.slice(0, 6).map((checkIn) => (
+                  <CheckInCard
+                    key={checkIn.id}
+                    checkIn={{
+                      id: checkIn.id,
+                      user_id: user?.id || '',
+                      tracking_date: checkIn.tracking_date,
+                      weight_kg: checkIn.weight_kg ?? null,
+                      steps: checkIn.steps ?? null,
+                      mood_score: checkIn.mood_score ?? null,
+                      energy_level: checkIn.energy_level ?? null,
+                      notes: checkIn.notes ?? null,
+                      is_public: true, // Assume public for user's own check-ins
+                      created_at: checkIn.created_at,
+                      updated_at: checkIn.created_at,
+                    }}
+                    onClick={() => handleCheckInClick(checkIn)}
+                  />
+                ))}
+              </div>
+            </motion.div>
+          )}
         </div>
       </div>
 

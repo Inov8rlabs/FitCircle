@@ -99,6 +99,7 @@ export interface FoodLogStats {
   by_type: Record<EntryType, number>;
   by_meal: Record<MealType, number>;
   total_water_ml: number;
+  total_calories: number;
   avg_daily_entries: number;
   streak_days: number;
 }

@@ -468,7 +468,7 @@ export class FoodLogService {
       // Get all entries in date range
       const { data: entries, error } = await supabase
         .from('food_log_entries')
-        .select('entry_type, meal_type, water_ml, entry_date')
+        .select('entry_type, meal_type, water_ml, entry_date, nutrition_data')
         .eq('user_id', userId)
         .gte('entry_date', startDate)
         .lte('entry_date', endDate)
@@ -496,6 +496,8 @@ export class FoodLogService {
         total_water_ml: entries
           .filter(e => e.water_ml)
           .reduce((sum, e) => sum + (e.water_ml || 0), 0),
+        total_calories: entries
+          .reduce((sum, e) => sum + (e.nutrition_data?.calories || 0), 0),
         avg_daily_entries: this.calculateAvgDailyEntries(entries, startDate, endDate),
         streak_days: await this.calculateStreak(userId, supabase),
       };

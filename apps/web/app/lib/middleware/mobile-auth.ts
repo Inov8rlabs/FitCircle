@@ -10,39 +10,60 @@ export interface AuthenticatedRequest extends NextRequest {
  * Verify Bearer token from Authorization header
  * Returns user object if valid, null otherwise
  */
+import { createServerSupabase } from '@/lib/supabase-server';
+import { createAdminSupabase } from '@/lib/supabase-admin';
+
+/**
+ * Verify Bearer token from Authorization header OR session cookie
+ * Returns user object if valid, null otherwise
+ */
 export async function verifyMobileAuth(request: NextRequest): Promise<any | null> {
   const authHeader = request.headers.get('Authorization');
 
-  if (!authHeader) {
-    console.log('[verifyMobileAuth] No Authorization header');
-    return null;
+  // 1. Try Authorization Header (Mobile App)
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    const token = authHeader.substring(7);
+    if (token) {
+      console.log('[verifyMobileAuth] Verifying Bearer token...');
+      try {
+        const user = await MobileAPIService.authenticateWithToken(token);
+        return user;
+      } catch (error) {
+        console.error('[verifyMobileAuth] Error calling authenticateWithToken:', error);
+      }
+    }
   }
 
-  // Check for Bearer token format
-  if (!authHeader.startsWith('Bearer ')) {
-    console.log('[verifyMobileAuth] Invalid Authorization header format');
-    return null;
-  }
-
-  // Extract token
-  const token = authHeader.substring(7);
-
-  if (!token) {
-    console.log('[verifyMobileAuth] Empty token after Bearer prefix');
-    return null;
-  }
-
-  console.log('[verifyMobileAuth] Token extracted, length:', token.length);
-
-  // Verify token and get user
+  // 2. Try Session Cookie (Web App)
   try {
-    const user = await MobileAPIService.authenticateWithToken(token);
-    console.log('[verifyMobileAuth] authenticateWithToken returned:', user ? 'user object' : 'null');
-    return user;
+    console.log('[verifyMobileAuth] Checking for session cookie...');
+    const supabase = await createServerSupabase();
+    const { data: { user: authUser }, error } = await supabase.auth.getUser();
+
+    if (authUser && !error) {
+      console.log('[verifyMobileAuth] Valid session cookie found for user:', authUser.id);
+
+      // Fetch full profile to match mobile auth behavior
+      const supabaseAdmin = createAdminSupabase();
+      const { data: profile } = await supabaseAdmin
+        .from('profiles')
+        .select('*')
+        .eq('id', authUser.id)
+        .single();
+
+      if (profile) {
+        return profile;
+      }
+
+      // Fallback if profile not found (shouldn't happen usually)
+      return { id: authUser.id, email: authUser.email };
+    }
   } catch (error) {
-    console.error('[verifyMobileAuth] Error calling authenticateWithToken:', error);
-    return null;
+    console.error('[verifyMobileAuth] Cookie auth error:', error);
   }
+
+  console.log('[verifyMobileAuth] No valid auth found');
+  return null;
 }
 
 /**

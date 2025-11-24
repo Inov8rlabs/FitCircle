@@ -17,6 +17,13 @@ export type BeverageCategory =
   | 'milk'
   | 'other';
 
+export interface BeverageType {
+  id: string;
+  name: string;
+  calories: number;
+  caffeine: number;
+}
+
 export type BeverageSource = 'manual' | 'import' | 'api' | 'ios' | 'android' | 'web';
 
 export type Temperature = 'hot' | 'cold' | 'iced' | 'room_temp';
