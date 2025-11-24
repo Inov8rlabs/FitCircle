@@ -80,8 +80,8 @@ export async function GET(request: NextRequest) {
       error: null,
     });
 
-    // Add cache headers (1 minute cache)
-    response.headers.set('Cache-Control', 'private, max-age=60');
+    // No caching for frequently changing user data
+    response.headers.set('Cache-Control', 'private, no-cache, no-store, must-revalidate');
 
     return response;
   } catch (error: any) {
