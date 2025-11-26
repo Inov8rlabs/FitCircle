@@ -202,11 +202,12 @@ export default function DashboardPage() {
       const today = new Date().toISOString().split('T')[0];
 
       // Update the steps_source to 'manual' to indicate user confirmed
-      const { error } = await (supabase
-        .from('daily_tracking' as any)
+      // @ts-ignore - daily_tracking table not in generated types
+      const { error } = await supabase
+        .from('daily_tracking')
         .update({ steps_source: 'manual' })
         .eq('user_id', user.id)
-        .eq('tracking_date', today) as any);
+        .eq('tracking_date', today);
 
       if (error) throw error;
 
