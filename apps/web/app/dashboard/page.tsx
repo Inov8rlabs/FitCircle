@@ -204,7 +204,7 @@ export default function DashboardPage() {
       // Update the steps_source to 'manual' to indicate user confirmed
       const { error } = await supabase
         .from('daily_tracking')
-        .update({ steps_source: 'manual' })
+        .update({ steps_source: 'manual' } as any)
         .eq('user_id', user.id)
         .eq('tracking_date', today);
 
