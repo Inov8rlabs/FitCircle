@@ -1,5 +1,5 @@
 import { cn } from '@/lib/utils';
-import { Utensils, Coffee, GlassWater, Pill, Carrot, CupSoda, Wine } from 'lucide-react';
+import { Utensils, Coffee, GlassWater, Pill, Carrot, CupSoda, Wine, Leaf } from 'lucide-react';
 
 export type CategoryId = 'meal' | 'snack' | 'water' | 'coffee' | 'tea' | 'soda' | 'juice' | 'alcohol' | 'supplement';
 
@@ -15,7 +15,7 @@ const icons: Record<CategoryId, any> = {
   snack: Carrot,
   water: GlassWater,
   coffee: Coffee,
-  tea: Coffee, // Reuse coffee icon or find leaf if available
+  tea: Leaf,
   soda: CupSoda,
   juice: CupSoda,
   alcohol: Wine,
@@ -27,7 +27,7 @@ const colors: Record<CategoryId, string> = {
   snack: 'text-pink-500',
   water: 'text-cyan-500',
   coffee: 'text-amber-700',
-  tea: 'text-green-500',
+  tea: 'text-emerald-500',
   soda: 'text-purple-500',
   juice: 'text-yellow-500',
   alcohol: 'text-red-500',

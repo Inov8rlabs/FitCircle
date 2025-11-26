@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { FoodLogList } from '@/components/food-log/food-log-list';
 import { FoodLogService } from '@/lib/services/food-log-service';
 import { BeverageLogService } from '@/lib/services/beverage-log-service';
+import { FoodLogImageService } from '@/lib/services/food-log-image-service';
 
 export const dynamic = 'force-dynamic';
 
@@ -31,9 +32,23 @@ export default async function FoodLogPage() {
     const totalCalories = (foodStats?.total_calories || 0) + (beverageStats?.total_calories || 0);
     const totalWater = (foodStats?.total_water_ml || 0) + (beverageStats?.total_water_ml || 0);
 
+    // Get entry IDs that have images
+    const foodEntryIds = (foodLogs || [])
+        .filter((entry: any) => entry.has_images && entry.image_count > 0)
+        .map((entry: any) => entry.id);
+
+    // Fetch images for entries that have them
+    const { data: imagesByEntry } = await FoodLogImageService.getImagesForEntries(foodEntryIds, supabase);
+
+    // Attach images to food entries
+    const foodLogsWithImages = (foodLogs || []).map((entry: any) => ({
+        ...entry,
+        images: imagesByEntry[entry.id] || [],
+    }));
+
     // Combine and Sort
     const allEntries = [
-        ...(foodLogs || []),
+        ...foodLogsWithImages,
         ...(beverageLogs || [])
     ].sort((a, b) => new Date(b.logged_at).getTime() - new Date(a.logged_at).getTime());
 

@@ -162,6 +162,71 @@ export class FoodLogImageService {
   }
 
   /**
+   * Get images for multiple food log entries with signed URLs
+   * Returns a map of entry_id -> images array
+   */
+  static async getImagesForEntries(
+    entryIds: string[],
+    supabase: SupabaseClient
+  ): Promise<{ data: Record<string, FoodLogImage[]>; error: Error | null }> {
+    try {
+      if (entryIds.length === 0) {
+        return { data: {}, error: null };
+      }
+
+      const { data: images, error } = await supabase
+        .from('food_log_images')
+        .select('*')
+        .in('food_log_entry_id', entryIds)
+        .is('deleted_at', null)
+        .order('display_order', { ascending: true });
+
+      if (error) {
+        return { data: {}, error: new Error(error.message) };
+      }
+
+      // Group images by entry ID and add signed URLs
+      const imagesByEntry: Record<string, FoodLogImage[]> = {};
+      
+      if (images && images.length > 0) {
+        // Generate signed URLs for all images
+        const imagesWithUrls = await Promise.all(
+          images.map(async (image) => {
+            const mediumPath = image.storage_path.replace('_original.', '_medium.');
+            
+            const [thumbnailUrl, mediumUrl] = await Promise.all([
+              supabase.storage.from(image.storage_bucket).createSignedUrl(image.thumbnail_path, 3600),
+              supabase.storage.from(image.storage_bucket).createSignedUrl(mediumPath, 3600),
+            ]);
+
+            return {
+              ...image,
+              thumbnail_url: thumbnailUrl.data?.signedUrl || '',
+              url: mediumUrl.data?.signedUrl || '',
+            };
+          })
+        );
+
+        // Group by entry ID
+        for (const image of imagesWithUrls) {
+          const entryId = image.food_log_entry_id;
+          if (!imagesByEntry[entryId]) {
+            imagesByEntry[entryId] = [];
+          }
+          imagesByEntry[entryId].push(image);
+        }
+      }
+
+      return { data: imagesByEntry, error: null };
+    } catch (error) {
+      return {
+        data: {},
+        error: error instanceof Error ? error : new Error('Unknown error'),
+      };
+    }
+  }
+
+  /**
    * Get signed URLs for image access
    */
   static async getSignedUrls(
