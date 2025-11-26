@@ -379,8 +379,8 @@ export async function performDailyCheckIn(
     .single();
 
   const trackingData: any = {
-    mood: checkInData.mood,
-    energy: checkInData.energy,
+    mood_score: checkInData.mood,
+    energy_level: checkInData.energy,
   };
 
   if (checkInData.weight !== undefined) {

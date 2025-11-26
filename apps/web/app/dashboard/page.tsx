@@ -49,6 +49,7 @@ import { EngagementStreakCard } from '@/components/EngagementStreakCard';
 import { StreakHistoryModal } from '@/components/StreakHistoryModal';
 import { CheckInCard, CheckInDetailModal, CheckInDetailSheet } from '@/components/check-ins';
 import { DailyProgressMeter } from '@/components/DailyProgressMeter';
+import { AutoSyncSubmissionCard } from '@/components/AutoSyncSubmissionCard';
 import { useAuthStore } from '@/stores/auth-store';
 import { useUnitPreference } from '@/hooks/useUnitPreference';
 import { useDailyGoals } from '@/hooks/useDailyGoals';
@@ -114,6 +115,11 @@ export default function DashboardPage() {
   const [selectedCheckIn, setSelectedCheckIn] = useState<CheckIn | null>(null);
   const [showCheckInDetail, setShowCheckInDetail] = useState(false);
 
+  // Auto-sync submission states
+  const [pendingAutoSyncSteps, setPendingAutoSyncSteps] = useState<number | null>(null);
+  const [isSubmittingAutoSync, setIsSubmittingAutoSync] = useState(false);
+  const [autoSyncUnlocked, setAutoSyncUnlocked] = useState(false);
+
   // Convert weight value when unit system changes
   useEffect(() => {
     if (quickWeight && unitSystem !== previousUnitSystem) {
@@ -146,8 +152,95 @@ export default function DashboardPage() {
       fetchCheckIns();
       fetchDailyStats();
       fetchGoalWeight();
+      checkPendingAutoSync();
     }
   }, [user]);
+
+  // Check if today has unconfirmed auto-synced steps
+  const checkPendingAutoSync = async () => {
+    if (!user) return;
+
+    try {
+      const today = new Date().toISOString().split('T')[0];
+
+      // Check localStorage for unlock status
+      const unlockKey = `stepsConfirmed-${today}`;
+      if (localStorage.getItem(unlockKey) === 'true') {
+        setAutoSyncUnlocked(true);
+        return;
+      }
+
+      // Fetch today's tracking data
+      const { data, error } = await supabase
+        .from('daily_tracking')
+        .select('steps, steps_source')
+        .eq('user_id', user.id)
+        .eq('tracking_date', today)
+        .maybeSingle() as { data: any; error: any };
+
+      if (error) {
+        console.error('Error checking auto-sync status:', error);
+        return;
+      }
+
+      // If steps exist and source is healthkit, show the confirmation card
+      if (data?.steps && data?.steps > 0 && data?.steps_source === 'healthkit') {
+        setPendingAutoSyncSteps(data.steps);
+      }
+    } catch (error) {
+      console.error('Error checking pending auto-sync:', error);
+    }
+  };
+
+  // Handle auto-sync steps confirmation
+  const handleAutoSyncSubmit = async () => {
+    if (!user || !pendingAutoSyncSteps) return;
+
+    setIsSubmittingAutoSync(true);
+
+    try {
+      const today = new Date().toISOString().split('T')[0];
+
+      // Update the steps_source to 'manual' to indicate user confirmed
+      const { error } = await supabase
+        .from('daily_tracking')
+        .update({ steps_source: 'manual' })
+        .eq('user_id', user.id)
+        .eq('tracking_date', today);
+
+      if (error) throw error;
+
+      // Mark today as unlocked in localStorage
+      localStorage.setItem(`stepsConfirmed-${today}`, 'true');
+
+      setAutoSyncUnlocked(true);
+      setPendingAutoSyncSteps(null);
+      toast.success('Steps logged! Your streak is safe 🔥');
+
+      // Refresh data
+      fetchCheckIns();
+      fetchDailyStats();
+      refreshGoals();
+    } catch (error) {
+      console.error('Error confirming auto-sync:', error);
+      toast.error('Failed to confirm steps');
+    } finally {
+      setIsSubmittingAutoSync(false);
+    }
+  };
+
+  // Listen for food/beverage log events to unlock auto-sync
+  useEffect(() => {
+    const handleStreakAutoClaimed = () => {
+      const today = new Date().toISOString().split('T')[0];
+      localStorage.setItem(`stepsConfirmed-${today}`, 'true');
+      setAutoSyncUnlocked(true);
+      setPendingAutoSyncSteps(null);
+    };
+
+    window.addEventListener('streak-auto-claimed', handleStreakAutoClaimed);
+    return () => window.removeEventListener('streak-auto-claimed', handleStreakAutoClaimed);
+  }, []);
 
   const fetchGoalWeight = async () => {
     if (!user) return;
@@ -493,6 +586,19 @@ export default function DashboardPage() {
               Track your progress and stay consistent 🎯
             </p>
           </motion.div>
+
+          {/* Auto-Sync Submission Card - shown when HealthKit steps need confirmation */}
+          <AnimatePresence>
+            {pendingAutoSyncSteps && !autoSyncUnlocked && (
+              <div className="mb-6 sm:mb-8">
+                <AutoSyncSubmissionCard
+                  steps={pendingAutoSyncSteps}
+                  onSubmit={handleAutoSyncSubmit}
+                  isSubmitting={isSubmittingAutoSync}
+                />
+              </div>
+            )}
+          </AnimatePresence>
 
           {/* Quick Entry Section */}
           <div className="mb-6 sm:mb-8">

@@ -288,7 +288,7 @@ export class OnboardingService {
     }
 
     if (checkInData.mood) {
-      trackingData.mood = checkInData.mood;
+      trackingData.mood_score = checkInData.mood;
     }
 
     if (checkInData.energy) {

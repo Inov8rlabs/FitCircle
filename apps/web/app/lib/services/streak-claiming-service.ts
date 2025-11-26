@@ -593,17 +593,24 @@ export class StreakClaimingService {
   static async checkHealthData(userId: string, date: string): Promise<HealthDataCheck> {
     const supabaseAdmin = createAdminSupabase();
 
-    const { data } = await supabaseAdmin
+    const { data, error } = await supabaseAdmin
       .from('daily_tracking')
-      .select('weight_kg, steps, mood, energy')
+      .select('weight_kg, steps, mood_score, energy_level')
       .eq('user_id', userId)
       .eq('tracking_date', date)
       .single();
 
+    if (error && error.code !== 'PGRST116') {
+      // PGRST116 = no rows found, which is expected for no data
+      console.error(`[checkHealthData] Error querying daily_tracking for ${date}:`, error);
+    }
+
     const hasWeight = !!data?.weight_kg && data.weight_kg > 0;
     const hasSteps = !!data?.steps && data.steps > 0;
-    const hasMood = !!data?.mood;
-    const hasEnergy = !!data?.energy;
+    const hasMood = !!data?.mood_score;
+    const hasEnergy = !!data?.energy_level;
+
+    console.log(`[checkHealthData] User ${userId}, date ${date}: weight=${hasWeight}, steps=${hasSteps}, mood=${hasMood}, energy=${hasEnergy}`);
 
     return {
       hasWeight,

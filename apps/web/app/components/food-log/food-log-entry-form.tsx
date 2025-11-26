@@ -118,6 +118,12 @@ export function FoodLogEntryForm() {
             }
 
             toast({ title: 'Entry saved!', description: 'Your log has been added.' });
+
+            // Dispatch event to unlock auto-sync for today (food/beverage log counts towards streak)
+            if (typeof window !== 'undefined') {
+                window.dispatchEvent(new CustomEvent('streak-auto-claimed', { detail: { source: 'food_log' } }));
+            }
+
             router.push('/food-log');
             router.refresh();
         } catch (error: any) {
