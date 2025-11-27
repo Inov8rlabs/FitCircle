@@ -228,11 +228,12 @@ export async function submitToAllFitCircles(
 ): Promise<{ results: SubmissionResult[]; error: Error | null }> {
   try {
     // Get all active FitCircles user belongs to
+    // NOTE: Using challenge_participants table (circle_members was dropped in migration 018)
     const { data: memberships, error: memberError } = await supabase
-      .from('circle_members')
-      .select('circle_id')
+      .from('challenge_participants')
+      .select('challenge_id')
       .eq('user_id', userId)
-      .eq('is_active', true);
+      .eq('status', 'active');
 
     if (memberError) {
       console.error('[submitToAllFitCircles] Error fetching memberships:', memberError);
@@ -249,13 +250,13 @@ export async function submitToAllFitCircles(
     for (const membership of memberships) {
       const { submission, error } = await submitToFitCircle(
         userId,
-        membership.circle_id,
+        membership.challenge_id,
         date,
         supabase
       );
 
       results.push({
-        fitcircle_id: membership.circle_id,
+        fitcircle_id: membership.challenge_id,
         success: !error && submission !== null,
         rank: submission?.rank_after_submission || null,
         rank_change: submission?.rank_change || 0,
@@ -289,17 +290,18 @@ export async function getPendingSubmissions(
     const { hasData } = await hasTodayTrackingData(userId, date, supabase);
 
     // Get all active FitCircles
+    // NOTE: Using challenge_participants table (circle_members was dropped in migration 018)
     const { data: memberships, error: memberError } = await supabase
-      .from('circle_members')
+      .from('challenge_participants')
       .select(`
-        circle_id,
-        circles:circle_id (
+        challenge_id,
+        challenges:challenge_id (
           id,
           name
         )
       `)
       .eq('user_id', userId)
-      .eq('is_active', true);
+      .eq('status', 'active');
 
     if (memberError) {
       console.error('[getPendingSubmissions] Error fetching memberships:', memberError);
@@ -314,11 +316,11 @@ export async function getPendingSubmissions(
     // Check submission status for each FitCircle
     const pending: PendingSubmission[] = [];
     for (const membership of memberships) {
-      const alreadySubmitted = await hasSubmittedToday(userId, membership.circle_id, date, supabase);
+      const alreadySubmitted = await hasSubmittedToday(userId, membership.challenge_id, date, supabase);
 
       pending.push({
-        fitcircle_id: membership.circle_id,
-        fitcircle_name: (membership.circles as any)?.name || 'Unknown',
+        fitcircle_id: membership.challenge_id,
+        fitcircle_name: (membership.challenges as any)?.name || 'Unknown',
         can_submit: hasData && !alreadySubmitted,
         already_submitted: alreadySubmitted,
       });
@@ -408,11 +410,12 @@ export async function getSubmissionStats(
 }> {
   try {
     // Get total members
+    // NOTE: Using challenge_participants table (circle_members was dropped in migration 018)
     const { data: members, error: memberError } = await supabase
-      .from('circle_members')
+      .from('challenge_participants')
       .select('user_id')
-      .eq('circle_id', fitcircleId)
-      .eq('is_active', true);
+      .eq('challenge_id', fitcircleId)
+      .eq('status', 'active');
 
     if (memberError) {
       return { total_members: 0, submitted_count: 0, submission_rate: 0, error: new Error(memberError.message) };
