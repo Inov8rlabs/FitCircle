@@ -119,12 +119,17 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // For unexpected errors, include more details for debugging
     return NextResponse.json(
       {
         success: false,
         error: {
-          code: 'INTERNAL_SERVER_ERROR',
-          message: 'An unexpected error occurred',
+          code: error.code || 'INTERNAL_SERVER_ERROR',
+          message: error.message || 'An unexpected error occurred',
+          details: {
+            name: error.name,
+            stack: process.env.NODE_ENV === 'development' ? error.stack : undefined,
+          },
         },
       },
       { status: 500 }

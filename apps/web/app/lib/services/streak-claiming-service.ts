@@ -126,7 +126,19 @@ export class StreakClaimingService {
 
     if (claimError) {
       console.error('[StreakClaimingService.claimStreak] Step 4 FAILED - Insert claim error:', claimError);
-      throw claimError;
+      // Check for unique constraint violation (already claimed)
+      if (claimError.code === '23505') {
+        throw new StreakClaimError(
+          'Streak already claimed for this date',
+          CLAIM_ERROR_CODES.ALREADY_CLAIMED,
+          { date: claimDateStr }
+        );
+      }
+      throw new StreakClaimError(
+        claimError.message || 'Failed to insert claim record',
+        'DATABASE_ERROR',
+        { originalError: claimError.code, date: claimDateStr }
+      );
     }
     console.log('[StreakClaimingService.claimStreak] Step 4: Claim record inserted:', claim.id);
 
