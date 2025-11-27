@@ -71,22 +71,26 @@ export class StreakClaimingService {
       throw e;
     }
     
-    if (!canClaimResult.canClaim) {
-      console.log('[StreakClaimingService.claimStreak] Step 1: Cannot claim -', canClaimResult.reason);
-      throw new StreakClaimError(
-        canClaimResult.reason || 'Cannot claim streak',
-        CLAIM_ERROR_CODES.NO_HEALTH_DATA,
-        { date: claimDateStr, reason: canClaimResult.reason }
-      );
-    }
-
-    // 2. Check if already claimed
+    // 2. Check if already claimed (check this FIRST)
     if (canClaimResult.alreadyClaimed) {
-      console.log('[StreakClaimingService.claimStreak] Step 2: Already claimed');
+      console.log('[StreakClaimingService.claimStreak] Step 1: Already claimed');
       throw new StreakClaimError(
         'Streak already claimed for this date',
         CLAIM_ERROR_CODES.ALREADY_CLAIMED,
         { date: claimDateStr }
+      );
+    }
+
+    if (!canClaimResult.canClaim) {
+      console.log('[StreakClaimingService.claimStreak] Step 1: Cannot claim -', canClaimResult.reason);
+      // Determine correct error code based on reason
+      const errorCode = canClaimResult.hasHealthData === false 
+        ? CLAIM_ERROR_CODES.NO_HEALTH_DATA 
+        : 'CLAIM_NOT_ALLOWED';
+      throw new StreakClaimError(
+        canClaimResult.reason || 'Cannot claim streak',
+        errorCode,
+        { date: claimDateStr, reason: canClaimResult.reason }
       );
     }
 

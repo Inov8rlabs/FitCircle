@@ -61,7 +61,18 @@ export async function GET(request: NextRequest) {
     const date = new Date(dateStr + 'T00:00:00.000Z');
     const result = await StreakClaimingService.canClaimStreak(user.id, date, timezone);
 
-    return NextResponse.json(result);
+    // Transform to iOS expected format
+    const response = {
+      date: dateStr,
+      is_claimed: result.alreadyClaimed,
+      is_claimable: result.canClaim,
+      reason: result.reason || null,
+      health_data_synced: result.hasHealthData ?? false,
+    };
+
+    console.log(`[GET /api/streaks/claim-status] User ${user.id}, date ${dateStr}: is_claimed=${response.is_claimed}, is_claimable=${response.is_claimable}`);
+
+    return NextResponse.json(response);
   } catch (error: any) {
     console.error('[GET /api/streaks/claim-status] Error:', error);
 
