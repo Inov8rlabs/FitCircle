@@ -57,7 +57,8 @@ export async function GET(request: NextRequest) {
     }
 
     // 4. Check claim status
-    const date = new Date(dateStr);
+    // Parse as UTC midnight to preserve the date string
+    const date = new Date(dateStr + 'T00:00:00.000Z');
     const result = await StreakClaimingService.canClaimStreak(user.id, date, timezone);
 
     return NextResponse.json(result);

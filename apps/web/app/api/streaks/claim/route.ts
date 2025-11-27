@@ -43,13 +43,26 @@ export async function POST(request: NextRequest) {
     const { claimDate, timezone } = claimStreakSchema.parse(body);
 
     // 3. Determine claim date (today if not specified)
-    const targetDate = claimDate ? new Date(claimDate) : new Date();
-    targetDate.setHours(0, 0, 0, 0);
+    // IMPORTANT: Parse dates at UTC midnight to avoid timezone issues
+    // The claimDate string from iOS is already in local date format (YYYY-MM-DD)
+    let targetDate: Date;
+    let claimDateString: string;
+    
+    if (claimDate) {
+      // Parse as UTC midnight to preserve the date string
+      targetDate = new Date(claimDate + 'T00:00:00.000Z');
+      claimDateString = claimDate;
+    } else {
+      // Use today's date in UTC
+      targetDate = new Date();
+      targetDate.setUTCHours(0, 0, 0, 0);
+      claimDateString = targetDate.toISOString().split('T')[0];
+    }
 
     // 4. Determine claim method
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const isToday = targetDate.getTime() === today.getTime();
+    const now = new Date();
+    const todayString = now.toISOString().split('T')[0];
+    const isToday = claimDateString === todayString;
     const method = isToday ? 'explicit' : 'retroactive';
 
     // 5. Claim the streak
