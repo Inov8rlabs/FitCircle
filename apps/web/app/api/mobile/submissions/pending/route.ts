@@ -19,14 +19,14 @@ import { getPendingSubmissions } from '@/lib/services/data-submission-service';
  *
  * Check pending submissions for the user
  *
- * Response:
+ * Response (iOS format):
  * {
  *   success: true,
  *   data: {
- *     date: string,
- *     pending_submissions: PendingSubmission[],
- *     count: number,
- *     hasPendingSubmissions: boolean
+ *     has_pending_submissions: boolean,
+ *     today_steps: number,
+ *     today_weight: number | null,
+ *     circles: [{ circle_id, circle_name, has_submitted_today }]
  *   },
  *   error: null,
  *   meta: { requestTime: number }
@@ -41,6 +41,17 @@ export async function GET(request: NextRequest) {
     console.log(`[Mobile Pending Submissions] Checking for user: ${user.id}, date: ${date}`);
 
     const supabase = createAdminSupabase();
+
+    // Fetch today's tracking data for steps and weight
+    const { data: todayTracking } = await supabase
+      .from('daily_tracking')
+      .select('steps, weight_kg')
+      .eq('user_id', user.id)
+      .eq('tracking_date', date)
+      .single();
+
+    const today_steps = todayTracking?.steps || 0;
+    const today_weight = todayTracking?.weight_kg || null;
 
     const { pending, error } = await getPendingSubmissions(user.id, date, supabase);
 
@@ -62,18 +73,24 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const count = pending.filter(p => p.can_submit).length;
-    const has_pending_submissions = count > 0;
+    // Transform to iOS expected format
+    const circles = pending.map(p => ({
+      circle_id: p.fitcircle_id,
+      circle_name: p.fitcircle_name,
+      has_submitted_today: p.already_submitted,
+    }));
 
-    console.log(`[Mobile Pending Submissions] Found ${count} pending submissions (${pending.length} total circles)`);
+    const has_pending_submissions = pending.some(p => p.can_submit);
+
+    console.log(`[Mobile Pending Submissions] Found ${circles.length} circles, has_pending: ${has_pending_submissions}, steps: ${today_steps}`);
 
     const response = NextResponse.json({
       success: true,
       data: {
-        date,
-        pending_submissions: pending,
-        count,
         has_pending_submissions,
+        today_steps,
+        today_weight,
+        circles,
       },
       error: null,
       meta: {
