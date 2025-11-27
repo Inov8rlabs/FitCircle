@@ -62,8 +62,17 @@ export class StreakClaimingService {
     );
 
     // 1. Validate claim is allowed
-    const canClaimResult = await this.canClaimStreak(userId, claimDate, timezone);
+    console.log('[StreakClaimingService.claimStreak] Step 1: Validating claim...');
+    let canClaimResult;
+    try {
+      canClaimResult = await this.canClaimStreak(userId, claimDate, timezone);
+    } catch (e: any) {
+      console.error('[StreakClaimingService.claimStreak] Step 1 FAILED - canClaimStreak error:', e.message);
+      throw e;
+    }
+    
     if (!canClaimResult.canClaim) {
+      console.log('[StreakClaimingService.claimStreak] Step 1: Cannot claim -', canClaimResult.reason);
       throw new StreakClaimError(
         canClaimResult.reason || 'Cannot claim streak',
         CLAIM_ERROR_CODES.NO_HEALTH_DATA,
@@ -73,6 +82,7 @@ export class StreakClaimingService {
 
     // 2. Check if already claimed
     if (canClaimResult.alreadyClaimed) {
+      console.log('[StreakClaimingService.claimStreak] Step 2: Already claimed');
       throw new StreakClaimError(
         'Streak already claimed for this date',
         CLAIM_ERROR_CODES.ALREADY_CLAIMED,
@@ -81,9 +91,18 @@ export class StreakClaimingService {
     }
 
     // 3. Check for health data
-    const healthCheck = await this.checkHealthData(userId, claimDateStr);
+    console.log('[StreakClaimingService.claimStreak] Step 3: Checking health data...');
+    let healthCheck;
+    try {
+      healthCheck = await this.checkHealthData(userId, claimDateStr);
+      console.log('[StreakClaimingService.claimStreak] Step 3: Health data check passed -', JSON.stringify(healthCheck));
+    } catch (e: any) {
+      console.error('[StreakClaimingService.claimStreak] Step 3 FAILED - checkHealthData error:', e.message);
+      throw e;
+    }
 
     // 4. Insert claim record
+    console.log('[StreakClaimingService.claimStreak] Step 4: Inserting claim record...');
     const { data: claim, error: claimError } = await supabaseAdmin
       .from('streak_claims')
       .insert({
@@ -106,41 +125,65 @@ export class StreakClaimingService {
       .single();
 
     if (claimError) {
-      console.error('[StreakClaimingService.claimStreak] Error inserting claim:', claimError);
+      console.error('[StreakClaimingService.claimStreak] Step 4 FAILED - Insert claim error:', claimError);
       throw claimError;
     }
+    console.log('[StreakClaimingService.claimStreak] Step 4: Claim record inserted:', claim.id);
 
-    // 5. Record engagement activity
-    await EngagementStreakService.recordActivity(
-      userId,
-      'weight_log', // Generic activity type for streak claim
-      claim.id,
-      claimDateStr
-    );
+    // 5. Record engagement activity (this also updates the streak internally)
+    console.log('[StreakClaimingService.claimStreak] Step 5: Recording engagement activity...');
+    let streakResponse = { current_streak: 1, longest_streak: 1 };
+    try {
+      await EngagementStreakService.recordActivity(
+        userId,
+        'circle_checkin', // Use circle_checkin for claiming streaks
+        claim.id,
+        claimDateStr
+      );
+      console.log('[StreakClaimingService.claimStreak] Step 5: Activity recorded');
+      
+      // Fetch updated streak
+      streakResponse = await EngagementStreakService.getEngagementStreak(userId);
+      console.log('[StreakClaimingService.claimStreak] Step 5: Current streak:', streakResponse.current_streak);
+    } catch (e: any) {
+      console.error('[StreakClaimingService.claimStreak] Step 5 FAILED - recordActivity error:', e.message, e.stack);
+      // Don't throw - continue with defaults
+    }
 
-    // 6. Update engagement streak record
-    const streakResponse = await EngagementStreakService.updateEngagementStreak(userId);
+    // 6. Update last_claim_date in engagement_streaks
+    console.log('[StreakClaimingService.claimStreak] Step 6: Updating last_claim_date...');
+    try {
+      const { data: currentStreakData } = await supabaseAdmin
+        .from('engagement_streaks')
+        .select('total_claims')
+        .eq('user_id', userId)
+        .single();
 
-    // 7. Update last_claim_date in engagement_streaks
-    // First fetch current total_claims, then increment
-    const { data: currentStreak } = await supabaseAdmin
-      .from('engagement_streaks')
-      .select('total_claims')
-      .eq('user_id', userId)
-      .single();
+      await supabaseAdmin
+        .from('engagement_streaks')
+        .update({
+          last_claim_date: claimDateStr,
+          total_claims: (currentStreakData?.total_claims || 0) + 1,
+        })
+        .eq('user_id', userId);
+      console.log('[StreakClaimingService.claimStreak] Step 6: last_claim_date updated');
+    } catch (e: any) {
+      console.error('[StreakClaimingService.claimStreak] Step 6 FAILED - update last_claim_date error:', e.message);
+      // Don't throw - not critical
+    }
 
-    await supabaseAdmin
-      .from('engagement_streaks')
-      .update({
-        last_claim_date: claimDateStr,
-        total_claims: (currentStreak?.total_claims || 0) + 1,
-      })
-      .eq('user_id', userId);
-
-    // 8. Check for milestone shields
-    const milestone = getMilestoneInfo(streakResponse.current_streak);
-    if (milestone) {
-      await this.grantMilestoneShields(userId, milestone.shieldsGranted || 0);
+    // 7. Check for milestone shields
+    console.log('[StreakClaimingService.claimStreak] Step 7: Checking milestones...');
+    let milestone: MilestoneInfo | undefined = undefined;
+    try {
+      milestone = getMilestoneInfo(streakResponse.current_streak);
+      if (milestone && milestone.shieldsGranted && milestone.shieldsGranted > 0) {
+        console.log('[StreakClaimingService.claimStreak] Step 7: Granting', milestone.shieldsGranted, 'shields');
+        await this.grantMilestoneShields(userId, milestone.shieldsGranted);
+      }
+    } catch (e: any) {
+      console.error('[StreakClaimingService.claimStreak] Step 7 FAILED - milestone/shield error:', e.message);
+      // Don't throw - not critical
     }
 
     console.log(
