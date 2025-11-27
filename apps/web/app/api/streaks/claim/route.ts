@@ -78,6 +78,8 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(result);
   } catch (error: any) {
     console.error('[POST /api/streaks/claim] Error:', error);
+    console.error('[POST /api/streaks/claim] Error message:', error?.message);
+    console.error('[POST /api/streaks/claim] Error stack:', error?.stack);
 
     if (error instanceof StreakClaimError) {
       const statusCode =

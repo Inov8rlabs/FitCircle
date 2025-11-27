@@ -437,15 +437,17 @@ export class StreakClaimingService {
     const newCount = Math.min(CLAIMING_CONSTANTS.MAX_TOTAL_SHIELDS, currentCount + count);
 
     // Update milestone shield count
+    // Use upsert with onConflict to handle both insert and update cases
     const { error } = await supabaseAdmin
       .from('streak_shields')
-      .upsert({
-        user_id: userId,
-        shield_type: 'milestone_shield',
-        available_count: newCount,
-      })
-      .eq('user_id', userId)
-      .eq('shield_type', 'milestone_shield');
+      .upsert(
+        {
+          user_id: userId,
+          shield_type: 'milestone_shield',
+          available_count: newCount,
+        },
+        { onConflict: 'user_id,shield_type' }
+      );
 
     if (error) {
       console.error('[StreakClaimingService.grantMilestoneShields] Error:', error);
