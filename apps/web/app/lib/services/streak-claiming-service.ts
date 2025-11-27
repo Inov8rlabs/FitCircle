@@ -332,31 +332,25 @@ export class StreakClaimingService {
     }
 
     // Decrement shield count - using direct update instead of RPC
-    const { data: currentShields, error: fetchError } = await supabaseAdmin
+    // Table structure: one row per user per shield_type with available_count
+    const { data: shieldRow, error: fetchError } = await supabaseAdmin
       .from('streak_shields')
-      .select('freezes, milestone_shields, purchased')
+      .select('available_count')
       .eq('user_id', userId)
+      .eq('shield_type', shieldType)
       .single();
 
     if (fetchError) {
-      console.error('[StreakClaimingService.activateFreeze] Error fetching shields:', fetchError);
+      console.error('[StreakClaimingService.activateFreeze] Error fetching shield:', fetchError);
       throw fetchError;
     }
 
-    const updateData: Record<string, number> = {};
-    if (shieldType === 'freeze' && currentShields.freezes > 0) {
-      updateData.freezes = currentShields.freezes - 1;
-    } else if (shieldType === 'milestone_shield' && currentShields.milestone_shields > 0) {
-      updateData.milestone_shields = currentShields.milestone_shields - 1;
-    } else if (shieldType === 'purchased' && currentShields.purchased > 0) {
-      updateData.purchased = currentShields.purchased - 1;
-    }
-
-    if (Object.keys(updateData).length > 0) {
+    if (shieldRow && shieldRow.available_count > 0) {
       const { error: updateError } = await supabaseAdmin
         .from('streak_shields')
-        .update(updateData)
-        .eq('user_id', userId);
+        .update({ available_count: shieldRow.available_count - 1 })
+        .eq('user_id', userId)
+        .eq('shield_type', shieldType);
 
       if (updateError) {
         console.error('[StreakClaimingService.activateFreeze] Error decrementing shield:', updateError);
