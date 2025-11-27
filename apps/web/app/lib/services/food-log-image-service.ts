@@ -113,8 +113,20 @@ export class FoodLogImageService {
         return { success: false, error: new Error(error.message) };
       }
 
-      // Update parent entry image count
-      await supabase.rpc('increment_image_count', { entry_id: entryId });
+      // Update parent entry image count - using direct update instead of RPC
+      const { data: entryData } = await supabase
+        .from('food_log_entries')
+        .select('image_count')
+        .eq('id', entryId)
+        .single();
+      
+      await supabase
+        .from('food_log_entries')
+        .update({ 
+          image_count: (entryData?.image_count || 0) + 1,
+          has_images: true 
+        })
+        .eq('id', entryId);
 
       // Audit log
       await supabase.from('food_log_audit').insert({
@@ -301,10 +313,21 @@ export class FoodLogImageService {
         .update({ deleted_at: new Date().toISOString() })
         .eq('id', imageId);
 
-      // Update parent entry image count
-      await supabase.rpc('decrement_image_count', {
-        entry_id: image.food_log_entry_id,
-      });
+      // Update parent entry image count - using direct update instead of RPC
+      const { data: entry } = await supabase
+        .from('food_log_entries')
+        .select('image_count')
+        .eq('id', image.food_log_entry_id)
+        .single();
+      
+      const newCount = Math.max(0, (entry?.image_count || 1) - 1);
+      await supabase
+        .from('food_log_entries')
+        .update({ 
+          image_count: newCount,
+          has_images: newCount > 0 
+        })
+        .eq('id', image.food_log_entry_id);
 
       // Audit log
       await supabase.from('food_log_audit').insert({

@@ -454,12 +454,17 @@ export class CircleService {
     // Add member with goal
     await this.addMemberToCircle(userId, circleId, circle.creator_id, goal);
 
-    // Update participant count
-    await supabaseAdmin.rpc('increment', {
-      table_name: 'challenges',
-      column_name: 'participant_count',
-      row_id: circleId,
-    });
+    // Update participant count - using direct update instead of RPC
+    const { data: circleData } = await supabaseAdmin
+      .from('challenges')
+      .select('participant_count')
+      .eq('id', circleId)
+      .single();
+    
+    await supabaseAdmin
+      .from('challenges')
+      .update({ participant_count: (circleData?.participant_count || 0) + 1 })
+      .eq('id', circleId);
 
     console.log(`[CircleService.joinCircle] Successfully added user to circle`);
   }
@@ -975,14 +980,24 @@ export class CircleService {
           });
       }
 
-      // Update recipient's high-five count if specified
+      // Update recipient's high-five count if specified - using direct update instead of RPC
       if (input.to_user_id) {
         console.log(`[CircleService.sendEncouragement] Incrementing high-fives for user ${input.to_user_id}`);
-        await supabaseAdmin.rpc('increment', {
-          table_name: 'challenge_participants',
-          column_name: 'total_high_fives_received',
-          row_id: input.to_user_id,
-        });
+        
+        const { data: recipient } = await supabaseAdmin
+          .from('challenge_participants')
+          .select('total_high_fives_received')
+          .eq('challenge_id', circleId)
+          .eq('user_id', input.to_user_id)
+          .single();
+        
+        if (recipient) {
+          await supabaseAdmin
+            .from('challenge_participants')
+            .update({ total_high_fives_received: (recipient.total_high_fives_received || 0) + 1 })
+            .eq('challenge_id', circleId)
+            .eq('user_id', input.to_user_id);
+        }
       }
     }
 

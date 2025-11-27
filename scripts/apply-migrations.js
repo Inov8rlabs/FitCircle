@@ -1,53 +1,45 @@
-const { createClient } = require('@supabase/supabase-js');
+/**
+ * Migration Script
+ * 
+ * IMPORTANT: This script is DEPRECATED.
+ * 
+ * Migrations should be run using the Supabase CLI:
+ *   npx supabase db push
+ *   npx supabase migration up
+ * 
+ * This ensures migrations are tracked properly and avoids relying on
+ * custom database RPC functions.
+ */
+
+const { execSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+console.log('⚠️  WARNING: This migration script is deprecated.');
+console.log('');
+console.log('Please use the Supabase CLI to run migrations:');
+console.log('  npx supabase db push        - Push local schema to remote');
+console.log('  npx supabase migration up   - Run pending migrations');
+console.log('');
+console.log('If you need to run migrations programmatically, use the Supabase CLI');
+console.log('or connect directly to PostgreSQL using a database URL.');
+console.log('');
 
-if (!supabaseUrl || !supabaseKey) {
-  console.error('Missing Supabase credentials');
-  process.exit(1);
-}
-
-const supabase = createClient(supabaseUrl, supabaseKey);
-
-async function runMigration(filePath) {
-  const sql = fs.readFileSync(filePath, 'utf8');
-  const fileName = path.basename(filePath);
-
-  console.log(`\nApplying migration: ${fileName}...`);
-
-  try {
-    const { data, error } = await supabase.rpc('exec_sql', { sql_query: sql });
-
-    if (error) {
-      console.error(`Error in ${fileName}:`, error);
-      return false;
-    }
-
-    console.log(`✓ Successfully applied ${fileName}`);
-    return true;
-  } catch (err) {
-    console.error(`Exception in ${fileName}:`, err.message);
-    return false;
-  }
-}
-
-async function main() {
-  const migrationsDir = path.join(__dirname, '../supabase/migrations');
+// List available migrations for reference
+const migrationsDir = path.join(__dirname, '../supabase/migrations');
+if (fs.existsSync(migrationsDir)) {
   const migrations = fs.readdirSync(migrationsDir)
     .filter(f => f.endsWith('.sql'))
     .sort();
-
-  console.log('Found migrations:', migrations);
-
-  for (const migration of migrations) {
-    const filePath = path.join(migrationsDir, migration);
-    await runMigration(filePath);
+  
+  if (migrations.length > 0) {
+    console.log('Available migrations:');
+    migrations.forEach(m => console.log(`  - ${m}`));
   }
-
-  console.log('\nDone!');
 }
 
-main().catch(console.error);
+console.log('');
+console.log('To run migrations with Supabase CLI:');
+console.log('  1. Install CLI: npm install -g supabase');
+console.log('  2. Link project: npx supabase link --project-ref YOUR_PROJECT_REF');
+console.log('  3. Push migrations: npx supabase db push');

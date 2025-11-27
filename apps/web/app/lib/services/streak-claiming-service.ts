@@ -121,12 +121,19 @@ export class StreakClaimingService {
     // 6. Update engagement streak record
     const streakResponse = await EngagementStreakService.updateEngagementStreak(userId);
 
-    // 7. Update last_claim_date and total_claims in engagement_streaks
+    // 7. Update last_claim_date in engagement_streaks
+    // First fetch current total_claims, then increment
+    const { data: currentStreak } = await supabaseAdmin
+      .from('engagement_streaks')
+      .select('total_claims')
+      .eq('user_id', userId)
+      .single();
+
     await supabaseAdmin
       .from('engagement_streaks')
       .update({
         last_claim_date: claimDateStr,
-        total_claims: supabaseAdmin.rpc('increment', { x: 1 }) as any,
+        total_claims: (currentStreak?.total_claims || 0) + 1,
       })
       .eq('user_id', userId);
 
@@ -324,15 +331,37 @@ export class StreakClaimingService {
       shieldType = 'purchased';
     }
 
-    // Decrement shield count
-    const { error } = await supabaseAdmin.rpc('decrement_shield_count', {
-      p_user_id: userId,
-      p_shield_type: shieldType,
-    });
+    // Decrement shield count - using direct update instead of RPC
+    const { data: currentShields, error: fetchError } = await supabaseAdmin
+      .from('streak_shields')
+      .select('freezes, milestone_shields, purchased')
+      .eq('user_id', userId)
+      .single();
 
-    if (error) {
-      console.error('[StreakClaimingService.activateFreeze] Error decrementing shield:', error);
-      throw error;
+    if (fetchError) {
+      console.error('[StreakClaimingService.activateFreeze] Error fetching shields:', fetchError);
+      throw fetchError;
+    }
+
+    const updateData: Record<string, number> = {};
+    if (shieldType === 'freeze' && currentShields.freezes > 0) {
+      updateData.freezes = currentShields.freezes - 1;
+    } else if (shieldType === 'milestone_shield' && currentShields.milestone_shields > 0) {
+      updateData.milestone_shields = currentShields.milestone_shields - 1;
+    } else if (shieldType === 'purchased' && currentShields.purchased > 0) {
+      updateData.purchased = currentShields.purchased - 1;
+    }
+
+    if (Object.keys(updateData).length > 0) {
+      const { error: updateError } = await supabaseAdmin
+        .from('streak_shields')
+        .update(updateData)
+        .eq('user_id', userId);
+
+      if (updateError) {
+        console.error('[StreakClaimingService.activateFreeze] Error decrementing shield:', updateError);
+        throw updateError;
+      }
     }
 
     // Record engagement activity for the protected day

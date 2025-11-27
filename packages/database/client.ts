@@ -207,8 +207,17 @@ export class DatabaseService {
       throw new DatabaseError('Failed to join challenge', error.code, 500, error);
     }
 
-    // Update participant count
-    await this.client.rpc('increment_participant_count', { challenge_id: challengeId });
+    // Update participant count - using direct update instead of RPC
+    const { data: challenge } = await this.client
+      .from('challenges')
+      .select('participant_count')
+      .eq('id', challengeId)
+      .single();
+    
+    await this.client
+      .from('challenges')
+      .update({ participant_count: (challenge?.participant_count || 0) + 1 })
+      .eq('id', challengeId);
 
     return data;
   }
@@ -275,8 +284,17 @@ export class DatabaseService {
       throw new DatabaseError('Failed to join team', error.code, 500, error);
     }
 
-    // Update member count
-    await this.client.rpc('increment_team_member_count', { team_id: teamId });
+    // Update member count - using direct update instead of RPC
+    const { data: team } = await this.client
+      .from('teams')
+      .select('member_count')
+      .eq('id', teamId)
+      .single();
+    
+    await this.client
+      .from('teams')
+      .update({ member_count: (team?.member_count || 0) + 1 })
+      .eq('id', teamId);
 
     return data;
   }
@@ -293,11 +311,20 @@ export class DatabaseService {
       throw new DatabaseError('Failed to create check-in', error.code, 500, error);
     }
 
-    // Update participant stats
-    await this.client.rpc('update_participant_stats', {
-      participant_id: checkIn.participant_id,
-      check_in_date: checkIn.check_in_date
-    });
+    // Update participant stats - using direct update instead of RPC
+    const { data: participant } = await this.client
+      .from('challenge_participants')
+      .select('total_check_ins')
+      .eq('id', checkIn.participant_id)
+      .single();
+    
+    await this.client
+      .from('challenge_participants')
+      .update({
+        total_check_ins: (participant?.total_check_ins || 0) + 1,
+        last_check_in_date: checkIn.check_in_date,
+      })
+      .eq('id', checkIn.participant_id);
 
     return data;
   }

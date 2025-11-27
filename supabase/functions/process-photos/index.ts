@@ -355,13 +355,22 @@ async function awardPhotoPoints(params: {
         })
         .eq('id', params.checkInId);
 
-      // Update participant points if in a challenge
+      // Update participant points if in a challenge - using direct update instead of RPC
       if (params.challengeId) {
-        await params.supabase.rpc('add_participant_points', {
-          p_user_id: params.userId,
-          p_challenge_id: params.challengeId,
-          p_points: PHOTO_POINTS,
-        });
+        const { data: participant } = await params.supabase
+          .from('challenge_participants')
+          .select('total_points')
+          .eq('challenge_id', params.challengeId)
+          .eq('user_id', params.userId)
+          .single();
+        
+        if (participant) {
+          await params.supabase
+            .from('challenge_participants')
+            .update({ total_points: (participant.total_points || 0) + PHOTO_POINTS })
+            .eq('challenge_id', params.challengeId)
+            .eq('user_id', params.userId);
+        }
       }
     }
   } catch (error) {
