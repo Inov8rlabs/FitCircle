@@ -384,7 +384,7 @@ export async function performDailyCheckIn(
   };
 
   if (checkInData.weight !== undefined) {
-    trackingData.weight = checkInData.weight;
+    trackingData.weight_kg = checkInData.weight;
   }
 
   if (checkInData.notes !== undefined) {
