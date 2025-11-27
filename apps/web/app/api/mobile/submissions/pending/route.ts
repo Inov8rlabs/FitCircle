@@ -63,7 +63,7 @@ export async function GET(request: NextRequest) {
     }
 
     const count = pending.filter(p => p.can_submit).length;
-    const hasPendingSubmissions = count > 0;
+    const has_pending_submissions = count > 0;
 
     console.log(`[Mobile Pending Submissions] Found ${count} pending submissions (${pending.length} total circles)`);
 
@@ -73,7 +73,7 @@ export async function GET(request: NextRequest) {
         date,
         pending_submissions: pending,
         count,
-        hasPendingSubmissions,
+        has_pending_submissions,
       },
       error: null,
       meta: {
