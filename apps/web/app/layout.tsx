@@ -1,11 +1,14 @@
+import { Analytics } from '@vercel/analytics/next';
 import type { Metadata, Viewport } from 'next';
 import { Inter } from 'next/font/google';
+import { Toaster } from 'sonner';
+
+import { CookieConsentBanner } from '@/components/CookieConsentBanner';
+import { OfflineIndicator } from '@/components/pwa/offline-indicator';
+import { PWAInstall } from '@/components/pwa/pwa-install';
+
 import './globals.css';
 import { Providers } from './providers';
-import { Toaster } from 'sonner';
-import { PWAInstall } from '@/components/pwa/pwa-install';
-import { OfflineIndicator } from '@/components/pwa/offline-indicator';
-import { CookieConsentBanner } from '@/components/CookieConsentBanner';
 
 const inter = Inter({
   subsets: ['latin'],
@@ -139,6 +142,7 @@ export default function RootLayout({
           <PWAInstall />
           <OfflineIndicator />
           <CookieConsentBanner />
+          <Analytics />
         </Providers>
       </body>
     </html>
