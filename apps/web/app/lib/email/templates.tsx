@@ -479,3 +479,69 @@ export function generateInvitationEmail({
 </html>
   `.trim();
 }
+
+interface GenericNotificationEmailProps {
+  title: string;
+  body: string;
+  actionUrl?: string;
+  actionText?: string;
+  userName?: string;
+  footerText?: string;
+}
+
+export const generateGenericNotificationEmail = ({
+  title,
+  body,
+  actionUrl,
+  actionText = 'View Details',
+  userName,
+  footerText,
+}: GenericNotificationEmailProps) => {
+  const content = `
+    <div class="content">
+      ${userName ? `<p class="text">Hi ${userName},</p>` : ''}
+      <h2 class="title" style="font-size: 20px; margin-bottom: 16px;">${title}</h2>
+      <p class="text">${body.replace(/\n/g, '<br/>')}</p>
+      
+      ${actionUrl
+      ? `
+        <div style="text-align: center; margin: 32px 0;">
+          <a href="${actionUrl}" class="button">${actionText}</a>
+        </div>
+      `
+      : ''
+    }
+      
+      ${footerText
+      ? `
+        <p style="font-size: 12px; color: #6b7280; margin-top: 24px; border-top: 1px solid #1f2937; padding-top: 16px;">
+          ${footerText}
+        </p>
+      `
+      : ''
+    }
+    </div>
+  `;
+
+  return `
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>${title}</title>
+        <style>${baseStyles}</style>
+      </head>
+      <body>
+        <div class="container">
+          <div class="header">
+            <div class="logo-wrapper">
+              <span class="logo-icon"><span class="logo-f">f</span></span><span class="logo-text">FitCircle</span>
+            </div>
+          </div>
+          ${content}
+        </div>
+      </body>
+    </html>
+  `;
+};

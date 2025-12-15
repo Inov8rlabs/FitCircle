@@ -33,6 +33,8 @@ export const CreateFoodLogEntrySchema = z.object({
 );
 
 export const UpdateFoodLogEntrySchema = z.object({
+  logged_at: z.string().datetime().optional(),
+  entry_date: z.string().date().optional(),
   meal_type: z.enum(['breakfast', 'lunch', 'dinner', 'snack', 'other']).optional(),
   title: z.string().max(200).optional(),
   description: z.string().max(1000).optional(),

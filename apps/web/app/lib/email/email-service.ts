@@ -156,3 +156,7 @@ export async function sendBatchInvitationEmails(
 
   return { success, failed, errors };
 }
+
+// Re-export NotificationService
+export { NotificationService } from '../services/notification-service';
+export type { NotificationPayload } from '../services/notification-service';
