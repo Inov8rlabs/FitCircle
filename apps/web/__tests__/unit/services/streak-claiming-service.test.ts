@@ -107,6 +107,7 @@ describe('StreakClaimingService', () => {
     it('should throw error if date is too old (>7 days)', async () => {
       const userId = 'test-user-id';
       const oldDate = new Date();
+      oldDate.setHours(0, 0, 0, 0);
       oldDate.setDate(oldDate.getDate() - 8);
       const timezone = 'America/Los_Angeles';
 
@@ -121,6 +122,7 @@ describe('StreakClaimingService', () => {
     it('should return true if date is today and not already claimed', async () => {
       const userId = 'test-user-id';
       const today = new Date();
+      today.setHours(0, 0, 0, 0);
       const timezone = 'America/Los_Angeles';
 
       // Mock no existing claim
@@ -161,6 +163,7 @@ describe('StreakClaimingService', () => {
     it('should return false if already claimed', async () => {
       const userId = 'test-user-id';
       const today = new Date();
+      today.setHours(0, 0, 0, 0);
       const timezone = 'America/Los_Angeles';
 
       // Mock existing claim
@@ -183,9 +186,10 @@ describe('StreakClaimingService', () => {
       expect(result.alreadyClaimed).toBe(true);
     });
 
-    it('should return false if no health data', async () => {
+    it('should return true (allow claim) if no health data', async () => {
       const userId = 'test-user-id';
       const today = new Date();
+      today.setHours(0, 0, 0, 0);
       const timezone = 'America/Los_Angeles';
 
       // Mock no existing claim
@@ -218,7 +222,8 @@ describe('StreakClaimingService', () => {
 
       const result = await StreakClaimingService.canClaimStreak(userId, today, timezone);
 
-      expect(result.canClaim).toBe(false);
+      // Should allow claim even without health data
+      expect(result.canClaim).toBe(true);
       expect(result.hasHealthData).toBe(false);
     });
   });
@@ -245,6 +250,7 @@ describe('StreakClaimingService', () => {
 
       // Mock health data checks (will be called multiple times)
       for (let i = 0; i <= 7; i++) {
+        // Mock health data check called by getClaimableDays
         mockSupabase.from.mockReturnValueOnce({
           select: vi.fn().mockReturnValue({
             eq: vi.fn().mockReturnValue({
@@ -258,7 +264,7 @@ describe('StreakClaimingService', () => {
           }),
         });
 
-        // Mock existing claim checks
+        // Mock existing claim checks (called by canClaimStreak)
         mockSupabase.from.mockReturnValueOnce({
           select: vi.fn().mockReturnValue({
             eq: vi.fn().mockReturnValue({
@@ -271,12 +277,33 @@ describe('StreakClaimingService', () => {
             }),
           }),
         });
+
+        // Mock health data check (called by canClaimStreak) - ADDED THIS
+        mockSupabase.from.mockReturnValueOnce({
+          select: vi.fn().mockReturnValue({
+            eq: vi.fn().mockReturnValue({
+              eq: vi.fn().mockReturnValue({
+                single: vi.fn().mockResolvedValue({
+                  data: i < 3 ? { weight_kg: 70, steps: 8000 } : null,
+                  error: i < 3 ? null : { code: 'PGRST116' },
+                }),
+              }),
+            }),
+          }),
+        });
       }
 
       const days = await StreakClaimingService.getClaimableDays(userId, timezone);
 
       expect(days).toHaveLength(8);
-      expect(days[0].date).toBe(new Date().toISOString().split('T')[0]);
+
+      const today = new Date();
+      const year = today.getFullYear();
+      const month = String(today.getMonth() + 1).padStart(2, '0');
+      const day = String(today.getDate()).padStart(2, '0');
+      const expectedDate = `${year}-${month}-${day}`;
+
+      expect(days[0].date).toBe(expectedDate);
     });
   });
 

@@ -70,7 +70,7 @@ export class StreakClaimingService {
       console.error('[StreakClaimingService.claimStreak] Step 1 FAILED - canClaimStreak error:', e.message);
       throw e;
     }
-    
+
     // 2. Check if already claimed (check this FIRST)
     if (canClaimResult.alreadyClaimed) {
       console.log('[StreakClaimingService.claimStreak] Step 1: Already claimed');
@@ -84,8 +84,8 @@ export class StreakClaimingService {
     if (!canClaimResult.canClaim) {
       console.log('[StreakClaimingService.claimStreak] Step 1: Cannot claim -', canClaimResult.reason);
       // Determine correct error code based on reason
-      const errorCode = canClaimResult.hasHealthData === false 
-        ? CLAIM_ERROR_CODES.NO_HEALTH_DATA 
+      const errorCode = canClaimResult.hasHealthData === false
+        ? CLAIM_ERROR_CODES.NO_HEALTH_DATA
         : 'CLAIM_NOT_ALLOWED';
       throw new StreakClaimError(
         canClaimResult.reason || 'Cannot claim streak',
@@ -157,7 +157,7 @@ export class StreakClaimingService {
         claimDateStr
       );
       console.log('[StreakClaimingService.claimStreak] Step 5: Activity recorded');
-      
+
       // Fetch updated streak
       streakResponse = await EngagementStreakService.getEngagementStreak(userId);
       console.log('[StreakClaimingService.claimStreak] Step 5: Current streak:', streakResponse.current_streak);
@@ -266,13 +266,11 @@ export class StreakClaimingService {
 
     // 4. Check for health data
     const healthCheck = await this.checkHealthData(userId, dateStr);
+
+    // We allow claiming even without health data now
+    // The streak will be claimed, but metadata will show no health data
     if (!healthCheck.hasAnyData) {
-      return {
-        canClaim: false,
-        alreadyClaimed: false,
-        hasHealthData: false,
-        reason: 'No health data available for this date',
-      };
+      console.log(`[StreakClaimingService.canClaimStreak] No health data for ${dateStr}, but allowing claim`);
     }
 
     // 5. Special handling for yesterday - check grace period
@@ -282,7 +280,7 @@ export class StreakClaimingService {
     return {
       canClaim: true,
       alreadyClaimed: false,
-      hasHealthData: true,
+      hasHealthData: healthCheck.hasAnyData,
       gracePeriodActive: isYesterday ? gracePeriodActive : undefined,
     };
   }
