@@ -89,5 +89,8 @@ temp/
 # ESLint cache
 .eslintcache
 
+# Local settings
+settings.local.json
+
 # Misc
 .gitattributes
