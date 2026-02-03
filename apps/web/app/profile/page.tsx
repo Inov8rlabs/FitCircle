@@ -475,6 +475,55 @@ export default function ProfilePage() {
                   </div>
                 </CardContent>
               </Card>
+              {/* Settings */}
+              <Card className="bg-slate-900/50 border-slate-800 backdrop-blur-xl">
+                <CardHeader>
+                  <div className="flex items-center gap-4">
+                    <div className="w-12 h-12 rounded-lg bg-slate-800 flex items-center justify-center text-gray-400">
+                      <Settings className="w-6 h-6" />
+                    </div>
+                    <div className="flex-1">
+                      <CardTitle className="text-white text-lg">App Settings</CardTitle>
+                      <CardDescription className="text-gray-400">
+                        Manage notifications and privacy
+                      </CardDescription>
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent className="space-y-2">
+                  <Button
+                    variant="ghost"
+                    className="w-full justify-between text-white hover:bg-slate-800 h-14 px-4"
+                    onClick={() => router.push('/settings/notifications')}
+                  >
+                    <div className="flex items-center gap-3">
+                      <Bell className="w-5 h-5 text-purple-400" />
+                      <div className="text-left">
+                        <p className="font-medium">Notifications</p>
+                        <p className="text-xs text-gray-400">Push, email, and social alerts</p>
+                      </div>
+                    </div>
+                    <div className="text-gray-500">→</div>
+                  </Button>
+
+                  <div className="h-px bg-slate-800 mx-2" />
+
+                  <Button
+                    variant="ghost"
+                    className="w-full justify-between text-white hover:bg-slate-800 h-14 px-4"
+                    onClick={() => router.push('/settings/privacy')}
+                  >
+                    <div className="flex items-center gap-3">
+                      <Shield className="w-5 h-5 text-indigo-400" />
+                      <div className="text-left">
+                        <p className="font-medium">Privacy & Data</p>
+                        <p className="text-xs text-gray-400">Data usage, cookies, and export</p>
+                      </div>
+                    </div>
+                    <div className="text-gray-500">→</div>
+                  </Button>
+                </CardContent>
+              </Card>
             </div>
 
             {/* Logout Section */}
