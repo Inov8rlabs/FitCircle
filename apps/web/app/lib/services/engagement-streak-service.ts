@@ -129,19 +129,25 @@ export class EngagementStreakService {
     // Check if weekly freeze reset is due
     await this.checkAndResetWeeklyFreezes(userId, streakRecord);
 
-    // Get recent activities (last 90 days)
-    const { data: activities, error: activitiesError } = await supabaseAdmin
-      .from('engagement_activities')
-      .select('activity_date')
+    // Get recent streak claims (last 90 days)
+    // IMPORTANT: Streak calculation uses streak_claims table, NOT engagement_activities.
+    // This ensures only explicit user actions (manual claims, manual data entry, freezes)
+    // count toward the streak. Auto-synced data (HealthKit steps/weight) does NOT count.
+    const { data: claims, error: claimsError } = await supabaseAdmin
+      .from('streak_claims')
+      .select('claim_date')
       .eq('user_id', userId)
-      .gte('activity_date', this.formatDate(this.getDaysAgo(90)))
-      .order('activity_date', { ascending: false });
+      .gte('claim_date', this.formatDate(this.getDaysAgo(90)))
+      .order('claim_date', { ascending: false });
 
-    if (activitiesError) throw activitiesError;
+    if (claimsError) throw claimsError;
+
+    // Map claims to activity format for calculateStreakWithGrace
+    const claimActivities = (claims || []).map(c => ({ activity_date: c.claim_date }));
 
     // Calculate streak with grace logic
     const calculation = this.calculateStreakWithGrace(
-      activities || [],
+      claimActivities,
       streakRecord.streak_freezes_available,
       streakRecord.last_engagement_date
     );
@@ -159,9 +165,9 @@ export class EngagementStreakService {
       streakRecord.streak_freezes_available - calculation.freezes_used + newFreezesEarned
     );
 
-    // Get last engagement date from activities
-    const lastEngagementDate = activities && activities.length > 0
-      ? activities[0].activity_date
+    // Get last engagement date from claims
+    const lastEngagementDate = claims && claims.length > 0
+      ? claims[0].claim_date
       : streakRecord.last_engagement_date;
 
     // Update streak record
@@ -282,6 +288,21 @@ export class EngagementStreakService {
       throw updateError;
     }
 
+    // Record freeze as a streak_claims entry so claim-based streak calculation
+    // counts the freeze-protected day
+    await supabaseAdmin.from('streak_claims').upsert(
+      {
+        user_id: userId,
+        claim_date: targetDate,
+        claimed_at: new Date().toISOString(),
+        claim_method: 'freeze',
+        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+        health_data_synced: false,
+        metadata: { source: 'engagement_streak_freeze' },
+      },
+      { onConflict: 'user_id,claim_date' }
+    );
+
     console.log(`[applyFreeze] Successfully applied freeze for ${targetDate}`);
 
     // Recalculate streak (should now include the frozen day)
@@ -290,6 +311,7 @@ export class EngagementStreakService {
 
   /**
    * Get user's engagement streak details
+   * Recalculates from streak_claims to prevent stale values
    */
   static async getEngagementStreak(userId: string): Promise<EngagementStreakResponse> {
     const supabaseAdmin = createAdminSupabase();
@@ -317,6 +339,43 @@ export class EngagementStreakService {
 
     if (error) throw error;
     if (!streakRecord) throw new Error('Streak record not found');
+
+    // Recalculate streak from streak_claims (source of truth)
+    const { data: claims } = await supabaseAdmin
+      .from('streak_claims')
+      .select('claim_date')
+      .eq('user_id', userId)
+      .gte('claim_date', this.formatDate(this.getDaysAgo(90)))
+      .order('claim_date', { ascending: false });
+
+    const claimDates = new Set((claims || []).map(c => c.claim_date));
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    let currentStreak = 0;
+    for (let i = 0; i < 90; i++) {
+      const checkDate = new Date(today);
+      checkDate.setDate(checkDate.getDate() - i);
+      const checkDateStr = this.formatDate(checkDate);
+
+      if (claimDates.has(checkDateStr)) {
+        currentStreak++;
+      } else if (i === 0) {
+        continue; // Today with no claim doesn't break streak yet
+      } else {
+        break; // Missed a day - streak is broken
+      }
+    }
+
+    // Update stored value if it differs
+    if (currentStreak !== streakRecord.current_streak) {
+      console.log(`[EngagementStreakService.getEngagementStreak] Correcting stale streak: ${streakRecord.current_streak} -> ${currentStreak}`);
+      await supabaseAdmin
+        .from('engagement_streaks')
+        .update({ current_streak: currentStreak })
+        .eq('user_id', userId);
+      streakRecord.current_streak = currentStreak;
+    }
 
     return this.formatStreakResponse(streakRecord);
   }

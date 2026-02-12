@@ -87,7 +87,7 @@ export async function POST(request: NextRequest) {
             steps_source: validatedData.source,
             steps_synced_at: syncedAt,
             is_override: entry.is_override ?? false, // FIXED: Use client-provided value, default to false
-            // NO STREAK CLAIMING HERE - this is intentional per requirements
+            skip_streak_tracking: true, // Auto-synced data must NOT count toward streaks
           }
         );
 

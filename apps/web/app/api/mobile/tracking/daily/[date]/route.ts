@@ -123,6 +123,9 @@ export async function PUT(
     const body = await request.json();
     const validatedData = updateTrackingSchema.parse(body);
 
+    // Determine if this is auto-synced data
+    const isAutoSync = validatedData.autoClaimStreak === false;
+
     // Upsert tracking data
     const trackingEntry = await MobileAPIService.upsertDailyTracking(user.id, date, {
       weight_kg: validatedData.weightKg,
@@ -130,7 +133,8 @@ export async function PUT(
       mood_score: validatedData.moodScore,
       energy_level: validatedData.energyLevel,
       notes: validatedData.notes,
-      is_override: true, // Manual entry is always an override
+      is_override: !isAutoSync, // Only manual entries are overrides
+      skip_streak_tracking: isAutoSync, // Auto-synced data must NOT count toward streaks
     });
 
     // Automatically claim streak if data was manually entered

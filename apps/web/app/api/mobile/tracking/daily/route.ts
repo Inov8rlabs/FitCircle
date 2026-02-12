@@ -16,6 +16,8 @@ const trackingSchema = z.object({
   stepsSource: z.enum(['manual', 'healthkit', 'google_fit']).optional(),
   stepsSyncedAt: z.string().datetime().optional(),
   isOverride: z.boolean().optional(),
+  // When false, this is auto-synced data that should NOT count toward streaks
+  autoClaimStreak: z.boolean().optional().default(true),
 });
 
 /**
@@ -161,6 +163,12 @@ export async function POST(request: NextRequest) {
 
     console.log(`[Mobile API] Tracking entry for user ${user.id}, date: ${targetDate}, timezone: ${userTimezone}`);
 
+    // Determine if this is auto-synced data (HealthKit/Google Fit)
+    // Auto-synced data should NOT count toward maintaining streaks
+    // Two signals: explicit autoClaimStreak=false, or stepsSource is healthkit/google_fit
+    const isAutoSync = validatedData.autoClaimStreak === false ||
+      validatedData.stepsSource === 'healthkit' || validatedData.stepsSource === 'google_fit';
+
     // Upsert tracking data
     const trackingEntry = await MobileAPIService.upsertDailyTracking(
       user.id,
@@ -174,6 +182,7 @@ export async function POST(request: NextRequest) {
         steps_source: validatedData.stepsSource,
         steps_synced_at: validatedData.stepsSyncedAt,
         is_override: validatedData.isOverride,
+        skip_streak_tracking: isAutoSync,
       }
     );
 

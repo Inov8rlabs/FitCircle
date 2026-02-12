@@ -127,6 +127,46 @@ export async function getUserStreak(
       return { streak: mapToUserStreak(created), error: null };
     }
 
+    // Recalculate streak from streak_claims (source of truth)
+    const ninetyDaysAgo = new Date();
+    ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
+    const ninetyDaysAgoStr = ninetyDaysAgo.toISOString().split('T')[0];
+
+    const { data: claims } = await supabase
+      .from('streak_claims')
+      .select('claim_date')
+      .eq('user_id', userId)
+      .gte('claim_date', ninetyDaysAgoStr)
+      .order('claim_date', { ascending: false });
+
+    const claimDates = new Set((claims || []).map(c => c.claim_date));
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    let currentStreak = 0;
+    for (let i = 0; i < 90; i++) {
+      const checkDate = new Date(today);
+      checkDate.setDate(checkDate.getDate() - i);
+      const checkDateStr = checkDate.toISOString().split('T')[0];
+
+      if (claimDates.has(checkDateStr)) {
+        currentStreak++;
+      } else if (i === 0) {
+        continue; // Today with no claim doesn't break streak yet
+      } else {
+        break; // Missed a day - streak is broken
+      }
+    }
+
+    // Update stored value if it differs
+    if (currentStreak !== data.current_streak) {
+      await supabase
+        .from('engagement_streaks')
+        .update({ current_streak: currentStreak })
+        .eq('user_id', userId);
+      data.current_streak = currentStreak;
+    }
+
     return { streak: mapToUserStreak(data), error: null };
   } catch (error) {
     return {
@@ -398,16 +438,18 @@ export async function validateAllStreaks(
     let broken = 0;
 
     for (const streak of streaks || []) {
-      // Check if user checked in yesterday
-      const { data: checkin } = await supabase
-        .from('daily_tracking')
+      // Check if user CLAIMED yesterday (not just synced data)
+      // IMPORTANT: Use streak_claims table, NOT daily_tracking.
+      // daily_tracking contains auto-synced data which should NOT maintain streaks.
+      const { data: claim } = await supabase
+        .from('streak_claims')
         .select('id')
         .eq('user_id', streak.user_id)
-        .eq('tracking_date', yesterdayStr)
+        .eq('claim_date', yesterdayStr)
         .single();
 
-      // If no check-in yesterday and last check-in was day before yesterday
-      if (!checkin && streak.last_checkin_date) {
+      // If no claim yesterday and last check-in was day before yesterday
+      if (!claim && streak.last_checkin_date) {
         const lastCheckin = new Date(streak.last_checkin_date);
         const diffTime = yesterday.getTime() - lastCheckin.getTime();
         const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));

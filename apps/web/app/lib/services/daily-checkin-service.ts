@@ -266,6 +266,21 @@ export async function performDailyCheckIn(
           activity_type: 'freeze_used',
           metadata: { reason: 'auto_applied', missed_date: yesterday },
         });
+
+        // Record freeze as a streak_claims entry so claim-based streak calculation
+        // counts the freeze-protected day
+        await supabase.from('streak_claims').upsert(
+          {
+            user_id: userId,
+            claim_date: yesterday,
+            claimed_at: new Date().toISOString(),
+            claim_method: 'freeze',
+            timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+            health_data_synced: false,
+            metadata: { source: 'daily_checkin_auto_freeze', missed_date: yesterday },
+          },
+          { onConflict: 'user_id,claim_date' }
+        );
       } else {
         // No freeze - streak broken, reset to 1
         newStreak = 1;
@@ -369,6 +384,24 @@ export async function performDailyCheckIn(
       is_first_checkin_today: isFirstCheckInToday,
     },
   });
+
+  // Also record a streak_claims entry so claim-based streak calculation
+  // includes days claimed via the daily check-in flow.
+  // Uses upsert to avoid conflicts if a claim already exists for this date.
+  if (isFirstCheckInToday) {
+    await supabase.from('streak_claims').upsert(
+      {
+        user_id: userId,
+        claim_date: checkInDate,
+        claimed_at: checkInTimestamp,
+        claim_method: 'explicit',
+        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+        health_data_synced: checkInData.weight !== undefined,
+        metadata: { source: 'daily_checkin', mood: checkInData.mood, energy: checkInData.energy },
+      },
+      { onConflict: 'user_id,claim_date' }
+    );
+  }
 
   // 4. Update or create daily_tracking entry (always, even for subsequent check-ins)
   const { data: existingTracking } = await supabase
@@ -488,27 +521,64 @@ export async function getStreakStatus(
     };
   }
 
-  // Check if checked in today (ANY engagement activity counts)
-  const { data: todayActivities } = await supabase
-    .from('engagement_activities')
-    .select('*')
-    .eq('user_id', userId)
-    .eq('activity_date', today)
-    .limit(1);
+  // Recalculate streak from streak_claims (source of truth)
+  // This prevents stale values from being displayed
+  const ninetyDaysAgo = new Date();
+  ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
+  const ninetyDaysAgoStr = ninetyDaysAgo.toISOString().split('T')[0];
 
-  const hasCheckedInToday = !!todayActivities && todayActivities.length > 0;
-  const nextMilestone = getNextMilestone(streak.current_streak);
+  const { data: claims } = await supabase
+    .from('streak_claims')
+    .select('claim_date')
+    .eq('user_id', userId)
+    .gte('claim_date', ninetyDaysAgoStr)
+    .order('claim_date', { ascending: false });
+
+  const claimDates = new Set((claims || []).map(c => c.claim_date));
+  const hasCheckedInToday = claimDates.has(today);
+
+  // Calculate current streak by counting backwards from today
+  let currentStreak = 0;
+  const todayDate = new Date();
+  todayDate.setHours(0, 0, 0, 0);
+
+  for (let i = 0; i < 90; i++) {
+    const checkDate = new Date(todayDate);
+    checkDate.setDate(checkDate.getDate() - i);
+    const checkDateStr = checkDate.toISOString().split('T')[0];
+
+    if (claimDates.has(checkDateStr)) {
+      currentStreak++;
+    } else if (i === 0) {
+      // Today with no claim doesn't break streak yet (grace period)
+      continue;
+    } else {
+      // Missed a day - streak is broken
+      break;
+    }
+  }
+
+  // Update the stored value if it differs, to keep the DB in sync
+  if (currentStreak !== streak.current_streak) {
+    await supabase
+      .from('engagement_streaks')
+      .update({ current_streak: currentStreak })
+      .eq('user_id', userId);
+  }
+
+  const longestStreak = Math.max(currentStreak, streak.longest_streak);
+  const nextMilestone = getNextMilestone(currentStreak);
 
   return {
-    currentStreak: streak.current_streak,
-    longestStreak: streak.longest_streak,
-    lastCheckInDate: streak.last_engagement_date,
+    currentStreak,
+    longestStreak,
+    lastCheckInDate: claims && claims.length > 0 ? claims[0].claim_date : streak.last_engagement_date,
     hasCheckedInToday,
     freezesAvailable: streak.streak_freezes_available || 0,
     nextMilestone: nextMilestone?.days || null,
-    daysUntilNextMilestone: nextMilestone ? nextMilestone.days - streak.current_streak : null,
+    daysUntilNextMilestone: nextMilestone ? nextMilestone.days - currentStreak : null,
     canCheckInAgain: true, // Can always update mood/energy/weight
-    streakColor: getStreakColor(streak.current_streak),
+    streakColor: getStreakColor(currentStreak),
     totalPoints: streak.total_points || 0,
   };
 }
@@ -574,6 +644,21 @@ export async function useFreeze(
     activity_type: 'freeze_used',
     metadata: { reason: 'manual', planned: true },
   });
+
+  // Record freeze as a streak_claims entry so claim-based streak calculation
+  // counts the freeze-protected day
+  await supabase.from('streak_claims').upsert(
+    {
+      user_id: userId,
+      claim_date: today,
+      claimed_at: new Date().toISOString(),
+      claim_method: 'freeze',
+      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+      health_data_synced: false,
+      metadata: { source: 'manual_freeze', planned: true },
+    },
+    { onConflict: 'user_id,claim_date' }
+  );
 
   return {
     success: true,

@@ -48,7 +48,7 @@ export interface StreakRecovery {
 // ENUMS
 // ============================================================================
 
-export type ClaimMethod = 'explicit' | 'manual_entry' | 'retroactive';
+export type ClaimMethod = 'explicit' | 'manual_entry' | 'retroactive' | 'freeze';
 
 export type ShieldType = 'freeze' | 'milestone_shield' | 'purchased';
 

@@ -415,10 +415,32 @@ export class StreakClaimingService {
       }
     }
 
-    // Record engagement activity for the protected day
+    // Insert a streak_claims record for the protected day
+    // This ensures the claim-based streak calculation counts shield-protected days
+    const { error: claimInsertError } = await supabaseAdmin
+      .from('streak_claims')
+      .insert({
+        user_id: userId,
+        claim_date: dateStr,
+        claimed_at: new Date().toISOString(),
+        claim_method: 'freeze',
+        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+        health_data_synced: false,
+        metadata: {
+          shield_type: shieldType,
+          activated_at: new Date().toISOString(),
+        },
+      });
+
+    // Ignore duplicate key errors (already claimed/frozen for this day)
+    if (claimInsertError && claimInsertError.code !== '23505') {
+      console.error('[StreakClaimingService.activateFreeze] Error inserting freeze claim:', claimInsertError);
+    }
+
+    // Record engagement activity for the protected day (for history display)
     await EngagementStreakService.recordActivity(
       userId,
-      'weight_log',
+      'streak_freeze',
       undefined,
       dateStr
     );

@@ -460,6 +460,7 @@ export class MobileAPIService {
       steps_source?: 'manual' | 'healthkit' | 'google_fit';
       steps_synced_at?: string;
       is_override?: boolean;
+      skip_streak_tracking?: boolean;
     }
   ): Promise<any> {
     const supabaseAdmin = createAdminSupabase();
@@ -599,6 +600,15 @@ export class MobileAPIService {
     // ============================================================================
     // STREAK SYSTEM INTEGRATION
     // ============================================================================
+    // IMPORTANT: Skip streak tracking for auto-synced data (HealthKit/Google Fit).
+    // Only manual user actions (explicit claims, manual data entry, food logs)
+    // should count toward maintaining a streak.
+    // ============================================================================
+
+    if (data.skip_streak_tracking) {
+      console.log(`[upsertDailyTracking] Skipping streak tracking for auto-synced data (user ${userId}, date ${trackingDate})`);
+      return result;
+    }
 
     // Track which streak operations succeeded/failed
     const streakResults = {
@@ -676,6 +686,35 @@ export class MobileAPIService {
           '[upsertDailyTracking] WARNING: All streak operations failed. Tracking data saved but streaks not updated.',
           { streakResults }
         );
+      }
+
+      // Also create a streak_claims record for manual data entry.
+      // This ensures claim-based streak calculation includes days where
+      // users submitted data through upsertDailyTracking (e.g., web app, mobile manual entry).
+      // Uses upsert to be idempotent - if claimStreak was already called, this is a no-op.
+      if (successCount > 0) {
+        try {
+          await supabaseAdmin.from('streak_claims').upsert(
+            {
+              user_id: userId,
+              claim_date: trackingDate,
+              claimed_at: new Date().toISOString(),
+              claim_method: 'manual_entry' as const,
+              timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+              health_data_synced: data.weight_kg !== undefined || data.steps !== undefined,
+              metadata: {
+                source: 'upsert_daily_tracking',
+                has_weight: data.weight_kg !== undefined,
+                has_steps: data.steps !== undefined,
+                has_mood: data.mood_score !== undefined,
+              },
+            },
+            { onConflict: 'user_id,claim_date' }
+          );
+        } catch (claimError) {
+          console.error('[upsertDailyTracking] Error creating streak_claims record:', claimError);
+          // Non-blocking - tracking data was saved
+        }
       }
     } catch (streakError) {
       // This catch is a fallback for unexpected errors
