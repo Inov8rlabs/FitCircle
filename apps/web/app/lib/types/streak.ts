@@ -10,6 +10,7 @@ export type ActivityType =
   | 'weight_log'
   | 'steps_log'
   | 'mood_log'
+  | 'exercise_log'
   | 'circle_checkin'
   | 'social_interaction'
   | 'streak_freeze'; // Manual freeze applied by user to cover missed day
@@ -222,6 +223,7 @@ export function isValidActivityType(type: string): type is ActivityType {
     'weight_log',
     'steps_log',
     'mood_log',
+    'exercise_log',
     'circle_checkin',
     'social_interaction',
   ].includes(type);
