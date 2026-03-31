@@ -70,11 +70,11 @@ export async function GET(request: NextRequest) {
 
     // Get circle-specific streaks
     const { data: activeCircles } = await supabaseAdmin
-      .from('challenge_participants')
+      .from('fitcircle_members')
       .select(`
         challenge_id,
         streak_days,
-        challenges!challenge_participants_challenge_id_fkey (
+        fitcircles!fitcircle_members_fitcircle_id_fkey (
           name
         )
       `)

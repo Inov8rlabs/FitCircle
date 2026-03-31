@@ -38,7 +38,7 @@ export class LeaderboardService {
 
     // Get challenge details
     const { data: challenge, error: challengeError } = await client
-      .from('challenges')
+      .from('fitcircles')
       .select('*')
       .eq('id', challengeId)
       .single();
@@ -50,7 +50,7 @@ export class LeaderboardService {
 
     // Get all active participants with their profile goals
     const { data: participants, error: participantsError } = await client
-      .from('challenge_participants')
+      .from('fitcircle_members')
       .select(`
         user_id,
         status,
@@ -65,7 +65,7 @@ export class LeaderboardService {
           goals
         )
       `)
-      .eq('challenge_id', challengeId)
+      .eq('fitcircle_id', challengeId)
       .eq('status', 'active');
 
     if (participantsError || !participants) {

@@ -64,7 +64,7 @@ export async function POST(request: NextRequest) {
 
     // Get challenge details
     const { data: challenge, error: challengeError } = await supabaseAdmin
-      .from('challenges')
+      .from('fitcircles')
       .select('*')
       .eq('id', challengeId)
       .single();
@@ -88,9 +88,9 @@ export async function POST(request: NextRequest) {
 
     // Check if already a participant
     const { data: existingParticipant } = await supabaseAdmin
-      .from('challenge_participants')
+      .from('fitcircle_members')
       .select('id')
-      .eq('challenge_id', challengeId)
+      .eq('fitcircle_id', challengeId)
       .eq('user_id', user.id)
       .single();
 
@@ -114,9 +114,9 @@ export async function POST(request: NextRequest) {
     // Check if max participants reached
     if (challenge.max_participants) {
       const { count } = await supabaseAdmin
-        .from('challenge_participants')
+        .from('fitcircle_members')
         .select('id', { count: 'exact', head: true })
-        .eq('challenge_id', challengeId)
+        .eq('fitcircle_id', challengeId)
         .eq('status', 'active');
 
       if (count && count >= challenge.max_participants) {
@@ -139,7 +139,7 @@ export async function POST(request: NextRequest) {
 
     // Add user as participant
     const { data: participant, error: participantError } = await supabaseAdmin
-      .from('challenge_participants')
+      .from('fitcircle_members')
       .insert({
         challenge_id: challengeId,
         user_id: user.id,

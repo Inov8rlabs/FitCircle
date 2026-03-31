@@ -13,7 +13,7 @@ export class ChallengeService {
     const supabaseAdmin = createAdminSupabase();
 
     const { data: challenge, error: fetchError } = await supabaseAdmin
-      .from('challenges')
+      .from('fitcircles')
       .select('participant_count')
       .eq('id', challengeId)
       .single();
@@ -25,7 +25,7 @@ export class ChallengeService {
       : Math.max((challenge.participant_count || 0) - 1, 0);
 
     const { error } = await supabaseAdmin
-      .from('challenges')
+      .from('fitcircles')
       .update({
         participant_count: newCount,
         updated_at: new Date().toISOString(),
@@ -72,7 +72,7 @@ export class ChallengeService {
 
     // Get participant details
     const { data: participant, error: participantError } = await supabaseAdmin
-      .from('challenge_participants')
+      .from('fitcircle_members')
       .select('*')
       .eq('id', participantId)
       .single();
@@ -127,7 +127,7 @@ export class ChallengeService {
 
     // Update participant
     await supabaseAdmin
-      .from('challenge_participants')
+      .from('fitcircle_members')
       .update({
         check_ins_count: (participant.check_ins_count || 0) + 1,
         streak_days: newStreak,
@@ -140,13 +140,13 @@ export class ChallengeService {
 
     // Update challenge total check-ins
     const { data: challengeData } = await supabaseAdmin
-      .from('challenges')
+      .from('fitcircles')
       .select('total_check_ins')
       .eq('id', participant.challenge_id)
       .single();
 
     await supabaseAdmin
-      .from('challenges')
+      .from('fitcircles')
       .update({
         total_check_ins: (challengeData?.total_check_ins || 0) + 1,
         updated_at: new Date().toISOString(),
@@ -181,9 +181,9 @@ export class ChallengeService {
 
     // Get all active participants
     const { data: participants } = await supabaseAdmin
-      .from('challenge_participants')
+      .from('fitcircle_members')
       .select('*')
-      .eq('challenge_id', challengeId)
+      .eq('fitcircle_id', challengeId)
       .eq('status', 'active')
       .order('total_points', { ascending: false });
 
@@ -210,10 +210,10 @@ export class ChallengeService {
     // Update participant ranks
     for (const entry of leaderboardEntries) {
       await supabaseAdmin
-        .from('challenge_participants')
+        .from('fitcircle_members')
         .update({ rank: entry.rank })
         .eq('user_id', entry.entity_id)
-        .eq('challenge_id', challengeId);
+        .eq('fitcircle_id', challengeId);
     }
 
     // Handle team leaderboard if applicable
@@ -256,7 +256,7 @@ export class ChallengeService {
 
     // Update challenges from 'upcoming' to 'active'
     await supabaseAdmin
-      .from('challenges')
+      .from('fitcircles')
       .update({
         status: 'active',
         updated_at: now,
@@ -266,7 +266,7 @@ export class ChallengeService {
 
     // Update challenges from 'active' to 'completed'
     await supabaseAdmin
-      .from('challenges')
+      .from('fitcircles')
       .update({
         status: 'completed',
         updated_at: now,
@@ -276,7 +276,7 @@ export class ChallengeService {
 
     // Calculate completion rates for newly completed challenges
     const { data: completedChallenges } = await supabaseAdmin
-      .from('challenges')
+      .from('fitcircles')
       .select('id')
       .eq('status', 'completed')
       .is('completion_rate', null);
@@ -284,9 +284,9 @@ export class ChallengeService {
     if (completedChallenges) {
       for (const challenge of completedChallenges) {
         const { data: participants } = await supabaseAdmin
-          .from('challenge_participants')
+          .from('fitcircle_members')
           .select('status, progress_percentage')
-          .eq('challenge_id', challenge.id);
+          .eq('fitcircle_id', challenge.id);
 
         if (participants && participants.length > 0) {
           const completedCount = participants.filter(p => p.status === 'completed').length;
@@ -294,7 +294,7 @@ export class ChallengeService {
           const avgProgress = participants.reduce((sum, p) => sum + (p.progress_percentage || 0), 0) / participants.length;
 
           await supabaseAdmin
-            .from('challenges')
+            .from('fitcircles')
             .update({
               completion_rate: completionRate,
               avg_progress: avgProgress,
@@ -387,7 +387,7 @@ export class ChallengeService {
 
     // Find participants with 7-day streaks
     const { data: sevenDayStreaks } = await supabaseAdmin
-      .from('challenge_participants')
+      .from('fitcircle_members')
       .select('user_id, challenge_id')
       .eq('streak_days', 7);
 
@@ -417,7 +417,7 @@ export class ChallengeService {
 
     // Find participants with 30-day streaks
     const { data: thirtyDayStreaks } = await supabaseAdmin
-      .from('challenge_participants')
+      .from('fitcircle_members')
       .select('user_id, challenge_id')
       .eq('streak_days', 30);
 

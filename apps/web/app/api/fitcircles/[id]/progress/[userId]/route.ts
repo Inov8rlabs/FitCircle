@@ -19,7 +19,7 @@ export async function GET(
 
     // Get challenge details to know date range and type
     const { data: challenge, error: challengeError } = await supabase
-      .from('challenges')
+      .from('fitcircles')
       .select('type, start_date, end_date')
       .eq('id', challengeId)
       .single();

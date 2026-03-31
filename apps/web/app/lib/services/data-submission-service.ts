@@ -230,7 +230,7 @@ export async function submitToAllFitCircles(
     // Get all active FitCircles user belongs to
     // NOTE: Using challenge_participants table (circle_members was dropped in migration 018)
     const { data: memberships, error: memberError } = await supabase
-      .from('challenge_participants')
+      .from('fitcircle_members')
       .select('challenge_id')
       .eq('user_id', userId)
       .eq('status', 'active');
@@ -292,7 +292,7 @@ export async function getPendingSubmissions(
     // Get all active FitCircles
     // NOTE: Using challenge_participants table (circle_members was dropped in migration 018)
     const { data: memberships, error: memberError } = await supabase
-      .from('challenge_participants')
+      .from('fitcircle_members')
       .select(`
         challenge_id,
         challenges:challenge_id (
@@ -412,9 +412,9 @@ export async function getSubmissionStats(
     // Get total members
     // NOTE: Using challenge_participants table (circle_members was dropped in migration 018)
     const { data: members, error: memberError } = await supabase
-      .from('challenge_participants')
+      .from('fitcircle_members')
       .select('user_id')
-      .eq('challenge_id', fitcircleId)
+      .eq('fitcircle_id', fitcircleId)
       .eq('status', 'active');
 
     if (memberError) {

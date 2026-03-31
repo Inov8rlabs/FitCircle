@@ -272,7 +272,7 @@ export default function CircleCreationWizard({ isOpen, onClose, onSuccess }: Cir
       });
 
       let { data, error } = (await supabase
-        .from('challenges')
+        .from('fitcircles')
         .insert(challengeData as any)
         .select()
         .single()) as { data: any; error: any };
@@ -284,7 +284,7 @@ export default function CircleCreationWizard({ isOpen, onClose, onSuccess }: Cir
         challengeData.invite_code = inviteCode;
 
         const retry = (await supabase
-          .from('challenges')
+          .from('fitcircles')
           .insert(challengeData as any)
           .select()
           .single()) as { data: any; error: any };
@@ -312,7 +312,7 @@ export default function CircleCreationWizard({ isOpen, onClose, onSuccess }: Cir
 
       // Auto-join the creator to their circle
       const { error: joinError } = await supabase
-        .from('challenge_participants')
+        .from('fitcircle_members')
         .insert({
           challenge_id: data.id,
           user_id: user.id,

@@ -19,7 +19,7 @@ export async function DELETE(
 
     // Get the challenge to verify ownership
     const { data: challenge, error: fetchError } = await supabase
-      .from('challenges')
+      .from('fitcircles')
       .select('creator_id')
       .eq('id', challengeId)
       .single();
@@ -38,9 +38,9 @@ export async function DELETE(
 
     // Delete all challenge participants first (cascade should handle this, but being explicit)
     const { error: participantsError } = await supabaseAdmin
-      .from('challenge_participants')
+      .from('fitcircle_members')
       .delete()
-      .eq('challenge_id', challengeId);
+      .eq('fitcircle_id', challengeId);
 
     if (participantsError) {
       console.error('Error deleting participants:', participantsError);
@@ -49,7 +49,7 @@ export async function DELETE(
 
     // Delete the challenge
     const { error: deleteError } = await supabaseAdmin
-      .from('challenges')
+      .from('fitcircles')
       .delete()
       .eq('id', challengeId);
 

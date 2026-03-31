@@ -47,7 +47,7 @@ export default function CheckInPage() {
   const fetchFitCircle = async () => {
     try {
       const { data, error } = await supabase
-        .from('challenges')
+        .from('fitcircles')
         .select('*')
         .eq('id', circleId)
         .single();

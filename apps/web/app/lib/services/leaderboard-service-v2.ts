@@ -135,7 +135,7 @@ export async function calculateWeightLossMetric(
   try {
     // Get challenge details for starting and target weight
     const { data: challenge, error: challengeError } = await supabase
-      .from('challenges')
+      .from('fitcircles')
       .select('id, start_date')
       .eq('circle_id', fitcircleId)
       .eq('type', 'weight_loss')
@@ -178,9 +178,9 @@ export async function calculateWeightLossMetric(
 
     // Get target weight (from challenge participants)
     const { data: participant } = await supabase
-      .from('challenge_participants')
+      .from('fitcircle_members')
       .select('target_weight')
-      .eq('challenge_id', challenge.id)
+      .eq('fitcircle_id', challenge.id)
       .eq('user_id', userId)
       .single();
 
@@ -369,7 +369,7 @@ export async function getLeaderboard(
       // No entries exist - trigger recalculation
       // Determine metric type from challenge type
       const { data: challenge } = await supabase
-        .from('challenges')
+        .from('fitcircles')
         .select('type')
         .eq('circle_id', fitcircleId)
         .single();

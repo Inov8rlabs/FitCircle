@@ -71,7 +71,7 @@ export default function JoinCirclePage() {
 
       // Fetch circle details using invite code (works for both authenticated and anonymous users)
       const { data: circleData, error: circleError } = await supabase
-        .from('challenges')
+        .from('fitcircles')
         .select(`
           id,
           name,
@@ -104,9 +104,9 @@ export default function JoinCirclePage() {
 
       // Get actual participant count from challenge_participants table
       const { count: participantCount } = await supabase
-        .from('challenge_participants')
+        .from('fitcircle_members')
         .select('*', { count: 'exact', head: true })
-        .eq('challenge_id', circleInfo.id)
+        .eq('fitcircle_id', circleInfo.id)
         .eq('status', 'active');
       const circle: CircleDetails = {
         id: circleInfo.id,
@@ -129,9 +129,9 @@ export default function JoinCirclePage() {
       // Check if user is already a member (if logged in)
       if (user) {
         const { data: memberData } = await supabase
-          .from('challenge_participants')
+          .from('fitcircle_members')
           .select('id')
-          .eq('challenge_id', circle.id)
+          .eq('fitcircle_id', circle.id)
           .eq('user_id', user.id)
           .single();
 
@@ -211,7 +211,7 @@ export default function JoinCirclePage() {
 
       // Join the circle by adding to challenge_participants
       const { error: participantError } = await supabase
-        .from('challenge_participants')
+        .from('fitcircle_members')
         .insert({
           challenge_id: circleDetails.id,
           user_id: user.id,

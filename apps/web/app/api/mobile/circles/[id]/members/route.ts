@@ -29,9 +29,9 @@ export async function GET(
 
     // Verify user is a member of this circle
     const { data: membership, error: membershipError } = await supabaseAdmin
-      .from('challenge_participants')
+      .from('fitcircle_members')
       .select('id')
-      .eq('challenge_id', circleId)
+      .eq('fitcircle_id', circleId)
       .eq('user_id', user.id)
       .eq('status', 'active')
       .single();
@@ -59,7 +59,7 @@ export async function GET(
 
     // Get circle creator_id
     const { data: circle, error: circleError } = await supabaseAdmin
-      .from('challenges')
+      .from('fitcircles')
       .select('creator_id')
       .eq('id', circleId)
       .single();
@@ -70,7 +70,7 @@ export async function GET(
 
     // Get all active members with profile info
     const { data: members, error } = await supabaseAdmin
-      .from('challenge_participants')
+      .from('fitcircle_members')
       .select(`
         user_id,
         joined_at,
@@ -79,7 +79,7 @@ export async function GET(
           avatar_url
         )
       `)
-      .eq('challenge_id', circleId)
+      .eq('fitcircle_id', circleId)
       .eq('status', 'active')
       .order('joined_at', { ascending: true });
 

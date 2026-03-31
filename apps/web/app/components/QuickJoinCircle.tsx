@@ -76,7 +76,7 @@ export default function QuickJoinCircle({ isOpen, onClose, initialCode = '' }: Q
     try {
       // Check if the challenge exists
       const { data: challenge, error: challengeError } = await supabase
-        .from('challenges')
+        .from('fitcircles')
         .select(`
           id,
           name,
@@ -105,9 +105,9 @@ export default function QuickJoinCircle({ isOpen, onClose, initialCode = '' }: Q
       // Check if user is already a member
       if (user) {
         const { data: membership } = (await supabase
-          .from('challenge_participants')
+          .from('fitcircle_members')
           .select('id')
-          .eq('challenge_id', (challenge as any).id)
+          .eq('fitcircle_id', (challenge as any).id)
           .eq('user_id', user.id)
           .single()) as { data: any; error: any };
 
@@ -143,7 +143,7 @@ export default function QuickJoinCircle({ isOpen, onClose, initialCode = '' }: Q
     try {
       // Direct approach to join the circle
       const joinResult = (await (supabase
-        .from('challenge_participants') as any)
+        .from('fitcircle_members') as any)
         .insert({
           challenge_id: circlePreview.id,
           user_id: user.id,

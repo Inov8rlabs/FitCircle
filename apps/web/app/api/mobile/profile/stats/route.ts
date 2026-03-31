@@ -23,7 +23,7 @@ export async function GET(request: NextRequest) {
 
     // Get total circles (all memberships, including left ones)
     const { count: totalCircles } = await supabaseAdmin
-      .from('challenge_participants')
+      .from('fitcircle_members')
       .select('id', { count: 'exact', head: true })
       .eq('user_id', user.id);
 
@@ -41,7 +41,7 @@ export async function GET(request: NextRequest) {
 
     // Get best streak from challenge_participants
     const { data: participants } = await supabaseAdmin
-      .from('challenge_participants')
+      .from('fitcircle_members')
       .select('longest_streak')
       .eq('user_id', user.id)
       .order('longest_streak', { ascending: false })
@@ -67,7 +67,7 @@ export async function GET(request: NextRequest) {
 
     // Get completed circles (status = 'completed' from participants where circle has ended)
     const { count: circlesCompleted } = await supabaseAdmin
-      .from('challenge_participants')
+      .from('fitcircle_members')
       .select('id', { count: 'exact', head: true })
       .eq('user_id', user.id)
       .eq('status', 'completed');

@@ -67,7 +67,7 @@ export default function CirclesPage() {
       let userCircles: any[] = [];
 
       const { data: allChallenges, error: allError } = await supabase
-        .from('challenges')
+        .from('fitcircles')
         .select('*')
         .order('created_at', { ascending: false });
 
@@ -83,7 +83,7 @@ export default function CirclesPage() {
 
         // Try to get participations
         const { data: participations } = await supabase
-          .from('challenge_participants')
+          .from('fitcircle_members')
           .select('challenge_id')
           .eq('user_id', user.id);
 
@@ -104,7 +104,7 @@ export default function CirclesPage() {
         console.warn('Could not fetch all challenges, trying created only:', allError?.message);
 
         const { data: createdChallenges, error: createdError } = await supabase
-          .from('challenges')
+          .from('fitcircles')
           .select('*')
           .eq('creator_id', user.id);
 

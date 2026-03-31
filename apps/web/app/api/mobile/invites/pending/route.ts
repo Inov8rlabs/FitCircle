@@ -38,7 +38,7 @@ export async function GET(request: NextRequest) {
         email,
         created_at,
         expires_at,
-        challenges!circle_invites_circle_id_fkey (
+        fitcircles!circle_invites_circle_id_fkey (
           id,
           name,
           description,

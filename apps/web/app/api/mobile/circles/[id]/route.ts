@@ -151,7 +151,7 @@ export async function PUT(
 
     // Get circle to verify permissions
     const { data: circle, error: fetchError } = await supabaseAdmin
-      .from('challenges')
+      .from('fitcircles')
       .select('creator_id, start_date, end_date, status')
       .eq('id', circleId)
       .single();
@@ -219,7 +219,7 @@ export async function PUT(
 
     // Update circle
     const { data: updated, error: updateError } = await supabaseAdmin
-      .from('challenges')
+      .from('fitcircles')
       .update({
         ...(validatedData.name && { name: validatedData.name }),
         ...(validatedData.description && { description: validatedData.description }),
@@ -318,7 +318,7 @@ export async function DELETE(
 
     // Get circle to verify permissions
     const { data: circle, error: fetchError } = await supabaseAdmin
-      .from('challenges')
+      .from('fitcircles')
       .select('creator_id, status, start_date, end_date')
       .eq('id', circleId)
       .single();
@@ -394,7 +394,7 @@ export async function DELETE(
 
     // Delete circle (cascade will handle related records)
     const { error: deleteError } = await supabaseAdmin
-      .from('challenges')
+      .from('fitcircles')
       .delete()
       .eq('id', circleId);
 

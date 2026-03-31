@@ -214,7 +214,7 @@ export async function DELETE(request: NextRequest) {
 
     // 2. Delete challenge participations
     await supabase
-      .from('challenge_participants')
+      .from('fitcircle_members')
       .delete()
       .eq('user_id', user.id);
 
@@ -308,7 +308,7 @@ async function getProfileStats(userId: string) {
 
   // Get challenge stats
   const { data: challenges } = await supabase
-    .from('challenge_participants')
+    .from('fitcircle_members')
     .select('challenge_id, completed')
     .eq('user_id', userId);
 

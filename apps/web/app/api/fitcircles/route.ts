@@ -16,7 +16,7 @@ export async function GET(request: NextRequest) {
 
     // Get challenges where user is creator
     const { data: creatorChallenges, error: creatorError } = await supabase
-      .from('challenges')
+      .from('fitcircles')
       .select(`
         id,
         name,
@@ -35,10 +35,10 @@ export async function GET(request: NextRequest) {
     // Get challenges where user is a participant
     // We need to query from challenge_participants and join to challenges
     const { data: participantData, error: participantError } = await supabase
-      .from('challenge_participants')
+      .from('fitcircle_members')
       .select(`
         challenge_id,
-        challenges!inner (
+        fitcircles!inner (
           id,
           name,
           description,
@@ -90,9 +90,9 @@ export async function GET(request: NextRequest) {
         try {
           // Get participant count
           const { count: participantCount } = await supabase
-            .from('challenge_participants')
+            .from('fitcircle_members')
             .select('*', { count: 'exact', head: true })
-            .eq('challenge_id', challenge.id)
+            .eq('fitcircle_id', challenge.id)
             .eq('status', 'active');
 
           // Get user's latest progress for this challenge

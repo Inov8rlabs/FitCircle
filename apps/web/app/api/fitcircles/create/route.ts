@@ -35,7 +35,7 @@ export async function POST(request: NextRequest) {
 
     // Create challenge (FitCircle)
     const { data: challenge, error: challengeError } = await supabaseAdmin
-      .from('challenges')
+      .from('fitcircles')
       .insert({
         creator_id: user.id,
         name: validatedData.name,
@@ -62,7 +62,7 @@ export async function POST(request: NextRequest) {
 
     // Automatically add creator as first participant
     const { error: participantError } = await supabaseAdmin
-      .from('challenge_participants')
+      .from('fitcircle_members')
       .insert({
         challenge_id: challenge.id,
         user_id: user.id,

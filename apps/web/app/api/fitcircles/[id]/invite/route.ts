@@ -49,7 +49,7 @@ export async function POST(
 
     // Get challenge details
     const { data: challenge, error: challengeError } = await supabase
-      .from('challenges')
+      .from('fitcircles')
       .select(`
         id,
         name,
@@ -74,9 +74,9 @@ export async function POST(
 
     // Get current participant count
     const { count: participantCount } = await supabase
-      .from('challenge_participants')
+      .from('fitcircle_members')
       .select('*', { count: 'exact', head: true })
-      .eq('challenge_id', challengeId)
+      .eq('fitcircle_id', challengeId)
       .eq('status', 'active');
 
     // Get inviter's name

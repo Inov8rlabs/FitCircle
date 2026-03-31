@@ -143,7 +143,7 @@ export class AccountDeletionService {
     console.log(`🔍 [AccountDeletionService] Getting challenges for leaderboard recomputation`);
 
     const { data: userChallenges } = await supabaseAdmin
-      .from('challenge_participants')
+      .from('fitcircle_members')
       .select('challenge_id')
       .eq('user_id', userId)
       .eq('status', 'active');
@@ -159,7 +159,7 @@ export class AccountDeletionService {
 
     // This will cascade delete related data due to ON DELETE CASCADE
     await supabaseAdmin
-      .from('challenge_participants')
+      .from('fitcircle_members')
       .delete()
       .eq('user_id', userId);
 
@@ -180,7 +180,7 @@ export class AccountDeletionService {
 
     // Delete challenges where user is creator and no other participants exist
     const { data: challengesToDelete } = await supabaseAdmin
-      .from('challenges')
+      .from('fitcircles')
       .select('id, name')
       .eq('creator_id', userId);
 
@@ -188,14 +188,14 @@ export class AccountDeletionService {
       for (const challenge of challengesToDelete) {
         // Check if there are any remaining participants
         const { count } = await supabaseAdmin
-          .from('challenge_participants')
+          .from('fitcircle_members')
           .select('id', { count: 'exact', head: true })
-          .eq('challenge_id', challenge.id);
+          .eq('fitcircle_id', challenge.id);
 
         if (count === 0) {
           console.log(`🗑️ [AccountDeletionService] Deleting challenge "${challenge.name}" (${challenge.id})`);
           await supabaseAdmin
-            .from('challenges')
+            .from('fitcircles')
             .delete()
             .eq('id', challenge.id);
         }
@@ -318,7 +318,7 @@ export class AccountDeletionService {
       try {
         // Get challenge details to determine metric type
         const { data: challenge } = await supabaseAdmin
-          .from('challenges')
+          .from('fitcircles')
           .select('type')
           .eq('id', challengeId)
           .single();
@@ -410,7 +410,7 @@ export class AccountDeletionService {
 
     // Get all challenges created by user
     const { data: challenges, error } = await supabaseAdmin
-      .from('challenges')
+      .from('fitcircles')
       .select('id, name, creator_id')
       .eq('creator_id', userId);
 
@@ -424,9 +424,9 @@ export class AccountDeletionService {
     for (const challenge of challenges) {
       // Count active members (excluding the user being deleted)
       const { data: participants, count } = await supabaseAdmin
-        .from('challenge_participants')
+        .from('fitcircle_members')
         .select('user_id, joined_at, profiles!inner(display_name)', { count: 'exact' })
-        .eq('challenge_id', challenge.id)
+        .eq('fitcircle_id', challenge.id)
         .neq('user_id', userId)
         .eq('status', 'active')
         .order('joined_at', { ascending: true });
@@ -466,7 +466,7 @@ export class AccountDeletionService {
 
     // Update challenge creator
     const { error } = await supabaseAdmin
-      .from('challenges')
+      .from('fitcircles')
       .update({
         creator_id: newCreatorId,
         updated_at: new Date().toISOString(),
@@ -514,7 +514,7 @@ export class AccountDeletionService {
         .select('id', { count: 'exact', head: true })
         .eq('user_id', userId),
       supabaseAdmin
-        .from('challenge_participants')
+        .from('fitcircle_members')
         .select('id', { count: 'exact', head: true })
         .eq('user_id', userId),
       supabaseAdmin
@@ -564,8 +564,8 @@ export class AccountDeletionService {
       supabaseAdmin.from('profiles').select('*').eq('id', userId).single(),
       supabaseAdmin.from('check_ins').select('*').eq('user_id', userId),
       supabaseAdmin.from('daily_tracking').select('*').eq('user_id', userId),
-      supabaseAdmin.from('challenges').select('*').eq('creator_id', userId),
-      supabaseAdmin.from('challenge_participants').select('*').eq('user_id', userId),
+      supabaseAdmin.from('fitcircles').select('*').eq('creator_id', userId),
+      supabaseAdmin.from('fitcircle_members').select('*').eq('user_id', userId),
       supabaseAdmin.from('notifications').select('*').eq('user_id', userId),
       supabaseAdmin.from('comments').select('*').eq('user_id', userId),
       supabaseAdmin.from('reactions').select('*').eq('user_id', userId),

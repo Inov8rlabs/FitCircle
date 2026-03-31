@@ -52,7 +52,7 @@ export async function POST(request: NextRequest) {
     const supabaseAdmin = createAdminSupabase();
 
     const { data: circle, error: circleError } = await supabaseAdmin
-      .from('challenges')
+      .from('fitcircles')
       .select('id, created_by, start_date')
       .eq('invite_code', inviteCode)
       .single();
@@ -69,9 +69,9 @@ export async function POST(request: NextRequest) {
 
     // Check if already a member
     const { data: existing } = await supabaseAdmin
-      .from('challenge_participants')
+      .from('fitcircle_members')
       .select('id')
-      .eq('challenge_id', circle.id)
+      .eq('fitcircle_id', circle.id)
       .eq('user_id', user.id)
       .single();
 
@@ -93,7 +93,7 @@ export async function POST(request: NextRequest) {
       await CircleService.acceptInvite(inviteCode, user.id);
 
       // Add as member without goal
-      const { error: memberError } = await supabaseAdmin.from('challenge_participants').insert({
+      const { error: memberError } = await supabaseAdmin.from('fitcircle_members').insert({
         challenge_id: circle.id,
         user_id: user.id,
         invited_by: circle.created_by,
@@ -104,13 +104,13 @@ export async function POST(request: NextRequest) {
 
       // Update participant count
       const { data: currentCircle } = await supabaseAdmin
-        .from('challenges')
+        .from('fitcircles')
         .select('participant_count')
         .eq('id', circle.id)
         .single();
 
       await supabaseAdmin
-        .from('challenges')
+        .from('fitcircles')
         .update({
           participant_count: (currentCircle?.participant_count || 0) + 1,
         })

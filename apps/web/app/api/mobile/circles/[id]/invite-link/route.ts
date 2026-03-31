@@ -26,9 +26,9 @@ export async function GET(
 
     // Verify user is a member of this circle
     const { data: membership, error: membershipError } = await supabaseAdmin
-      .from('challenge_participants')
+      .from('fitcircle_members')
       .select('id')
-      .eq('challenge_id', circleId)
+      .eq('fitcircle_id', circleId)
       .eq('user_id', user.id)
       .eq('status', 'active')
       .single();
@@ -56,7 +56,7 @@ export async function GET(
 
     // Get circle's invite code
     const { data: circle, error: circleError } = await supabaseAdmin
-      .from('challenges')
+      .from('fitcircles')
       .select('invite_code, name')
       .eq('id', circleId)
       .single();

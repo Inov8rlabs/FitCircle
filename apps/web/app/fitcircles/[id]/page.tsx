@@ -43,6 +43,7 @@ import { SubmitProgressDialog } from '@/components/SubmitProgressDialog';
 import { useUnitPreference } from '@/hooks/useUnitPreference';
 import { toast } from 'sonner';
 import { CheckInCard } from '@/components/check-ins';
+import CircleChallengesSection from '@/components/challenges/CircleChallengesSection';
 
 interface FitCircle {
   id: string;
@@ -143,7 +144,7 @@ export default function FitCirclePage() {
   const fetchFitCircle = async () => {
     try {
       const { data, error } = await supabase
-        .from('challenges')
+        .from('fitcircles')
         .select('*')
         .eq('id', circleId)
         .single();
@@ -246,7 +247,7 @@ export default function FitCirclePage() {
     try {
       // Fallback: Fetch participants directly without progress data
       const { data: participantsData, error: participantsError } = await supabase
-        .from('challenge_participants')
+        .from('fitcircle_members')
         .select(`
           id,
           user_id,
@@ -258,7 +259,7 @@ export default function FitCirclePage() {
             avatar_url
           )
         `)
-        .eq('challenge_id', circleId)
+        .eq('fitcircle_id', circleId)
         .eq('status', 'active');
 
       if (participantsError) {
@@ -997,6 +998,26 @@ export default function FitCirclePage() {
               </Card>
             </motion.div>
           </div>
+
+          {/* Circle Challenges */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.45 }}
+          >
+            <Card className="bg-slate-900/50 border-slate-800/50 backdrop-blur-xl">
+              <CardContent className="p-4 sm:p-6">
+                <CircleChallengesSection
+                  circleId={circleId}
+                  circleMembers={participants.map(p => ({
+                    user_id: p.user_id,
+                    display_name: p.display_name,
+                    avatar_url: p.avatar_url,
+                  }))}
+                />
+              </CardContent>
+            </Card>
+          </motion.div>
 
           {/* Leaderboard */}
           <motion.div

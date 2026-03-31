@@ -19,7 +19,7 @@ export async function POST(
 
     // Get the challenge to verify ownership
     const { data: challenge, error: fetchError } = await supabase
-      .from('challenges')
+      .from('fitcircles')
       .select('creator_id')
       .eq('id', challengeId)
       .single();
@@ -42,9 +42,9 @@ export async function POST(
     const supabaseAdmin = createAdminSupabase();
 
     const { error: deleteError } = await supabaseAdmin
-      .from('challenge_participants')
+      .from('fitcircle_members')
       .delete()
-      .eq('challenge_id', challengeId)
+      .eq('fitcircle_id', challengeId)
       .eq('user_id', participantId);
 
     if (deleteError) {

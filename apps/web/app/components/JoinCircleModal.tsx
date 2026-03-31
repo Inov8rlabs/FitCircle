@@ -73,7 +73,7 @@ export default function JoinCircleModal({ isOpen, onClose, onSuccess }: JoinCirc
     setIsSearching(true);
     try {
       const { data, error } = (await supabase
-        .from('challenges')
+        .from('fitcircles')
         .select(`
           id,
           name,
@@ -105,9 +105,9 @@ export default function JoinCircleModal({ isOpen, onClose, onSuccess }: JoinCirc
 
       // Check if already a member
       const { data: existingMember } = await supabase
-        .from('challenge_participants')
+        .from('fitcircle_members')
         .select('id')
-        .eq('challenge_id', data.id)
+        .eq('fitcircle_id', data.id)
         .eq('user_id', user?.id!)
         .single();
 
@@ -141,7 +141,7 @@ export default function JoinCircleModal({ isOpen, onClose, onSuccess }: JoinCirc
     setIsJoining(true);
     try {
       const { error } = await supabase
-        .from('challenge_participants')
+        .from('fitcircle_members')
         .insert({
           challenge_id: circlePreview.id,
           user_id: user.id,

@@ -108,7 +108,7 @@ export async function GET(
     if (challengeId) {
       // Get challenge details
       const { data: challengeData } = await supabase
-        .from('challenges')
+        .from('fitcircles')
         .select('id, type, creator_id, name, description, start_date, end_date')
         .eq('id', challengeId)
         .single();

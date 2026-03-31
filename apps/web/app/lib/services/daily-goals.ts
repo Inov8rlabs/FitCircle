@@ -181,7 +181,7 @@ export class DailyGoalService {
     try {
       // 1. Fetch challenge details
       const { data: challenge, error: challengeError } = await supabase
-        .from('challenges')
+        .from('fitcircles')
         .select('id, type, start_date, end_date')
         .eq('id', challengeId)
         .single();
@@ -192,10 +192,10 @@ export class DailyGoalService {
 
       // 2. Fetch participant details
       const { data: participant, error: participantError } = await supabase
-        .from('challenge_participants')
+        .from('fitcircle_members')
         .select('starting_weight_kg, goal_weight_kg, starting_value, goal_value')
         .eq('user_id', userId)
-        .eq('challenge_id', challengeId)
+        .eq('fitcircle_id', challengeId)
         .single();
 
       if (participantError || !participant) {

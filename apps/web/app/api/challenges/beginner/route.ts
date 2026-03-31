@@ -29,7 +29,7 @@ export async function GET(request: NextRequest) {
     // 3. Not too many participants yet
     // 4. Clear, simple goals
     const { data: challenges, error } = await supabaseAdmin
-      .from('challenges')
+      .from('fitcircles')
       .select(`
         id,
         name,

@@ -22,14 +22,14 @@ export async function GET(
 
     // Get challenge details first
     const { data: challenge } = await supabase
-      .from('challenges')
+      .from('fitcircles')
       .select('creator_id')
       .eq('id', challengeId)
       .single();
 
     // Get active participants with profile data
     const { data: participantsData, error: participantsError } = await supabase
-      .from('challenge_participants')
+      .from('fitcircle_members')
       .select(`
         id,
         user_id,
@@ -37,7 +37,7 @@ export async function GET(
         status,
         joined_at
       `)
-      .eq('challenge_id', challengeId)
+      .eq('fitcircle_id', challengeId)
       .eq('status', 'active');
 
     if (participantsError) {

@@ -754,7 +754,7 @@ export class MobileAPIService {
 
     // Get challenges completed count
     const { count: challengesCompleted } = await supabaseAdmin
-      .from('challenge_participants')
+      .from('fitcircle_members')
       .select('id', { count: 'exact', head: true })
       .eq('user_id', userId)
       .eq('status', 'completed');

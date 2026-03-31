@@ -37,7 +37,7 @@ export async function GET(request: NextRequest) {
     // Also get circles where user is the creator
     const supabase = await import('@/lib/supabase-admin').then(m => m.createAdminSupabase());
     const { data: createdCircles } = await supabase
-      .from('challenges')
+      .from('fitcircles')
       .select('*')
       .eq('creator_id', user.id)
       .order('created_at', { ascending: false });

@@ -18,7 +18,7 @@ export async function PATCH(
 
     // Get the challenge to verify ownership
     const { data: challenge, error: fetchError } = await supabase
-      .from('challenges')
+      .from('fitcircles')
       .select('creator_id')
       .eq('id', challengeId)
       .single();
@@ -62,7 +62,7 @@ export async function PATCH(
     } else if (start_date) {
       // Get current end date from challenge
       const { data: currentChallenge } = await supabase
-        .from('challenges')
+        .from('fitcircles')
         .select('end_date')
         .eq('id', challengeId)
         .single();
@@ -73,7 +73,7 @@ export async function PATCH(
     } else if (end_date) {
       // Get current start date from challenge
       const { data: currentChallenge } = await supabase
-        .from('challenges')
+        .from('fitcircles')
         .select('start_date')
         .eq('id', challengeId)
         .single();
@@ -85,7 +85,7 @@ export async function PATCH(
 
     // Update challenge
     const { data, error: updateError } = await supabase
-      .from('challenges')
+      .from('fitcircles')
       .update(updates)
       .eq('id', challengeId)
       .select()

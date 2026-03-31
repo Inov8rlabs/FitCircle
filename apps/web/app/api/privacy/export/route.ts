@@ -43,7 +43,7 @@ export async function GET(request: NextRequest) {
 
       // Challenge participation
       supabase
-        .from('challenge_participants')
+        .from('fitcircle_members')
         .select(
           `
           *,

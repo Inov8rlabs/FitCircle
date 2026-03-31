@@ -29,7 +29,7 @@ export async function GET(request: NextRequest) {
     // 3. User is not already a member of
     // 4. Match user's interests (based on persona)
     let query = supabaseAdmin
-      .from('challenges')
+      .from('fitcircles')
       .select(`
         id,
         name,
@@ -60,7 +60,7 @@ export async function GET(request: NextRequest) {
 
     // Filter out challenges user is already in
     const { data: userParticipations } = await supabaseAdmin
-      .from('challenge_participants')
+      .from('fitcircle_members')
       .select('challenge_id')
       .eq('user_id', user.id);
 

@@ -37,7 +37,7 @@ export async function PATCH(
 
     // Get challenge details to know the type and valid date range
     const { data: challenge, error: challengeError } = await supabase
-      .from('challenges')
+      .from('fitcircles')
       .select('type, start_date, end_date')
       .eq('id', challengeId)
       .single();
@@ -133,7 +133,7 @@ export async function DELETE(
 
     // Get challenge details to know the type
     const { data: challenge, error: challengeError } = await supabase
-      .from('challenges')
+      .from('fitcircles')
       .select('type')
       .eq('id', challengeId)
       .single();

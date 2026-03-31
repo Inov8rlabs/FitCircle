@@ -50,7 +50,7 @@ export class CircleService {
 
     // Create the circle (challenge)
     const { data: circle, error } = await supabaseAdmin
-      .from('challenges')
+      .from('fitcircles')
       .insert({
         name: sanitizedName,
         description: sanitizedDescription,
@@ -86,7 +86,7 @@ export class CircleService {
 
     // Get circle data
     const { data: circle, error } = await supabaseAdmin
-      .from('challenges')
+      .from('fitcircles')
       .select('*')
       .eq('id', circleId)
       .single();
@@ -97,9 +97,9 @@ export class CircleService {
     // Get actual member count from challenge_participants table (the actual table used)
     console.log(`[CircleService.getCircle] Querying challenge_participants for challenge_id: ${circleId}`);
     const { count: memberCount, error: countError } = await supabaseAdmin
-      .from('challenge_participants')
+      .from('fitcircle_members')
       .select('*', { count: 'exact', head: true })
-      .eq('challenge_id', circleId)
+      .eq('fitcircle_id', circleId)
       .eq('status', 'active');
 
     if (countError) {
@@ -111,9 +111,9 @@ export class CircleService {
 
     // Also query without status filter to see total
     const { count: totalMembers } = await supabaseAdmin
-      .from('challenge_participants')
+      .from('fitcircle_members')
       .select('*', { count: 'exact', head: true })
-      .eq('challenge_id', circleId);
+      .eq('fitcircle_id', circleId);
 
     console.log(`[CircleService.getCircle] Total members (all statuses): ${totalMembers}`);
 
@@ -137,11 +137,11 @@ export class CircleService {
 
     // Get all circles where user is a participant (using challenge_participants table)
     const { data: memberships, error } = await supabaseAdmin
-      .from('challenge_participants')
+      .from('fitcircle_members')
       .select(`
         challenge_id,
         progress_percentage,
-        challenges!inner (
+        fitcircles!inner (
           id,
           name,
           description,
@@ -176,9 +176,9 @@ export class CircleService {
 
       // Get actual member count for this circle from challenge_participants
       const { count: actualMemberCount, error: countError } = await supabaseAdmin
-        .from('challenge_participants')
+        .from('fitcircle_members')
         .select('*', { count: 'exact', head: true })
-        .eq('challenge_id', circle.id)
+        .eq('fitcircle_id', circle.id)
         .eq('status', 'active');
 
       if (countError) {
@@ -235,7 +235,7 @@ export class CircleService {
 
       // Check uniqueness
       const { data: existing } = await supabaseAdmin
-        .from('challenges')
+        .from('fitcircles')
         .select('id')
         .eq('invite_code', code)
         .single();
@@ -262,7 +262,7 @@ export class CircleService {
 
     // Get circle's invite code
     const { data: circle, error: circleError } = await supabaseAdmin
-      .from('challenges')
+      .from('fitcircles')
       .select('invite_code')
       .eq('id', circleId)
       .single();
@@ -299,7 +299,7 @@ export class CircleService {
 
     // Find circle with this invite code
     const { data: circle, error } = await supabaseAdmin
-      .from('challenges')
+      .from('fitcircles')
       .select(`
         id,
         name,
@@ -379,7 +379,7 @@ export class CircleService {
 
     // Find the circle
     const { data: circle, error: circleError } = await supabaseAdmin
-      .from('challenges')
+      .from('fitcircles')
       .select('id, creator_id')
       .eq('invite_code', inviteCode.toUpperCase().trim())
       .single();
@@ -417,7 +417,7 @@ export class CircleService {
 
     // Verify invite code matches circle
     const { data: circle, error: circleError } = await supabaseAdmin
-      .from('challenges')
+      .from('fitcircles')
       .select('invite_code, creator_id, start_date')
       .eq('id', circleId)
       .single();
@@ -434,9 +434,9 @@ export class CircleService {
 
     // Check if already a member (using challenge_participants table)
     const { data: existing } = await supabaseAdmin
-      .from('challenge_participants')
+      .from('fitcircle_members')
       .select('id')
-      .eq('challenge_id', circleId)
+      .eq('fitcircle_id', circleId)
       .eq('user_id', userId)
       .single();
 
@@ -456,13 +456,13 @@ export class CircleService {
 
     // Update participant count - using direct update instead of RPC
     const { data: circleData } = await supabaseAdmin
-      .from('challenges')
+      .from('fitcircles')
       .select('participant_count')
       .eq('id', circleId)
       .single();
     
     await supabaseAdmin
-      .from('challenges')
+      .from('fitcircles')
       .update({ participant_count: (circleData?.participant_count || 0) + 1 })
       .eq('id', circleId);
 
@@ -483,9 +483,9 @@ export class CircleService {
 
     // Get member record (using challenge_participants table)
     const { data: member, error: memberError } = await supabaseAdmin
-      .from('challenge_participants')
+      .from('fitcircle_members')
       .select('id, goal_locked_at')
-      .eq('challenge_id', circleId)
+      .eq('fitcircle_id', circleId)
       .eq('user_id', userId)
       .single();
 
@@ -502,7 +502,7 @@ export class CircleService {
 
     // Get circle start date
     const { data: circle, error: circleError } = await supabaseAdmin
-      .from('challenges')
+      .from('fitcircles')
       .select('start_date')
       .eq('id', circleId)
       .single();
@@ -517,7 +517,7 @@ export class CircleService {
 
     // Update goal in challenge_participants table
     const { error: updateError } = await supabaseAdmin
-      .from('challenge_participants')
+      .from('fitcircle_members')
       .update({
         goal_type: goal.goal_type,
         goal_start_value: goal.goal_start_value,
@@ -546,9 +546,9 @@ export class CircleService {
     console.log(`[CircleService.getCircleMembers] Fetching members for circle: ${circleId}`);
 
     const { data: members, error } = await supabaseAdmin
-      .from('challenge_participants')
+      .from('fitcircle_members')
       .select('*')
-      .eq('challenge_id', circleId)
+      .eq('fitcircle_id', circleId)
       .eq('status', 'active')
       .order('joined_at', { ascending: true });
 
@@ -580,9 +580,9 @@ export class CircleService {
 
     // Get member record (using challenge_participants table)
     const { data: member, error: memberError } = await supabaseAdmin
-      .from('challenge_participants')
+      .from('fitcircle_members')
       .select('*')
-      .eq('challenge_id', circleId)
+      .eq('fitcircle_id', circleId)
       .eq('user_id', userId)
       .single();
 
@@ -632,7 +632,7 @@ export class CircleService {
     console.log(`[CircleService.submitCheckIn] Updating participant stats: progress=${newProgress}%, streak=${newStreak}`);
 
     const { error: updateError } = await supabaseAdmin
-      .from('challenge_participants')
+      .from('fitcircle_members')
       .update({
         current_value: input.value,
         progress_percentage: newProgress,
@@ -718,7 +718,7 @@ export class CircleService {
 
     // Get member with latest check-in (using challenge_participants table)
     const { data: member, error: memberError } = await supabaseAdmin
-      .from('challenge_participants')
+      .from('fitcircle_members')
       .select(`
         *,
         circle_check_ins (
@@ -726,7 +726,7 @@ export class CircleService {
           check_in_date
         )
       `)
-      .eq('challenge_id', circleId)
+      .eq('fitcircle_id', circleId)
       .eq('user_id', userId)
       .order('circle_check_ins.check_in_date', { ascending: false })
       .limit(1)
@@ -744,7 +744,7 @@ export class CircleService {
       console.log(`[CircleService.updateMemberProgress] Calculated progress: ${newProgress}%`);
 
       await supabaseAdmin
-        .from('challenge_participants')
+        .from('fitcircle_members')
         .update({
           current_value: latestValue,
           progress_percentage: newProgress,
@@ -770,7 +770,7 @@ export class CircleService {
 
     // Get all active members with their profiles (using challenge_participants table)
     const { data: members, error} = await supabaseAdmin
-      .from('challenge_participants')
+      .from('fitcircle_members')
       .select(`
         user_id,
         progress_percentage,
@@ -788,7 +788,7 @@ export class CircleService {
           avatar_url
         )
       `)
-      .eq('challenge_id', circleId)
+      .eq('fitcircle_id', circleId)
       .eq('status', 'active');
 
     if (error) {
@@ -929,9 +929,9 @@ export class CircleService {
 
     // Check if sender is a member (using challenge_participants table)
     const { data: sender } = await supabaseAdmin
-      .from('challenge_participants')
+      .from('fitcircle_members')
       .select('id')
-      .eq('challenge_id', circleId)
+      .eq('fitcircle_id', circleId)
       .eq('user_id', fromUserId)
       .single();
 
@@ -985,17 +985,17 @@ export class CircleService {
         console.log(`[CircleService.sendEncouragement] Incrementing high-fives for user ${input.to_user_id}`);
         
         const { data: recipient } = await supabaseAdmin
-          .from('challenge_participants')
+          .from('fitcircle_members')
           .select('total_high_fives_received')
-          .eq('challenge_id', circleId)
+          .eq('fitcircle_id', circleId)
           .eq('user_id', input.to_user_id)
           .single();
         
         if (recipient) {
           await supabaseAdmin
-            .from('challenge_participants')
+            .from('fitcircle_members')
             .update({ total_high_fives_received: (recipient.total_high_fives_received || 0) + 1 })
-            .eq('challenge_id', circleId)
+            .eq('fitcircle_id', circleId)
             .eq('user_id', input.to_user_id);
         }
       }
@@ -1073,7 +1073,7 @@ export class CircleService {
     console.log(`[CircleService.addMemberToCircle] Adding user ${userId} to circle ${circleId}`);
 
     const { error } = await supabaseAdmin
-      .from('challenge_participants')
+      .from('fitcircle_members')
       .insert({
         challenge_id: circleId,
         user_id: userId,
@@ -1307,9 +1307,9 @@ export class CircleService {
 
     // Get member record
     const { data: member, error: memberError } = await supabaseAdmin
-      .from('challenge_participants')
+      .from('fitcircle_members')
       .select('id, longest_streak')
-      .eq('challenge_id', circleId)
+      .eq('fitcircle_id', circleId)
       .eq('user_id', userId)
       .single();
 
@@ -1323,7 +1323,7 @@ export class CircleService {
 
     // Update member's circle streak
     const { error: updateError } = await supabaseAdmin
-      .from('challenge_participants')
+      .from('fitcircle_members')
       .update({
         streak_days: newStreak,
         longest_streak: Math.max(newStreak, member.longest_streak || 0),
@@ -1362,7 +1362,7 @@ export class CircleService {
 
       // Calculate grace days based on challenge duration
       const { data: circle } = await supabaseAdmin
-        .from('challenges')
+        .from('fitcircles')
         .select('start_date, end_date')
         .eq('id', circleId)
         .single();
@@ -1406,9 +1406,9 @@ export class CircleService {
 
     // Get all active members
     const { data: members } = await supabaseAdmin
-      .from('challenge_participants')
+      .from('fitcircle_members')
       .select('id, user_id')
-      .eq('challenge_id', circleId)
+      .eq('fitcircle_id', circleId)
       .eq('status', 'active');
 
     if (!members || members.length === 0) {

@@ -125,7 +125,7 @@ export default function FitCircleCreator() {
       registrationDeadline.setDate(registrationDeadline.getDate() - 1);
 
       const { data, error } = (await supabase
-        .from('challenges')
+        .from('fitcircles')
         .insert({
           creator_id: user.id,
           name: formData.name,
@@ -182,7 +182,7 @@ export default function FitCircleCreator() {
   const fetchFitCircles = async () => {
     try {
       const { data, error } = await supabase
-        .from('challenges')
+        .from('fitcircles')
         .select('*')
         .in('status', ['upcoming', 'active'])
         .order('created_at', { ascending: false })
@@ -198,7 +198,7 @@ export default function FitCircleCreator() {
   const fetchParticipants = async (challengeId: string) => {
     try {
       const { data, error } = await supabase
-        .from('challenge_participants')
+        .from('fitcircle_members')
         .select(`
           *,
           profiles:user_id (
@@ -207,7 +207,7 @@ export default function FitCircleCreator() {
             avatar_url
           )
         `)
-        .eq('challenge_id', challengeId)
+        .eq('fitcircle_id', challengeId)
         .eq('status', 'active')
         .order('total_points', { ascending: false })
         .limit(10);
@@ -240,7 +240,7 @@ export default function FitCircleCreator() {
 
     try {
       const { error } = await supabase
-        .from('challenge_participants')
+        .from('fitcircle_members')
         .insert({
           challenge_id: challengeId,
           user_id: user.id,

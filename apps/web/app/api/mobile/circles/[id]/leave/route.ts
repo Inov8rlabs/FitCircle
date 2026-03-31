@@ -24,7 +24,7 @@ export async function POST(
 
     // Get circle to check if user is creator
     const { data: circle, error: circleError } = await supabaseAdmin
-      .from('challenges')
+      .from('fitcircles')
       .select('creator_id, participant_count')
       .eq('id', circleId)
       .single();
@@ -70,9 +70,9 @@ export async function POST(
 
     // Get member record
     const { data: member, error: memberError } = await supabaseAdmin
-      .from('challenge_participants')
+      .from('fitcircle_members')
       .select('id, status, left_at')
-      .eq('challenge_id', circleId)
+      .eq('fitcircle_id', circleId)
       .eq('user_id', user.id)
       .single();
 
@@ -117,7 +117,7 @@ export async function POST(
 
     // Mark member as left
     const { error: updateError } = await supabaseAdmin
-      .from('challenge_participants')
+      .from('fitcircle_members')
       .update({
         left_at: new Date().toISOString(),
         status: 'left',
@@ -132,7 +132,7 @@ export async function POST(
     // Decrement participant count
     const newCount = Math.max((circle.participant_count || 1) - 1, 0);
     const { error: countError } = await supabaseAdmin
-      .from('challenges')
+      .from('fitcircles')
       .update({
         participant_count: newCount,
         updated_at: new Date().toISOString(),

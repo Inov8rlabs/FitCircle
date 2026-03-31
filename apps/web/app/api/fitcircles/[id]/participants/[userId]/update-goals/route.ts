@@ -53,9 +53,9 @@ export async function PATCH(
 
     // Update challenge_participants table
     const { data, error } = await supabase
-      .from('challenge_participants')
+      .from('fitcircle_members')
       .update(updateData)
-      .eq('challenge_id', challengeId)
+      .eq('fitcircle_id', challengeId)
       .eq('user_id', userId)
       .select()
       .single();

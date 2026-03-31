@@ -128,7 +128,7 @@ export async function GET(
 
     // Get challenge details to determine type
     const { data: challenge, error: challengeError } = await supabase
-      .from('challenges')
+      .from('fitcircles')
       .select('id, type, creator_id, name')
       .eq('id', challengeId)
       .single();

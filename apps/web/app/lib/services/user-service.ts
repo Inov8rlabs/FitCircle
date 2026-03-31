@@ -121,7 +121,7 @@ export class UserService {
 
     // Get circles for user1
     const { data: user1Circles, error: error1 } = await supabaseAdmin
-      .from('challenge_participants')
+      .from('fitcircle_members')
       .select('challenge_id')
       .eq('user_id', userId1)
       .eq('status', 'active');
@@ -130,7 +130,7 @@ export class UserService {
 
     // Get circles for user2
     const { data: user2Circles, error: error2 } = await supabaseAdmin
-      .from('challenge_participants')
+      .from('fitcircle_members')
       .select('challenge_id')
       .eq('user_id', userId2)
       .eq('status', 'active');
@@ -186,13 +186,13 @@ export class UserService {
 
     // Get circle statistics
     const { count: totalCircles } = await supabaseAdmin
-      .from('challenge_participants')
+      .from('fitcircle_members')
       .select('id', { count: 'exact', head: true })
       .eq('user_id', userId)
       .eq('status', 'active');
 
     const { count: circlesCompleted } = await supabaseAdmin
-      .from('challenge_participants')
+      .from('fitcircle_members')
       .select('id', { count: 'exact', head: true })
       .eq('user_id', userId)
       .eq('status', 'completed');
@@ -263,7 +263,7 @@ export class UserService {
 
     // Get progress data
     let query = supabaseAdmin
-      .from('challenge_participants')
+      .from('fitcircle_members')
       .select(`
         goal_start_value,
         current_value,
@@ -423,7 +423,7 @@ export class UserService {
 
     if (circleId) {
       const { data: challenge } = await supabaseAdmin
-        .from('challenges')
+        .from('fitcircles')
         .select('type, start_date, end_date')
         .eq('id', circleId)
         .single();
