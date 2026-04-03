@@ -1,25 +1,25 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
-import { ChallengeService } from '@/lib/services/circle-challenge-service';
+import { CircleQuestService, CreateQuestInput } from '@/lib/services/circle-quest-service';
 import { z } from 'zod';
 
-const createChallengeSchema = z.object({
-  template_id: z.string().optional(),
-  name: z.string().min(3).max(50),
-  description: z.string().max(200).optional(),
-  category: z.enum(['strength', 'cardio', 'flexibility', 'wellness', 'custom']),
+const createQuestSchema = z.object({
+  quest_name: z.string().min(3).max(100),
+  quest_description: z.string().max(500).optional(),
+  quest_type: z.enum(['individual', 'collaborative', 'competitive']),
   goal_amount: z.number().positive(),
   unit: z.string().min(1).max(20),
-  logging_prompt: z.string().max(60).optional(),
-  is_open: z.boolean().optional(),
-  starts_at: z.string(),
-  ends_at: z.string(),
-  invite_user_ids: z.array(z.string().uuid()).optional(),
+  collective_target: z.number().positive().optional(),
+  starts_at: z.string().datetime(),
+  ends_at: z.string().datetime(),
+  template_id: z.string().uuid().optional(),
+  challenge_id: z.string().uuid().optional(),
+  metadata: z.record(z.unknown()).optional(),
 });
 
 /**
- * GET /api/fitcircles/[id]/challenges
- * List all challenges for a circle
+ * GET /api/mobile/circles/[id]/quests
+ * List active quests for a circle
  */
 export async function GET(
   request: NextRequest,
@@ -29,11 +29,11 @@ export async function GET(
     const user = await requireMobileAuth(request);
     const { id: circleId } = await params;
 
-    const challenges = await ChallengeService.getCircleChallenges(circleId, user.id);
+    const quests = await CircleQuestService.getActiveQuests(circleId, user.id);
 
     return NextResponse.json({
       success: true,
-      data: challenges,
+      data: quests,
       error: null,
     });
   } catch (error: any) {
@@ -41,6 +41,12 @@ export async function GET(
       return NextResponse.json(
         { success: false, data: null, error: { code: 'UNAUTHORIZED', message: 'Invalid or expired token' } },
         { status: 401 }
+      );
+    }
+    if (error.message?.includes('active member')) {
+      return NextResponse.json(
+        { success: false, data: null, error: { code: 'FORBIDDEN', message: error.message } },
+        { status: 403 }
       );
     }
     return NextResponse.json(
@@ -51,8 +57,8 @@ export async function GET(
 }
 
 /**
- * POST /api/fitcircles/[id]/challenges
- * Create a new challenge within a circle
+ * POST /api/mobile/circles/[id]/quests
+ * Create a new quest in a circle
  */
 export async function POST(
   request: NextRequest,
@@ -62,16 +68,18 @@ export async function POST(
     const user = await requireMobileAuth(request);
     const { id: circleId } = await params;
     const body = await request.json();
-    const validated = createChallengeSchema.parse(body);
 
-    const challenge = await ChallengeService.createChallenge(user.id, {
-      ...validated,
-      fitcircle_id: circleId,
-    });
+    const validated = createQuestSchema.parse(body);
+
+    const quest = await CircleQuestService.createQuest(
+      circleId,
+      user.id,
+      validated as CreateQuestInput
+    );
 
     return NextResponse.json({
       success: true,
-      data: challenge,
+      data: quest,
       error: null,
     });
   } catch (error: any) {
@@ -83,8 +91,14 @@ export async function POST(
     }
     if (error instanceof z.ZodError) {
       return NextResponse.json(
-        { success: false, data: null, error: { code: 'VALIDATION_ERROR', message: 'Invalid data', details: error.errors } },
+        { success: false, data: null, error: { code: 'VALIDATION_ERROR', message: 'Invalid input', details: error.errors } },
         { status: 400 }
+      );
+    }
+    if (error.message?.includes('active member')) {
+      return NextResponse.json(
+        { success: false, data: null, error: { code: 'FORBIDDEN', message: error.message } },
+        { status: 403 }
       );
     }
     return NextResponse.json(

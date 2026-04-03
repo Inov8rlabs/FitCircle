@@ -1,4 +1,5 @@
 import { createAdminSupabase } from '../supabase-admin';
+import { MomentumService } from './momentum-service';
 import {
   EngagementStreak,
   EngagementActivity,
@@ -69,6 +70,13 @@ export class EngagementStreakService {
 
       // Update engagement streak
       await this.updateEngagementStreak(userId);
+
+      // Also trigger momentum check-in (idempotent, non-blocking)
+      try {
+        await MomentumService.checkIn(userId);
+      } catch (momentumError) {
+        console.error(`[EngagementStreakService.recordActivity] Momentum check-in failed (non-blocking):`, momentumError);
+      }
 
       console.log(`[EngagementStreakService.recordActivity] Successfully recorded activity and updated streak`);
     } catch (error) {
