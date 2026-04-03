@@ -169,7 +169,7 @@ export class CircleService {
     const completed: CircleWithDetails[] = [];
 
     for (const membership of memberships || []) {
-      const circle = membership.challenges as any;
+      const circle = membership.fitcircles as any;
       const status = this.getCircleStatus(circle.start_date, circle.end_date);
 
       console.log(`[CircleService.getUserCircles] Processing circle: ${circle.name} (${circle.id})`);

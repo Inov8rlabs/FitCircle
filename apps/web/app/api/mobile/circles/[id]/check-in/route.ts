@@ -59,6 +59,14 @@ export async function POST(
 
     console.log(`[Circle Check-In] User ${user.id} checked in to circle ${circleId}`);
 
+    // Recalculate circle boost after check-in (non-blocking)
+    try {
+      const { BoostService } = await import('@/lib/services/boost-service');
+      await BoostService.recalculateBoost(circleId);
+    } catch (boostError) {
+      console.error('[Circle Check-In] Boost recalculation failed:', boostError);
+    }
+
     const response = NextResponse.json({
       success: true,
       data: {

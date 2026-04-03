@@ -163,6 +163,9 @@ export class ExerciseService {
         }
       }
 
+      // Any workout >= 10 min counts as a check-in
+      const countsAsCheckin = data.duration_minutes >= 10;
+
       const { data: exercise, error } = await supabase
         .from('exercise_logs')
         .insert({
@@ -186,6 +189,7 @@ export class ExerciseService {
           healthkit_workout_id: data.healthkit_workout_id ?? null,
           source_device_name: data.source_device_name ?? null,
           is_public: true,
+          counts_as_checkin: countsAsCheckin,
         })
         .select()
         .single();
@@ -208,6 +212,23 @@ export class ExerciseService {
         } catch (streakError) {
           // Non-blocking: streak failure shouldn't fail the exercise log
           console.error('[ExerciseService] Streak recording failed:', streakError);
+        }
+      }
+
+      // Trigger momentum check-in and circle boost if workout qualifies
+      if (countsAsCheckin) {
+        try {
+          const { MomentumService } = await import('./momentum-service');
+          await MomentumService.checkIn(userId);
+        } catch (momentumError) {
+          console.error('[ExerciseService] Momentum check-in failed:', momentumError);
+        }
+
+        try {
+          const { BoostService } = await import('./boost-service');
+          await BoostService.recalculateAllCirclesForUser(userId);
+        } catch (boostError) {
+          console.error('[ExerciseService] Boost recalculation failed:', boostError);
         }
       }
 
@@ -280,6 +301,7 @@ export class ExerciseService {
 
           const exerciseDate = exercise.date || new Date().toISOString().split('T')[0];
           const bodyAreas = DEFAULT_BODY_AREAS[exercise.exercise_type] || ['fullBody'];
+          const countsAsCheckin = exercise.duration_minutes >= 10;
 
           const { error: insertError } = await supabase
             .from('exercise_logs')
@@ -304,6 +326,7 @@ export class ExerciseService {
               healthkit_workout_id: exercise.healthkit_workout_id,
               source_device_name: exercise.source_device_name ?? null,
               is_public: true,
+              counts_as_checkin: countsAsCheckin,
             });
 
           if (insertError) {
@@ -341,6 +364,26 @@ export class ExerciseService {
             reason: itemError instanceof Error ? itemError.message : 'Unknown error',
           });
           failed++;
+        }
+      }
+
+      // If any synced exercises qualify as check-in, trigger momentum + boost
+      if (synced > 0) {
+        const hasCheckinExercise = data.exercises.some(e => e.duration_minutes >= 10);
+        if (hasCheckinExercise) {
+          try {
+            const { MomentumService } = await import('./momentum-service');
+            await MomentumService.checkIn(userId);
+          } catch (momentumError) {
+            console.error('[ExerciseService.bulkSync] Momentum check-in failed:', momentumError);
+          }
+
+          try {
+            const { BoostService } = await import('./boost-service');
+            await BoostService.recalculateAllCirclesForUser(userId);
+          } catch (boostError) {
+            console.error('[ExerciseService.bulkSync] Boost recalculation failed:', boostError);
+          }
         }
       }
 

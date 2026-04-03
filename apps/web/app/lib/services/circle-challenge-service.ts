@@ -31,7 +31,7 @@ export class ChallengeService {
     const supabaseAdmin = createAdminSupabase();
 
     // Verify user is a member of the circle
-    await this.verifyCircleMembership(userId, input.circle_id);
+    await this.verifyCircleMembership(userId, input.fitcircle_id);
 
     // Sanitize inputs
     const name = input.name.trim().slice(0, 50);
@@ -45,7 +45,7 @@ export class ChallengeService {
     const { data: challenge, error } = await supabaseAdmin
       .from('challenges')
       .insert({
-        fitcircle_id: input.circle_id,
+        fitcircle_id: input.fitcircle_id,
         creator_id: userId,
         template_id: input.template_id || null,
         name,
@@ -66,7 +66,7 @@ export class ChallengeService {
     if (error) throw error;
 
     // Add creator as first participant
-    await this.addParticipant(challenge.id, userId, input.circle_id, userId);
+    await this.addParticipant(challenge.id, userId, input.fitcircle_id, userId);
 
     // Send invites to specified users
     if (input.invite_user_ids && input.invite_user_ids.length > 0) {

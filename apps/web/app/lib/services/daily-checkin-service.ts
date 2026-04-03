@@ -14,6 +14,7 @@
  */
 
 import { SupabaseClient } from '@supabase/supabase-js';
+import { MomentumService } from './momentum-service';
 
 // ============================================================================
 // TYPES
@@ -465,6 +466,15 @@ export async function performDailyCheckIn(
 
   if (freezeEarned) {
     message += ' You earned a freeze!';
+  }
+
+  // Trigger momentum check-in (idempotent, safe to call on every check-in)
+  if (isFirstCheckInToday) {
+    try {
+      await MomentumService.checkIn(userId);
+    } catch (momentumError) {
+      console.error('[performDailyCheckIn] Momentum check-in failed (non-blocking):', momentumError);
+    }
   }
 
   return {
