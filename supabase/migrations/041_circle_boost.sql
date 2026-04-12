@@ -28,19 +28,21 @@ CREATE INDEX IF NOT EXISTS idx_circle_boosts_fitcircle ON circle_daily_boosts(fi
 ALTER TABLE circle_daily_boosts ENABLE ROW LEVEL SECURITY;
 
 -- Circle members can read their circle's boosts
+DROP POLICY IF EXISTS "Circle members can view boosts" ON circle_daily_boosts;
 CREATE POLICY "Circle members can view boosts"
   ON circle_daily_boosts
   FOR SELECT
   USING (
     EXISTS (
-      SELECT 1 FROM challenge_participants
-      WHERE challenge_participants.challenge_id = circle_daily_boosts.fitcircle_id
-        AND challenge_participants.user_id = auth.uid()
-        AND challenge_participants.status = 'active'
+      SELECT 1 FROM fitcircle_members
+      WHERE fitcircle_members.fitcircle_id = circle_daily_boosts.fitcircle_id
+        AND fitcircle_members.user_id = auth.uid()
+        AND fitcircle_members.status = 'active'
     )
   );
 
 -- Service role can manage boosts (via admin client)
+DROP POLICY IF EXISTS "Service role full access to boosts" ON circle_daily_boosts;
 CREATE POLICY "Service role full access to boosts"
   ON circle_daily_boosts
   FOR ALL

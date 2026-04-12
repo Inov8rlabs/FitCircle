@@ -28,9 +28,9 @@ CREATE TABLE daily_challenge_participants (
 );
 
 -- Indexes
-CREATE INDEX idx_daily_challenges_date ON daily_challenges(challenge_date);
-CREATE INDEX idx_participants_challenge ON daily_challenge_participants(daily_challenge_id, is_completed);
-CREATE INDEX idx_participants_user ON daily_challenge_participants(user_id, joined_at DESC);
+CREATE INDEX IF NOT EXISTS idx_daily_challenges_date ON daily_challenges(challenge_date);
+CREATE INDEX IF NOT EXISTS idx_daily_participants_challenge ON daily_challenge_participants(daily_challenge_id, is_completed);
+CREATE INDEX IF NOT EXISTS idx_daily_participants_user ON daily_challenge_participants(user_id, joined_at DESC);
 
 -- RLS
 ALTER TABLE daily_challenges ENABLE ROW LEVEL SECURITY;

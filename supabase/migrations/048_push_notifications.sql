@@ -4,9 +4,9 @@
 -- ============================================================================
 
 -- Push tokens table (FCM device tokens)
-CREATE TABLE push_tokens (
+CREATE TABLE IF NOT EXISTS push_tokens (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  user_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
   token TEXT NOT NULL UNIQUE,
   platform TEXT NOT NULL CHECK (platform IN ('ios', 'android', 'web')),
   device_name TEXT,
@@ -16,9 +16,9 @@ CREATE TABLE push_tokens (
 );
 
 -- Notification preferences (one per user)
-CREATE TABLE notification_preferences (
+CREATE TABLE IF NOT EXISTS notification_preferences (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE UNIQUE,
+  user_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE UNIQUE,
   journey_enabled BOOLEAN DEFAULT true,
   momentum_enabled BOOLEAN DEFAULT true,
   circle_enabled BOOLEAN DEFAULT true,
@@ -32,9 +32,9 @@ CREATE TABLE notification_preferences (
 );
 
 -- Notification log (audit trail for all notifications)
-CREATE TABLE notification_log (
+CREATE TABLE IF NOT EXISTS notification_log (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  user_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
   notification_type TEXT NOT NULL,
   notification_category TEXT NOT NULL,
   title TEXT NOT NULL,
@@ -48,11 +48,11 @@ CREATE TABLE notification_log (
 );
 
 -- Indexes
-CREATE INDEX idx_push_tokens_user ON push_tokens(user_id, is_active);
-CREATE INDEX idx_push_tokens_token ON push_tokens(token);
-CREATE INDEX idx_notification_log_user ON notification_log(user_id, sent_at DESC);
-CREATE INDEX idx_notification_log_type ON notification_log(notification_type, sent_at);
-CREATE INDEX idx_notification_preferences_user ON notification_preferences(user_id);
+CREATE INDEX IF NOT EXISTS idx_push_tokens_user ON push_tokens(user_id, is_active);
+CREATE INDEX IF NOT EXISTS idx_push_tokens_token ON push_tokens(token);
+CREATE INDEX IF NOT EXISTS idx_notification_log_user ON notification_log(user_id, sent_at DESC);
+CREATE INDEX IF NOT EXISTS idx_notification_log_type ON notification_log(notification_type, sent_at);
+CREATE INDEX IF NOT EXISTS idx_notification_preferences_user ON notification_preferences(user_id);
 
 -- ============================================================================
 -- RLS Policies
@@ -63,6 +63,11 @@ ALTER TABLE notification_preferences ENABLE ROW LEVEL SECURITY;
 ALTER TABLE notification_log ENABLE ROW LEVEL SECURITY;
 
 -- Push tokens: users manage their own tokens
+DROP POLICY IF EXISTS "Users can view own push tokens" ON push_tokens;
+DROP POLICY IF EXISTS "Users can insert own push tokens" ON push_tokens;
+DROP POLICY IF EXISTS "Users can update own push tokens" ON push_tokens;
+DROP POLICY IF EXISTS "Users can delete own push tokens" ON push_tokens;
+
 CREATE POLICY "Users can view own push tokens"
   ON push_tokens FOR SELECT
   USING (auth.uid() = user_id);
@@ -80,6 +85,10 @@ CREATE POLICY "Users can delete own push tokens"
   USING (auth.uid() = user_id);
 
 -- Notification preferences: users manage their own preferences
+DROP POLICY IF EXISTS "Users can view own notification preferences" ON notification_preferences;
+DROP POLICY IF EXISTS "Users can insert own notification preferences" ON notification_preferences;
+DROP POLICY IF EXISTS "Users can update own notification preferences" ON notification_preferences;
+
 CREATE POLICY "Users can view own notification preferences"
   ON notification_preferences FOR SELECT
   USING (auth.uid() = user_id);
@@ -93,6 +102,7 @@ CREATE POLICY "Users can update own notification preferences"
   USING (auth.uid() = user_id);
 
 -- Notification log: users can view their own logs
+DROP POLICY IF EXISTS "Users can view own notification log" ON notification_log;
 CREATE POLICY "Users can view own notification log"
   ON notification_log FOR SELECT
   USING (auth.uid() = user_id);

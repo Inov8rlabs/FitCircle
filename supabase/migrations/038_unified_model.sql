@@ -164,7 +164,17 @@ SELECT
     ELSE 'Log your progress'
   END,
   true,
-  COALESCE(f.status::text, 'active'),
+  CASE COALESCE(f.status::text, 'active')
+    WHEN 'draft' THEN 'scheduled'
+    WHEN 'pending' THEN 'scheduled'
+    WHEN 'scheduled' THEN 'scheduled'
+    WHEN 'active' THEN 'active'
+    WHEN 'completed' THEN 'completed'
+    WHEN 'cancelled' THEN 'cancelled'
+    WHEN 'canceled' THEN 'cancelled'
+    WHEN 'archived' THEN 'completed'
+    ELSE 'active'
+  END,
   COALESCE(f.start_date, NOW()),
   COALESCE(f.end_date, NOW() + INTERVAL '90 days'),
   f.participant_count,
@@ -196,7 +206,7 @@ SELECT
   END,
   COALESCE(fm.current_value, 0),
   0,
-  COALESCE(fm.streak_days, fm.current_streak, 0),
+  COALESCE(fm.streak_days, 0),
   COALESCE(fm.longest_streak, 0),
   COALESCE(fm.check_ins_count, 0),
   fm.rank,
