@@ -1,7 +1,8 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { type NextRequest, NextResponse } from 'next/server';
+import { z } from 'zod';
+
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { PushService } from '@/lib/services/push-service';
-import { z } from 'zod';
 
 const registerSchema = z.object({
   token: z.string().min(1),

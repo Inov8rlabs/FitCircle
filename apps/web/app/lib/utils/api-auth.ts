@@ -4,9 +4,9 @@
  * Reusable authentication helpers for API routes
  */
 
-import { NextRequest } from 'next/server';
-import { cookies } from 'next/headers';
 import { createClient } from '@supabase/supabase-js';
+import { cookies } from 'next/headers';
+import { type NextRequest } from 'next/server';
 
 export interface AuthUser {
   id: string;

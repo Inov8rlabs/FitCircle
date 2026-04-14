@@ -10,7 +10,7 @@
  * PRD: /docs/progress-history-checkin-detail-prd.md
  */
 
-import { SupabaseClient } from '@supabase/supabase-js';
+import { type SupabaseClient } from '@supabase/supabase-js';
 
 // Types
 export type ChallengeType = 'weight_loss' | 'step_count' | 'workout_frequency' | 'custom';

@@ -4,9 +4,10 @@
  * GET /api/daily-goals/history - Get completion history
  */
 
-import { NextRequest, NextResponse } from 'next/server';
-import { createServerSupabase } from '@/lib/supabase-server';
+import { type NextRequest, NextResponse } from 'next/server';
+
 import { DailyGoalService } from '@/lib/services/daily-goals';
+import { createServerSupabase } from '@/lib/supabase-server';
 
 /**
  * GET /api/daily-goals/history

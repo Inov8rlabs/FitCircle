@@ -11,7 +11,8 @@
  * PRD: /docs/PRD-ENGAGEMENT-V2.md
  */
 
-import { SupabaseClient } from '@supabase/supabase-js';
+import { type SupabaseClient } from '@supabase/supabase-js';
+
 import { getWeekStart } from './goal-service';
 
 // ============================================================================
@@ -65,10 +66,11 @@ export function getPeriodStart(period: LeaderboardPeriod, date: Date = new Date(
       return date.toISOString().split('T')[0];
     case 'weekly':
       return getWeekStart(date);
-    case 'monthly':
+    case 'monthly': {
       const year = date.getFullYear();
       const month = String(date.getMonth() + 1).padStart(2, '0');
       return `${year}-${month}-01`;
+    }
     case 'all_time':
       return '1970-01-01'; // Epoch start
   }

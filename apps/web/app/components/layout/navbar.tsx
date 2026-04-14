@@ -1,8 +1,5 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
-import Link from 'next/link';
-import { useRouter, usePathname } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   LayoutDashboard,
@@ -13,6 +10,10 @@ import {
   User,
   ChevronDown,
 } from 'lucide-react';
+import Link from 'next/link';
+import { useRouter, usePathname } from 'next/navigation';
+import { useState, useRef, useEffect } from 'react';
+
 import { Logo } from '@/components/ui/logo';
 import { useAuthStore } from '@/stores/auth-store';
 
@@ -48,7 +49,7 @@ export function Navbar() {
 
   const handleLogout = async () => {
     await logout();
-    router.push('/');
+    void router.push('/');
   };
 
   return (
@@ -121,7 +122,7 @@ export function Navbar() {
                     <button
                       onClick={() => {
                         setProfileMenuOpen(false);
-                        handleLogout();
+                        void handleLogout();
                       }}
                       className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-red-400 hover:bg-slate-800 transition-colors"
                     >

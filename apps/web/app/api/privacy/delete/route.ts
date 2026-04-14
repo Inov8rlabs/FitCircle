@@ -1,6 +1,7 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { createServerSupabase } from '@/lib/supabase-server';
+import { type NextRequest, NextResponse } from 'next/server';
+
 import { AccountDeletionService } from '@/lib/services/account-deletion-service';
+import { createServerSupabase } from '@/lib/supabase-server';
 
 /**
  * GDPR Article 17: Right to Erasure ("Right to be Forgotten")

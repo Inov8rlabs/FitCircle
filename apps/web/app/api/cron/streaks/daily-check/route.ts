@@ -1,6 +1,7 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { createAdminSupabase } from '@/lib/supabase-admin';
+import { type NextRequest, NextResponse } from 'next/server';
+
 import { StreakClaimingService } from '@/lib/services/streak-claiming-service';
+import { createAdminSupabase } from '@/lib/supabase-admin';
 
 /**
  * GET /api/cron/streaks/daily-check

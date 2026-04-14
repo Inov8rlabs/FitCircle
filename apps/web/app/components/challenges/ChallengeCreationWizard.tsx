@@ -1,13 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
-import { Badge } from '@/components/ui/badge';
 import {
   ChevronRight,
   ChevronLeft,
@@ -19,10 +12,20 @@ import {
   Sparkles,
   Zap,
 } from 'lucide-react';
-import { useAuthStore } from '@/stores/auth-store';
+import React, { useState, useEffect } from 'react';
 import { toast } from 'sonner';
-import { ChallengeTemplate, ChallengeCategory } from '@/lib/types/circle-challenge';
+
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
 import { CHALLENGE_TEMPLATES, getTemplateById } from '@/lib/data/challenge-templates';
+import { type ChallengeTemplate, type ChallengeCategory } from '@/lib/types/circle-challenge';
+import { useAuthStore } from '@/stores/auth-store';
+
+
 import ChallengeTemplateGrid from './ChallengeTemplateGrid';
 
 interface ChallengeCreationWizardProps {

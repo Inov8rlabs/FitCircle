@@ -1,9 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
-import { toast } from 'sonner';
 import {
   Scale,
   Footprints,
@@ -18,6 +15,8 @@ import {
   Loader2,
   Utensils
 } from 'lucide-react';
+import Link from 'next/link';
+import { useState, useEffect } from 'react';
 import {
   LineChart,
   Line,
@@ -31,28 +30,28 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from 'recharts';
+import { toast } from 'sonner';
 
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { AutoSyncSubmissionCard } from '@/components/AutoSyncSubmissionCard';
+import { BackfillDataDialog } from '@/components/BackfillDataDialog';
+import { CheckInCard, CheckInDetailModal, CheckInDetailSheet } from '@/components/check-ins';
+import { DailyProgressMeter } from '@/components/DailyProgressMeter';
+import { EngagementStreakCard } from '@/components/EngagementStreakCard';
+import { GoalProgressIndicator } from '@/components/GoalProgressIndicator';
+import { BathroomScale } from '@/components/icons/BathroomScale';
+import { Navbar } from '@/components/layout/navbar';
+import { QuickEntryCard } from '@/components/QuickEntryCard';
+import { StepsGoalCard } from '@/components/StepsGoalCard';
+import { StreakHistoryModal } from '@/components/StreakHistoryModal';
 import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { CircularProgress, ActivityRing, CircularSlider } from '@/components/ui/circular-progress';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { CircularProgress, ActivityRing, CircularSlider } from '@/components/ui/circular-progress';
 import { UnitToggle } from '@/components/ui/unit-toggle';
-import { BathroomScale } from '@/components/icons/BathroomScale';
-import { Navbar } from '@/components/layout/navbar';
-import { GoalProgressIndicator } from '@/components/GoalProgressIndicator';
-import { StepsGoalCard } from '@/components/StepsGoalCard';
-import { QuickEntryCard } from '@/components/QuickEntryCard';
-import { BackfillDataDialog } from '@/components/BackfillDataDialog';
-import { EngagementStreakCard } from '@/components/EngagementStreakCard';
-import { StreakHistoryModal } from '@/components/StreakHistoryModal';
-import { CheckInCard, CheckInDetailModal, CheckInDetailSheet } from '@/components/check-ins';
-import { DailyProgressMeter } from '@/components/DailyProgressMeter';
-import { AutoSyncSubmissionCard } from '@/components/AutoSyncSubmissionCard';
-import { useAuthStore } from '@/stores/auth-store';
-import { useUnitPreference } from '@/hooks/useUnitPreference';
 import { useDailyGoals } from '@/hooks/useDailyGoals';
+import { useUnitPreference } from '@/hooks/useUnitPreference';
 import { supabase } from '@/lib/supabase';
 import {
   formatWeight,
@@ -64,6 +63,7 @@ import {
   getWeightValidationMessage,
   detectWrongUnit,
 } from '@/lib/utils/units';
+import { useAuthStore } from '@/stores/auth-store';
 
 interface CheckIn {
   id: string;
@@ -149,10 +149,10 @@ export default function DashboardPage() {
   // Fetch check-ins and profile on mount
   useEffect(() => {
     if (user) {
-      fetchCheckIns();
-      fetchDailyStats();
-      fetchGoalWeight();
-      checkPendingAutoSync();
+      void fetchCheckIns();
+      void fetchDailyStats();
+      void fetchGoalWeight();
+      void checkPendingAutoSync();
     }
   }, [user]);
 
@@ -218,9 +218,9 @@ export default function DashboardPage() {
       toast.success('Steps logged! Your streak is safe 🔥');
 
       // Refresh data
-      fetchCheckIns();
-      fetchDailyStats();
-      refreshGoals();
+      void fetchCheckIns();
+      void fetchDailyStats();
+      void refreshGoals();
     } catch (error) {
       console.error('Error confirming auto-sync:', error);
       toast.error('Failed to confirm steps');
@@ -434,9 +434,9 @@ export default function DashboardPage() {
 
     toast.success('Weight logged!');
     setQuickWeight('');
-    fetchCheckIns();
-    fetchDailyStats();
-    refreshGoals(); // Refresh daily goals too
+    void fetchCheckIns();
+    void fetchDailyStats();
+    void refreshGoals(); // Refresh daily goals too
   };
 
   // Quick entry for steps
@@ -459,8 +459,8 @@ export default function DashboardPage() {
 
     toast.success('Steps logged!');
     setQuickSteps('');
-    fetchCheckIns();
-    fetchDailyStats();
+    void fetchCheckIns();
+    void fetchDailyStats();
   };
 
   // Backfill past data
@@ -500,8 +500,8 @@ export default function DashboardPage() {
     });
 
     toast.success(`Data saved for ${dateDisplay}!`);
-    fetchCheckIns();
-    fetchDailyStats();
+    void fetchCheckIns();
+    void fetchDailyStats();
   };
 
   const chartData = checkIns
@@ -532,8 +532,8 @@ export default function DashboardPage() {
       }
 
       toast.success('Check-in deleted successfully');
-      fetchCheckIns();
-      fetchDailyStats();
+      void fetchCheckIns();
+      void fetchDailyStats();
       setShowCheckInDetail(false);
     } catch (error) {
       console.error('Error deleting check-in:', error);
@@ -554,7 +554,7 @@ export default function DashboardPage() {
       }
 
       toast.success(isPublic ? 'Check-in is now public' : 'Check-in is now private');
-      fetchCheckIns();
+      void fetchCheckIns();
     } catch (error) {
       console.error('Error updating privacy:', error);
       toast.error('Failed to update privacy');

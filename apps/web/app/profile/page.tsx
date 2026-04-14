@@ -1,13 +1,5 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
-import DashboardNav from '@/components/DashboardNav';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { UnitToggle } from '@/components/ui/unit-toggle';
 import {
   User,
   Mail,
@@ -25,11 +17,21 @@ import {
   Loader2,
   Footprints,
 } from 'lucide-react';
-import { useAuthStore } from '@/stores/auth-store';
+import { useRouter } from 'next/navigation';
+import { useState, useEffect } from 'react';
+import { toast } from 'sonner';
+
+import DashboardNav from '@/components/DashboardNav';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { UnitToggle } from '@/components/ui/unit-toggle';
 import { useUnitPreference } from '@/hooks/useUnitPreference';
 import { supabase } from '@/lib/supabase';
 import { parseWeightToKg, weightKgToDisplay, getWeightUnit } from '@/lib/utils/units';
-import { toast } from 'sonner';
+import { useAuthStore } from '@/stores/auth-store';
+
 
 export default function ProfilePage() {
   const router = useRouter();
@@ -77,7 +79,7 @@ export default function ProfilePage() {
       }
     };
 
-    fetchGoalWeight();
+    void fetchGoalWeight();
   }, [user, unitSystem]);
 
   const handleSaveGoalWeight = async () => {

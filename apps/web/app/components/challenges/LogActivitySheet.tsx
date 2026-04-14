@@ -1,13 +1,14 @@
 'use client';
 
-import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Loader2, Plus, Flame, Trophy, PartyPopper } from 'lucide-react';
+import React, { useState, useRef, useEffect } from 'react';
 import { toast } from 'sonner';
-import { CircleChallengeWithDetails, LogActivityResponse } from '@/lib/types/circle-challenge';
+
+import { Button } from '@/components/ui/button';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { type CircleChallengeWithDetails, type LogActivityResponse } from '@/lib/types/circle-challenge';
 
 interface LogActivitySheetProps {
   isOpen: boolean;

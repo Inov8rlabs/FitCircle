@@ -5,10 +5,11 @@
  * POST /api/daily-goals - Create/update daily goals
  */
 
-import { NextRequest, NextResponse } from 'next/server';
+import { type NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
-import { createServerSupabase } from '@/lib/supabase-server';
+
 import { DailyGoalService } from '@/lib/services/daily-goals';
+import { createServerSupabase } from '@/lib/supabase-server';
 
 // Validation schema for POST
 const createGoalSchema = z.object({

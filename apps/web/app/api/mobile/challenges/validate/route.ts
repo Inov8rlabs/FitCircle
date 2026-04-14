@@ -1,6 +1,7 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { type NextRequest, NextResponse } from 'next/server';
+
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
-import { CustomChallengeService, CustomChallengeInput } from '@/lib/services/custom-challenge-service';
+import { CustomChallengeService, type CustomChallengeInput } from '@/lib/services/custom-challenge-service';
 
 /**
  * POST /api/mobile/challenges/validate

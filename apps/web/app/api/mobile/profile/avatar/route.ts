@@ -1,8 +1,9 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { type NextRequest, NextResponse } from 'next/server';
+
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { addAutoRefreshHeaders } from '@/lib/middleware/mobile-auto-refresh';
-import { createAdminSupabase } from '@/lib/supabase-admin';
 import { MobileAPIService } from '@/lib/services/mobile-api-service';
+import { createAdminSupabase } from '@/lib/supabase-admin';
 
 /**
  * DELETE /api/mobile/profile/avatar

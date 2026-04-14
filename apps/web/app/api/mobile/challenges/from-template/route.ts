@@ -1,7 +1,8 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { type NextRequest, NextResponse } from 'next/server';
+import { z } from 'zod';
+
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { TemplateService } from '@/lib/services/template-service';
-import { z } from 'zod';
 
 const createFromTemplateSchema = z.object({
   template_id: z.string().uuid(),

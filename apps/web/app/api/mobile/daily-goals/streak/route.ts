@@ -1,4 +1,5 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { type NextRequest, NextResponse } from 'next/server';
+
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { addAutoRefreshHeaders } from '@/lib/middleware/mobile-auto-refresh';
 import { createAdminSupabase } from '@/lib/supabase-admin';
@@ -126,7 +127,7 @@ export async function GET(request: NextRequest) {
 
     if (allDates.length > 0) {
       // Calculate current streak (must be consecutive days up to today or yesterday)
-      let checkDate = new Date(today);
+      const checkDate = new Date(today);
       let checkingCurrent = true;
 
       // Check if today's goals are all complete

@@ -9,10 +9,8 @@
  * PRD: /docs/progress-history-checkin-detail-prd.md
  */
 
-import { useState } from 'react';
-import { motion, AnimatePresence, PanInfo } from 'framer-motion';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
+import { format } from 'date-fns';
+import { motion, AnimatePresence, type PanInfo } from 'framer-motion';
 import {
   Scale,
   Footprints,
@@ -24,9 +22,13 @@ import {
   TrendingUp,
   Minus,
 } from 'lucide-react';
-import { format } from 'date-fns';
-import { CheckInWithProfile } from '@/lib/services/check-in-service';
+import { useState } from 'react';
 import { toast } from 'sonner';
+
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { type CheckInWithProfile } from '@/lib/services/check-in-service';
+
 
 // Mood mapping (same as modal)
 const MOOD_MAP: Record<number, { emoji: string; label: string; color: string }> = {

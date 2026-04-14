@@ -1,7 +1,8 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { type NextRequest, NextResponse } from 'next/server';
+import { z } from 'zod';
+
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { ChallengeService } from '@/lib/services/circle-challenge-service';
-import { z } from 'zod';
 
 const highFiveSchema = z.object({
   to_user_id: z.string().uuid(),

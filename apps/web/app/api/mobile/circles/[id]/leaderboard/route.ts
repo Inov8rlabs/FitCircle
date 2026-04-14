@@ -1,4 +1,5 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { type NextRequest, NextResponse } from 'next/server';
+
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { CircleService } from '@/lib/services/circle-service';
 

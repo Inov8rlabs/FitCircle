@@ -1,4 +1,5 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { type NextRequest, NextResponse } from 'next/server';
+
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { createAdminSupabase } from '@/lib/supabase-admin';
 import { getUserTimezone, getLastNDays } from '@/lib/utils/timezone';

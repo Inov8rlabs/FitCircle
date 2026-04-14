@@ -1,7 +1,8 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { type NextRequest, NextResponse } from 'next/server';
+import { z } from 'zod';
+
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { createAdminSupabase } from '@/lib/supabase-admin';
-import { z } from 'zod';
 
 // Validation schema for creating a FitCircle
 const createFitCircleSchema = z.object({

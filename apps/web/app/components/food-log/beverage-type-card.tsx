@@ -1,4 +1,3 @@
-import { cn } from '@/lib/utils';
 import { 
     Coffee, 
     Leaf, 
@@ -9,6 +8,8 @@ import {
     CupSoda,
     Milk
 } from 'lucide-react';
+
+import { cn } from '@/lib/utils';
 
 interface BeverageTypeCardProps {
     id: string;

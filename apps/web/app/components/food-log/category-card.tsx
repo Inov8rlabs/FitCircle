@@ -1,11 +1,12 @@
-import { cn } from '@/lib/utils';
 import { Utensils, Coffee, GlassWater, Pill, Carrot, CupSoda, Wine, Leaf } from 'lucide-react';
+
+import { cn } from '@/lib/utils';
 
 export type CategoryId = 'meal' | 'snack' | 'water' | 'coffee' | 'tea' | 'soda' | 'juice' | 'alcohol' | 'supplement';
 
 interface CategoryCardProps {
   id: CategoryId;
-  label: String;
+  label: string;
   isSelected: boolean;
   onClick: () => void;
 }

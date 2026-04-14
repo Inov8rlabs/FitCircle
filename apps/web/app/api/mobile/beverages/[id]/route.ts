@@ -5,12 +5,13 @@
  * DELETE /api/mobile/beverages/[id] - Delete entry
  */
 
-import { NextRequest, NextResponse } from 'next/server';
+import { type NextRequest, NextResponse } from 'next/server';
+import { z } from 'zod';
+
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { BeverageLogService } from '@/lib/services/beverage-log-service';
-import { UpdateBeverageLogSchema } from '@/lib/validation/beverage-log-validation';
 import { createAdminSupabase } from '@/lib/supabase-admin';
-import { z } from 'zod';
+import { UpdateBeverageLogSchema } from '@/lib/validation/beverage-log-validation';
 
 /**
  * GET /api/mobile/beverages/[id]

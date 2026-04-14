@@ -1,7 +1,8 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
-import { CustomChallengeService, CustomChallengeInput } from '@/lib/services/custom-challenge-service';
+import { type NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
+
+import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
+import { CustomChallengeService, type CustomChallengeInput } from '@/lib/services/custom-challenge-service';
 
 const customChallengeSchema = z.object({
   name: z.string().min(3).max(100),

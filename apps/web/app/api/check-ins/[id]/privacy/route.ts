@@ -6,10 +6,11 @@
  * PRD: /docs/progress-history-checkin-detail-prd.md
  */
 
-import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { cookies } from 'next/headers';
+import { type NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
+
 import { toggleCheckInPrivacy } from '@/lib/services/check-in-service';
 
 // Validation schema

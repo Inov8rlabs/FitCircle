@@ -1,9 +1,10 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { type NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
+
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { MobileAPIService } from '@/lib/services/mobile-api-service';
-import { createAdminSupabase } from '@/lib/supabase-admin';
 import { StreakClaimingService } from '@/lib/services/streak-claiming-service';
+import { createAdminSupabase } from '@/lib/supabase-admin';
 
 // Validation schema for PUT
 const updateTrackingSchema = z.object({

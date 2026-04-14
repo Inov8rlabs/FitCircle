@@ -1,5 +1,6 @@
-import Link from 'next/link';
 import { ArrowLeft } from 'lucide-react';
+import Link from 'next/link';
+
 import { Button } from '@/components/ui/button';
 
 export default function TermsPage() {
@@ -23,7 +24,7 @@ export default function TermsPage() {
           <section className="mb-8">
             <h2 className="text-2xl font-semibold mb-4">1. Acceptance of Terms</h2>
             <p className="mb-4">
-              By accessing or using FitCircle ("the Service," "we," "us," or "our"), you agree to be bound by these Terms of Service ("Terms").
+              By accessing or using FitCircle (&quot;the Service,&quot; &quot;we,&quot; &quot;us,&quot; or &quot;our&quot;), you agree to be bound by these Terms of Service (&quot;Terms&quot;).
               If you disagree with any part of these terms, you may not access the Service.
             </p>
             <p>
@@ -98,7 +99,7 @@ export default function TermsPage() {
               <li>Provide accurate and truthful data for all check-ins and submissions</li>
               <li>Complete required check-ins by the specified deadlines</li>
               <li>Pay any entry fees or stakes associated with the challenge</li>
-              <li>Accept the challenge creator's decisions regarding rule interpretation</li>
+              <li>Accept the challenge creator&apos;s decisions regarding rule interpretation</li>
             </ul>
 
             <h3 className="text-xl font-semibold mb-3 mt-6">5.2 Challenge Stakes and Prize Pools</h3>
@@ -121,7 +122,7 @@ export default function TermsPage() {
             <ul className="list-disc pl-6 space-y-2">
               <li>Falsify weight, steps, or other health data</li>
               <li>Submit manipulated or fraudulent photos</li>
-              <li>Use another person's data or photos</li>
+              <li>Use another person&apos;s data or photos</li>
               <li>Collude with other participants to manipulate outcomes</li>
               <li>Employ any artificial means to gain unfair advantage</li>
             </ul>
@@ -169,9 +170,9 @@ export default function TermsPage() {
             <h2 className="text-2xl font-semibold mb-4">7. User Content</h2>
             <p className="mb-4">
               You retain ownership of all content you post on FitCircle, including photos, comments, and profile information
-              ("User Content"). However, by posting User Content, you grant FitCircle a worldwide, non-exclusive, royalty-free,
+              (&quot;User Content&quot;). However, by posting User Content, you grant FitCircle a worldwide, non-exclusive, royalty-free,
               transferable license to use, reproduce, distribute, prepare derivative works of, display, and perform your
-              User Content in connection with the Service and FitCircle's business operations.
+              User Content in connection with the Service and FitCircle&apos;s business operations.
             </p>
             <p className="mb-4">
               You represent and warrant that:
@@ -195,8 +196,8 @@ export default function TermsPage() {
               <li>Harass, abuse, threaten, or intimidate other users</li>
               <li>Post false, misleading, or fraudulent information</li>
               <li>Impersonate any person or entity</li>
-              <li>Attempt to gain unauthorized access to the Service or other users' accounts</li>
-              <li>Interfere with or disrupt the Service's functionality</li>
+              <li>Attempt to gain unauthorized access to the Service or other users&apos; accounts</li>
+              <li>Interfere with or disrupt the Service&apos;s functionality</li>
               <li>Use automated scripts, bots, or scrapers to access the Service</li>
               <li>Collect or harvest user information without consent</li>
               <li>Post content that is obscene, defamatory, or hateful</li>
@@ -284,7 +285,7 @@ export default function TermsPage() {
               <li>Non-refundable once the challenge begins</li>
               <li>Clearly displayed before joining</li>
               <li>Collected immediately upon joining</li>
-              <li>Subject to FitCircle's platform fee (disclosed before payment)</li>
+              <li>Subject to FitCircle&apos;s platform fee (disclosed before payment)</li>
             </ul>
 
             <h3 className="text-xl font-semibold mb-3 mt-6">11.4 Prize Distribution</h3>
@@ -322,7 +323,7 @@ export default function TermsPage() {
               <li>Copy, modify, or create derivative works of the Service</li>
               <li>Reverse engineer or decompile any aspect of the Service</li>
               <li>Remove or alter any copyright, trademark, or proprietary notices</li>
-              <li>Use FitCircle's name, logo, or trademarks without written permission</li>
+              <li>Use FitCircle&apos;s name, logo, or trademarks without written permission</li>
             </ul>
           </section>
 
@@ -338,7 +339,7 @@ export default function TermsPage() {
           <section className="mb-8">
             <h2 className="text-2xl font-semibold mb-4">14. Disclaimers and Warranties</h2>
             <p className="mb-4 uppercase font-semibold">
-              THE SERVICE IS PROVIDED "AS IS" AND "AS AVAILABLE" WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED.
+              THE SERVICE IS PROVIDED &quot;AS IS&quot; AND &quot;AS AVAILABLE&quot; WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR IMPLIED.
             </p>
             <p className="mb-4">
               FitCircle disclaims all warranties, including but not limited to:
@@ -376,7 +377,7 @@ export default function TermsPage() {
               and even if FitCircle has been advised of the possibility of such damages.
             </p>
             <p className="mb-4">
-              IN NO EVENT SHALL FITCIRCLE'S TOTAL LIABILITY TO YOU FOR ALL CLAIMS EXCEED THE GREATER OF (A) THE
+              IN NO EVENT SHALL FITCIRCLE&apos;S TOTAL LIABILITY TO YOU FOR ALL CLAIMS EXCEED THE GREATER OF (A) THE
               AMOUNT YOU PAID TO FITCIRCLE IN THE 12 MONTHS PRECEDING THE CLAIM OR (B) $100.
             </p>
             <p className="mt-4">
@@ -389,7 +390,7 @@ export default function TermsPage() {
             <p className="mb-4">
               You agree to indemnify, defend, and hold harmless FitCircle and its officers, directors, employees,
               and agents from and against any claims, liabilities, damages, losses, costs, or expenses (including
-              reasonable attorneys' fees) arising from:
+              reasonable attorneys&apos; fees) arising from:
             </p>
             <ul className="list-disc pl-6 space-y-2">
               <li>Your use of the Service</li>
@@ -448,7 +449,7 @@ export default function TermsPage() {
             </p>
             <p className="mb-4">
               The arbitration shall be conducted by the American Arbitration Association (AAA) under its Commercial
-              Arbitration Rules. The arbitrator's decision will be final and binding.
+              Arbitration Rules. The arbitrator&apos;s decision will be final and binding.
             </p>
 
             <h3 className="text-xl font-semibold mb-3 mt-6">18.3 Class Action Waiver</h3>

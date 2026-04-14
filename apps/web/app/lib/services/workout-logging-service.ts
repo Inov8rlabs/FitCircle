@@ -1,6 +1,7 @@
 import { createAdminSupabase } from '../supabase-admin';
-import { MomentumService } from './momentum-service';
+
 import { BoostService } from './boost-service';
+import { MomentumService } from './momentum-service';
 
 // ============================================================================
 // TYPES

@@ -6,9 +6,10 @@
  * PRD: /docs/PRD-ENGAGEMENT-V2.md
  */
 
-import { NextRequest, NextResponse } from 'next/server';
-import { getAuthenticatedUser, createAdminSupabase } from '@/lib/utils/api-auth';
+import { type NextRequest, NextResponse } from 'next/server';
+
 import { getTodayDailyGoals, generateDailyGoals, getDailyGoalHistory } from '@/lib/services/goal-service';
+import { getAuthenticatedUser, createAdminSupabase } from '@/lib/utils/api-auth';
 
 /**
  * GET /api/goals/daily

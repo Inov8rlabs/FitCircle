@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
+
 import { supabase } from '@/lib/supabase';
 
 export interface User {
@@ -310,7 +311,8 @@ export const useAuthStore = create<AuthState>()(
         }
       },
 
-      logout: async () => {
+      logout: () => {
+        void (async () => {
         try {
           await supabase.auth.signOut();
           set({
@@ -322,6 +324,7 @@ export const useAuthStore = create<AuthState>()(
         } catch (error) {
           console.error('Logout error:', error);
         }
+        })();
       },
 
       updateUser: (updates: Partial<User>) => {

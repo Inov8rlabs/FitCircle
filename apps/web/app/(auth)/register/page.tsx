@@ -1,11 +1,7 @@
 'use client';
 
-import { useState, useEffect, Suspense } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
-import { motion } from 'framer-motion';
-import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import * as z from 'zod';
+import { motion } from 'framer-motion';
 import {
   Mail,
   Lock,
@@ -20,14 +16,19 @@ import {
   Check,
   Loader2,
 } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { useState, useEffect, Suspense } from 'react';
+import { useForm } from 'react-hook-form';
+import * as z from 'zod';
+
+import { PrivacyModal } from '@/components/legal/PrivacyModal';
+import { TermsModal } from '@/components/legal/TermsModal';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { LogoIcon } from '@/components/ui/logo';
+import { useFormPersistence } from '@/hooks/useFormPersistence';
 import { useAuthStore } from '@/stores/auth-store';
 import { useUIStore } from '@/stores/ui-store';
-import { useFormPersistence } from '@/hooks/useFormPersistence';
-import { TermsModal } from '@/components/legal/TermsModal';
-import { PrivacyModal } from '@/components/legal/PrivacyModal';
 
 const registerSchema = z.object({
   email: z.string().email('Please enter a valid email'),

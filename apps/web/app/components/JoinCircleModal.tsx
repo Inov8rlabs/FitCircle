@@ -1,11 +1,6 @@
 'use client';
 
-import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import {
   Users,
   Loader2,
@@ -14,9 +9,16 @@ import {
   Info,
   Trophy,
 } from 'lucide-react';
+import { useState } from 'react';
+import { toast } from 'sonner';
+
+import { Button } from '@/components/ui/button';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/stores/auth-store';
-import { toast } from 'sonner';
+
 
 interface JoinCircleModalProps {
   isOpen: boolean;
@@ -61,7 +63,7 @@ export default function JoinCircleModal({ isOpen, onClose, onSuccess }: JoinCirc
     if (formatted.length >= 9) {
       // Remove hyphen for search to support both formats
       const codeToSearch = formatted.replace('-', '');
-      searchCircle(codeToSearch);
+      void searchCircle(codeToSearch);
     } else {
       setCirclePreview(null);
     }

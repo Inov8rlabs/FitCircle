@@ -1,5 +1,6 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { type NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
+
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { StreakClaimingService } from '@/lib/services/streak-claiming-service';
 import { StreakClaimError } from '@/lib/types/streak-claiming';

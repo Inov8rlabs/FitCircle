@@ -1,5 +1,6 @@
 
-import { NextRequest, NextResponse } from 'next/server';
+import { type NextRequest, NextResponse } from 'next/server';
+
 import { NotificationService } from '../../lib/services/notification-service';
 
 export async function POST(request: NextRequest) {

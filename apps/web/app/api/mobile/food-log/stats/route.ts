@@ -3,7 +3,8 @@
  * GET /api/mobile/food-log/stats - Get aggregated statistics
  */
 
-import { NextRequest, NextResponse } from 'next/server';
+import { type NextRequest, NextResponse } from 'next/server';
+
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { FoodLogService } from '@/lib/services/food-log-service';
 import { createAdminSupabase } from '@/lib/supabase-admin';

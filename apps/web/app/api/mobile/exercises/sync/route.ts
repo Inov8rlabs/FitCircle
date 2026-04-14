@@ -1,5 +1,6 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { type NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
+
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { ExerciseService } from '@/lib/services/exercise-service';
 import { createAdminSupabase } from '@/lib/supabase-admin';
@@ -58,7 +59,7 @@ export async function POST(request: NextRequest) {
       started_at: e.startedAt,
       healthkit_workout_id: e.healthkitWorkoutId,
       source_device_name: e.sourceDeviceName,
-      source: e.source as 'manual' | 'healthkit',
+      source: e.source,
       auto_claim_streak: false, // Never claim streak for bulk sync
     }));
 

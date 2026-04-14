@@ -1,8 +1,8 @@
 import {
-  PersonaScores,
-  PersonaResult,
-  PersonaType,
-  QuestionnaireAnswers,
+  type PersonaScores,
+  type PersonaResult,
+  type PersonaType,
+  type QuestionnaireAnswers,
 } from '../types/onboarding';
 
 // ============================================================================

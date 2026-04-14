@@ -5,6 +5,7 @@
  */
 
 import { Resend } from 'resend';
+
 import { generateWelcomeEmail, generateInvitationEmail } from './templates';
 
 // Initialize Resend client

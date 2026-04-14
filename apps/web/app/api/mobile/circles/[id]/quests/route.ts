@@ -1,7 +1,8 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
-import { CircleQuestService, CreateQuestInput } from '@/lib/services/circle-quest-service';
+import { type NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
+
+import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
+import { CircleQuestService, type CreateQuestInput } from '@/lib/services/circle-quest-service';
 
 const createQuestSchema = z.object({
   quest_name: z.string().min(3).max(100),

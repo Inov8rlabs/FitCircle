@@ -5,10 +5,11 @@
  * DELETE /api/daily-goals/[id] - Delete a daily goal
  */
 
-import { NextRequest, NextResponse } from 'next/server';
+import { type NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
-import { createServerSupabase } from '@/lib/supabase-server';
+
 import { DailyGoalService } from '@/lib/services/daily-goals';
+import { createServerSupabase } from '@/lib/supabase-server';
 
 // Validation schema for PATCH
 const updateGoalSchema = z.object({

@@ -7,7 +7,8 @@
  * - Percentage-based rollout
  */
 
-import { SupabaseClient } from '@supabase/supabase-js';
+import { type SupabaseClient } from '@supabase/supabase-js';
+
 import type { FeatureFlagResult } from '@/lib/types/food-log';
 
 export class FeatureFlagService {

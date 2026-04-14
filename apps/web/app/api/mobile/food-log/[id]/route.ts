@@ -5,13 +5,14 @@
  * DELETE /api/mobile/food-log/[id] - Delete entry
  */
 
-import { NextRequest, NextResponse } from 'next/server';
-import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
-import { FoodLogService } from '@/lib/services/food-log-service';
-import { FoodLogImageService } from '@/lib/services/food-log-image-service';
-import { UpdateFoodLogEntrySchema } from '@/lib/validation/food-log-validation';
-import { createAdminSupabase } from '@/lib/supabase-admin';
+import { type NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
+
+import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
+import { FoodLogImageService } from '@/lib/services/food-log-image-service';
+import { FoodLogService } from '@/lib/services/food-log-service';
+import { createAdminSupabase } from '@/lib/supabase-admin';
+import { UpdateFoodLogEntrySchema } from '@/lib/validation/food-log-validation';
 
 /**
  * GET /api/mobile/food-log/[id]

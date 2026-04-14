@@ -377,7 +377,7 @@ export class CircleQuestService {
     if (error) throw error;
 
     return (progress || []).map((p, index) => {
-      const profile = p.profiles as any;
+      const profile = p.profiles;
       return {
         rank: index + 1,
         user_id: p.user_id,

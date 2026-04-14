@@ -3,10 +3,12 @@
  */
 
 import { useState, useEffect } from 'react';
-import { useAuthStore } from '@/stores/auth-store';
-import { supabase } from '@/lib/supabase';
-import { UnitSystem, WeightUnit, getWeightUnit } from '@/lib/utils/units';
 import { toast } from 'sonner';
+
+import { supabase } from '@/lib/supabase';
+import { type UnitSystem, type WeightUnit, getWeightUnit } from '@/lib/utils/units';
+import { useAuthStore } from '@/stores/auth-store';
+
 
 interface UseUnitPreferenceReturn {
   unitSystem: UnitSystem;
@@ -26,7 +28,7 @@ export function useUnitPreference(): UseUnitPreferenceReturn {
   // Load user preferences on mount and when user changes
   useEffect(() => {
     if (user) {
-      loadUserPreferences();
+      void loadUserPreferences();
     }
   }, [user?.id]);
 

@@ -1,8 +1,8 @@
 'use client';
 
+import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Button } from '@/components/ui/button';
 
 interface TermsModalProps {
   open: boolean;
@@ -101,7 +101,7 @@ export function TermsModal({ open, onClose }: TermsModalProps) {
             <section>
               <h3 className="text-lg font-semibold text-white mb-3">9. Limitation of Liability</h3>
               <p className="text-sm leading-relaxed">
-                FitCircle is provided "as is" without warranties. We are not liable for indirect,
+                FitCircle is provided &quot;as is&quot; without warranties. We are not liable for indirect,
                 incidental, or consequential damages arising from your use of the service.
               </p>
             </section>

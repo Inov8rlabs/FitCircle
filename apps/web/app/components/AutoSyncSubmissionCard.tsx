@@ -1,9 +1,10 @@
 'use client';
 
 import { motion } from 'framer-motion';
-import { Card, CardContent } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
 import { Flame, Check, Loader2 } from 'lucide-react';
+
+import { Button } from '@/components/ui/button';
+import { Card, CardContent } from '@/components/ui/card';
 
 interface AutoSyncSubmissionCardProps {
   steps: number;
@@ -35,7 +36,7 @@ export function AutoSyncSubmissionCard({ steps, onSubmit, isSubmitting = false }
 
               <div className="flex-1 min-w-0">
                 <h3 className="text-base sm:text-lg font-semibold text-white">
-                  Submit today's steps
+                  Submit today&apos;s steps
                 </h3>
                 <p className="text-xs sm:text-sm text-gray-400 mt-0.5">
                   Auto-synced steps need a quick confirmation to keep your streak alive.

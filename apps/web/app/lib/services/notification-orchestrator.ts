@@ -1,9 +1,10 @@
 import { createAdminSupabase } from '../supabase-admin';
-import { PushService, PushNotification } from './push-service';
+
 import {
   NotificationPreferencesService,
-  NotificationCategory,
+  type NotificationCategory,
 } from './notification-preferences-service';
+import { PushService, type PushNotification } from './push-service';
 
 // ============================================================================
 // TYPES

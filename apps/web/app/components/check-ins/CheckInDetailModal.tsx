@@ -8,18 +8,8 @@
  * PRD: /docs/progress-history-checkin-detail-prd.md
  */
 
-import { useState } from 'react';
+import { format } from 'date-fns';
 import { motion, AnimatePresence } from 'framer-motion';
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import {
   Scale,
   Footprints,
@@ -33,10 +23,21 @@ import {
   Minus,
   Save,
 } from 'lucide-react';
-import { format } from 'date-fns';
-import { CheckInWithProfile } from '@/lib/services/check-in-service';
+import { useState } from 'react';
 import { toast } from 'sonner';
+
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { useUnitPreference } from '@/hooks/useUnitPreference';
+import { type CheckInWithProfile } from '@/lib/services/check-in-service';
 import {
   parseWeightToKg,
   weightKgToDisplay,

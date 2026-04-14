@@ -1,12 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { useParams, useRouter } from 'next/navigation';
-import DashboardNav from '@/components/DashboardNav';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import { Progress } from '@/components/ui/progress';
+import { motion } from 'framer-motion';
 import {
   Trophy,
   Users,
@@ -33,17 +27,26 @@ import {
   Check,
   Loader2,
 } from 'lucide-react';
+import { useParams, useRouter } from 'next/navigation';
+import { useState, useEffect } from 'react';
+import { toast } from 'sonner';
+
+import CircleChallengesSection from '@/components/challenges/CircleChallengesSection';
+import { CheckInCard } from '@/components/check-ins';
+import DashboardNav from '@/components/DashboardNav';
 import { BathroomScale } from '@/components/icons/BathroomScale';
-import { DateRangeDisplay, DatePicker } from '@/components/ui/date-picker';
-import { motion } from 'framer-motion';
-import { supabase } from '@/lib/supabase';
-import { useAuthStore } from '@/stores/auth-store';
 import { ShareFitCircleDialog } from '@/components/ShareFitCircleDialog';
 import { SubmitProgressDialog } from '@/components/SubmitProgressDialog';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { DateRangeDisplay, DatePicker } from '@/components/ui/date-picker';
+import { Progress } from '@/components/ui/progress';
 import { useUnitPreference } from '@/hooks/useUnitPreference';
-import { toast } from 'sonner';
-import { CheckInCard } from '@/components/check-ins';
-import CircleChallengesSection from '@/components/challenges/CircleChallengesSection';
+import { supabase } from '@/lib/supabase';
+import { useAuthStore } from '@/stores/auth-store';
+
+
 
 interface FitCircle {
   id: string;
@@ -136,8 +139,8 @@ export default function FitCirclePage() {
 
   useEffect(() => {
     if (circleId && user) {
-      fetchFitCircle();
-      fetchParticipants();
+      void fetchFitCircle();
+      void fetchParticipants();
     }
   }, [circleId, user]);
 
@@ -335,7 +338,7 @@ export default function FitCirclePage() {
       }
 
       toast.success('FitCircle deleted successfully');
-      router.push('/fitcircles');
+      void router.push('/fitcircles');
     } catch (err: any) {
       console.error('Error deleting challenge:', err);
       toast.error(err.message || 'Failed to delete challenge');
@@ -796,7 +799,7 @@ export default function FitCirclePage() {
               <h2 className="text-xl font-semibold text-red-400 mb-2">FitCircle Not Found</h2>
               <p className="text-gray-400 mb-4">{error || 'The FitCircle you\'re looking for doesn\'t exist.'}</p>
               <Button
-                onClick={() => router.push('/fitcircles')}
+                onClick={() => { void router.push('/fitcircles'); }}
                 variant="outline"
                 className="border-orange-500/50 text-orange-400 hover:bg-orange-500/10"
               >
@@ -861,7 +864,7 @@ export default function FitCirclePage() {
           {/* Header */}
           <div className="mb-6 sm:mb-8">
             <Button
-              onClick={() => router.push('/fitcircles')}
+              onClick={() => { void router.push('/fitcircles'); }}
               variant="ghost"
               className="mb-3 sm:mb-4 text-gray-400 hover:text-white hover:bg-slate-800/50 text-xs sm:text-sm"
             >
@@ -1865,7 +1868,7 @@ export default function FitCirclePage() {
             unitSystem={unitSystem}
             onSubmitSuccess={() => {
               // Refresh participants/leaderboard after submitting progress
-              fetchParticipants();
+              void fetchParticipants();
             }}
           />
         )}

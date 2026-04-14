@@ -1,7 +1,6 @@
 'use client';
 
 import { motion } from 'framer-motion';
-import Link from 'next/link';
 import {
   ArrowRight,
   Trophy,
@@ -21,12 +20,14 @@ import {
   MessageSquare,
   Dumbbell
 } from 'lucide-react';
+import Link from 'next/link';
+
+import DashboardNav from '@/components/DashboardNav';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
 import { Logo, LogoIcon } from '@/components/ui/logo';
 import { useAuthStore } from '@/stores/auth-store';
-import DashboardNav from '@/components/DashboardNav';
 
 const fadeIn = {
   initial: { opacity: 0, y: 20 },
@@ -434,7 +435,7 @@ export default function LandingPage() {
             transition={{ delay: 0.2 }}
           >
             <p className="text-gray-400 mb-4">
-              Get started with FitCircle today and we'll notify you as soon as our mobile apps are ready!
+              Get started with FitCircle today and we&apos;ll notify you as soon as our mobile apps are ready!
             </p>
             <Button className="bg-purple-600 hover:bg-purple-700 shadow-lg hover:shadow-purple-500/50 transition-all" asChild>
               <Link href="/register">

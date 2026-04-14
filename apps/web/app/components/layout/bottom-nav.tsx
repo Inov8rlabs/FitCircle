@@ -1,10 +1,11 @@
 'use client';
 
-import { usePathname } from 'next/navigation';
-import Link from 'next/link';
-import { Home, Trophy, Plus, Users, User } from 'lucide-react';
-import { cn, triggerHapticFeedback } from '@/lib/utils';
 import { motion, AnimatePresence } from 'framer-motion';
+import { Home, Trophy, Plus, Users, User } from 'lucide-react';
+import Link from 'next/link';
+import { usePathname } from 'next/navigation';
+
+import { cn, triggerHapticFeedback } from '@/lib/utils';
 import { useUIStore } from '@/stores/ui-store';
 
 const navItems = [

@@ -1,7 +1,9 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import CircleCreationWizard from '../CircleCreationWizard';
+
 import { useAuthStore } from '@/stores/auth-store';
+
+import CircleCreationWizard from '../CircleCreationWizard';
 
 // Mock dependencies
 vi.mock('@/stores/auth-store');
@@ -138,7 +140,7 @@ describe('CircleCreationWizard', () => {
       // Check for step content container with padding
       const stepContent = screen.getByTestId('step-content');
       expect(stepContent).toBeInTheDocument();
-      expect(stepContent).toHaveClass('px-4');
+      expect(stepContent).toHaveClass('sm:px-4');
     });
 
     it('should render Circle Name input on step 1', () => {
@@ -308,7 +310,7 @@ describe('CircleCreationWizard', () => {
 
       // Check for min-width constraint on step groups (prevents layout shift)
       const stepGroup1 = screen.getByTestId('step-group-1');
-      expect(stepGroup1).toHaveClass('min-w-[60px]');
+      expect(stepGroup1).toHaveClass('sm:min-w-[60px]');
     });
 
     it('should use responsive line widths', () => {
@@ -322,8 +324,8 @@ describe('CircleCreationWizard', () => {
 
       // Check for responsive width classes on connecting lines (w-12 sm:w-16)
       const line = screen.getByTestId('connecting-line-1');
-      expect(line).toHaveClass('w-12');
-      expect(line).toHaveClass('sm:w-16');
+      expect(line).toHaveClass('sm:w-12');
+      expect(line).toHaveClass('md:w-16');
     });
   });
 });

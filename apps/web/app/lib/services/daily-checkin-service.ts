@@ -13,7 +13,8 @@
  * Spec: /docs/DAILY-STREAK-CHECKIN-SPEC.md
  */
 
-import { SupabaseClient } from '@supabase/supabase-js';
+import { type SupabaseClient } from '@supabase/supabase-js';
+
 import { MomentumService } from './momentum-service';
 
 // ============================================================================

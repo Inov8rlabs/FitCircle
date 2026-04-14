@@ -1,6 +1,6 @@
-import { Metadata } from 'next';
-import Link from 'next/link';
 import { Shield, ArrowLeft } from 'lucide-react';
+import { type Metadata } from 'next';
+import Link from 'next/link';
 
 export const metadata: Metadata = {
   title: 'Privacy Policy | FitCircle',
@@ -232,7 +232,7 @@ export default function PrivacyPolicyPage() {
             </section>
 
             <section>
-              <h2 className="text-2xl font-bold text-white mb-4">10. Children's Privacy</h2>
+              <h2 className="text-2xl font-bold text-white mb-4">10. Children&apos;s Privacy</h2>
               <p className="text-slate-300 leading-relaxed">
                 FitCircle is not intended for users under 18 years of age. We do not knowingly collect data from children.
                 If we discover that we have collected data from a child, we will delete it immediately.

@@ -1,17 +1,14 @@
-import { NextRequest } from 'next/server';
+import { type NextRequest } from 'next/server';
+
+import { createAdminSupabase } from '@/lib/supabase-admin';
+import { createServerSupabase } from '@/lib/supabase-server';
+
 import { MobileAPIService } from '../services/mobile-api-service';
 
 export interface AuthenticatedRequest extends NextRequest {
   user?: any;
   userId?: string;
 }
-
-/**
- * Verify Bearer token from Authorization header
- * Returns user object if valid, null otherwise
- */
-import { createServerSupabase } from '@/lib/supabase-server';
-import { createAdminSupabase } from '@/lib/supabase-admin';
 
 /**
  * Verify Bearer token from Authorization header OR session cookie

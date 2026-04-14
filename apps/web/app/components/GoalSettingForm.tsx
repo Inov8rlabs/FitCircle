@@ -1,20 +1,6 @@
 'use client';
 
-import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import { Badge } from '@/components/ui/badge';
 import {
   Trophy,
   Target,
@@ -32,7 +18,23 @@ import {
   Activity,
   TrendingDown,
 } from 'lucide-react';
+import { useState } from 'react';
 import { toast } from 'sonner';
+
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { Textarea } from '@/components/ui/textarea';
+
 
 interface GoalSettingFormProps {
   circleName: string;
@@ -319,7 +321,7 @@ export default function GoalSettingForm({
                           Goal: Lose {(goalData.current_value - goalData.target_value).toFixed(1)} {goalData.unit}
                         </p>
                         <p className="text-xs text-gray-400">
-                          That's {((goalData.current_value - goalData.target_value) / (duration / 7)).toFixed(1)} {goalData.unit} per week
+                          That&apos;s {((goalData.current_value - goalData.target_value) / (duration / 7)).toFixed(1)} {goalData.unit} per week
                         </p>
                       </div>
                     </div>
@@ -546,7 +548,7 @@ export default function GoalSettingForm({
                   <div className="space-y-1">
                     <div className="flex items-center gap-2 text-xs text-gray-300">
                       <Eye className="h-3 w-3 text-gray-400" />
-                      <span>Others will only see: "You're at 65% of your goal"</span>
+                      <span>Others will only see: &quot;You&apos;re at 65% of your goal&quot;</span>
                     </div>
                     <div className="flex items-center gap-2 text-xs text-gray-300">
                       <Lock className="h-3 w-3 text-gray-400" />

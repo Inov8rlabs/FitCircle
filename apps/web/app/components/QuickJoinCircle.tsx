@@ -1,11 +1,6 @@
 'use client';
 
-import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Card } from '@/components/ui/card';
 import {
   Sparkles,
   UserPlus,
@@ -18,10 +13,17 @@ import {
   Zap,
   Hash,
 } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { useState } from 'react';
+import { toast } from 'sonner';
+
+import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/stores/auth-store';
-import { toast } from 'sonner';
-import { useRouter } from 'next/navigation';
+
 
 interface QuickJoinCircleProps {
   isOpen: boolean;
@@ -58,7 +60,7 @@ export default function QuickJoinCircle({ isOpen, onClose, initialCode = '' }: Q
     
     // Auto-validate when code looks complete
     if (formatted.length >= 9) {
-      validateCode(formatted);
+      void validateCode(formatted);
     }
   };
 
@@ -133,7 +135,7 @@ export default function QuickJoinCircle({ isOpen, onClose, initialCode = '' }: Q
     if (!user) {
       // Save the code and redirect to login
       localStorage.setItem('pendingJoinCode', inviteCode);
-      router.push(`/login?returnUrl=/join/${inviteCode}`);
+      void router.push(`/login?returnUrl=/join/${inviteCode}`);
       return;
     }
 
@@ -167,7 +169,7 @@ export default function QuickJoinCircle({ isOpen, onClose, initialCode = '' }: Q
       
       // Redirect after animation
       setTimeout(() => {
-        router.push(`/fitcircles/${circlePreview.id}`);
+        void router.push(`/fitcircles/${circlePreview.id}`);
         onClose();
       }, 2000);
     } catch (error: any) {
@@ -241,7 +243,7 @@ export default function QuickJoinCircle({ isOpen, onClose, initialCode = '' }: Q
                     autoFocus
                     onKeyDown={(e) => {
                       if (e.key === 'Enter' && inviteCode.length >= 9) {
-                        validateCode();
+                        void validateCode();
                       }
                     }}
                   />
@@ -406,7 +408,7 @@ export default function QuickJoinCircle({ isOpen, onClose, initialCode = '' }: Q
               
               <div>
                 <h3 className="text-2xl font-bold text-white mb-2">Welcome!</h3>
-                <p className="text-gray-400">You've successfully joined the FitCircle</p>
+                <p className="text-gray-400">You&apos;ve successfully joined the FitCircle</p>
               </div>
               
               <motion.div

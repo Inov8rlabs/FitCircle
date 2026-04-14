@@ -4,15 +4,16 @@
  * GET /api/mobile/beverages - Get user's beverage log entries (paginated)
  */
 
-import { NextRequest, NextResponse } from 'next/server';
+import { type NextRequest, NextResponse } from 'next/server';
+import { z } from 'zod';
+
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { BeverageLogService } from '@/lib/services/beverage-log-service';
+import { createAdminSupabase } from '@/lib/supabase-admin';
 import {
   CreateBeverageLogSchema,
   BeverageLogQuerySchema,
 } from '@/lib/validation/beverage-log-validation';
-import { createAdminSupabase } from '@/lib/supabase-admin';
-import { z } from 'zod';
 
 /**
  * GET /api/mobile/beverages

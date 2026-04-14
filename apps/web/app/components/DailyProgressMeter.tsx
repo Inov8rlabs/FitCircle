@@ -14,16 +14,18 @@
 
 'use client';
 
-import { useState, useEffect } from 'react';
+import confetti from 'canvas-confetti';
 import { motion, AnimatePresence } from 'framer-motion';
+import { Footprints, Scale, Smile, Zap, Flame, Check, Circle, ChevronDown, ChevronUp, Plus, PlusCircle, Dumbbell } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { toast } from 'sonner';
+
+import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { ActivityRing } from '@/components/ui/circular-progress';
-import { Footprints, Scale, Smile, Zap, Flame, Check, Circle, ChevronDown, ChevronUp, Plus, PlusCircle, Dumbbell } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { toast } from 'sonner';
-import confetti from 'canvas-confetti';
-import { GoalSetupDialog } from './GoalSetupDialog';
 import type { GoalRecommendation } from '@/lib/services/goal-recommendations';
+
+import { GoalSetupDialog } from './GoalSetupDialog';
 
 interface GoalProgress {
   goal_id: string;
@@ -83,16 +85,16 @@ export function DailyProgressMeter({ userId, onGoalComplete, className = '' }: D
   const [recommendations, setRecommendations] = useState<GoalRecommendation[]>([]);
 
   useEffect(() => {
-    fetchProgress();
+    void fetchProgress();
     // Refresh every 30 seconds
-    const interval = setInterval(fetchProgress, 30000);
+    const interval = setInterval(() => { void fetchProgress(); }, 30000);
     return () => clearInterval(interval);
   }, [userId]);
 
   // Fetch recommendations when there are no goals
   useEffect(() => {
     if (progress && progress.total_goals === 0) {
-      fetchRecommendations();
+      void fetchRecommendations();
     }
   }, [progress?.total_goals]);
 
@@ -152,13 +154,13 @@ export function DailyProgressMeter({ userId, onGoalComplete, className = '' }: D
       }
 
       const particleCount = 50 * (timeLeft / duration);
-      confetti({
+      void confetti({
         ...defaults,
         particleCount,
         origin: { x: randomInRange(0.1, 0.3), y: Math.random() - 0.2 },
         colors: ['#6366f1', '#8b5cf6', '#f97316', '#10b981'],
       });
-      confetti({
+      void confetti({
         ...defaults,
         particleCount,
         origin: { x: randomInRange(0.7, 0.9), y: Math.random() - 0.2 },
@@ -298,7 +300,7 @@ export function DailyProgressMeter({ userId, onGoalComplete, className = '' }: D
                     return (
                       <button
                         key={idx}
-                        onClick={() => handleQuickSetGoal(rec)}
+                        onClick={() => { void handleQuickSetGoal(rec); }}
                         className="w-full text-left p-3 rounded-lg bg-slate-800/50 hover:bg-slate-700/50 transition-all group"
                       >
                         <div className="flex items-start gap-3">
@@ -499,7 +501,7 @@ export function DailyProgressMeter({ userId, onGoalComplete, className = '' }: D
                 All goals complete! 🎉
               </p>
               <p className="text-xs text-gray-400">
-                You're on track for your FitCircle challenge
+                You&apos;re on track for your FitCircle challenge
               </p>
             </motion.div>
           )}

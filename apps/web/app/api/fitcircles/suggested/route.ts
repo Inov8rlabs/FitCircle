@@ -1,4 +1,5 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { type NextRequest, NextResponse } from 'next/server';
+
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { createAdminSupabase } from '@/lib/supabase-admin';
 
@@ -28,7 +29,7 @@ export async function GET(request: NextRequest) {
     // 2. Are upcoming or active
     // 3. User is not already a member of
     // 4. Match user's interests (based on persona)
-    let query = supabaseAdmin
+    const query = supabaseAdmin
       .from('fitcircles')
       .select(`
         id,

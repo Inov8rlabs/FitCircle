@@ -1,8 +1,6 @@
 'use client';
 
-import { useState } from 'react';
 import { format } from 'date-fns';
-import Image from 'next/image';
 import { 
     Trash2, 
     Droplets, 
@@ -19,7 +17,9 @@ import {
     Apple,
     ImageIcon
 } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import Image from 'next/image';
+import { useState } from 'react';
+
 import {
     AlertDialog,
     AlertDialogAction,
@@ -31,10 +31,11 @@ import {
     AlertDialogTitle,
     AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { supabase } from '@/lib/supabase';
+import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/use-toast';
-import { FoodLogService } from '@/lib/services/food-log-service';
 import { BeverageLogService } from '@/lib/services/beverage-log-service';
+import { FoodLogService } from '@/lib/services/food-log-service';
+import { supabase } from '@/lib/supabase';
 import { cn } from '@/lib/utils';
 
 interface FoodLogImage {

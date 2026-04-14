@@ -10,7 +10,8 @@
  * Part of Beverage Logging Feature
  */
 
-import { SupabaseClient } from '@supabase/supabase-js';
+import { type SupabaseClient } from '@supabase/supabase-js';
+
 import type {
   BeverageLogEntry,
   BeverageLogStats,

@@ -1,13 +1,14 @@
 'use client';
 
-import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Footprints, Save, X, Loader2, Edit2, TrendingUp } from 'lucide-react';
-import { Card, CardContent } from '@/components/ui/card';
+import { useState } from 'react';
+
 import { Button } from '@/components/ui/button';
+import { Card, CardContent } from '@/components/ui/card';
+import { CircularProgress } from '@/components/ui/circular-progress';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { CircularProgress } from '@/components/ui/circular-progress';
 
 interface StepsGoalCardProps {
   currentSteps: number;

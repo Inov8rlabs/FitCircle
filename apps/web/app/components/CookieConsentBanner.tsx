@@ -1,12 +1,13 @@
 'use client';
 
-import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { Shield, BarChart3, Megaphone, ChevronDown, ChevronUp } from 'lucide-react';
+import { useState, useEffect } from 'react';
+
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
-import { Shield, BarChart3, Megaphone, ChevronDown, ChevronUp } from 'lucide-react';
-import { createBrowserSupabase } from '@/lib/supabase';
 import { initializeAmplitude } from '@/lib/amplitude';
+import { createBrowserSupabase } from '@/lib/supabase';
 
 interface ConsentPreferences {
   essential: boolean; // Always true, cannot be disabled
@@ -164,16 +165,16 @@ export function CookieConsentBanner() {
 
   const handleAcceptAll = () => {
     const prefs = { essential: true, analytics: true, marketing: true };
-    saveConsent(prefs, 'banner');
+    void saveConsent(prefs, 'banner');
   };
 
   const handleRejectAll = (gpcSignal: boolean = false) => {
     const prefs = { essential: true, analytics: false, marketing: false };
-    saveConsent(prefs, gpcSignal ? 'gpc' : 'banner', gpcSignal);
+    void saveConsent(prefs, gpcSignal ? 'gpc' : 'banner', gpcSignal);
   };
 
   const handleSavePreferences = () => {
-    saveConsent(preferences, 'banner');
+    void saveConsent(preferences, 'banner');
   };
 
   if (!showBanner) return null;

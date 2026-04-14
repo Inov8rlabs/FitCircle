@@ -1,5 +1,6 @@
 import { render, screen } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
+
 import TermsPage from '../page';
 
 // Mock Next.js Link component

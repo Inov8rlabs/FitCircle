@@ -11,7 +11,8 @@
  * Spec: /docs/DAILY-PROGRESS-METER-SPEC.md
  */
 
-import { SupabaseClient } from '@supabase/supabase-js';
+import { type SupabaseClient } from '@supabase/supabase-js';
+
 import { createAdminSupabase } from '@/lib/supabase';
 
 // Types

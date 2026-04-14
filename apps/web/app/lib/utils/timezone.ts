@@ -10,7 +10,7 @@
  * - We use the user's timezone from profiles.timezone for all date operations
  */
 
-import { SupabaseClient } from '@supabase/supabase-js';
+import { type SupabaseClient } from '@supabase/supabase-js';
 
 /**
  * Get user's timezone from their profile

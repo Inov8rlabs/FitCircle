@@ -1,4 +1,4 @@
-import { ChallengeTemplate } from '../types/circle-challenge';
+import { type ChallengeTemplate } from '../types/circle-challenge';
 
 export const CHALLENGE_TEMPLATES: ChallengeTemplate[] = [
   // ============================================================================

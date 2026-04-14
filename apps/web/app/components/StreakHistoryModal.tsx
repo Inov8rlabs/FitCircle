@@ -14,16 +14,8 @@
  * - Responsive design (modal on desktop, sheet on mobile)
  */
 
-import { useState, useEffect } from 'react';
+import { format } from 'date-fns';
 import { motion, AnimatePresence } from 'framer-motion';
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-} from '@/components/ui/dialog';
-import { Card, CardContent } from '@/components/ui/card';
 import {
   Flame,
   Trophy,
@@ -39,7 +31,16 @@ import {
   Smartphone,
   PenLine
 } from 'lucide-react';
-import { format } from 'date-fns';
+import { useState, useEffect } from 'react';
+
+import { Card, CardContent } from '@/components/ui/card';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from '@/components/ui/dialog';
 import { useUnitPreference } from '@/hooks/useUnitPreference';
 import { formatWeight, weightKgToDisplay, getWeightUnit } from '@/lib/utils/units';
 
@@ -85,7 +86,7 @@ export function StreakHistoryModal({ isOpen, onClose, userId }: StreakHistoryMod
 
   useEffect(() => {
     if (isOpen) {
-      fetchData();
+      void fetchData();
     }
   }, [isOpen, userId]);
 

@@ -106,10 +106,10 @@ export function useDailyGoals() {
   }, []);
 
   useEffect(() => {
-    fetchData();
+    void fetchData();
 
     // Refresh every minute
-    const interval = setInterval(fetchData, 60000);
+    const interval = setInterval(() => { void fetchData(); }, 60000);
     return () => clearInterval(interval);
   }, [fetchData]);
 
@@ -156,7 +156,7 @@ export function useDailyGoalsHistory(limit: number = 30) {
   }, [limit]);
 
   useEffect(() => {
-    fetchHistory();
+    void fetchHistory();
   }, [fetchHistory]);
 
   return {

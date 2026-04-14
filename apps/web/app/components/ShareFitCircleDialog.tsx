@@ -1,16 +1,5 @@
 'use client';
 
-import { useState } from 'react';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   Copy,
   Mail,
@@ -21,7 +10,20 @@ import {
   X,
   MessageCircle,
 } from 'lucide-react';
+import { useState } from 'react';
 import { toast } from 'sonner';
+
+import { Button } from '@/components/ui/button';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+
 
 interface ShareFitCircleDialogProps {
   open: boolean;
@@ -203,7 +205,7 @@ Let's do this! 🚀`;
       <DialogContent className="bg-slate-900 border-slate-800 max-w-lg">
         <DialogHeader>
           <DialogTitle className="text-2xl font-bold bg-gradient-to-r from-indigo-400 to-purple-400 bg-clip-text text-transparent">
-            Share "{fitCircleName}"
+            Share &quot;{fitCircleName}&quot;
           </DialogTitle>
           <DialogDescription className="text-gray-400">
             Invite friends to join this FitCircle

@@ -1,16 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
-import { Card, CardContent } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { DatePicker } from '@/components/ui/date-picker';
-// import { Switch } from '@/components/ui/switch'; // Temporarily disabled
 import {
   Trophy,
   Target,
@@ -37,9 +27,20 @@ import {
   Sparkles,
   QrCode,
 } from 'lucide-react';
+import React, { useState } from 'react';
+import { toast } from 'sonner';
+
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent } from '@/components/ui/card';
+import { DatePicker } from '@/components/ui/date-picker';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+// import { Switch } from '@/components/ui/switch'; // Temporarily disabled
+import { Textarea } from '@/components/ui/textarea';
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/stores/auth-store';
-import { toast } from 'sonner';
 
 interface CircleCreationWizardProps {
   isOpen: boolean;
@@ -134,7 +135,7 @@ export default function CircleCreationWizard({ isOpen, onClose, onSuccess }: Cir
     switch (step) {
       case 1:
         return formData.name.length >= 3 && formData.name.length <= 50;
-      case 2:
+      case 2: {
         if (!formData.startDate || !formData.endDate) return false;
         const start = new Date(formData.startDate + 'T00:00:00');
         const end = new Date(formData.endDate + 'T00:00:00');
@@ -143,6 +144,7 @@ export default function CircleCreationWizard({ isOpen, onClose, onSuccess }: Cir
 
         // Start date must be today or later, end date must be after start, minimum 7 days
         return start >= today && end > start && calculateDuration() >= 7;
+      }
       case 3:
         return true; // Settings are optional
       case 4:
@@ -180,7 +182,7 @@ export default function CircleCreationWizard({ isOpen, onClose, onSuccess }: Cir
   };
 
   const copyInviteCode = () => {
-    navigator.clipboard.writeText(inviteLink); // inviteLink stores the code
+    void navigator.clipboard.writeText(inviteLink); // inviteLink stores the code
     toast.success('Invite code copied to clipboard!');
   };
 
@@ -188,7 +190,7 @@ export default function CircleCreationWizard({ isOpen, onClose, onSuccess }: Cir
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL ||
       (typeof window !== 'undefined' ? window.location.origin : '');
     const url = `${baseUrl}/join/${inviteLink}`;
-    navigator.clipboard.writeText(url);
+    void navigator.clipboard.writeText(url);
     toast.success('Invite link copied to clipboard!');
   };
 
@@ -978,9 +980,9 @@ export default function CircleCreationWizard({ isOpen, onClose, onSuccess }: Cir
                   <div className="flex items-start gap-3">
                     <CheckCircle2 className="h-5 w-5 text-green-400 mt-0.5" />
                     <div>
-                      <p className="text-white font-medium text-sm">You're all set!</p>
+                      <p className="text-white font-medium text-sm">You&apos;re all set!</p>
                       <p className="text-xs text-gray-400 mt-1">
-                        You can invite more members later from the FitCircle page. Don't worry if you skip this step.
+                        You can invite more members later from the FitCircle page. Don&apos;t worry if you skip this step.
                       </p>
                     </div>
                   </div>

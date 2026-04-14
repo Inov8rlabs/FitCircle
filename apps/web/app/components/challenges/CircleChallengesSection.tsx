@@ -1,15 +1,17 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
 import { motion } from 'framer-motion';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import { Zap, Plus, Trophy, Flame } from 'lucide-react';
-import { useAuthStore } from '@/stores/auth-store';
+import React, { useState, useEffect, useCallback } from 'react';
+
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import {
   CircleChallengeWithDetails,
-  ChallengeListResponse,
+  type ChallengeListResponse,
 } from '@/lib/types/circle-challenge';
+import { useAuthStore } from '@/stores/auth-store';
+
 import ChallengeCard from './ChallengeCard';
 import ChallengeCreationWizard from './ChallengeCreationWizard';
 import ChallengeDetailView from './ChallengeDetailView';
@@ -45,7 +47,7 @@ export default function CircleChallengesSection({
   }, [circleId]);
 
   useEffect(() => {
-    fetchChallenges();
+    void fetchChallenges();
   }, [fetchChallenges]);
 
   // If viewing a challenge detail
@@ -56,7 +58,7 @@ export default function CircleChallengesSection({
         circleId={circleId}
         onBack={() => {
           setSelectedChallengeId(null);
-          fetchChallenges();
+          void fetchChallenges();
         }}
       />
     );
@@ -169,7 +171,7 @@ export default function CircleChallengesSection({
         isOpen={showCreateWizard}
         onClose={() => setShowCreateWizard(false)}
         onSuccess={() => {
-          fetchChallenges();
+          void fetchChallenges();
         }}
         circleId={circleId}
         circleMembers={circleMembers}

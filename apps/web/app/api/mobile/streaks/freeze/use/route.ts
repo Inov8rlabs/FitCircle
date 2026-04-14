@@ -1,8 +1,9 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { type NextRequest, NextResponse } from 'next/server';
+
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { addAutoRefreshHeaders } from '@/lib/middleware/mobile-auto-refresh';
+import { useFreeze as applyFreeze } from '@/lib/services/daily-checkin-service';
 import { createAdminSupabase } from '@/lib/supabase-admin';
-import { useFreeze } from '@/lib/services/daily-checkin-service';
 
 /**
  * POST /api/mobile/streaks/freeze/use
@@ -26,7 +27,7 @@ export async function POST(request: NextRequest) {
     const supabaseAdmin = createAdminSupabase();
 
     // Use a freeze
-    const result = await useFreeze(user.id, supabaseAdmin);
+    const result = await applyFreeze(user.id, supabaseAdmin);
 
     const statusCode = result.success ? 200 : 400;
 

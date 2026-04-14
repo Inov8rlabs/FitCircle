@@ -1,6 +1,7 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { verifyMobileAuth } from '@/lib/middleware/mobile-auth';
 import { createClient } from '@supabase/supabase-js';
+import { type NextRequest, NextResponse } from 'next/server';
+
+import { verifyMobileAuth } from '@/lib/middleware/mobile-auth';
 
 export async function GET(request: NextRequest) {
   try {

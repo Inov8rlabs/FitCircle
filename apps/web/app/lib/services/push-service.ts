@@ -1,5 +1,6 @@
-import { createAdminSupabase } from '../supabase-admin';
 import * as jwt from 'jsonwebtoken';
+
+import { createAdminSupabase } from '../supabase-admin';
 
 // ============================================================================
 // TYPES

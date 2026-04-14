@@ -1,10 +1,10 @@
 import { createAdminSupabase } from '../supabase-admin';
 import {
-  MetricStreak,
-  MetricType,
-  MetricStreakResponse,
-  AllMetricStreaksResponse,
-  MetricFrequencyConfig,
+  type MetricStreak,
+  type MetricType,
+  type MetricStreakResponse,
+  type AllMetricStreaksResponse,
+  type MetricFrequencyConfig,
   METRIC_FREQUENCY_CONFIG,
   getMetricFrequency,
   StreakError,
@@ -45,12 +45,13 @@ export class MetricStreakService {
     const config = getMetricFrequency(metricType);
 
     // Get or create metric streak record
-    let { data: streakRecord, error: fetchError } = await supabaseAdmin
+    const { data: initialStreakRecord, error: fetchError } = await supabaseAdmin
       .from('metric_streaks')
       .select('*')
       .eq('user_id', userId)
       .eq('metric_type', metricType)
       .single();
+    let streakRecord = initialStreakRecord;
 
     if (fetchError && fetchError.code === 'PGRST116') {
       // No record exists, create one
@@ -217,7 +218,7 @@ export class MetricStreakService {
     let longestStreak = 0;
     let graceDaysUsed = 0;
     let graceDaysAvailable = graceDaysPerWeek;
-    let weekStart = new Date(today);
+    const weekStart = new Date(today);
     weekStart.setDate(weekStart.getDate() - weekStart.getDay()); // Start of current week (Sunday)
 
     // Count backwards from today
@@ -463,7 +464,7 @@ export class MetricStreakService {
     config: MetricFrequencyConfig
   ): MetricStreakResponse {
     return {
-      metric_type: record.metric_type as MetricType,
+      metric_type: record.metric_type,
       current_streak: record.current_streak,
       longest_streak: record.longest_streak,
       last_log_date: record.last_log_date,

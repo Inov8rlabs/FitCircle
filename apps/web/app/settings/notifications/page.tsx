@@ -1,9 +1,5 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
-import { createBrowserSupabase } from '@/lib/supabase';
-import { toast } from 'sonner';
 import {
   Bell,
   Mail,
@@ -17,8 +13,12 @@ import {
   Loader2,
   ArrowLeft
 } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { useState, useEffect } from 'react';
+import { toast } from 'sonner';
+
+import DashboardNav from '@/components/DashboardNav';
 import { Button } from '@/components/ui/button';
-import { Switch } from '@/components/ui/switch';
 import {
   Card,
   CardContent,
@@ -26,7 +26,8 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
-import DashboardNav from '@/components/DashboardNav';
+import { Switch } from '@/components/ui/switch';
+import { createBrowserSupabase } from '@/lib/supabase';
 
 interface NotificationPreferences {
   // General
@@ -70,7 +71,7 @@ export default function NotificationSettingsPage() {
   const [preferences, setPreferences] = useState<NotificationPreferences>(DEFAULT_PREFERENCES);
 
   useEffect(() => {
-    loadPreferences();
+    void loadPreferences();
   }, []);
 
   const loadPreferences = async () => {
@@ -79,7 +80,7 @@ export default function NotificationSettingsPage() {
       const { data: { user } } = await supabase.auth.getUser();
 
       if (!user) {
-        router.push('/login');
+        void router.push('/login');
         return;
       }
 
@@ -167,7 +168,7 @@ export default function NotificationSettingsPage() {
           <Button 
             variant="ghost" 
             size="icon" 
-            onClick={() => router.push('/profile')}
+            onClick={() => { void router.push('/profile'); }}
             className="text-gray-400 hover:text-white"
           >
             <ArrowLeft className="h-6 w-6" />
@@ -250,7 +251,7 @@ export default function NotificationSettingsPage() {
               <div className="flex items-center justify-between p-3 rounded-lg bg-slate-800/30">
                 <div className="flex-1">
                   <p className="text-white font-medium">Team Invites</p>
-                  <p className="text-sm text-gray-400">When you're invited to join a team</p>
+                  <p className="text-sm text-gray-400">When you&apos;re invited to join a team</p>
                 </div>
                 <Switch 
                   checked={preferences.team_invite} 

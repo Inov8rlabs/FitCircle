@@ -1,30 +1,6 @@
 'use client';
 
-import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from '@/components/ui/dialog';
-import { Badge } from '@/components/ui/badge';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import {
   Users,
   Trophy,
@@ -44,9 +20,35 @@ import {
   Clock,
   CheckCircle2,
 } from 'lucide-react';
+import { useState } from 'react';
+import { toast } from 'sonner';
+
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { Textarea } from '@/components/ui/textarea';
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/stores/auth-store';
-import { toast } from 'sonner';
+
 
 interface FitCircle {
   id: string;
@@ -170,7 +172,7 @@ export default function FitCircleCreator() {
       });
 
       // Refresh FitCircles list
-      fetchFitCircles();
+      void fetchFitCircles();
     } catch (error: any) {
       console.error('Error creating FitCircle:', error);
       toast.error(error.message || 'Failed to create FitCircle');
@@ -250,9 +252,9 @@ export default function FitCircleCreator() {
       if (error) throw error;
 
       toast.success('Successfully joined FitCircle!');
-      fetchFitCircles();
+      void fetchFitCircles();
       if (selectedCircle?.id === challengeId) {
-        fetchParticipants(challengeId);
+        void fetchParticipants(challengeId);
       }
     } catch (error: any) {
       console.error('Error joining FitCircle:', error);
@@ -264,7 +266,7 @@ export default function FitCircleCreator() {
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL ||
       (typeof window !== 'undefined' ? window.location.origin : '');
     const link = `${baseUrl}/join/${inviteCode}`;
-    navigator.clipboard.writeText(link);
+    void navigator.clipboard.writeText(link);
     toast.success('Invite link copied to clipboard!');
   };
 

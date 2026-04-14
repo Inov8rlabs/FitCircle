@@ -1,13 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { useParams, useRouter } from 'next/navigation';
-import DashboardNav from '@/components/DashboardNav';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Badge } from '@/components/ui/badge';
+import { motion } from 'framer-motion';
 import {
   ArrowLeft,
   Scale,
@@ -19,10 +12,19 @@ import {
   Calendar,
   TrendingUp,
 } from 'lucide-react';
-import { motion } from 'framer-motion';
+import { useParams, useRouter } from 'next/navigation';
+import { useState, useEffect } from 'react';
+import { toast } from 'sonner';
+
+import DashboardNav from '@/components/DashboardNav';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/stores/auth-store';
-import { toast } from 'sonner';
+
 
 export default function CheckInPage() {
   const params = useParams();
@@ -39,8 +41,8 @@ export default function CheckInPage() {
 
   useEffect(() => {
     if (circleId && user) {
-      fetchFitCircle();
-      fetchRecentEntries();
+      void fetchFitCircle();
+      void fetchRecentEntries();
     }
   }, [circleId, user]);
 
@@ -169,10 +171,10 @@ export default function CheckInPage() {
 
         // Reset form
         setValue('');
-        fetchRecentEntries();
+        void fetchRecentEntries();
 
         // Redirect back to FitCircle page
-        router.push(`/fitcircles/${circleId}`);
+        void router.push(`/fitcircles/${circleId}`);
       } else {
         const errorData = await response.json();
 
@@ -239,7 +241,7 @@ export default function CheckInPage() {
             <CardContent className="p-8 text-center">
               <h2 className="text-xl font-semibold text-red-400 mb-2">FitCircle Not Found</h2>
               <Button
-                onClick={() => router.push('/fitcircles')}
+                onClick={() => { void router.push('/fitcircles'); }}
                 variant="outline"
                 className="border-orange-500/50 text-orange-400 hover:bg-orange-500/10"
               >
@@ -261,7 +263,7 @@ export default function CheckInPage() {
           {/* Header */}
           <div className="mb-8">
             <Button
-              onClick={() => router.push(`/fitcircles/${circleId}`)}
+              onClick={() => { void router.push(`/fitcircles/${circleId}`); }}
               variant="ghost"
               className="mb-4 text-gray-400 hover:text-white hover:bg-slate-800/50"
             >

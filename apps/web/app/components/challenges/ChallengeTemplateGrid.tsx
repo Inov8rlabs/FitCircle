@@ -1,11 +1,12 @@
 'use client';
 
-import React, { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Card, CardContent } from '@/components/ui/card';
+import React, { useState } from 'react';
+
 import { Badge } from '@/components/ui/badge';
-import { ChallengeTemplate, ChallengeCategory } from '@/lib/types/circle-challenge';
+import { Card, CardContent } from '@/components/ui/card';
 import { CHALLENGE_TEMPLATES } from '@/lib/data/challenge-templates';
+import { type ChallengeTemplate, ChallengeCategory } from '@/lib/types/circle-challenge';
 
 interface ChallengeTemplateGridProps {
   onSelectTemplate: (template: ChallengeTemplate) => void;

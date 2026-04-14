@@ -417,7 +417,7 @@ export class MomentumService {
   private static async getOrCreateStreakRecord(userId: string) {
     const supabaseAdmin = createAdminSupabase();
 
-    let { data: record, error } = await supabaseAdmin
+    const { data: record, error } = await supabaseAdmin
       .from('engagement_streaks')
       .select('*')
       .eq('user_id', userId)

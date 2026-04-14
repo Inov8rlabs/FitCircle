@@ -1,16 +1,17 @@
 import { createAdminSupabase } from '../supabase-admin';
 import {
-  CreateGoalData,
-  CreateGoalsData,
-  FirstCheckInData,
-  OnboardingCompletionResult,
-  OnboardingProgress,
-  PersonaResult,
-  QuestionnaireAnswers,
-  SaveProgressData,
-  UserGoal,
-  PersonaType,
+  type CreateGoalData,
+  type CreateGoalsData,
+  type FirstCheckInData,
+  type OnboardingCompletionResult,
+  type OnboardingProgress,
+  type PersonaResult,
+  type QuestionnaireAnswers,
+  type SaveProgressData,
+  type UserGoal,
+  type PersonaType,
 } from '../types/onboarding';
+
 import { PersonaService } from './persona-service';
 
 // ============================================================================

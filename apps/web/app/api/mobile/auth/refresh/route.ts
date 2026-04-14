@@ -1,5 +1,6 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { type NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
+
 import { MobileAPIService } from '@/lib/services/mobile-api-service';
 
 // Validation schema

@@ -11,7 +11,7 @@
  * PRD: /docs/PRD-ENGAGEMENT-V2.md
  */
 
-import { SupabaseClient } from '@supabase/supabase-js';
+import { type SupabaseClient } from '@supabase/supabase-js';
 
 // ============================================================================
 // TYPES

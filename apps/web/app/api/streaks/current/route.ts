@@ -6,10 +6,11 @@
  * PRD: /docs/PRD-ENGAGEMENT-V2.md
  */
 
-import { NextRequest, NextResponse } from 'next/server';
+import { type NextRequest, NextResponse } from 'next/server';
+
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
-import { createAdminSupabase } from '@/lib/utils/api-auth';
 import { getUserStreak, isFreezeAvailable, getNextMilestone } from '@/lib/services/streak-service-v2';
+import { createAdminSupabase } from '@/lib/utils/api-auth';
 
 /**
  * GET /api/streaks/current

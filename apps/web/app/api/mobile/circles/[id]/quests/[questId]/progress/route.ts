@@ -1,7 +1,8 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { type NextRequest, NextResponse } from 'next/server';
+import { z } from 'zod';
+
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { CircleQuestService } from '@/lib/services/circle-quest-service';
-import { z } from 'zod';
 
 const progressSchema = z.object({
   amount: z.number().positive('Amount must be greater than 0'),

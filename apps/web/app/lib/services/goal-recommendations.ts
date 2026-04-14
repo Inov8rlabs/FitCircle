@@ -9,7 +9,8 @@
  * Recommendations are contextual and explain WHY they're helpful
  */
 
-import { SupabaseClient } from '@supabase/supabase-js';
+import { type SupabaseClient } from '@supabase/supabase-js';
+
 import { createAdminSupabase } from '@/lib/supabase';
 
 export interface GoalRecommendation {
@@ -151,7 +152,7 @@ export class GoalRecommendationService {
         });
         break;
 
-      case 'step_count':
+      case 'step_count': {
         // Step challenges need daily step goals
         const dailySteps = challenge.target_value && challenge.duration_days
           ? Math.round(challenge.target_value / challenge.duration_days)
@@ -166,8 +167,9 @@ export class GoalRecommendationService {
           challenge_name: challenge.name,
         });
         break;
+      }
 
-      case 'workout_frequency':
+      case 'workout_frequency': {
         // Workout challenges need session tracking
         const dailyWorkouts = challenge.target_value && challenge.duration_days
           ? Math.ceil(challenge.target_value / challenge.duration_days)
@@ -190,6 +192,7 @@ export class GoalRecommendationService {
           challenge_name: challenge.name,
         });
         break;
+      }
 
       case 'custom':
       default:

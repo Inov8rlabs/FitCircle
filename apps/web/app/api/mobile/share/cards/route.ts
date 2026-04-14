@@ -1,7 +1,8 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { type NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
+
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
-import { ShareCardService, ShareCardType } from '@/lib/services/share-card-service';
+import { ShareCardService, type ShareCardType } from '@/lib/services/share-card-service';
 
 const VALID_CARD_TYPES: ShareCardType[] = [
   'milestone',

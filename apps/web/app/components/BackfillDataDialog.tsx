@@ -1,7 +1,11 @@
 'use client';
 
+import { Calendar, Loader2, Check , Footprints } from 'lucide-react';
 import { useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { toast } from 'sonner';
+
+import { BathroomScale } from '@/components/icons/BathroomScale';
+import { Button } from '@/components/ui/button';
 import {
   Dialog,
   DialogContent,
@@ -9,13 +13,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Calendar, Loader2, Check } from 'lucide-react';
-import { BathroomScale } from '@/components/icons/BathroomScale';
-import { Footprints } from 'lucide-react';
-import { toast } from 'sonner';
 import { parseWeightToKg } from '@/lib/utils/units';
 
 interface BackfillDataDialogProps {

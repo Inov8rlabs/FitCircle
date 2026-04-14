@@ -6,9 +6,10 @@
  * PRD: /docs/PRD-ENGAGEMENT-V2.md
  */
 
-import { NextRequest, NextResponse } from 'next/server';
+import { type NextRequest, NextResponse } from 'next/server';
+
+import { useFreeze as applyFreeze } from '@/lib/services/streak-service-v2';
 import { getAuthenticatedUser, createAdminSupabase } from '@/lib/utils/api-auth';
-import { useFreeze } from '@/lib/services/streak-service-v2';
 
 /**
  * POST /api/streaks/freeze
@@ -25,7 +26,7 @@ export async function POST(request: NextRequest) {
 
     const supabase = createAdminSupabase();
 
-    const { success, error } = await useFreeze(user.id, supabase);
+    const { success, error } = await applyFreeze(user.id, supabase);
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 400 });

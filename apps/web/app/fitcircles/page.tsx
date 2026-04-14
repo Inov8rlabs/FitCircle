@@ -1,17 +1,19 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import DashboardNav from '@/components/DashboardNav';
-import CircleCreationWizard from '@/components/CircleCreationWizard';
-import QuickJoinCircle from '@/components/QuickJoinCircle';
-import { Card, CardContent } from '@/components/ui/card';
+import { motion } from 'framer-motion';
 import { Users, Plus, UserPlus, Hash, Trophy, Calendar, Loader2 } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import { useRouter } from 'next/navigation';
+import { useState, useEffect } from 'react';
+
+import CircleCreationWizard from '@/components/CircleCreationWizard';
+import DashboardNav from '@/components/DashboardNav';
+import QuickJoinCircle from '@/components/QuickJoinCircle';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent } from '@/components/ui/card';
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/stores/auth-store';
-import { motion } from 'framer-motion';
-import { useRouter } from 'next/navigation';
+
 // import { fitCircleService } from '@/lib/services/fitcircle-service'; // Temporarily disabled due to RLS issues
 
 export default function CirclesPage() {
@@ -25,7 +27,7 @@ export default function CirclesPage() {
 
   useEffect(() => {
     if (user) {
-      fetchMyCircles();
+      void fetchMyCircles();
     } else {
       setIsLoading(false);
     }
@@ -127,12 +129,12 @@ export default function CirclesPage() {
 
   const handleCircleCreated = () => {
     setIsCreateDialogOpen(false);
-    fetchMyCircles();
+    void fetchMyCircles();
   };
 
   const handleCircleJoined = () => {
     setIsJoinDialogOpen(false);
-    fetchMyCircles();
+    void fetchMyCircles();
   };
 
   const hasActiveCircles = myCircles.length > 0;
@@ -198,7 +200,7 @@ export default function CirclesPage() {
                       <Button
                         onClick={() => {
                           setHasError(false);
-                          fetchMyCircles();
+                          void fetchMyCircles();
                         }}
                         variant="outline"
                         className="border-red-800 hover:bg-red-900/20 text-sm"
@@ -213,11 +215,13 @@ export default function CirclesPage() {
                       </Button>
                       {process.env.NODE_ENV === 'development' && (
                         <Button
-                          onClick={async () => {
-                            const res = await fetch('/api/debug/test-circles');
-                            const data = await res.json();
-                            console.log('Debug test results:', data);
-                            alert('Check console for debug results');
+                          onClick={() => {
+                            void (async () => {
+                              const res = await fetch('/api/debug/test-circles');
+                              const data = await res.json();
+                              console.log('Debug test results:', data);
+                              alert('Check console for debug results');
+                            })();
                           }}
                           variant="outline"
                           className="border-yellow-600 hover:bg-yellow-900/20 text-sm"
@@ -272,7 +276,7 @@ export default function CirclesPage() {
                     >
                       <Card
                         className="bg-slate-900/50 border-slate-800 backdrop-blur-xl hover:border-orange-500/50 transition-all cursor-pointer"
-                        onClick={() => router.push(`/fitcircles/${circle.challenge_id || circle.id}`)}
+                        onClick={() => { void router.push(`/fitcircles/${circle.challenge_id || circle.id}`); }}
                       >
                         <CardContent className="p-6">
                           <div className="flex items-start justify-between mb-4">
@@ -336,7 +340,7 @@ export default function CirclesPage() {
         onClose={() => {
           setIsJoinDialogOpen(false);
           if (user) {
-            fetchMyCircles(); // Refresh after joining
+            void fetchMyCircles(); // Refresh after joining
           }
         }}
       />

@@ -1,8 +1,9 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
-import { UpdateProfileSchema } from '@/lib/types/onboarding';
-import { MobileAPIService } from '@/lib/services/mobile-api-service';
+import { type NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
+
+import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
+import { MobileAPIService } from '@/lib/services/mobile-api-service';
+import { UpdateProfileSchema } from '@/lib/types/onboarding';
 
 /**
  * GET /api/onboarding/profile

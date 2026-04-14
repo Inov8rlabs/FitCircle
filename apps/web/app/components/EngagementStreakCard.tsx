@@ -1,10 +1,11 @@
 'use client';
 
-import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Card, CardContent } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
 import { Flame, Trophy, Pause, Plus, CheckCircle } from 'lucide-react';
+import { useState, useEffect } from 'react';
+
+import { Button } from '@/components/ui/button';
+import { Card, CardContent } from '@/components/ui/card';
 import { useAuthStore } from '@/stores/auth-store';
 
 interface EngagementStreak {
@@ -30,8 +31,8 @@ export function EngagementStreakCard({ onOpenHistory, onOpenCheckIn }: Engagemen
 
   useEffect(() => {
     if (user) {
-      fetchStreak();
-      checkTodayCheckIn();
+      void fetchStreak();
+      void checkTodayCheckIn();
     }
   }, [user]);
 
@@ -265,7 +266,7 @@ export function EngagementStreakCard({ onOpenHistory, onOpenCheckIn }: Engagemen
                 {hasCheckedInToday ? (
                   <>
                     <CheckCircle className="h-5 w-5 mr-2" />
-                    Update Today's Stats
+                    Update Today&apos;s Stats
                   </>
                 ) : (
                   <>

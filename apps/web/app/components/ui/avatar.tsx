@@ -1,6 +1,7 @@
-import * as React from 'react';
-import { cn, getInitials } from '@/lib/utils';
 import Image from 'next/image';
+import * as React from 'react';
+
+import { cn, getInitials } from '@/lib/utils';
 
 interface AvatarProps {
   src?: string | null;

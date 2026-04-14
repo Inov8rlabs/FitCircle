@@ -5,12 +5,13 @@
  * DELETE /api/mobile/food-log/[id]/share - Revoke specific share
  */
 
-import { NextRequest, NextResponse } from 'next/server';
+import { type NextRequest, NextResponse } from 'next/server';
+import { z } from 'zod';
+
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { FoodLogService } from '@/lib/services/food-log-service';
-import { ShareFoodLogSchema } from '@/lib/validation/food-log-validation';
 import { createAdminSupabase } from '@/lib/supabase-admin';
-import { z } from 'zod';
+import { ShareFoodLogSchema } from '@/lib/validation/food-log-validation';
 
 /**
  * POST /api/mobile/food-log/[id]/share

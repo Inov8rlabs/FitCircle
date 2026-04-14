@@ -40,7 +40,7 @@ export const createBrowserSupabase = () => {
           document.cookie = cookie;
         },
         remove(name: string, options: any) {
-          this.set(name, '', { ...options, maxAge: 0 });
+          void this.set(name, '', { ...options, maxAge: 0 });
         },
       },
     }

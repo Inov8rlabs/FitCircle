@@ -1,17 +1,5 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { Button } from '@/components/ui/button';
-import { Switch } from '@/components/ui/switch';
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card';
-import { createBrowserSupabase } from '@/lib/supabase';
-import { toast } from 'sonner';
 import {
   Shield,
   Download,
@@ -23,7 +11,21 @@ import {
   FileText,
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
+import { useState, useEffect } from 'react';
+import { toast } from 'sonner';
+
 import DashboardNav from '@/components/DashboardNav';
+import { Button } from '@/components/ui/button';
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card';
+import { Switch } from '@/components/ui/switch';
+import { createBrowserSupabase } from '@/lib/supabase';
+
 
 interface PrivacySettings {
   analytics_enabled: boolean;
@@ -42,7 +44,7 @@ export default function PrivacySettingsPage() {
   const router = useRouter();
 
   useEffect(() => {
-    loadSettings();
+    void loadSettings();
   }, []);
 
   const loadSettings = async () => {
@@ -53,7 +55,7 @@ export default function PrivacySettingsPage() {
       } = await supabase.auth.getUser();
 
       if (!user) {
-        router.push('/login');
+        void router.push('/login');
         return;
       }
 
@@ -204,7 +206,7 @@ export default function PrivacySettingsPage() {
         toast.success('Your account has been deleted');
         // Sign out and redirect
         await supabase.auth.signOut();
-        router.push('/');
+        void router.push('/');
       } else {
         const error = await response.json();
         toast.error(error.error || 'Failed to delete account');

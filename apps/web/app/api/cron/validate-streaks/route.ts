@@ -7,10 +7,11 @@
  * PRD: /docs/PRD-ENGAGEMENT-V2.md
  */
 
-import { NextRequest, NextResponse } from 'next/server';
-import { verifyCronSecret, createAdminSupabase } from '@/lib/utils/api-auth';
-import { validateAllStreaks, resetWeeklyFreezes } from '@/lib/services/streak-service-v2';
+import { type NextRequest, NextResponse } from 'next/server';
+
 import { getWeekStart } from '@/lib/services/goal-service';
+import { validateAllStreaks, resetWeeklyFreezes } from '@/lib/services/streak-service-v2';
+import { verifyCronSecret, createAdminSupabase } from '@/lib/utils/api-auth';
 
 /**
  * GET /api/cron/validate-streaks

@@ -10,7 +10,8 @@
  * - Streak integration (manual entries claim streaks)
  */
 
-import { SupabaseClient } from '@supabase/supabase-js';
+import { type SupabaseClient } from '@supabase/supabase-js';
+
 import type {
   ExerciseLog,
   ExerciseLogCreateInput,

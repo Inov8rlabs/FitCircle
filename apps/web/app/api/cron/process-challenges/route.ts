@@ -1,4 +1,5 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { type NextRequest, NextResponse } from 'next/server';
+
 import { ChallengeService } from '@/lib/services/circle-challenge-service';
 
 /**

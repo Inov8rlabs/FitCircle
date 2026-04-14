@@ -1,7 +1,8 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { type NextRequest, NextResponse } from 'next/server';
+import { z } from 'zod';
+
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { NotificationPreferencesService } from '@/lib/services/notification-preferences-service';
-import { z } from 'zod';
 
 const updateSchema = z.object({
   journey_enabled: z.boolean().optional(),

@@ -4,9 +4,10 @@
  * GET /api/daily-goals/progress - Get today's progress for all daily goals
  */
 
-import { NextRequest, NextResponse } from 'next/server';
-import { createServerSupabase } from '@/lib/supabase-server';
+import { type NextRequest, NextResponse } from 'next/server';
+
 import { DailyGoalService } from '@/lib/services/daily-goals';
+import { createServerSupabase } from '@/lib/supabase-server';
 
 /**
  * GET /api/daily-goals/progress

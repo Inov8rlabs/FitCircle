@@ -1,8 +1,13 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { type NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
+
+// eslint-disable-next-line import/no-unresolved
 import { verifyAppleToken } from '@/lib/auth/apple';
+// eslint-disable-next-line import/no-unresolved
 import { generateTokens } from '@/lib/auth/jwt';
+// eslint-disable-next-line import/no-unresolved
 import { createUser, getUserByEmail } from '@/lib/db/users';
+// eslint-disable-next-line import/no-unresolved
 import { logger } from '@/lib/utils/logger';
 
 const appleAuthSchema = z.object({

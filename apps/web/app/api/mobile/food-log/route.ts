@@ -4,13 +4,14 @@
  * GET /api/mobile/food-log - Get user's food log entries (paginated)
  */
 
-import { NextRequest, NextResponse } from 'next/server';
-import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
-import { FoodLogService } from '@/lib/services/food-log-service';
-import { FeatureFlagService } from '@/lib/services/feature-flag-service';
-import { CreateFoodLogEntrySchema, FoodLogQuerySchema } from '@/lib/validation/food-log-validation';
-import { createAdminSupabase } from '@/lib/supabase-admin';
+import { type NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
+
+import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
+import { FeatureFlagService } from '@/lib/services/feature-flag-service';
+import { FoodLogService } from '@/lib/services/food-log-service';
+import { createAdminSupabase } from '@/lib/supabase-admin';
+import { CreateFoodLogEntrySchema, FoodLogQuerySchema } from '@/lib/validation/food-log-validation';
 
 /**
  * GET /api/mobile/food-log

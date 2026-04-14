@@ -1,9 +1,10 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { type NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
+
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { CircleService } from '@/lib/services/circle-service';
-import { createAdminSupabase } from '@/lib/supabase-admin';
 import { DailyGoalService } from '@/lib/services/daily-goals';
+import { createAdminSupabase } from '@/lib/supabase-admin';
 
 // Validation schema
 const joinCircleSchema = z.object({

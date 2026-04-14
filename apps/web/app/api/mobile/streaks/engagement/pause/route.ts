@@ -1,4 +1,5 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { type NextRequest, NextResponse } from 'next/server';
+
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { EngagementStreakService } from '@/lib/services/engagement-streak-service';
 import { MAX_PAUSE_DURATION_DAYS } from '@/lib/types/streak';

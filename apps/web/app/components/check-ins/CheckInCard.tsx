@@ -10,10 +10,11 @@
  * PRD: /docs/progress-history-checkin-detail-prd.md
  */
 
+import { format } from 'date-fns';
 import { motion } from 'framer-motion';
 import { Scale, Footprints, Activity, ChevronRight, Lock, Globe } from 'lucide-react';
-import { format } from 'date-fns';
-import { CheckIn } from '@/lib/services/check-in-service';
+
+import { type CheckIn } from '@/lib/services/check-in-service';
 
 // Color system from PRD
 const CHECK_IN_COLORS = {
@@ -189,7 +190,7 @@ export function CheckInCard({
             )}
             {checkIn.notes && (
               <p className="text-sm text-slate-300 line-clamp-1 flex-1">
-                "{checkIn.notes}"
+                &quot;{checkIn.notes}&quot;
               </p>
             )}
           </div>

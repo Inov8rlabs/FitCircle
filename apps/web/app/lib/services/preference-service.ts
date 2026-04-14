@@ -3,7 +3,7 @@
  */
 
 import { createAdminSupabase } from '@/lib/supabase-admin';
-import { UnitSystem } from '@/lib/utils/units';
+import { type UnitSystem } from '@/lib/utils/units';
 
 export interface UserPreferences {
   unitSystem?: UnitSystem;

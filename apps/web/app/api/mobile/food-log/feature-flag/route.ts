@@ -3,7 +3,8 @@
  * GET /api/mobile/food-log/feature-flag - Check if feature is enabled for user
  */
 
-import { NextRequest, NextResponse } from 'next/server';
+import { type NextRequest, NextResponse } from 'next/server';
+
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { FeatureFlagService } from '@/lib/services/feature-flag-service';
 import { createAdminSupabase } from '@/lib/supabase-admin';

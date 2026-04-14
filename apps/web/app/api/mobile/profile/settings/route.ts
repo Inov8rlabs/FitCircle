@@ -1,8 +1,9 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { type NextRequest, NextResponse } from 'next/server';
+import { z } from 'zod';
+
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { addAutoRefreshHeaders } from '@/lib/middleware/mobile-auto-refresh';
 import { createAdminSupabase } from '@/lib/supabase-admin';
-import { z } from 'zod';
 
 /**
  * Validation schema for profile settings

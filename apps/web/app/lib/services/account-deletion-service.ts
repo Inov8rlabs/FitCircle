@@ -1,4 +1,5 @@
 import { createAdminSupabase } from '../supabase-admin';
+
 import { recalculateLeaderboard } from './leaderboard-service-v2';
 
 // ============================================================================

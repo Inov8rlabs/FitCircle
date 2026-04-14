@@ -6,9 +6,10 @@
  * PRD: /docs/PRD-ENGAGEMENT-V2.md
  */
 
-import { NextRequest, NextResponse } from 'next/server';
-import { verifyCronSecret, createAdminSupabase } from '@/lib/utils/api-auth';
+import { type NextRequest, NextResponse } from 'next/server';
+
 import { recalculateLeaderboard } from '@/lib/services/leaderboard-service-v2';
+import { verifyCronSecret, createAdminSupabase } from '@/lib/utils/api-auth';
 
 /**
  * GET /api/cron/leaderboard-refresh

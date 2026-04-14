@@ -1,15 +1,6 @@
 'use client';
 
-import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Card, CardContent } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
 import {
   Link,
   Mail,
@@ -24,9 +15,20 @@ import {
   Smartphone,
   CheckCircle2,
 } from 'lucide-react';
+import { useState } from 'react';
+import { toast } from 'sonner';
+
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent } from '@/components/ui/card';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Textarea } from '@/components/ui/textarea';
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/stores/auth-store';
-import { toast } from 'sonner';
+
 // import QRCode from 'qrcode'; // TODO: Install when workspace issue is resolved
 
 interface InviteFriendsModalProps {
@@ -367,7 +369,7 @@ export default function InviteFriendsModal({
                     {personalMessage && (
                       <p className="italic text-gray-300">{personalMessage}</p>
                     )}
-                    <p>I'm starting a fitness challenge called "{circleName}".</p>
+                    <p>I&apos;m starting a fitness challenge called &quot;{circleName}&quot;.</p>
                     <p>✓ Your actual weight/metrics stay private</p>
                     <p>✓ We only share progress % toward goals</p>
                     <p>Click here to join: {inviteLink}</p>

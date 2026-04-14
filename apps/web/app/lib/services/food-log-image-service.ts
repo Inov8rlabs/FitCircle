@@ -4,10 +4,11 @@
  * Business logic for image uploads, processing, and management
  */
 
-import { SupabaseClient } from '@supabase/supabase-js';
+import { type SupabaseClient } from '@supabase/supabase-js';
 import sharp from 'sharp';
-import type { FoodLogImage } from '@/lib/types/food-log';
+
 import { ImageProcessingError, StorageError } from '@/lib/errors/food-log-errors';
+import type { FoodLogImage } from '@/lib/types/food-log';
 
 export class FoodLogImageService {
   /**

@@ -1,23 +1,23 @@
+import { getTemplateById } from '../data/challenge-templates';
 import { createAdminSupabase } from '../supabase-admin';
 import {
-  CircleChallenge,
-  CircleChallengeParticipant,
-  CircleChallengeLog,
-  CircleChallengeWithDetails,
-  ChallengeLeaderboardEntry,
-  LogActivityResponse,
-  ChallengeListResponse,
-  CreateCircleChallengeInput,
-  LogActivityInput,
+  type CircleChallenge,
+  type CircleChallengeParticipant,
+  type CircleChallengeLog,
+  type CircleChallengeWithDetails,
+  type ChallengeLeaderboardEntry,
+  type LogActivityResponse,
+  type ChallengeListResponse,
+  type CreateCircleChallengeInput,
+  type LogActivityInput,
   MAX_LOGS_PER_DAY,
   MAX_LOG_AMOUNT,
   MIN_LOG_AMOUNT,
   DUPLICATE_DETECTION_WINDOW_MS,
   STREAK_GRACE_HOURS,
   MILESTONES,
-  MilestoneThreshold,
+  type MilestoneThreshold,
 } from '../types/circle-challenge';
-import { getTemplateById } from '../data/challenge-templates';
 
 export class ChallengeService {
   // ============================================================================
@@ -566,7 +566,7 @@ export class ChallengeService {
 
     // Build leaderboard entries
     const entries: ChallengeLeaderboardEntry[] = (participants || []).map((p, index) => {
-      const profile = p.profiles as any;
+      const profile = p.profiles;
 
       // Reset today_total display if date doesn't match
       const displayTodayTotal = p.today_date === today ? (p.today_total || 0) : 0;

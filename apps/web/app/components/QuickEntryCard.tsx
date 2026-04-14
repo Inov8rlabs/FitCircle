@@ -1,10 +1,11 @@
 'use client';
 
-import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Card, CardContent } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
 import { Check, Loader2, X } from 'lucide-react';
+import { useState, useEffect } from 'react';
+
+import { Button } from '@/components/ui/button';
+import { Card, CardContent } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
 
 interface QuickEntryCardProps {
@@ -90,7 +91,7 @@ export function QuickEntryCard({
 
   const handleKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter' && value) {
-      handleSubmit();
+      void handleSubmit();
     }
   };
 
@@ -203,7 +204,7 @@ export function QuickEntryCard({
           {/* Submit Button */}
           <div className="mt-4">
             <Button
-              onClick={handleSubmit}
+              onClick={() => { void handleSubmit(); }}
               disabled={!value || disabled || isSubmitting}
               className={cn(
                 'w-full h-11 sm:h-12 text-base font-semibold',

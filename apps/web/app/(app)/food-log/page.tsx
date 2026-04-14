@@ -1,12 +1,13 @@
-import { createServerSupabase } from '@/lib/supabase-server';
-import { redirect } from 'next/navigation';
-import Link from 'next/link';
 import { Plus } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import Link from 'next/link';
+import { redirect } from 'next/navigation';
+
 import { FoodLogList } from '@/components/food-log/food-log-list';
-import { FoodLogService } from '@/lib/services/food-log-service';
+import { Button } from '@/components/ui/button';
 import { BeverageLogService } from '@/lib/services/beverage-log-service';
 import { FoodLogImageService } from '@/lib/services/food-log-image-service';
+import { FoodLogService } from '@/lib/services/food-log-service';
+import { createServerSupabase } from '@/lib/supabase-server';
 
 export const dynamic = 'force-dynamic';
 
@@ -69,7 +70,7 @@ export default async function FoodLogPage() {
             {/* Stats Overview */}
             <div className="grid grid-cols-2 gap-4">
                 <div className="p-4 rounded-xl bg-primary/5 border border-primary/10">
-                    <div className="text-sm text-muted-foreground">Today's Calories</div>
+                    <div className="text-sm text-muted-foreground">Today&apos;s Calories</div>
                     <div className="text-2xl font-bold text-primary">{Math.round(totalCalories)}</div>
                 </div>
                 <div className="p-4 rounded-xl bg-cyan-500/5 border border-cyan-500/10">

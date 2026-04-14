@@ -3,7 +3,8 @@
  * POST /api/mobile/food-log/[id]/images - Upload image to entry
  */
 
-import { NextRequest, NextResponse } from 'next/server';
+import { type NextRequest, NextResponse } from 'next/server';
+
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { FoodLogImageService } from '@/lib/services/food-log-image-service';
 import { createAdminSupabase } from '@/lib/supabase-admin';

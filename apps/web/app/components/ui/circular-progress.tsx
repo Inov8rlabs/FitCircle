@@ -1,8 +1,8 @@
 'use client';
 
-import * as React from 'react';
 import { motion } from 'framer-motion';
-import { LucideIcon } from 'lucide-react';
+import { type LucideIcon } from 'lucide-react';
+import * as React from 'react';
 
 interface CircularProgressProps {
   value: number;

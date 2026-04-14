@@ -1,12 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { useParams, useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { Avatar } from '@/components/ui/avatar';
 import {
   Users,
   Calendar,
@@ -24,10 +18,19 @@ import {
   Star,
   ArrowRight,
 } from 'lucide-react';
+import { useParams, useRouter } from 'next/navigation';
+import { useState, useEffect } from 'react';
+import { toast } from 'sonner';
+
+import GoalSettingForm from '@/components/GoalSettingForm';
+import { Avatar } from '@/components/ui/avatar';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/stores/auth-store';
-import { toast } from 'sonner';
-import GoalSettingForm from '@/components/GoalSettingForm';
+
+
 
 interface CircleDetails {
   id: string;
@@ -60,7 +63,7 @@ export default function JoinCirclePage() {
 
   useEffect(() => {
     if (inviteCode) {
-      validateInviteCode();
+      void validateInviteCode();
     }
   }, [inviteCode, user]);
 
@@ -171,7 +174,7 @@ export default function JoinCirclePage() {
   const handleJoinClick = () => {
     if (!user) {
       // Redirect to login/signup with return URL
-      router.push(`/login?returnUrl=/join/${inviteCode}`);
+      void router.push(`/login?returnUrl=/join/${inviteCode}`);
     } else {
       setShowGoalSetting(true);
     }
@@ -224,7 +227,7 @@ export default function JoinCirclePage() {
       if (participantError) throw participantError;
 
       toast.success('Successfully joined the FitCircle!');
-      router.push(`/fitcircles/${circleDetails.id}`);
+      void router.push(`/fitcircles/${circleDetails.id}`);
     } catch (error: any) {
       console.error('Error joining circle:', error);
       toast.error(error.message || 'Failed to join circle');
@@ -317,7 +320,7 @@ export default function JoinCirclePage() {
 
                 {/* Heading */}
                 <h1 className="text-3xl sm:text-4xl font-bold text-white mb-4">
-                  You've Been Invited!
+                  You&apos;ve Been Invited!
                 </h1>
 
                 {circleDetails ? (
@@ -361,7 +364,7 @@ export default function JoinCirclePage() {
                 <div className="space-y-4">
                   <Button
                     size="lg"
-                    onClick={() => router.push(`/register?returnUrl=/join/${inviteCode}`)}
+                    onClick={() => { void router.push(`/register?returnUrl=/join/${inviteCode}`); }}
                     className="w-full bg-gradient-to-r from-orange-600 to-purple-600 hover:from-orange-700 hover:to-purple-700 text-lg py-6"
                   >
                     Sign Up to Join
@@ -373,7 +376,7 @@ export default function JoinCirclePage() {
                     <Button
                       variant="link"
                       className="text-orange-400 hover:text-orange-300 p-0"
-                      onClick={() => router.push(`/login?returnUrl=/join/${inviteCode}`)}
+                      onClick={() => { void router.push(`/login?returnUrl=/join/${inviteCode}`); }}
                     >
                       Log in
                     </Button>
@@ -413,7 +416,7 @@ export default function JoinCirclePage() {
                 : joinError || "This invite link is not valid."}
             </p>
             <Button
-              onClick={() => router.push(isAlreadyMember ? `/fitcircles/${circleDetails?.id}` : '/fitcircles')}
+              onClick={() => { void router.push(isAlreadyMember ? `/fitcircles/${circleDetails?.id}` : '/fitcircles'); }}
               className="bg-gradient-to-r from-orange-600 to-purple-600 hover:from-orange-700 hover:to-purple-700"
             >
               {isAlreadyMember ? 'Go to Circle' : 'Browse FitCircles'}
@@ -585,7 +588,7 @@ export default function JoinCirclePage() {
                     <Button
                       variant="link"
                       className="text-orange-400 hover:text-orange-300 p-0"
-                      onClick={() => router.push(`/login?returnUrl=/join/${inviteCode}`)}
+                      onClick={() => { void router.push(`/login?returnUrl=/join/${inviteCode}`); }}
                     >
                       Log in
                     </Button>

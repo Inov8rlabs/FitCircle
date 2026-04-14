@@ -6,9 +6,10 @@
  * PRD: /docs/PRD-ENGAGEMENT-V2.md
  */
 
-import { NextRequest, NextResponse } from 'next/server';
-import { getAuthenticatedUser, createAdminSupabase } from '@/lib/utils/api-auth';
+import { type NextRequest, NextResponse } from 'next/server';
+
 import { completeCheckin } from '@/lib/services/streak-service-v2';
+import { getAuthenticatedUser, createAdminSupabase } from '@/lib/utils/api-auth';
 
 /**
  * POST /api/streaks/checkin

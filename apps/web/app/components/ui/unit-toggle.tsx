@@ -2,8 +2,9 @@
 
 import { motion } from 'framer-motion';
 import { Scale, Loader2 } from 'lucide-react';
-import { UnitSystem } from '@/lib/utils/units';
+
 import { cn } from '@/lib/utils';
+import { type UnitSystem } from '@/lib/utils/units';
 
 interface UnitToggleProps {
   value: UnitSystem;

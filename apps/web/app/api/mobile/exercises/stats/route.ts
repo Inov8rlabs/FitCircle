@@ -1,4 +1,5 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { type NextRequest, NextResponse } from 'next/server';
+
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { ExerciseService } from '@/lib/services/exercise-service';
 import { createAdminSupabase } from '@/lib/supabase-admin';

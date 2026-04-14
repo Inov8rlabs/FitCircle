@@ -1,10 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Card, CardContent } from '@/components/ui/card';
-import { Progress } from '@/components/ui/progress';
-import { Button } from '@/components/ui/button';
 import {
   Trophy,
   Medal,
@@ -14,8 +10,13 @@ import {
   RefreshCw,
   Crown,
 } from 'lucide-react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { toast } from 'sonner';
-import { ChallengeLeaderboardEntry, CircleChallengeWithDetails } from '@/lib/types/circle-challenge';
+
+import { Button } from '@/components/ui/button';
+import { Card, CardContent } from '@/components/ui/card';
+import { Progress } from '@/components/ui/progress';
+import { type ChallengeLeaderboardEntry, type CircleChallengeWithDetails } from '@/lib/types/circle-challenge';
 
 interface ChallengeLeaderboardProps {
   challenge: CircleChallengeWithDetails;
@@ -52,11 +53,11 @@ export default function ChallengeLeaderboard({
   }, [circleId, challenge.id]);
 
   useEffect(() => {
-    fetchLeaderboard();
+    void fetchLeaderboard();
 
     // Poll every 60s for active challenges
     if (challenge.status === 'active') {
-      const interval = setInterval(fetchLeaderboard, 60_000);
+      const interval = setInterval(() => { void fetchLeaderboard(); }, 60_000);
       return () => clearInterval(interval);
     }
   }, [fetchLeaderboard, challenge.status]);
@@ -224,7 +225,7 @@ export default function ChallengeLeaderboard({
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
-                    handleHighFive(entry.user_id);
+                    void handleHighFive(entry.user_id);
                   }}
                   className="p-1.5 rounded-full hover:bg-slate-700 transition-all group"
                   title="High five!"

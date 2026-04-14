@@ -9,9 +9,10 @@
  * - General health recommendations (if no challenges)
  */
 
-import { NextRequest, NextResponse } from 'next/server';
-import { createServerSupabase } from '@/lib/supabase-server';
+import { type NextRequest, NextResponse } from 'next/server';
+
 import { GoalRecommendationService } from '@/lib/services/goal-recommendations';
+import { createServerSupabase } from '@/lib/supabase-server';
 
 /**
  * GET /api/daily-goals/recommendations

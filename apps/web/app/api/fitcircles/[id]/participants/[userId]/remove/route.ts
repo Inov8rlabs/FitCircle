@@ -1,6 +1,7 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { createServerSupabase } from '@/lib/supabase-server';
+import { type NextRequest, NextResponse } from 'next/server';
+
 import { createAdminSupabase } from '@/lib/supabase-admin';
+import { createServerSupabase } from '@/lib/supabase-server';
 
 export async function POST(
   request: NextRequest,

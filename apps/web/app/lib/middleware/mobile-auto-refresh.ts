@@ -1,6 +1,7 @@
-import { NextRequest, NextResponse } from 'next/server';
 import jwt from 'jsonwebtoken';
-import { MobileAPIService, JWTPayload } from '../services/mobile-api-service';
+import { type NextRequest, type NextResponse } from 'next/server';
+
+import { MobileAPIService, type JWTPayload } from '../services/mobile-api-service';
 
 /**
  * Proactive Token Refresh Middleware

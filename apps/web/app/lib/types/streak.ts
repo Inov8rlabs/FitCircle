@@ -187,7 +187,7 @@ export const METRIC_FREQUENCY_CONFIG: Record<MetricType, MetricFrequencyConfig> 
   steps: {
     frequency: 'daily',
     grace_days: 1, // 1 rest day per week allowed
-    description: 'Daily step tracking',
+    description: 'Daily steps tracking',
   },
   mood: {
     frequency: 'daily',

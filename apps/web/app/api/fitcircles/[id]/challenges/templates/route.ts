@@ -1,4 +1,5 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { type NextRequest, NextResponse } from 'next/server';
+
 import { CHALLENGE_TEMPLATES, getTemplatesByCategory } from '@/lib/data/challenge-templates';
 
 /**

@@ -343,7 +343,7 @@ export class AssessmentService {
       const reasons: string[] = [];
 
       // Check circle metadata for matching criteria
-      const metadata = (circle.metadata as any) || {};
+      const metadata = (circle.metadata) || {};
       const circleTags = (metadata.tags as string[]) || [];
       const circleLevel = metadata.fitness_level as string;
 

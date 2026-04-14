@@ -1,9 +1,10 @@
 'use client';
 
+import Link from 'next/link';
+
+import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Button } from '@/components/ui/button';
-import Link from 'next/link';
 
 interface PrivacyModalProps {
   open: boolean;
@@ -128,7 +129,7 @@ export function PrivacyModal({ open, onClose }: PrivacyModalProps) {
             </section>
 
             <section>
-              <h3 className="text-lg font-semibold text-white mb-3">9. Children's Privacy</h3>
+              <h3 className="text-lg font-semibold text-white mb-3">9. Children&apos;s Privacy</h3>
               <p className="text-sm leading-relaxed">
                 FitCircle is not intended for users under 18. We do not knowingly collect data from minors.
               </p>

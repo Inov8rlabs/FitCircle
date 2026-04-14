@@ -1,8 +1,9 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
-import { QuestionnaireAnswersSchema } from '@/lib/types/onboarding';
-import { OnboardingService } from '@/lib/services/onboarding-service';
+import { type NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
+
+import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
+import { OnboardingService } from '@/lib/services/onboarding-service';
+import { QuestionnaireAnswersSchema } from '@/lib/types/onboarding';
 
 /**
  * POST /api/onboarding/persona

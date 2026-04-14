@@ -1,5 +1,6 @@
+import { type SupabaseClient } from '@supabase/supabase-js';
+
 import { createServerSupabase } from '@/lib/supabase-server';
-import { SupabaseClient } from '@supabase/supabase-js';
 
 interface LeaderboardEntry {
   user_id: string;
@@ -283,7 +284,7 @@ export class LeaderboardService {
       const targetDay = updateDay; // 0 = Sunday, 1 = Monday, etc.
 
       // Find the most recent update day
-      let mostRecentUpdateDate = new Date(now);
+      const mostRecentUpdateDate = new Date(now);
       const currentDay = now.getDay();
       const daysToSubtract = (currentDay - targetDay + 7) % 7;
       mostRecentUpdateDate.setDate(now.getDate() - daysToSubtract);

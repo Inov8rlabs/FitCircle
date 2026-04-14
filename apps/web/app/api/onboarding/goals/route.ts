@@ -1,9 +1,10 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { type NextRequest, NextResponse } from 'next/server';
+import { z } from 'zod';
+
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
-import { CreateGoalsSchema } from '@/lib/types/onboarding';
 import { OnboardingService } from '@/lib/services/onboarding-service';
 import { createAdminSupabase } from '@/lib/supabase-admin';
-import { z } from 'zod';
+import { CreateGoalsSchema } from '@/lib/types/onboarding';
 
 /**
  * POST /api/onboarding/goals

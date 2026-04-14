@@ -1,12 +1,13 @@
 'use client';
 
-import React from 'react';
 import { motion } from 'framer-motion';
-import { Card, CardContent } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { Progress } from '@/components/ui/progress';
 import { Users, Calendar, Trophy, Flame, Clock } from 'lucide-react';
-import { CircleChallengeWithDetails } from '@/lib/types/circle-challenge';
+import React from 'react';
+
+import { Badge } from '@/components/ui/badge';
+import { Card, CardContent } from '@/components/ui/card';
+import { Progress } from '@/components/ui/progress';
+import { type CircleChallengeWithDetails } from '@/lib/types/circle-challenge';
 
 interface ChallengeCardProps {
   challenge: CircleChallengeWithDetails;

@@ -1,9 +1,10 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import confetti from 'canvas-confetti';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Sparkles, Trophy, Star, PartyPopper } from 'lucide-react';
-import confetti from 'canvas-confetti';
+import { useEffect, useState } from 'react';
+
 import { Button } from '@/components/ui/button';
 
 interface CelebrationProps {
@@ -36,7 +37,7 @@ export default function Celebration({ onComplete, userName = 'Champion' }: Celeb
       const particleCount = 50 * (timeLeft / duration);
 
       // Shoot confetti from left
-      confetti({
+      void confetti({
         ...defaults,
         particleCount,
         origin: { x: randomInRange(0.1, 0.3), y: Math.random() - 0.2 },
@@ -44,7 +45,7 @@ export default function Celebration({ onComplete, userName = 'Champion' }: Celeb
       });
 
       // Shoot confetti from right
-      confetti({
+      void confetti({
         ...defaults,
         particleCount,
         origin: { x: randomInRange(0.7, 0.9), y: Math.random() - 0.2 },
@@ -154,7 +155,7 @@ export default function Celebration({ onComplete, userName = 'Champion' }: Celeb
               className="mb-8"
             >
               <p className="text-white/80 text-lg italic">
-                "Every expert was once a beginner. Your fitness journey starts now!"
+                &quot;Every expert was once a beginner. Your fitness journey starts now!&quot;
               </p>
             </motion.div>
 

@@ -1,7 +1,8 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { createServerSupabase } from '@/lib/supabase-server';
-import { sendInvitationEmail, sendBatchInvitationEmails } from '@/lib/email/email-service';
+import { type NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
+
+import { sendInvitationEmail, sendBatchInvitationEmails } from '@/lib/email/email-service';
+import { createServerSupabase } from '@/lib/supabase-server';
 
 // Validation schema for single invite
 const inviteSchema = z.object({

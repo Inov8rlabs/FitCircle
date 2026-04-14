@@ -1,12 +1,14 @@
 'use client';
 
-import { useEffect } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { usePathname, useRouter } from 'next/navigation';
-import { Navbar } from '@/components/layout/navbar';
+import { useEffect } from 'react';
+
 import { BottomNav } from '@/components/layout/bottom-nav';
+import { Navbar } from '@/components/layout/navbar';
 import { useAuthStore } from '@/stores/auth-store';
 import { useUIStore } from '@/stores/ui-store';
-import { motion, AnimatePresence } from 'framer-motion';
+
 
 export default function AppLayout({
   children,
@@ -19,7 +21,7 @@ export default function AppLayout({
   const { setBottomNavVisible } = useUIStore();
 
   useEffect(() => {
-    checkAuth();
+    void checkAuth();
   }, [checkAuth]);
 
   useEffect(() => {
@@ -32,7 +34,7 @@ export default function AppLayout({
   useEffect(() => {
     const publicPaths = ['/', '/login', '/register', '/forgot-password'];
     if (!isAuthenticated && !publicPaths.includes(pathname)) {
-      router.push('/login');
+      void router.push('/login');
     }
   }, [isAuthenticated, pathname, router]);
 

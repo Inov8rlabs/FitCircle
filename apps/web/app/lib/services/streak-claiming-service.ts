@@ -11,23 +11,22 @@
  */
 
 import { createAdminSupabase } from '../supabase-admin';
-import { EngagementStreakService } from './engagement-streak-service';
 import {
   StreakClaim,
   StreakShield,
   StreakRecovery,
-  ClaimResult,
-  CanClaimResult,
-  ClaimableDay,
-  ShieldStatus,
-  RecoveryInfo,
+  type ClaimResult,
+  type CanClaimResult,
+  type ClaimableDay,
+  type ShieldStatus,
+  type RecoveryInfo,
   ClaimStreakInput,
   ActivateFreezeInput,
   StartRecoveryInput,
-  HealthDataCheck,
+  type HealthDataCheck,
   StreakBreakCheck,
   RecoveryOption,
-  MilestoneInfo,
+  type MilestoneInfo,
   StreakClaimError,
   CLAIM_ERROR_CODES,
   CLAIMING_CONSTANTS,
@@ -37,6 +36,8 @@ import {
   formatDateYYYYMMDD,
   getMilestoneInfo,
 } from '../types/streak-claiming';
+
+import { EngagementStreakService } from './engagement-streak-service';
 
 export class StreakClaimingService {
   // ============================================================================

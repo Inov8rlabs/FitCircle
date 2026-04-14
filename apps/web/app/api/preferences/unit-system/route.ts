@@ -2,10 +2,11 @@
  * API endpoint for updating user unit system preference
  */
 
-import { NextRequest, NextResponse } from 'next/server';
-import { createServerSupabase } from '@/lib/supabase-server';
+import { type NextRequest, NextResponse } from 'next/server';
+
 import { PreferenceService } from '@/lib/services/preference-service';
-import { UnitSystem } from '@/lib/utils/units';
+import { createServerSupabase } from '@/lib/supabase-server';
+import { type UnitSystem } from '@/lib/utils/units';
 
 export async function GET(request: NextRequest) {
   try {

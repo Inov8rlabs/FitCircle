@@ -1,22 +1,26 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { Loader2, ArrowLeft } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { supabase } from '@/lib/supabase';
-import { CategoryCard, CategoryId } from './category-card';
-import { BeverageTypeCard } from './beverage-type-card';
-import { NutritionPreview } from './nutrition-preview';
-import { WaterPresetButton } from './water-preset-button';
+import { useState, useEffect } from 'react';
+
+
+
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
-import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
+import { Switch } from '@/components/ui/switch';
+import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/components/ui/use-toast';
-import { Loader2, ArrowLeft } from 'lucide-react';
-import { FoodLogService } from '@/lib/services/food-log-service';
 import { BeverageLogService } from '@/lib/services/beverage-log-service';
-import { BeverageType, BeverageCustomizations } from '@/lib/types/beverage-log';
+import { FoodLogService } from '@/lib/services/food-log-service';
+import { supabase } from '@/lib/supabase';
+import { BeverageType, type BeverageCustomizations } from '@/lib/types/beverage-log';
+
+import { BeverageTypeCard } from './beverage-type-card';
+import { CategoryCard, type CategoryId } from './category-card';
+import { NutritionPreview } from './nutrition-preview';
+import { WaterPresetButton } from './water-preset-button';
 
 // Mock Data for Beverage Types (Should ideally come from a constant or API)
 const BEVERAGE_TYPES: Record<string, any[]> = {

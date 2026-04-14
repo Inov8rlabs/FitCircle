@@ -1,28 +1,29 @@
 import { createAdminSupabase } from '../supabase-admin';
 import {
-  Circle,
-  CircleInvite,
-  CircleMember,
+  type Circle,
+  type CircleInvite,
+  type CircleMember,
   CircleCheckIn,
   CircleEncouragement,
-  CreateCircleInput,
-  GoalInput,
-  CheckInInput,
-  SendEncouragementInput,
-  InviteDetails,
-  CheckInResponse,
-  LeaderboardEntry,
-  CircleStats,
-  CircleWithDetails,
-  MyCirclesResponse,
-  EncouragementWithUser,
+  type CreateCircleInput,
+  type GoalInput,
+  type CheckInInput,
+  type SendEncouragementInput,
+  type InviteDetails,
+  type CheckInResponse,
+  type LeaderboardEntry,
+  type CircleStats,
+  type CircleWithDetails,
+  type MyCirclesResponse,
+  type EncouragementWithUser,
   GoalType,
-  MilestoneType,
+  type MilestoneType,
   MAX_HIGH_FIVES_PER_DAY,
   MAX_WEIGHT_LOSS_PER_WEEK_LBS,
   MAX_DAILY_STEPS,
   MAX_WEEKLY_WORKOUTS,
 } from '../types/circle';
+
 import { LeaderboardService } from './leaderboard-service';
 
 export class CircleService {
@@ -1350,7 +1351,7 @@ export class CircleService {
     console.log(`[CircleService.getTeamCollectiveStreak] Fetching team streak for circle ${circleId}`);
 
     // Get or create circle streak tracking record
-    let { data: streakTracking, error: fetchError } = await supabaseAdmin
+    const { data: streakTracking, error: fetchError } = await supabaseAdmin
       .from('circle_streak_tracking')
       .select('*')
       .eq('circle_id', circleId)

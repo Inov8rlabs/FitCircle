@@ -1,9 +1,15 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { type NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
-import { getUserByEmail } from '@/lib/db/users';
+
+// eslint-disable-next-line import/no-unresolved
 import { generatePasswordResetToken, storePasswordResetToken } from '@/lib/auth/reset-tokens';
+// eslint-disable-next-line import/no-unresolved
+import { getUserByEmail } from '@/lib/db/users';
+// eslint-disable-next-line import/no-unresolved
 import { sendPasswordResetEmail } from '@/lib/email/password-reset';
+// eslint-disable-next-line import/no-unresolved
 import { logger } from '@/lib/utils/logger';
+// eslint-disable-next-line import/no-unresolved
 import { rateLimit } from '@/lib/utils/rate-limit';
 
 const forgotPasswordSchema = z.object({

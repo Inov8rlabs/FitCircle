@@ -6,9 +6,10 @@
  * PRD: /docs/PRD-ENGAGEMENT-V2.md
  */
 
-import { NextRequest, NextResponse } from 'next/server';
-import { getAuthenticatedUser, createAdminSupabase } from '@/lib/utils/api-auth';
+import { type NextRequest, NextResponse } from 'next/server';
+
 import { getTodaySubmissions, getSubmissionStats } from '@/lib/services/data-submission-service';
+import { getAuthenticatedUser, createAdminSupabase } from '@/lib/utils/api-auth';
 
 /**
  * GET /api/fitcircles/[id]/submissions/today

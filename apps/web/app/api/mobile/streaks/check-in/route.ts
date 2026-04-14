@@ -1,12 +1,13 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { type NextRequest, NextResponse } from 'next/server';
+import { z } from 'zod';
+
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { addAutoRefreshHeaders } from '@/lib/middleware/mobile-auto-refresh';
-import { createAdminSupabase } from '@/lib/supabase-admin';
-import { z } from 'zod';
 import {
   performDailyCheckIn,
-  DailyCheckInRequest,
+  type DailyCheckInRequest,
 } from '@/lib/services/daily-checkin-service';
+import { createAdminSupabase } from '@/lib/supabase-admin';
 
 // Validation schema
 const checkInSchema = z.object({

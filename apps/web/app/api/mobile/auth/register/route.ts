@@ -1,8 +1,9 @@
-import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { type NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
-import { MobileAPIService } from '@/lib/services/mobile-api-service';
+
 import { registerRateLimiter, getIdentifier, applyRateLimit } from '@/lib/middleware/rate-limit';
+import { MobileAPIService } from '@/lib/services/mobile-api-service';
 
 // Validation schema
 const registerSchema = z.object({

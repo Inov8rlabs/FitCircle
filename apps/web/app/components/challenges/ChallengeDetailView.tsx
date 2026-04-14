@@ -1,11 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
 import { motion } from 'framer-motion';
-import { Card, CardContent } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import { Progress } from '@/components/ui/progress';
 import {
   ArrowLeft,
   Calendar,
@@ -18,13 +13,20 @@ import {
   Trash2,
   UserPlus,
 } from 'lucide-react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { toast } from 'sonner';
-import { useAuthStore } from '@/stores/auth-store';
+
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent } from '@/components/ui/card';
+import { Progress } from '@/components/ui/progress';
 import {
-  CircleChallengeWithDetails,
-  CircleChallengeLog,
-  LogActivityResponse,
+  type CircleChallengeWithDetails,
+  type CircleChallengeLog,
+  type LogActivityResponse,
 } from '@/lib/types/circle-challenge';
+import { useAuthStore } from '@/stores/auth-store';
+
 import ChallengeLeaderboard from './ChallengeLeaderboard';
 import LogActivitySheet from './LogActivitySheet';
 
@@ -78,13 +80,13 @@ export default function ChallengeDetailView({
   }, [circleId, challengeId]);
 
   useEffect(() => {
-    fetchChallenge();
-    fetchMyLogs();
+    void fetchChallenge();
+    void fetchMyLogs();
   }, [fetchChallenge, fetchMyLogs]);
 
   const handleLogSuccess = (result: LogActivityResponse) => {
-    fetchChallenge();
-    fetchMyLogs();
+    void fetchChallenge();
+    void fetchMyLogs();
   };
 
   const handleJoin = async () => {
@@ -97,7 +99,7 @@ export default function ChallengeDetailView({
       const result = await response.json();
       if (result.success) {
         toast.success('Joined the challenge!');
-        fetchChallenge();
+        void fetchChallenge();
       } else {
         throw new Error(result.error?.message);
       }
@@ -118,8 +120,8 @@ export default function ChallengeDetailView({
       const result = await response.json();
       if (result.success) {
         toast.success('Log deleted');
-        fetchChallenge();
-        fetchMyLogs();
+        void fetchChallenge();
+        void fetchMyLogs();
       }
     } catch (err) {
       toast.error('Failed to delete log');

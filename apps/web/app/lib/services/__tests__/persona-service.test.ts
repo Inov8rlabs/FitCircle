@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
+
+import { type QuestionnaireAnswers } from '../../types/onboarding';
 import { PersonaService } from '../persona-service';
-import { QuestionnaireAnswers } from '../../types/onboarding';
 
 describe('PersonaService', () => {
   describe('detectPersona', () => {

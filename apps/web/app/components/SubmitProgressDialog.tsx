@@ -1,6 +1,11 @@
 'use client';
 
+import { Footprints, TrendingUp } from 'lucide-react';
 import { useState } from 'react';
+import { toast } from 'sonner';
+
+import { BathroomScale } from '@/components/icons/BathroomScale';
+import { QuickEntryCard } from '@/components/QuickEntryCard';
 import {
   Dialog,
   DialogContent,
@@ -8,10 +13,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { QuickEntryCard } from '@/components/QuickEntryCard';
-import { BathroomScale } from '@/components/icons/BathroomScale';
-import { Footprints, TrendingUp } from 'lucide-react';
-import { toast } from 'sonner';
 import { supabase } from '@/lib/supabase';
 import { parseWeightToKg, getWeightUnit } from '@/lib/utils/units';
 

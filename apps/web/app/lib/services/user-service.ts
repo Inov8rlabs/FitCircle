@@ -1,4 +1,5 @@
 import { createAdminSupabase } from '../supabase-admin';
+
 import { LeaderboardService } from './leaderboard-service';
 
 // ============================================================================
@@ -448,7 +449,7 @@ export class UserService {
 
     // Build query for circle check-ins if circleId provided
     if (circleId) {
-      let query = supabaseAdmin
+      const query = supabaseAdmin
         .from('circle_check_ins')
         .select('id, check_in_date, check_in_value, note, created_at', { count: 'exact' })
         .eq('user_id', userId)
@@ -518,7 +519,7 @@ export class UserService {
     }
 
     // If not the user, filter by is_public flag
-    let filteredData = trackingData || [];
+    const filteredData = trackingData || [];
     if (userId !== requesterId) {
       // For now, we don't have an is_public flag in daily_tracking
       // We'll assume all entries are visible to friends (people in same circles)

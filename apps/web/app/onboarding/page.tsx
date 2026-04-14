@@ -1,13 +1,6 @@
 'use client';
 
-import { useState, Suspense } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Progress } from '@/components/ui/progress';
-import { DatePicker } from '@/components/ui/date-picker';
 import {
   User,
   Target,
@@ -21,10 +14,19 @@ import {
   CalendarDays,
   Loader2
 } from 'lucide-react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { useState, Suspense } from 'react';
+import { toast } from 'sonner';
+
 import Celebration from '@/components/Celebration';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { DatePicker } from '@/components/ui/date-picker';
+import { Input } from '@/components/ui/input';
+import { Progress } from '@/components/ui/progress';
 import { useProfile } from '@/hooks/useProfile';
 import { useAuthStore } from '@/stores/auth-store';
-import { toast } from 'sonner';
+
 
 const steps = [
   {

@@ -1,10 +1,11 @@
 'use client';
 
-import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Target, TrendingDown, TrendingUp, Sparkles, Save, X, Loader2 } from 'lucide-react';
-import { Card, CardContent } from '@/components/ui/card';
+import { useState } from 'react';
+
 import { Button } from '@/components/ui/button';
+import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 
@@ -272,7 +273,7 @@ export function GoalProgressIndicator({
                   <Sparkles className="w-5 h-5 text-yellow-400" />
                 </motion.div>
                 <span className="text-sm font-semibold text-yellow-400">
-                  You've reached your goal! 🎉
+                  You&apos;ve reached your goal! 🎉
                 </span>
               </>
             ) : isAboveGoal ? (

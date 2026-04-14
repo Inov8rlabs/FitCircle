@@ -1,14 +1,13 @@
 import { createAdminSupabase } from '../supabase-admin';
-import { MomentumService } from './momentum-service';
 import {
-  EngagementStreak,
+  type EngagementStreak,
   EngagementActivity,
-  ActivityType,
-  EngagementStreakResponse,
-  EngagementHistoryEntry,
-  EngagementHistoryResponse,
+  type ActivityType,
+  type EngagementStreakResponse,
+  type EngagementHistoryEntry,
+  type EngagementHistoryResponse,
   PauseStreakInput,
-  StreakCalculationResult,
+  type StreakCalculationResult,
   MAX_STREAK_FREEZES,
   DEFAULT_STREAK_FREEZES,
   FREEZE_RESET_INTERVAL_DAYS,
@@ -17,6 +16,8 @@ import {
   StreakError,
   STREAK_ERROR_CODES,
 } from '../types/streak';
+
+import { MomentumService } from './momentum-service';
 
 /**
  * EngagementStreakService
@@ -95,11 +96,13 @@ export class EngagementStreakService {
     console.log(`[EngagementStreakService.updateEngagementStreak] Updating streak for user ${userId}`);
 
     // Get or create engagement streak record
-    let { data: streakRecord, error: fetchError } = await supabaseAdmin
+    const fetchResult = await supabaseAdmin
       .from('engagement_streaks')
       .select('*')
       .eq('user_id', userId)
       .single();
+    let streakRecord = fetchResult.data;
+    const fetchError = fetchResult.error;
 
     if (fetchError && fetchError.code === 'PGRST116') {
       // No record exists, create one

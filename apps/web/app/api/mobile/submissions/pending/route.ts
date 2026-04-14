@@ -6,11 +6,12 @@
  * PRD: /docs/PRD-ENGAGEMENT-V2.md
  */
 
-import { NextRequest, NextResponse } from 'next/server';
+import { type NextRequest, NextResponse } from 'next/server';
+
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { addAutoRefreshHeaders } from '@/lib/middleware/mobile-auto-refresh';
-import { createAdminSupabase } from '@/lib/supabase-admin';
 import { getPendingSubmissions } from '@/lib/services/data-submission-service';
+import { createAdminSupabase } from '@/lib/supabase-admin';
 
 /**
  * GET /api/mobile/submissions/pending
