@@ -2,7 +2,12 @@ import { Resend } from 'resend';
 
 import { generateGenericNotificationEmail } from '../email/templates';
 
-const resend = new Resend(process.env.RESEND_API_KEY);
+let _resend: Resend | null = null;
+function getResend(): Resend | null {
+  if (!process.env.RESEND_API_KEY) return null;
+  if (!_resend) _resend = new Resend(process.env.RESEND_API_KEY);
+  return _resend;
+}
 const FROM_EMAIL = 'FitCircle <team@fitcircle.ai>';
 const REPLY_TO = 'team@fitcircle.ai';
 
@@ -37,6 +42,9 @@ export class NotificationService {
                 userName: payload.userName,
                 footerText: `You received this email because you have ${payload.type.replace(/_/g, ' ')} notifications enabled.`,
             });
+
+            const resend = getResend();
+            if (!resend) return false;
 
             const { data, error } = await resend.emails.send({
                 from: FROM_EMAIL,

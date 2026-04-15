@@ -1351,7 +1351,7 @@ export class CircleService {
     console.log(`[CircleService.getTeamCollectiveStreak] Fetching team streak for circle ${circleId}`);
 
     // Get or create circle streak tracking record
-    const { data: streakTracking, error: fetchError } = await supabaseAdmin
+    let { data: streakTracking, error: fetchError } = await supabaseAdmin
       .from('circle_streak_tracking')
       .select('*')
       .eq('circle_id', circleId)
