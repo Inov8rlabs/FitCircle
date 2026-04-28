@@ -123,7 +123,7 @@ export class UserService {
     // Get circles for user1
     const { data: user1Circles, error: error1 } = await supabaseAdmin
       .from('fitcircle_members')
-      .select('challenge_id')
+      .select('fitcircle_id')
       .eq('user_id', userId1)
       .eq('status', 'active');
 
@@ -132,15 +132,15 @@ export class UserService {
     // Get circles for user2
     const { data: user2Circles, error: error2 } = await supabaseAdmin
       .from('fitcircle_members')
-      .select('challenge_id')
+      .select('fitcircle_id')
       .eq('user_id', userId2)
       .eq('status', 'active');
 
     if (error2 || !user2Circles) return false;
 
     // Check for intersection
-    const user1CircleIds = new Set(user1Circles.map((c) => c.challenge_id));
-    const hasSharedCircle = user2Circles.some((c) => user1CircleIds.has(c.challenge_id));
+    const user1CircleIds = new Set(user1Circles.map((c) => c.fitcircle_id));
+    const hasSharedCircle = user2Circles.some((c) => user1CircleIds.has(c.fitcircle_id));
 
     return hasSharedCircle;
   }
@@ -277,7 +277,7 @@ export class UserService {
       .order('updated_at', { ascending: false });
 
     if (circleId) {
-      query = query.eq('challenge_id', circleId);
+      query = query.eq('fitcircle_id', circleId);
     }
 
     const { data: progressData, error: progressError } = await query.limit(1).single();

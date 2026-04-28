@@ -142,7 +142,7 @@ export class ChallengeService {
     const { data: challengeData } = await supabaseAdmin
       .from('fitcircles')
       .select('total_check_ins')
-      .eq('id', participant.challenge_id)
+      .eq('id', participant.fitcircle_id)
       .single();
 
     await supabaseAdmin
@@ -151,7 +151,7 @@ export class ChallengeService {
         total_check_ins: (challengeData?.total_check_ins || 0) + 1,
         updated_at: new Date().toISOString(),
       })
-      .eq('id', participant.challenge_id);
+      .eq('id', participant.fitcircle_id);
 
     // Update user profile streak
     await supabaseAdmin
@@ -388,7 +388,7 @@ export class ChallengeService {
     // Find participants with 7-day streaks
     const { data: sevenDayStreaks } = await supabaseAdmin
       .from('fitcircle_members')
-      .select('user_id, challenge_id')
+      .select('user_id, fitcircle_id')
       .eq('streak_days', 7);
 
     if (sevenDayStreaks) {
@@ -398,14 +398,14 @@ export class ChallengeService {
           .from('achievements')
           .select('id')
           .eq('user_id', participant.user_id)
-          .eq('challenge_id', participant.challenge_id)
+          .eq('challenge_id', participant.fitcircle_id)
           .eq('name', '7-Day Streak')
           .maybeSingle();
 
         if (!existing) {
           await this.awardAchievement(
             participant.user_id,
-            participant.challenge_id,
+            participant.fitcircle_id,
             'streak',
             '7-Day Streak',
             'Completed check-ins for 7 consecutive days',
@@ -418,7 +418,7 @@ export class ChallengeService {
     // Find participants with 30-day streaks
     const { data: thirtyDayStreaks } = await supabaseAdmin
       .from('fitcircle_members')
-      .select('user_id, challenge_id')
+      .select('user_id, fitcircle_id')
       .eq('streak_days', 30);
 
     if (thirtyDayStreaks) {
@@ -427,14 +427,14 @@ export class ChallengeService {
           .from('achievements')
           .select('id')
           .eq('user_id', participant.user_id)
-          .eq('challenge_id', participant.challenge_id)
+          .eq('challenge_id', participant.fitcircle_id)
           .eq('name', '30-Day Streak')
           .maybeSingle();
 
         if (!existing) {
           await this.awardAchievement(
             participant.user_id,
-            participant.challenge_id,
+            participant.fitcircle_id,
             'streak',
             '30-Day Streak',
             'Completed check-ins for 30 consecutive days',

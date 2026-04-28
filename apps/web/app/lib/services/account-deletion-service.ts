@@ -145,11 +145,11 @@ export class AccountDeletionService {
 
     const { data: userChallenges } = await supabaseAdmin
       .from('fitcircle_members')
-      .select('challenge_id')
+      .select('fitcircle_id')
       .eq('user_id', userId)
       .eq('status', 'active');
 
-    const challengeIdsToUpdate = (userChallenges || []).map((p) => p.challenge_id);
+    const challengeIdsToUpdate = (userChallenges || []).map((p) => p.fitcircle_id);
 
     console.log(`📊 [AccountDeletionService] Found ${challengeIdsToUpdate.length} challenges to update leaderboards`);
 
