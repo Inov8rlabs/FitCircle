@@ -140,7 +140,7 @@ export class CircleService {
     const { data: memberships, error } = await supabaseAdmin
       .from('fitcircle_members')
       .select(`
-        challenge_id,
+        fitcircle_id,
         progress_percentage,
         fitcircles!inner (
           id,
@@ -1076,7 +1076,7 @@ export class CircleService {
     const { error } = await supabaseAdmin
       .from('fitcircle_members')
       .insert({
-        challenge_id: circleId,
+        fitcircle_id: circleId,
         user_id: userId,
         invited_by: invitedBy,
         goal_type: goal?.goal_type,

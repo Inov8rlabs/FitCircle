@@ -232,7 +232,7 @@ export async function submitToAllFitCircles(
     // NOTE: Using challenge_participants table (circle_members was dropped in migration 018)
     const { data: memberships, error: memberError } = await supabase
       .from('fitcircle_members')
-      .select('challenge_id')
+      .select('fitcircle_id')
       .eq('user_id', userId)
       .eq('status', 'active');
 
@@ -251,13 +251,13 @@ export async function submitToAllFitCircles(
     for (const membership of memberships) {
       const { submission, error } = await submitToFitCircle(
         userId,
-        membership.challenge_id,
+        membership.fitcircle_id,
         date,
         supabase
       );
 
       results.push({
-        fitcircle_id: membership.challenge_id,
+        fitcircle_id: membership.fitcircle_id,
         success: !error && submission !== null,
         rank: submission?.rank_after_submission || null,
         rank_change: submission?.rank_change || 0,
@@ -295,8 +295,8 @@ export async function getPendingSubmissions(
     const { data: memberships, error: memberError } = await supabase
       .from('fitcircle_members')
       .select(`
-        challenge_id,
-        challenges:challenge_id (
+        fitcircle_id,
+        fitcircles:fitcircle_id (
           id,
           name
         )
@@ -317,11 +317,11 @@ export async function getPendingSubmissions(
     // Check submission status for each FitCircle
     const pending: PendingSubmission[] = [];
     for (const membership of memberships) {
-      const alreadySubmitted = await hasSubmittedToday(userId, membership.challenge_id, date, supabase);
+      const alreadySubmitted = await hasSubmittedToday(userId, membership.fitcircle_id, date, supabase);
 
       pending.push({
-        fitcircle_id: membership.challenge_id,
-        fitcircle_name: (membership.challenges as any)?.name || 'Unknown',
+        fitcircle_id: membership.fitcircle_id,
+        fitcircle_name: (membership.fitcircles as any)?.name || 'Unknown',
         can_submit: hasData && !alreadySubmitted,
         already_submitted: alreadySubmitted,
       });
