@@ -15,6 +15,8 @@ import {
   Loader2,
   CheckCircle2,
   AlertCircle,
+  ArrowRight,
+  Bolt,
   Lock,
   Globe,
   Mail,
@@ -25,10 +27,14 @@ import {
   Search,
   Share2,
   Sparkles,
+  Wrench,
   QrCode,
 } from 'lucide-react';
 import React, { useState } from 'react';
 import { toast } from 'sonner';
+
+import { CHALLENGE_TEMPLATES } from '@/lib/data/challenge-templates';
+import { type ChallengeCategory } from '@/lib/types/circle-challenge';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -50,6 +56,10 @@ interface CircleCreationWizardProps {
 
 type ChallengeType = 'weight_loss' | 'step_count' | 'workout_frequency' | 'custom';
 
+/** What the user wants to do for the circle's challenge: pick a starter
+ *  template, design their own, or skip and decide later. */
+type ChallengeMode = 'template' | 'custom' | 'none';
+
 interface FormData {
   name: string;
   description: string;
@@ -63,7 +73,27 @@ interface FormData {
   leaderboardFrequency: 'realtime' | 'daily' | 'weekly';
   leaderboardDay: number;
   leaderboardTime: string;
+
+  // Step 2 — Choose a Challenge
+  challengeMode: ChallengeMode;
+  selectedTemplateId: string | null;
+  templateCategoryFilter: ChallengeCategory | null;
+  customChallengeName: string;
+  customChallengeDescription: string;
+  customChallengeCategory: ChallengeCategory;
+  customChallengeGoalAmount: string;
+  customChallengeUnit: string;
+  customChallengeLoggingPrompt: string;
 }
+
+const CHALLENGE_CATEGORY_FILTERS: { label: string; value: ChallengeCategory | null }[] = [
+  { label: 'All', value: null },
+  { label: 'Strength', value: 'strength' },
+  { label: 'Cardio', value: 'cardio' },
+  { label: 'Flexibility', value: 'flexibility' },
+  { label: 'Wellness', value: 'wellness' },
+  { label: 'Custom', value: 'custom' },
+];
 
 export default function CircleCreationWizard({ isOpen, onClose, onSuccess }: CircleCreationWizardProps) {
   const { user } = useAuthStore();
@@ -79,7 +109,7 @@ export default function CircleCreationWizard({ isOpen, onClose, onSuccess }: Cir
   const [formData, setFormData] = useState<FormData>({
     name: '',
     description: '',
-    type: 'weight_loss',
+    type: 'custom', // legacy field — derived from challenge below; not user-picked
     startDate: '',
     endDate: '',
     maxParticipants: '',
@@ -89,7 +119,31 @@ export default function CircleCreationWizard({ isOpen, onClose, onSuccess }: Cir
     leaderboardFrequency: 'realtime',
     leaderboardDay: 1, // Monday
     leaderboardTime: '08:00',
+
+    // Step 2 — Choose a Challenge defaults
+    challengeMode: 'template',
+    selectedTemplateId: null,
+    templateCategoryFilter: null,
+    customChallengeName: '',
+    customChallengeDescription: '',
+    customChallengeCategory: 'custom',
+    customChallengeGoalAmount: '100',
+    customChallengeUnit: 'reps',
+    customChallengeLoggingPrompt: '',
   });
+
+  const selectedTemplate = formData.selectedTemplateId
+    ? CHALLENGE_TEMPLATES.find((t) => t.id === formData.selectedTemplateId) ?? null
+    : null;
+
+  const filteredTemplates = formData.templateCategoryFilter
+    ? CHALLENGE_TEMPLATES.filter((t) => t.category === formData.templateCategoryFilter)
+    : CHALLENGE_TEMPLATES;
+
+  const customChallengeIsValid =
+    formData.customChallengeName.trim().length >= 3 &&
+    formData.customChallengeUnit.trim().length > 0 &&
+    parseFloat(formData.customChallengeGoalAmount) > 0;
 
   const challengeTypes = [
     {
@@ -136,18 +190,30 @@ export default function CircleCreationWizard({ isOpen, onClose, onSuccess }: Cir
       case 1:
         return formData.name.length >= 3 && formData.name.length <= 50;
       case 2: {
+        // Choose a Challenge
+        switch (formData.challengeMode) {
+          case 'none':
+            return true;
+          case 'template':
+            return formData.selectedTemplateId !== null;
+          case 'custom':
+            return customChallengeIsValid;
+          default:
+            return false;
+        }
+      }
+      case 3: {
+        // Timeline (was step 2)
         if (!formData.startDate || !formData.endDate) return false;
         const start = new Date(formData.startDate + 'T00:00:00');
         const end = new Date(formData.endDate + 'T00:00:00');
         const today = new Date();
         today.setHours(0, 0, 0, 0);
-
-        // Start date must be today or later, end date must be after start, minimum 7 days
         return start >= today && end > start && calculateDuration() >= 7;
       }
-      case 3:
-        return true; // Settings are optional
       case 4:
+        return true; // Settings/Review are optional
+      case 5:
         return true; // Invites are optional
       default:
         return false;
@@ -225,7 +291,8 @@ export default function CircleCreationWizard({ isOpen, onClose, onSuccess }: Cir
       return;
     }
 
-    if (!validateStep(2)) {
+    // Timeline is now Step 3
+    if (!validateStep(3)) {
       toast.error('Please complete all required fields');
       return;
     }
@@ -332,14 +399,67 @@ export default function CircleCreationWizard({ isOpen, onClose, onSuccess }: Cir
         throw joinError;
       }
 
-      // Store circle ID, invite code and link for step 4
+      // Store circle ID, invite code and link for the invite step
       setCreatedCircleId(data.id);
       setInviteLink(inviteCode); // Store just the code, we'll format the URL in the UI
 
+      // Best-effort: attach the chosen challenge to the new circle. If this
+      // fails the circle still exists — match iOS/Android behavior and don't
+      // roll back. The user can re-attach later from the circle detail page.
+      if (formData.challengeMode !== 'none') {
+        try {
+          const challengePayload =
+            formData.challengeMode === 'template' && selectedTemplate
+              ? {
+                  template_id: selectedTemplate.id,
+                  name: selectedTemplate.name,
+                  description: selectedTemplate.description,
+                  category: selectedTemplate.category,
+                  goal_amount: selectedTemplate.goal_amount,
+                  unit: selectedTemplate.unit,
+                  logging_prompt: selectedTemplate.logging_prompt,
+                }
+              : formData.challengeMode === 'custom'
+                ? {
+                    name: formData.customChallengeName.trim(),
+                    description: formData.customChallengeDescription.trim() || null,
+                    category: formData.customChallengeCategory,
+                    goal_amount: parseFloat(formData.customChallengeGoalAmount) || 0,
+                    unit: formData.customChallengeUnit.trim(),
+                    logging_prompt:
+                      formData.customChallengeLoggingPrompt.trim() || null,
+                  }
+                : null;
+
+          if (challengePayload) {
+            const { error: challengeError } = await supabase
+              .from('challenges')
+              .insert({
+                fitcircle_id: data.id,
+                creator_id: user.id,
+                ...challengePayload,
+                is_open: true,
+                status: 'scheduled',
+                starts_at: new Date(formData.startDate + 'T00:00:00').toISOString(),
+                ends_at: new Date(formData.endDate + 'T23:59:59').toISOString(),
+              } as any);
+
+            if (challengeError) {
+              console.warn(
+                '[CircleCreationWizard] Circle created but challenge attach failed:',
+                challengeError
+              );
+            }
+          }
+        } catch (e) {
+          console.warn('[CircleCreationWizard] Challenge attach exception:', e);
+        }
+      }
+
       toast.success('FitCircle created successfully!');
 
-      // Move to step 4 (invite members)
-      setCurrentStep(4);
+      // Move to step 5 (invite members)
+      setCurrentStep(5);
     } catch (error: any) {
       console.error('Error creating FitCircle:', error);
       toast.error(error.message || 'Failed to create FitCircle');
@@ -391,10 +511,10 @@ export default function CircleCreationWizard({ isOpen, onClose, onSuccess }: Cir
           {/* Progress Indicator */}
           <div className="mb-4 sm:mb-6 px-2 sm:px-4" data-testid="progress-indicator">
             <div className="flex items-start justify-center gap-1 sm:gap-2" data-testid="step-container">
-              {[1, 2, 3, 4].map((step, index) => (
+              {[1, 2, 3, 4, 5].map((step, index) => (
                 <React.Fragment key={step}>
                   {/* Step circle and label group */}
-                  <div className="flex flex-col items-center min-w-[50px] sm:min-w-[60px]" data-testid={`step-group-${step}`}>
+                  <div className="flex flex-col items-center min-w-[44px] sm:min-w-[56px]" data-testid={`step-group-${step}`}>
                     <div
                       className={`w-8 h-8 sm:w-10 sm:h-10 rounded-full flex items-center justify-center text-sm sm:text-base font-semibold transition-all ${
                         step <= currentStep
@@ -409,19 +529,20 @@ export default function CircleCreationWizard({ isOpen, onClose, onSuccess }: Cir
                       )}
                     </div>
                     <span className={`text-[10px] sm:text-xs font-medium text-center whitespace-nowrap mt-1.5 sm:mt-2 ${currentStep >= step ? 'text-orange-400' : 'text-gray-500'}`}>
-                      {step === 1 && 'Basic Info'}
-                      {step === 2 && 'Timeline'}
-                      {step === 3 && 'Settings'}
-                      {step === 4 && 'Invite'}
+                      {step === 1 && 'Info'}
+                      {step === 2 && 'Challenge'}
+                      {step === 3 && 'Timeline'}
+                      {step === 4 && 'Settings'}
+                      {step === 5 && 'Invite'}
                     </span>
                   </div>
 
                   {/* Connecting line */}
-                  {index < 3 && (
+                  {index < 4 && (
                     <div className="flex items-center pt-4 sm:pt-5">
                       <div
                         data-testid={`connecting-line-${step}`}
-                        className={`h-0.5 sm:h-1 w-6 sm:w-12 md:w-16 rounded transition-all ${
+                        className={`h-0.5 sm:h-1 w-4 sm:w-8 md:w-12 rounded transition-all ${
                           step < currentStep
                             ? 'bg-gradient-to-r from-orange-500 to-purple-600'
                             : 'bg-slate-800'
@@ -484,60 +605,294 @@ export default function CircleCreationWizard({ isOpen, onClose, onSuccess }: Cir
                   </p>
                 </div>
 
-                <div className="space-y-2">
-                  <Label className="text-white">Challenge Type</Label>
-                  <div className="grid grid-cols-2 gap-2 sm:gap-3">
-                    {challengeTypes.map((type) => (
-                      <motion.div
-                        key={type.value}
-                        whileHover={{ scale: 1.02 }}
-                        whileTap={{ scale: 0.98 }}
-                      >
-                        <Card
-                          className={`cursor-pointer transition-all ${
-                            formData.type === type.value
-                              ? 'border-orange-500 bg-gradient-to-br ' + type.color + ' bg-opacity-20'
-                              : 'border-slate-700 bg-slate-800/30 hover:bg-slate-800/50'
-                          }`}
-                          onClick={() => setFormData({ ...formData, type: type.value })}
-                        >
-                          <CardContent className="p-3 sm:p-4">
-                            <div className="flex items-start gap-2 sm:gap-3">
-                              <div
-                                className={`p-2 rounded-lg ${
-                                  formData.type === type.value
-                                    ? 'bg-white/20'
-                                    : 'bg-slate-700/50'
-                                }`}
-                              >
-                                <type.icon className={`h-5 w-5 ${
-                                  formData.type === type.value ? 'text-white' : 'text-gray-400'
-                                }`} />
-                              </div>
-                              <div className="flex-1">
-                                <p className={`font-medium ${
-                                  formData.type === type.value ? 'text-white' : 'text-gray-300'
-                                }`}>
-                                  {type.label}
-                                </p>
-                                <p className={`text-xs mt-1 ${
-                                  formData.type === type.value ? 'text-gray-200' : 'text-gray-500'
-                                }`}>
-                                  {type.description}
-                                </p>
-                              </div>
-                            </div>
-                          </CardContent>
-                        </Card>
-                      </motion.div>
-                    ))}
-                  </div>
-                </div>
+                <p className="text-xs text-gray-400">
+                  Give your group a name. You&apos;ll pick what you&apos;re doing together next.
+                </p>
               </div>
             )}
 
-            {/* Step 2: Timeline */}
+            {/* Step 2: Choose a Challenge */}
             {currentStep === 2 && (
+              <div className="space-y-4 sm:space-y-6">
+                <div>
+                  <h3 className="text-white text-base font-semibold">Choose a challenge</h3>
+                  <p className="text-xs text-gray-400 mt-1">
+                    Kick off with a ready-made challenge, build your own, or add one later.
+                  </p>
+                </div>
+
+                {/* Mode picker */}
+                <div className="grid grid-cols-3 gap-2 sm:gap-3">
+                  {([
+                    { mode: 'template' as const, title: 'Quick Start', subtitle: 'Starter challenges', icon: Bolt },
+                    { mode: 'custom' as const, title: 'Custom', subtitle: 'Design your own', icon: Wrench },
+                    { mode: 'none' as const, title: 'Add Later', subtitle: 'Skip for now', icon: Clock },
+                  ] as const).map(({ mode, title, subtitle, icon: Icon }) => {
+                    const isSelected = formData.challengeMode === mode;
+                    return (
+                      <button
+                        key={mode}
+                        type="button"
+                        onClick={() => {
+                          setFormData({
+                            ...formData,
+                            challengeMode: mode,
+                            // Clear template selection when leaving template mode
+                            selectedTemplateId: mode === 'template' ? formData.selectedTemplateId : null,
+                          });
+                        }}
+                        className={`p-3 sm:p-4 rounded-xl border transition-all text-center ${
+                          isSelected
+                            ? 'bg-gradient-to-br from-orange-500/20 to-purple-600/20 border-orange-500/60'
+                            : 'bg-slate-800/40 border-slate-700 hover:bg-slate-800/70'
+                        }`}
+                      >
+                        <Icon
+                          className={`h-5 w-5 mx-auto mb-1.5 ${isSelected ? 'text-orange-300' : 'text-gray-400'}`}
+                        />
+                        <p className={`text-xs sm:text-sm font-semibold ${isSelected ? 'text-white' : 'text-gray-300'}`}>
+                          {title}
+                        </p>
+                        <p className={`text-[10px] sm:text-xs mt-0.5 ${isSelected ? 'text-gray-200' : 'text-gray-500'}`}>
+                          {subtitle}
+                        </p>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* Template browser */}
+                {formData.challengeMode === 'template' && (
+                  <div className="space-y-3">
+                    {/* Category filter chips */}
+                    <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1">
+                      {CHALLENGE_CATEGORY_FILTERS.map((cat) => {
+                        const isSelected = formData.templateCategoryFilter === cat.value;
+                        return (
+                          <button
+                            key={cat.label}
+                            type="button"
+                            onClick={() => setFormData({ ...formData, templateCategoryFilter: cat.value })}
+                            className={`px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all ${
+                              isSelected
+                                ? 'bg-gradient-to-r from-orange-500 to-purple-600 text-white'
+                                : 'bg-slate-800/60 text-gray-400 hover:bg-slate-800'
+                            }`}
+                          >
+                            {cat.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    {/* Template list */}
+                    {filteredTemplates.length === 0 ? (
+                      <p className="text-sm text-gray-400 py-4 text-center">
+                        No templates in this category yet.
+                      </p>
+                    ) : (
+                      <div className="space-y-2 max-h-[400px] overflow-y-auto pr-1">
+                        {filteredTemplates.map((template) => {
+                          const isSelected = formData.selectedTemplateId === template.id;
+                          return (
+                            <button
+                              key={template.id}
+                              type="button"
+                              onClick={() => {
+                                // Selecting a template auto-prefills the timeline end date
+                                // from its recommended duration so the user lands on Step 3
+                                // with a sensible default they can edit.
+                                const startDate = formData.startDate
+                                  ? new Date(formData.startDate + 'T00:00:00')
+                                  : new Date();
+                                const endDate = new Date(startDate);
+                                endDate.setDate(endDate.getDate() + template.recommended_duration_days);
+                                const yyyy = endDate.getFullYear();
+                                const mm = String(endDate.getMonth() + 1).padStart(2, '0');
+                                const dd = String(endDate.getDate()).padStart(2, '0');
+
+                                setFormData({
+                                  ...formData,
+                                  selectedTemplateId: template.id,
+                                  challengeMode: 'template',
+                                  endDate: formData.endDate || `${yyyy}-${mm}-${dd}`,
+                                });
+                              }}
+                              className={`w-full text-left p-3 rounded-xl border transition-all ${
+                                isSelected
+                                  ? 'border-orange-500 bg-gradient-to-br from-orange-500/10 to-purple-600/10'
+                                  : 'border-slate-700 bg-slate-800/30 hover:bg-slate-800/50'
+                              }`}
+                            >
+                              <div className="flex items-start gap-3">
+                                <div className="text-3xl shrink-0">{template.icon}</div>
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-white font-semibold text-sm">{template.name}</p>
+                                  <p className="text-xs text-gray-400 mt-1 line-clamp-2">
+                                    {template.description}
+                                  </p>
+                                  <p className="text-xs text-gray-500 mt-1.5 flex items-center gap-1">
+                                    <Target className="h-3 w-3" />
+                                    {template.goal_amount} {template.unit} ·{' '}
+                                    {template.recommended_duration_days} days
+                                  </p>
+                                </div>
+                                {isSelected && (
+                                  <CheckCircle2 className="h-5 w-5 text-orange-400 shrink-0 mt-0.5" />
+                                )}
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Custom challenge form */}
+                {formData.challengeMode === 'custom' && (
+                  <div className="space-y-4">
+                    <div className="space-y-2">
+                      <Label className="text-white text-sm">Challenge Name</Label>
+                      <Input
+                        placeholder="e.g., 100 Squats Daily"
+                        value={formData.customChallengeName}
+                        onChange={(e) =>
+                          setFormData({ ...formData, customChallengeName: e.target.value })
+                        }
+                        className="bg-slate-800/50 border-slate-700 text-white placeholder:text-gray-500"
+                        maxLength={50}
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label className="text-white text-sm">
+                        Description <span className="text-gray-500 text-xs">(optional)</span>
+                      </Label>
+                      <Textarea
+                        placeholder="What are people doing?"
+                        value={formData.customChallengeDescription}
+                        onChange={(e) =>
+                          setFormData({ ...formData, customChallengeDescription: e.target.value })
+                        }
+                        className="bg-slate-800/50 border-slate-700 text-white placeholder:text-gray-500 min-h-[60px]"
+                        maxLength={200}
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label className="text-white text-sm">Category</Label>
+                      <div className="flex gap-2 flex-wrap">
+                        {(['strength', 'cardio', 'flexibility', 'wellness', 'custom'] as const).map(
+                          (cat) => {
+                            const isSelected = formData.customChallengeCategory === cat;
+                            return (
+                              <button
+                                key={cat}
+                                type="button"
+                                onClick={() =>
+                                  setFormData({ ...formData, customChallengeCategory: cat })
+                                }
+                                className={`px-3 py-1.5 rounded-full text-xs font-semibold capitalize transition-all ${
+                                  isSelected
+                                    ? 'bg-gradient-to-r from-orange-500 to-purple-600 text-white'
+                                    : 'bg-slate-800/60 text-gray-400 hover:bg-slate-800'
+                                }`}
+                              >
+                                {cat}
+                              </button>
+                            );
+                          }
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-2">
+                        <Label className="text-white text-sm">Goal Total</Label>
+                        <Input
+                          inputMode="decimal"
+                          placeholder="100"
+                          value={formData.customChallengeGoalAmount}
+                          onChange={(e) => {
+                            const v = e.target.value.replace(/[^0-9.]/g, '');
+                            setFormData({ ...formData, customChallengeGoalAmount: v });
+                          }}
+                          className="bg-slate-800/50 border-slate-700 text-white placeholder:text-gray-500"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label className="text-white text-sm">Unit</Label>
+                        <Input
+                          placeholder="reps"
+                          value={formData.customChallengeUnit}
+                          onChange={(e) =>
+                            setFormData({ ...formData, customChallengeUnit: e.target.value })
+                          }
+                          className="bg-slate-800/50 border-slate-700 text-white placeholder:text-gray-500"
+                          maxLength={20}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label className="text-white text-sm">
+                        Logging Prompt <span className="text-gray-500 text-xs">(optional)</span>
+                      </Label>
+                      <Input
+                        placeholder="How many reps today?"
+                        value={formData.customChallengeLoggingPrompt}
+                        onChange={(e) =>
+                          setFormData({ ...formData, customChallengeLoggingPrompt: e.target.value })
+                        }
+                        className="bg-slate-800/50 border-slate-700 text-white placeholder:text-gray-500"
+                        maxLength={60}
+                      />
+                    </div>
+
+                    {/* Live preview */}
+                    {customChallengeIsValid && (
+                      <div className="rounded-lg p-3 bg-purple-500/10 border border-purple-500/30">
+                        <p className="text-sm text-white">
+                          Reach{' '}
+                          <span className="font-semibold">
+                            {parseFloat(formData.customChallengeGoalAmount) % 1 === 0
+                              ? parseInt(formData.customChallengeGoalAmount)
+                              : formData.customChallengeGoalAmount}{' '}
+                            {formData.customChallengeUnit.trim()}
+                          </span>{' '}
+                          —{' '}
+                          <span className="font-medium">
+                            &ldquo;{formData.customChallengeName.trim()}&rdquo;
+                          </span>
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Add Later card */}
+                {formData.challengeMode === 'none' && (
+                  <Card className="bg-slate-800/40 border-slate-700">
+                    <CardContent className="p-4">
+                      <div className="flex items-start gap-3">
+                        <Clock className="h-5 w-5 text-indigo-400 mt-0.5 shrink-0" />
+                        <div>
+                          <p className="text-white font-semibold text-sm">Add a challenge later</p>
+                          <p className="text-xs text-gray-400 mt-1">
+                            Create the circle now and invite friends. You can start a challenge
+                            anytime from the circle&apos;s detail page.
+                          </p>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
+              </div>
+            )}
+
+            {/* Step 3: Timeline */}
+            {currentStep === 3 && (
               <div className="space-y-4 sm:space-y-6">
                 <div className="grid grid-cols-2 gap-3 sm:gap-4">
                   <div className="space-y-1">
@@ -598,8 +953,8 @@ export default function CircleCreationWizard({ isOpen, onClose, onSuccess }: Cir
               </div>
             )}
 
-            {/* Step 3: Settings */}
-            {currentStep === 3 && (
+            {/* Step 4: Settings */}
+            {currentStep === 4 && (
               <div className="space-y-4 sm:space-y-6">
                 <div className="space-y-4">
                   <div className="flex items-center justify-between p-4 bg-slate-800/30 rounded-lg">
@@ -768,9 +1123,14 @@ export default function CircleCreationWizard({ isOpen, onClose, onSuccess }: Cir
                       <span className="text-white">{formData.name}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-gray-400">Type:</span>
-                      <span className="text-white">
-                        {challengeTypes.find(t => t.value === formData.type)?.label}
+                      <span className="text-gray-400">Challenge:</span>
+                      <span className="text-white text-right">
+                        {formData.challengeMode === 'template' && selectedTemplate
+                          ? selectedTemplate.name
+                          : formData.challengeMode === 'custom' &&
+                              formData.customChallengeName.trim()
+                            ? formData.customChallengeName.trim()
+                            : 'Add later'}
                       </span>
                     </div>
                     <div className="flex justify-between">
@@ -788,8 +1148,8 @@ export default function CircleCreationWizard({ isOpen, onClose, onSuccess }: Cir
               </div>
             )}
 
-            {/* Step 4: Invite Members */}
-            {currentStep === 4 && (
+            {/* Step 5: Invite Members */}
+            {currentStep === 5 && (
               <div className="space-y-4 sm:space-y-6">
                 <div className="text-center mb-4">
                   <motion.div
@@ -999,14 +1359,14 @@ export default function CircleCreationWizard({ isOpen, onClose, onSuccess }: Cir
             onClick={currentStep === 1 ? onClose : handleBack}
             size="sm"
             className="border-slate-700 hover:bg-slate-800 text-xs sm:text-sm"
-            disabled={currentStep === 4} // Can't go back from invite step
+            disabled={currentStep === 5} // Can't go back from invite step
             aria-label={currentStep === 1 ? 'Cancel' : 'Go back'}
           >
             <ChevronLeft className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
             {currentStep === 1 ? 'Cancel' : 'Back'}
           </Button>
 
-          {currentStep < 3 ? (
+          {currentStep < 4 ? (
             <Button
               onClick={handleNext}
               disabled={!validateStep(currentStep)}
@@ -1016,10 +1376,10 @@ export default function CircleCreationWizard({ isOpen, onClose, onSuccess }: Cir
               Next
               <ChevronRight className="h-3 w-3 sm:h-4 sm:w-4 ml-1 sm:ml-2" />
             </Button>
-          ) : currentStep === 3 ? (
+          ) : currentStep === 4 ? (
             <Button
               onClick={handleCreateAndContinue}
-              disabled={isCreating || !validateStep(2)}
+              disabled={isCreating || !validateStep(3)}
               size="sm"
               className="bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-xs sm:text-sm"
             >
