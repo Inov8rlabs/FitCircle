@@ -40,15 +40,29 @@ export async function POST(request: NextRequest) {
     });
 
     if (error) {
+      // Distinguish unconfirmed-email from generic invalid-credentials so clients
+      // can offer a "Resend confirmation" action. Don't reveal whether the email
+      // exists for the wrong-password case.
+      const lower = error.message.toLowerCase();
+      const isEmailNotConfirmed =
+        lower.includes('email not confirmed') || lower.includes('not confirmed');
+
       return NextResponse.json({
         success: false,
         data: null,
-        error: {
-          code: 'INVALID_CREDENTIALS',
-          message: error.message,
-          details: {},
-          timestamp: new Date().toISOString(),
-        },
+        error: isEmailNotConfirmed
+          ? {
+              code: 'EMAIL_NOT_CONFIRMED',
+              message: "We need to verify your email before you can sign in. Check your inbox for a confirmation link from FitCircle.",
+              details: {},
+              timestamp: new Date().toISOString(),
+            }
+          : {
+              code: 'INVALID_CREDENTIALS',
+              message: "The email or password you entered is incorrect. Try again, or reset your password if you've forgotten it.",
+              details: {},
+              timestamp: new Date().toISOString(),
+            },
         meta: null,
       }, { status: 401 });
     }
@@ -59,7 +73,7 @@ export async function POST(request: NextRequest) {
         data: null,
         error: {
           code: 'INVALID_CREDENTIALS',
-          message: 'Invalid credentials',
+          message: "The email or password you entered is incorrect. Try again, or reset your password if you've forgotten it.",
           details: {},
           timestamp: new Date().toISOString(),
         },

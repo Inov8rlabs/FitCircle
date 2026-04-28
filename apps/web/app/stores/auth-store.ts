@@ -57,12 +57,18 @@ export interface UserPreferences {
   language: string;
 }
 
+export type AuthErrorCode =
+  | 'INVALID_CREDENTIALS'
+  | 'EMAIL_NOT_CONFIRMED'
+  | 'UNKNOWN';
+
 interface AuthState {
   user: User | null;
   token: string | null;
   isAuthenticated: boolean;
   isLoading: boolean;
   error: string | null;
+  errorCode: AuthErrorCode | null;
 
   // Actions
   login: (email: string, password: string) => Promise<void>;
@@ -72,7 +78,9 @@ interface AuthState {
   updatePreferences: (preferences: Partial<UserPreferences>) => void;
   refreshToken: () => Promise<void>;
   resetPassword: (email: string) => Promise<void>;
+  resendConfirmation: (email: string) => Promise<void>;
   checkAuth: () => Promise<void>;
+  clearError: () => void;
 }
 
 interface RegisterData {
@@ -152,9 +160,10 @@ export const useAuthStore = create<AuthState>()(
       isAuthenticated: false,
       isLoading: false,
       error: null,
+      errorCode: null,
 
       login: async (email: string, password: string) => {
-        set({ isLoading: true, error: null });
+        set({ isLoading: true, error: null, errorCode: null });
         try {
           // Sign in with Supabase Auth
           const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
@@ -209,8 +218,27 @@ export const useAuthStore = create<AuthState>()(
             });
           }
         } catch (error: any) {
+          const lower = String(error?.message || '').toLowerCase();
+          const isEmailNotConfirmed =
+            lower.includes('email not confirmed') || lower.includes('not confirmed');
+          const isInvalidCredentials =
+            lower.includes('invalid login credentials') ||
+            lower.includes('invalid credentials') ||
+            lower.includes('invalid email or password');
+
+          let errorCode: AuthErrorCode = 'UNKNOWN';
+          let friendly = error?.message || 'Something went wrong. Please try again.';
+          if (isEmailNotConfirmed) {
+            errorCode = 'EMAIL_NOT_CONFIRMED';
+            friendly = "We need to verify your email before you can sign in. Check your inbox for a confirmation link from FitCircle.";
+          } else if (isInvalidCredentials) {
+            errorCode = 'INVALID_CREDENTIALS';
+            friendly = "The email or password you entered is incorrect. Try again, or reset your password if you've forgotten it.";
+          }
+
           set({
-            error: error.message || 'Invalid email or password',
+            error: friendly,
+            errorCode,
             isLoading: false,
           });
           throw error;
@@ -376,6 +404,23 @@ export const useAuthStore = create<AuthState>()(
           });
         }
       },
+
+      resendConfirmation: async (email: string) => {
+        // Always resolves successfully — Supabase already protects against
+        // email enumeration on resend.
+        await supabase.auth.resend({
+          type: 'signup',
+          email,
+          options: {
+            emailRedirectTo:
+              typeof window !== 'undefined'
+                ? `${window.location.origin}/auth/callback`
+                : undefined,
+          },
+        });
+      },
+
+      clearError: () => set({ error: null, errorCode: null }),
 
       checkAuth: async () => {
         set({ isLoading: true });

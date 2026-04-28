@@ -2,15 +2,15 @@
 
 import { zodResolver } from '@hookform/resolvers/zod';
 import { motion } from 'framer-motion';
-import { Mail, Lock, Eye, EyeOff, ArrowRight, Loader2 } from 'lucide-react';
+import { AlertCircle, ArrowRight, Loader2, Lock, Mail, MailCheck } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { useState, Suspense } from 'react';
+import { useEffect, useState, Suspense } from 'react';
 import { useForm } from 'react-hook-form';
 import * as z from 'zod';
 
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { LogoIcon } from '@/components/ui/logo';
 import { useAuthStore } from '@/stores/auth-store';
@@ -28,13 +28,17 @@ function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const returnUrl = searchParams.get('returnUrl');
-  const { login, isLoading } = useAuthStore();
+  const { login, isLoading, error, errorCode, clearError, resendConfirmation } = useAuthStore();
   const { showToast } = useUIStore();
   const [showPassword, setShowPassword] = useState(false);
+  const [resendStatus, setResendStatus] = useState<'idle' | 'sending' | 'sent'>('idle');
 
   const {
     register,
     handleSubmit,
+    setValue,
+    setFocus,
+    getValues,
     formState: { errors, isSubmitting },
   } = useForm<LoginFormData>({
     resolver: zodResolver(loginSchema),
@@ -44,6 +48,12 @@ function LoginForm() {
       remember: true,
     },
   });
+
+  // Reset transient store error when the user starts typing again so the
+  // banner doesn't linger after they've already begun retrying.
+  useEffect(() => {
+    return () => clearError();
+  }, [clearError]);
 
   const onSubmit = async (data: LoginFormData) => {
     try {
@@ -56,8 +66,28 @@ function LoginForm() {
       } else {
         router.push('/dashboard');
       }
-    } catch (error) {
-      showToast('Invalid email or password', 'error');
+    } catch {
+      // Error state lives in the store; clear the password field so the user
+      // can retry without manually deleting their last attempt, and refocus
+      // the password input.
+      setValue('password', '');
+      setResendStatus('idle');
+      setFocus('password');
+    }
+  };
+
+  const handleResendConfirmation = async () => {
+    const email = getValues('email');
+    if (!email) {
+      setFocus('email');
+      return;
+    }
+    setResendStatus('sending');
+    try {
+      await resendConfirmation(email);
+    } finally {
+      // Always show success — backend / Supabase don't reveal account existence.
+      setResendStatus('sent');
     }
   };
 
@@ -110,6 +140,63 @@ function LoginForm() {
                   autoComplete="current-password"
                 />
               </div>
+
+              {error && (
+                <div
+                  role="alert"
+                  aria-live="polite"
+                  className="rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm"
+                >
+                  <div className="flex gap-2 text-red-300">
+                    <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
+                    <p className="leading-snug">{error}</p>
+                  </div>
+                  {errorCode === 'INVALID_CREDENTIALS' && (
+                    <div className="mt-2 pl-6">
+                      <Link
+                        href={
+                          getValues('email')
+                            ? `/forgot-password?email=${encodeURIComponent(getValues('email'))}`
+                            : '/forgot-password'
+                        }
+                        className="inline-flex items-center text-sm font-medium text-indigo-300 hover:text-indigo-200 hover:underline"
+                      >
+                        Reset your password
+                        <ArrowRight className="ml-1 h-3.5 w-3.5" />
+                      </Link>
+                    </div>
+                  )}
+                  {errorCode === 'EMAIL_NOT_CONFIRMED' && (
+                    <div className="mt-2 pl-6">
+                      {resendStatus === 'sent' ? (
+                        <div className="inline-flex items-center text-sm text-emerald-300">
+                          <MailCheck className="mr-1.5 h-3.5 w-3.5" />
+                          Confirmation email sent — check your inbox.
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={handleResendConfirmation}
+                          disabled={resendStatus === 'sending'}
+                          className="inline-flex items-center text-sm font-medium text-indigo-300 hover:text-indigo-200 hover:underline disabled:opacity-60"
+                        >
+                          {resendStatus === 'sending' ? (
+                            <>
+                              <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                              Sending…
+                            </>
+                          ) : (
+                            <>
+                              Resend confirmation email
+                              <ArrowRight className="ml-1 h-3.5 w-3.5" />
+                            </>
+                          )}
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
 
               <div className="flex items-center justify-between">
                 <label className="flex items-center space-x-2 text-sm">
