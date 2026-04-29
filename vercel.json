@@ -15,6 +15,26 @@
     {
       "path": "/api/cron/process-challenges",
       "schedule": "1 0 * * *"
+    },
+    {
+      "path": "/api/cron/challenges",
+      "schedule": "5 0 * * *"
+    },
+    {
+      "path": "/api/cron/generate-daily-goals",
+      "schedule": "10 0 * * *"
+    },
+    {
+      "path": "/api/cron/generate-weekly-goals",
+      "schedule": "15 0 * * 1"
+    },
+    {
+      "path": "/api/cron/leaderboard-refresh",
+      "schedule": "*/15 * * * *"
+    },
+    {
+      "path": "/api/cron/validate-streaks",
+      "schedule": "5 0 * * *"
     }
   ]
 }

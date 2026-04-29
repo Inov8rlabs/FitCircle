@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { PATCH } from '@/app/api/fitcircles/[id]/update/route';
+import { PATCH } from '@/api/fitcircles/[id]/update/route';
 import {
   createMockRequest,
   createMockContext,
@@ -102,22 +102,11 @@ describe('PATCH /api/fitcircles/[id]/update', () => {
         creator_id: 'original-creator-id',
       });
 
-      const mockFrom = vi.fn((table: string) => {
-        if (table === 'challenges') {
-          return {
-            select: vi.fn().mockReturnThis(),
-            eq: vi.fn().mockReturnThis(),
-            single: vi
-              .fn()
-              .mockResolvedValue(mockQuerySuccess(mockChallenge)),
-            update: vi.fn().mockReturnThis(),
-          };
-        }
-        return {
-          select: vi.fn().mockReturnThis(),
-          eq: vi.fn().mockReturnThis(),
-        };
-      });
+      const mockFrom = vi.fn(() => ({
+        select: vi.fn().mockReturnThis(),
+        eq: vi.fn().mockReturnThis(),
+        single: vi.fn().mockResolvedValue(mockQuerySuccess(mockChallenge)),
+      }));
       mockSupabase.from = mockFrom;
 
       (createServerSupabase as any).mockResolvedValue(mockSupabase);
@@ -134,8 +123,8 @@ describe('PATCH /api/fitcircles/[id]/update', () => {
   });
 
   describe('Update Operations', () => {
-    beforeEach(() => {
-      const { createServerSupabase } = import('@/lib/supabase-server');
+    beforeEach(async () => {
+      const { createServerSupabase } = await import('@/lib/supabase-server');
       mockSupabase.auth.getUser.mockResolvedValue(
         mockAuthenticatedUser('creator-id')
       );
@@ -147,7 +136,7 @@ describe('PATCH /api/fitcircles/[id]/update', () => {
       const updatedChallenge = { ...mockChallenge, name: 'Updated Name' };
 
       const mockFrom = vi.fn((table: string) => {
-        if (table === 'challenges') {
+        if (table === 'fitcircles') {
           return {
             select: vi.fn().mockReturnThis(),
             eq: vi.fn().mockReturnThis(),
@@ -182,7 +171,7 @@ describe('PATCH /api/fitcircles/[id]/update', () => {
 
       let capturedUpdate: any;
       const mockFrom = vi.fn((table: string) => {
-        if (table === 'challenges') {
+        if (table === 'fitcircles') {
           return {
             select: vi.fn().mockReturnThis(),
             eq: vi.fn().mockReturnThis(),
@@ -225,7 +214,7 @@ describe('PATCH /api/fitcircles/[id]/update', () => {
       });
 
       const mockFrom = vi.fn((table: string) => {
-        if (table === 'challenges') {
+        if (table === 'fitcircles') {
           return {
             select: vi.fn().mockReturnThis(),
             eq: vi.fn().mockReturnThis(),
@@ -257,7 +246,7 @@ describe('PATCH /api/fitcircles/[id]/update', () => {
 
       let capturedUpdate: any;
       const mockFrom = vi.fn((table: string) => {
-        if (table === 'challenges') {
+        if (table === 'fitcircles') {
           return {
             select: vi.fn().mockReturnThis(),
             eq: vi.fn().mockReturnThis(),
@@ -300,21 +289,16 @@ describe('PATCH /api/fitcircles/[id]/update', () => {
 
       const mockChallenge = createMockChallenge({ creator_id: 'creator-id' });
 
-      const mockFrom = vi.fn((table: string) => {
-        if (table === 'challenges') {
-          return {
-            select: vi.fn().mockReturnThis(),
-            eq: vi.fn().mockReturnThis(),
-            single: vi.fn().mockResolvedValue(mockQuerySuccess(mockChallenge)),
-            update: vi.fn().mockReturnThis(),
-          };
-        }
-        return {
+      const mockFrom = vi.fn(() => ({
+        select: vi.fn().mockReturnThis(),
+        eq: vi.fn().mockReturnThis(),
+        single: vi.fn().mockResolvedValue(mockQuerySuccess(mockChallenge)),
+        update: vi.fn().mockReturnValue({
           eq: vi.fn().mockReturnThis(),
           select: vi.fn().mockReturnThis(),
           single: vi.fn().mockResolvedValue(mockQueryError('Database error')),
-        };
-      });
+        }),
+      }));
       mockSupabase.from = mockFrom;
 
       (createServerSupabase as any).mockResolvedValue(mockSupabase);

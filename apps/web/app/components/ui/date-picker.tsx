@@ -90,7 +90,7 @@ export function DatePicker({
             error && 'border-red-500 hover:border-red-400',
             disabled && 'opacity-50 cursor-not-allowed'
           )}
-          onClick={() => !disabled && inputRef.current?.showPicker()}
+          onClick={() => !disabled && inputRef.current?.showPicker?.()}
         >
           <div className="flex items-center justify-center w-10 h-10 rounded-lg bg-gradient-to-br from-purple-500/20 to-indigo-500/20">
             <Calendar className="h-5 w-5 text-purple-400" />

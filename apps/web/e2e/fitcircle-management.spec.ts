@@ -45,7 +45,7 @@ test.describe('FitCircle Creation and Management', () => {
     page,
   }) => {
     // Click on a FitCircle card
-    await page.click('[data-testid="fitcircle-card"]').first();
+    await page.locator('[data-testid="fitcircle-card"]').first().click();
 
     // Wait for detail page
     await expect(page).toHaveURL(/\/fitcircles\/.+/);
@@ -140,7 +140,7 @@ test.describe('FitCircle Creation and Management', () => {
     await page.click('button:has-text("Remove Participants")');
 
     // Click remove on a participant
-    await page.click('[data-testid="remove-participant-btn"]').first();
+    await page.locator('[data-testid="remove-participant-btn"]').first().click();
 
     // Should show confirmation dialog
     await expect(

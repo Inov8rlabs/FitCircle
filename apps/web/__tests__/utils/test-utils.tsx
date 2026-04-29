@@ -1,4 +1,5 @@
 import { render, RenderOptions } from '@testing-library/react';
+import { NextRequest } from 'next/server';
 import { ReactElement, ReactNode } from 'react';
 import { vi } from 'vitest';
 
@@ -24,10 +25,10 @@ export function createMockRequest(
   method: string,
   body?: any,
   headers?: Record<string, string>
-): Request {
+): NextRequest {
   const url = 'http://localhost:3000/api/test';
 
-  return new Request(url, {
+  return new NextRequest(url, {
     method,
     headers: {
       'Content-Type': 'application/json',
@@ -37,7 +38,7 @@ export function createMockRequest(
   });
 }
 
-export function createMockContext(params: Record<string, string>) {
+export function createMockContext<T extends Record<string, string>>(params: T) {
   return {
     params: Promise.resolve(params),
   };

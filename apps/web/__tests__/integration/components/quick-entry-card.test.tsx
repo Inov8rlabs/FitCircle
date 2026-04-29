@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, userEvent, waitFor } from '../../utils/test-utils';
 import { QuickEntryCard } from '@/components/QuickEntryCard';
 import { BathroomScale } from '@/components/icons/BathroomScale';
@@ -33,6 +33,10 @@ describe('QuickEntryCard', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockOnSubmit.mockResolvedValue(undefined);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   describe('Rendering', () => {
@@ -169,8 +173,8 @@ describe('QuickEntryCard', () => {
     });
 
     it('should hide success state after timeout', async () => {
-      const user = userEvent.setup();
-      vi.useFakeTimers();
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
 
       render(<QuickEntryCard {...defaultProps} value="75" />);
 
@@ -181,13 +185,11 @@ describe('QuickEntryCard', () => {
         expect(screen.getByText(/Saved!/i)).toBeInTheDocument();
       });
 
-      vi.advanceTimersByTime(2000);
+      await vi.advanceTimersByTimeAsync(2100);
 
       await waitFor(() => {
         expect(screen.queryByText(/Saved!/i)).not.toBeInTheDocument();
       });
-
-      vi.useRealTimers();
     });
   });
 

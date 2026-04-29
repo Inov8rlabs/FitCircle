@@ -1,0 +1,266 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint-and-typecheck:
+    name: Lint & Type Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Lint
+        run: cd apps/web && bun run lint
+
+      - name: Type check
+        run: cd apps/web && bun run type-check
+
+  test:
+    name: Unit & Integration Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Run tests with coverage
+        run: cd apps/web && bunx vitest run --coverage
+
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: apps/web/coverage/
+          retention-days: 14
+
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    needs: [lint-and-typecheck, test]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Build
+        run: cd apps/web && bun run build
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: https://placeholder.supabase.co
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: placeholder-key
+
+  e2e:
+    name: E2E Tests
+    runs-on: ubuntu-latest
+    needs: [build]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Install Playwright browsers
+        run: cd apps/web && bunx playwright install --with-deps chromium
+
+      - name: Run E2E tests
+        run: cd apps/web && bunx playwright test --project=chromium
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+
+      - name: Upload E2E report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: apps/web/playwright-report/
+          retention-days: 14
+
+  health-check:
+    name: Post-Deploy Health Check
+    runs-on: ubuntu-latest
+    needs: [build]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    steps:
+      - name: Validate required secrets
+        run: |
+          if [ -z "${{ secrets.PRODUCTION_URL }}" ]; then
+            echo "::error::PRODUCTION_URL secret is not set — cannot run health check"
+            exit 1
+          fi
+
+      - name: Wait for Vercel deployment
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+          VERCEL_TEAM_ID: ${{ secrets.VERCEL_TEAM_ID }}
+        run: |
+          # If Vercel API secrets are available, poll for deployment completion.
+          # Otherwise fall back to a timed wait with progressive back-off.
+          if [ -n "$VERCEL_TOKEN" ] && [ -n "$VERCEL_PROJECT_ID" ]; then
+            echo "Polling Vercel API for deployment status..."
+            TEAM_PARAM=""
+            if [ -n "$VERCEL_TEAM_ID" ]; then
+              TEAM_PARAM="&teamId=$VERCEL_TEAM_ID"
+            fi
+
+            for attempt in $(seq 1 20); do
+              RESPONSE=$(curl -s -H "Authorization: Bearer $VERCEL_TOKEN" \
+                "https://api.vercel.com/v6/deployments?projectId=$VERCEL_PROJECT_ID&limit=1&target=production${TEAM_PARAM}" || true)
+
+              STATE=$(echo "$RESPONSE" | python3 -c "
+          import sys, json
+          try:
+              d = json.load(sys.stdin)
+              dep = d.get('deployments', [{}])[0]
+              print(dep.get('state', dep.get('readyState', 'UNKNOWN')))
+          except Exception:
+              print('UNKNOWN')
+          " 2>/dev/null || echo "UNKNOWN")
+
+              echo "Attempt $attempt/20: deployment state = $STATE"
+
+              if [ "$STATE" = "READY" ]; then
+                echo "Vercel deployment is READY"
+                break
+              elif [ "$STATE" = "ERROR" ] || [ "$STATE" = "CANCELED" ]; then
+                echo "::error::Vercel deployment finished with state: $STATE"
+                exit 1
+              fi
+
+              sleep 15
+            done
+
+            if [ "$STATE" != "READY" ]; then
+              echo "::warning::Timed out waiting for Vercel deployment (last state: $STATE). Proceeding with health check anyway."
+            fi
+          else
+            echo "Vercel API secrets not configured — using timed wait"
+            echo "Set VERCEL_TOKEN and VERCEL_PROJECT_ID secrets to enable deployment polling"
+            # Progressive back-off: 30s + 30s + 30s = 90s total
+            for i in 1 2 3; do
+              echo "Waiting 30s (cycle $i/3)..."
+              sleep 30
+            done
+          fi
+
+      - name: Run health check
+        id: health
+        run: |
+          HEALTH_URL="${{ secrets.PRODUCTION_URL }}/api/health"
+          echo "Checking $HEALTH_URL ..."
+
+          PASSED=false
+          for i in 1 2 3 4 5; do
+            STATUS=$(curl -s -o /tmp/health_response.json -w "%{http_code}" "$HEALTH_URL" || true)
+            BODY=$(cat /tmp/health_response.json 2>/dev/null || echo "{}")
+
+            if [ "$STATUS" = "200" ]; then
+              echo "Health check passed on attempt $i"
+              echo "status=passed" >> "$GITHUB_OUTPUT"
+              PASSED=true
+              break
+            fi
+
+            echo "Attempt $i/5: HTTP $STATUS — retrying in 15s..."
+            sleep 15
+          done
+
+          if [ "$PASSED" != "true" ]; then
+            echo "status=failed" >> "$GITHUB_OUTPUT"
+            echo "::error::Health check failed after 5 attempts (last HTTP status: $STATUS)"
+            exit 1
+          fi
+
+      - name: Write job summary
+        if: always()
+        run: |
+          HEALTH_URL="${{ secrets.PRODUCTION_URL }}/api/health"
+          RESULT="${{ steps.health.outputs.status }}"
+
+          if [ "$RESULT" = "passed" ]; then
+            echo "### Health Check Passed" >> "$GITHUB_STEP_SUMMARY"
+            echo "Endpoint: \`$HEALTH_URL\`" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "### Health Check Failed" >> "$GITHUB_STEP_SUMMARY"
+            echo "Endpoint: \`$HEALTH_URL\`" >> "$GITHUB_STEP_SUMMARY"
+            echo "Review the deployment logs for details." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+  # Aggregated status gate — branch protection rules and external monitors
+  # only need to watch this single job.
+  ci-status:
+    name: CI Status
+    runs-on: ubuntu-latest
+    if: always()
+    needs: [lint-and-typecheck, test, build, e2e, health-check]
+    steps:
+      - name: Evaluate pipeline result
+        run: |
+          echo "## CI Pipeline Summary" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Job | Result |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|-----|--------|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Lint & Type Check | \`${{ needs.lint-and-typecheck.result }}\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Tests | \`${{ needs.test.result }}\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Build | \`${{ needs.build.result }}\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| E2E | \`${{ needs.e2e.result }}\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Health Check | \`${{ needs.health-check.result }}\` |" >> "$GITHUB_STEP_SUMMARY"
+
+          # health-check is allowed to be skipped (only runs on main pushes)
+          LINT="${{ needs.lint-and-typecheck.result }}"
+          TEST="${{ needs.test.result }}"
+          BUILD="${{ needs.build.result }}"
+          E2E="${{ needs.e2e.result }}"
+          HC="${{ needs.health-check.result }}"
+
+          FAILED=false
+          for JOB_RESULT in "$LINT" "$TEST" "$BUILD" "$E2E"; do
+            if [ "$JOB_RESULT" = "failure" ] || [ "$JOB_RESULT" = "cancelled" ]; then
+              FAILED=true
+            fi
+          done
+
+          # health-check failure is also a failure, but skipped is fine
+          if [ "$HC" = "failure" ]; then
+            FAILED=true
+          fi
+
+          if [ "$FAILED" = "true" ]; then
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "**Result: FAILED**" >> "$GITHUB_STEP_SUMMARY"
+            echo "::error::CI pipeline failed — see individual job logs above"
+            exit 1
+          fi
+
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "**Result: PASSED**" >> "$GITHUB_STEP_SUMMARY"

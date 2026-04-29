@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { POST } from '@/app/api/fitcircles/[id]/participants/[userId]/remove/route';
+import { POST } from '@/api/fitcircles/[id]/participants/[userId]/remove/route';
 import {
   createMockRequest,
   createMockContext,
@@ -15,6 +15,10 @@ import {
 
 vi.mock('@/lib/supabase-server', () => ({
   createServerSupabase: vi.fn(),
+}));
+
+vi.mock('@/lib/supabase-admin', () => ({
+  createAdminSupabase: vi.fn(),
 }));
 
 describe('POST /api/fitcircles/[id]/participants/[userId]/remove', () => {
@@ -142,6 +146,7 @@ describe('POST /api/fitcircles/[id]/participants/[userId]/remove', () => {
   describe('Remove Participant', () => {
     it('should successfully remove a participant', async () => {
       const { createServerSupabase } = await import('@/lib/supabase-server');
+      const { createAdminSupabase } = await import('@/lib/supabase-admin');
       const creatorId = 'creator-id';
       const participantId = 'participant-id';
 
@@ -151,34 +156,33 @@ describe('POST /api/fitcircles/[id]/participants/[userId]/remove', () => {
 
       const mockChallenge = createMockChallenge({ creator_id: creatorId });
 
-      let updateCalled = false;
-      let capturedStatus: string | undefined;
+      // Mock server client for fetching fitcircle
+      const mockFrom = vi.fn(() => ({
+        select: vi.fn().mockReturnThis(),
+        eq: vi.fn().mockReturnThis(),
+        single: vi.fn().mockResolvedValue(mockQuerySuccess(mockChallenge)),
+      }));
+      mockSupabase.from = mockFrom;
+      (createServerSupabase as any).mockResolvedValue(mockSupabase);
 
-      const mockFrom = vi.fn((table: string) => {
-        if (table === 'challenges') {
+      // Mock admin client for deleting member
+      let deleteCalled = false;
+      const mockAdminFrom = vi.fn((table: string) => {
+        if (table === 'fitcircle_members') {
           return {
-            select: vi.fn().mockReturnThis(),
-            eq: vi.fn().mockReturnThis(),
-            single: vi.fn().mockResolvedValue(mockQuerySuccess(mockChallenge)),
-          };
-        }
-        if (table === 'challenge_participants') {
-          return {
-            update: vi.fn((data) => {
-              updateCalled = true;
-              capturedStatus = data.status;
+            delete: vi.fn(() => {
+              deleteCalled = true;
               return {
-                eq: vi.fn().mockReturnThis(),
+                eq: vi.fn().mockReturnValue({
+                  eq: vi.fn().mockResolvedValue({ error: null }),
+                }),
               };
             }),
-            eq: vi.fn().mockReturnThis(),
           };
         }
         return {};
       });
-      mockSupabase.from = mockFrom;
-
-      (createServerSupabase as any).mockResolvedValue(mockSupabase);
+      (createAdminSupabase as any).mockReturnValue({ from: mockAdminFrom });
 
       const request = createMockRequest('POST');
       const context = createMockContext({
@@ -191,12 +195,12 @@ describe('POST /api/fitcircles/[id]/participants/[userId]/remove', () => {
 
       expect(response.status).toBe(200);
       expect(data.success).toBe(true);
-      expect(updateCalled).toBe(true);
-      expect(capturedStatus).toBe('removed');
+      expect(deleteCalled).toBe(true);
     });
 
     it('should handle database errors when removing participant', async () => {
       const { createServerSupabase } = await import('@/lib/supabase-server');
+      const { createAdminSupabase } = await import('@/lib/supabase-admin');
       const creatorId = 'creator-id';
 
       mockSupabase.auth.getUser.mockResolvedValue(
@@ -205,28 +209,31 @@ describe('POST /api/fitcircles/[id]/participants/[userId]/remove', () => {
 
       const mockChallenge = createMockChallenge({ creator_id: creatorId });
 
-      const mockFrom = vi.fn((table: string) => {
-        if (table === 'challenges') {
+      // Mock server client for fetching fitcircle
+      const mockFrom = vi.fn(() => ({
+        select: vi.fn().mockReturnThis(),
+        eq: vi.fn().mockReturnThis(),
+        single: vi.fn().mockResolvedValue(mockQuerySuccess(mockChallenge)),
+      }));
+      mockSupabase.from = mockFrom;
+      (createServerSupabase as any).mockResolvedValue(mockSupabase);
+
+      // Mock admin client to return an error on delete
+      const mockAdminFrom = vi.fn((table: string) => {
+        if (table === 'fitcircle_members') {
           return {
-            select: vi.fn().mockReturnThis(),
-            eq: vi.fn().mockReturnThis(),
-            single: vi.fn().mockResolvedValue(mockQuerySuccess(mockChallenge)),
-          };
-        }
-        if (table === 'challenge_participants') {
-          return {
-            update: vi.fn().mockReturnValue({
-              eq: vi.fn().mockResolvedValue({
-                error: { message: 'Database error' },
+            delete: vi.fn().mockReturnValue({
+              eq: vi.fn().mockReturnValue({
+                eq: vi.fn().mockResolvedValue({
+                  error: { message: 'Database error' },
+                }),
               }),
             }),
           };
         }
         return {};
       });
-      mockSupabase.from = mockFrom;
-
-      (createServerSupabase as any).mockResolvedValue(mockSupabase);
+      (createAdminSupabase as any).mockReturnValue({ from: mockAdminFrom });
 
       const request = createMockRequest('POST');
       const context = createMockContext({

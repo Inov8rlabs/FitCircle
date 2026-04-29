@@ -82,7 +82,7 @@ test.describe('Food & Beverage Logging', () => {
     });
 
     test('should create a meal entry', async ({ page }) => {
-        await page.getByRole('button').filter({ hasChild: page.locator('svg.lucide-plus') }).click();
+        await page.getByRole('button').filter({ has: page.locator('svg.lucide-plus') }).click();
         await expect(page.getByRole('heading', { name: 'New Entry' })).toBeVisible();
 
         // Select Meal
@@ -103,7 +103,7 @@ test.describe('Food & Beverage Logging', () => {
     });
 
     test('should create a water entry', async ({ page }) => {
-        await page.getByRole('button').filter({ hasChild: page.locator('svg.lucide-plus') }).click();
+        await page.getByRole('button').filter({ has: page.locator('svg.lucide-plus') }).click();
 
         // Select Water
         await page.getByText('Water', { exact: true }).click();
@@ -122,7 +122,7 @@ test.describe('Food & Beverage Logging', () => {
     });
 
     test('should create a beverage entry', async ({ page }) => {
-        await page.getByRole('button').filter({ hasChild: page.locator('svg.lucide-plus') }).click();
+        await page.getByRole('button').filter({ has: page.locator('svg.lucide-plus') }).click();
 
         // Select Coffee
         await page.getByText('Coffee', { exact: true }).click();
