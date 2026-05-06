@@ -255,22 +255,32 @@ export class EngagementStreakService {
       );
     }
 
-    // Check if there's already an activity on that date
-    const { data: existingActivity } = await supabaseAdmin
+    // Check if there's already an activity on that date.
+    // Use limit(1) instead of single() so we don't throw on multiple rows
+    // (a user can have multiple activity rows per day — food/weight/steps).
+    const { data: existingRows, error: existsError } = await supabaseAdmin
       .from('engagement_activities')
-      .select('id')
+      .select('id, activity_type')
       .eq('user_id', userId)
       .eq('activity_date', targetDate)
-      .single();
+      .limit(1);
 
-    if (existingActivity) {
+    if (existsError) {
+      console.error('[applyFreeze] Error checking existing activity:', existsError);
+      throw existsError;
+    }
+
+    if (existingRows && existingRows.length > 0) {
       throw new StreakError(
         STREAK_ERROR_CODES.DATE_HAS_ACTIVITY,
         'That date already has activity - no freeze needed'
       );
     }
 
-    // Create a freeze activity for the missed date
+    // Create a freeze activity for the missed date.
+    // Tolerate a unique-constraint collision (Postgres SQLSTATE 23505) so a
+    // double-tap is idempotent — the existence check above already covers
+    // the common case, this is belt-and-suspenders.
     const { error: insertError } = await supabaseAdmin
       .from('engagement_activities')
       .insert({
@@ -280,7 +290,7 @@ export class EngagementStreakService {
         reference_id: null,
       });
 
-    if (insertError) {
+    if (insertError && insertError.code !== '23505') {
       console.error('[applyFreeze] Error creating freeze activity:', insertError);
       throw insertError;
     }

@@ -115,15 +115,23 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Generic error
+    // Generic error — surface enough detail to diagnose without leaking secrets.
+    // The mobile client just shows error.message in an alert, so make it actionable.
+    const detailedMessage = [
+      error.message || 'An unexpected error occurred',
+      error.code ? `(code: ${error.code})` : null,
+    ].filter(Boolean).join(' ');
+
     return NextResponse.json(
       {
         success: false,
         data: null,
         error: {
-          code: 'INTERNAL_SERVER_ERROR',
-          message: 'An unexpected error occurred',
-          details: {},
+          code: error.code || 'INTERNAL_SERVER_ERROR',
+          message: detailedMessage,
+          details: process.env.NODE_ENV === 'development'
+            ? { hint: error.hint, details: error.details }
+            : {},
           timestamp: new Date().toISOString(),
         },
         meta: null,
