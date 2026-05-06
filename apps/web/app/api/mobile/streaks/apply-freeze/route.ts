@@ -40,9 +40,17 @@ export async function POST(request: NextRequest) {
     // Verify authentication
     const user = await requireMobileAuth(request);
 
-    // Parse request body
-    const body = await request.json();
-    const { missedDate } = body as { missedDate?: string };
+    // Parse request body (tolerant of empty/missing bodies — defaults to yesterday)
+    let missedDate: string | undefined;
+    try {
+      const text = await request.text();
+      if (text) {
+        const body = JSON.parse(text) as { missedDate?: string };
+        missedDate = body.missedDate;
+      }
+    } catch {
+      // Malformed JSON — fall through with undefined missedDate (defaults to yesterday)
+    }
 
     console.log(`[Apply Freeze] User ${user.id} applying freeze for date: ${missedDate || 'yesterday'}`);
 
