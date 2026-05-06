@@ -29,8 +29,8 @@ CREATE TABLE IF NOT EXISTS challenge_templates (
 );
 
 -- Index for filtered queries
-CREATE INDEX idx_templates_category ON challenge_templates(category, is_active);
-CREATE INDEX idx_templates_difficulty ON challenge_templates(difficulty, is_active);
+CREATE INDEX IF NOT EXISTS idx_templates_category ON challenge_templates(category, is_active);
+CREATE INDEX IF NOT EXISTS idx_templates_difficulty ON challenge_templates(difficulty, is_active);
 
 -- ============================================================================
 -- RLS: Public read for authenticated users
@@ -38,6 +38,7 @@ CREATE INDEX idx_templates_difficulty ON challenge_templates(difficulty, is_acti
 
 ALTER TABLE challenge_templates ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Authenticated users can read templates" ON challenge_templates;
 CREATE POLICY "Authenticated users can read templates"
   ON challenge_templates FOR SELECT
   USING (auth.uid() IS NOT NULL);
