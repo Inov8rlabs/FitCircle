@@ -90,10 +90,23 @@ export const STREAK_MILESTONES = [
 // ============================================================================
 
 /**
- * Get today's date in ISO format (YYYY-MM-DD)
+ * Get today's date in ISO format (YYYY-MM-DD).
+ * Accepts an optional IANA timezone (e.g. "America/Toronto") so the date
+ * reflects the user's local "today" rather than the Vercel server's UTC.
+ * Falls back to UTC for unknown/missing timezones.
  */
-function getTodayDateString(): string {
-  return new Date().toISOString().split('T')[0];
+function getTodayDateString(timezone?: string): string {
+  if (!timezone) return new Date().toISOString().split('T')[0];
+  try {
+    return new Intl.DateTimeFormat('en-CA', {
+      timeZone: timezone,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(new Date());
+  } catch {
+    return new Date().toISOString().split('T')[0];
+  }
 }
 
 /**
@@ -496,9 +509,10 @@ export async function performDailyCheckIn(
  */
 export async function getStreakStatus(
   userId: string,
-  supabase: SupabaseClient
+  supabase: SupabaseClient,
+  timezone?: string
 ): Promise<StreakStatusResponse> {
-  const today = getTodayDateString();
+  const today = getTodayDateString(timezone);
 
   // Get streak record
   const { data: streak } = await supabase
@@ -548,14 +562,16 @@ export async function getStreakStatus(
   const claimDates = new Set((claims || []).map(c => c.claim_date));
   const hasCheckedInToday = claimDates.has(today);
 
-  // Calculate current streak by counting backwards from today
+  // Calculate current streak by counting backwards from the user's local
+  // "today" (anchored on the timezone-aware `today` string above). Use UTC
+  // operations on a Date constructed from the date string so day arithmetic
+  // doesn't drift across the server's local timezone or DST.
   let currentStreak = 0;
-  const todayDate = new Date();
-  todayDate.setHours(0, 0, 0, 0);
+  const todayDate = new Date(`${today}T00:00:00Z`);
 
   for (let i = 0; i < 90; i++) {
     const checkDate = new Date(todayDate);
-    checkDate.setDate(checkDate.getDate() - i);
+    checkDate.setUTCDate(checkDate.getUTCDate() - i);
     const checkDateStr = checkDate.toISOString().split('T')[0];
 
     if (claimDates.has(checkDateStr)) {

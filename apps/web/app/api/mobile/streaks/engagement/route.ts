@@ -14,8 +14,11 @@ export async function GET(request: NextRequest) {
 
     console.log('[GET /api/mobile/streaks/engagement] Fetching streak for user:', user.id);
 
+    // Honour the device's local timezone so date math doesn't drift to UTC.
+    const timezone = request.headers.get('x-client-timezone') || undefined;
+
     // Get engagement streak
-    const streak = await EngagementStreakService.getEngagementStreak(user.id);
+    const streak = await EngagementStreakService.getEngagementStreak(user.id, timezone);
 
     return NextResponse.json({ success: true, data: streak });
 

@@ -231,16 +231,16 @@ export class EngagementStreakService {
 
     if (fetchError) {
       throw new StreakError(
-        STREAK_ERROR_CODES.STREAK_NOT_FOUND,
-        'No streak record found for user'
+        'No streak record found for user',
+        STREAK_ERROR_CODES.STREAK_NOT_FOUND
       );
     }
 
     // Check if user has freezes available
     if (streakRecord.streak_freezes_available <= 0) {
       throw new StreakError(
-        STREAK_ERROR_CODES.NO_FREEZES_AVAILABLE,
-        'No streak freezes available'
+        'No streak freezes available',
+        STREAK_ERROR_CODES.NO_FREEZES_AVAILABLE
       );
     }
 
@@ -254,8 +254,8 @@ export class EngagementStreakService {
     const daysDiff = Math.floor((today.getTime() - targetDateObj.getTime()) / (1000 * 60 * 60 * 24));
     if (daysDiff < 1 || daysDiff > 7) {
       throw new StreakError(
-        STREAK_ERROR_CODES.INVALID_DATE_RANGE,
-        'Can only apply freeze to missed days within the past 7 days'
+        'Can only apply freeze to missed days within the past 7 days',
+        STREAK_ERROR_CODES.INVALID_DATE_RANGE
       );
     }
 
@@ -276,8 +276,8 @@ export class EngagementStreakService {
 
     if (existingRows && existingRows.length > 0) {
       throw new StreakError(
-        STREAK_ERROR_CODES.DATE_HAS_ACTIVITY,
-        'That date already has activity - no freeze needed'
+        'That date already has activity - no freeze needed',
+        STREAK_ERROR_CODES.DATE_HAS_ACTIVITY
       );
     }
 
@@ -345,10 +345,13 @@ export class EngagementStreakService {
    * Get user's engagement streak details
    * Recalculates from streak_claims to prevent stale values
    */
-  static async getEngagementStreak(userId: string): Promise<EngagementStreakResponse> {
+  static async getEngagementStreak(
+    userId: string,
+    timezone?: string
+  ): Promise<EngagementStreakResponse> {
     const supabaseAdmin = createAdminSupabase();
 
-    console.log(`[EngagementStreakService.getEngagementStreak] Fetching streak for user ${userId}`);
+    console.log(`[EngagementStreakService.getEngagementStreak] Fetching streak for user ${userId} (tz=${timezone || 'UTC default'})`);
 
     const { data: streakRecord, error } = await supabaseAdmin
       .from('engagement_streaks')
@@ -381,14 +384,22 @@ export class EngagementStreakService {
       .order('claim_date', { ascending: false });
 
     const claimDates = new Set((claims || []).map(c => c.claim_date));
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    // Anchor "today" on the user's local timezone when provided, otherwise UTC.
+    const todayStr = timezone
+      ? new Intl.DateTimeFormat('en-CA', {
+          timeZone: timezone,
+          year: 'numeric',
+          month: '2-digit',
+          day: '2-digit',
+        }).format(new Date())
+      : new Date().toISOString().split('T')[0];
+    const today = new Date(`${todayStr}T00:00:00Z`);
 
     let currentStreak = 0;
     for (let i = 0; i < 90; i++) {
       const checkDate = new Date(today);
-      checkDate.setDate(checkDate.getDate() - i);
-      const checkDateStr = this.formatDate(checkDate);
+      checkDate.setUTCDate(checkDate.getUTCDate() - i);
+      const checkDateStr = checkDate.toISOString().split('T')[0];
 
       if (claimDates.has(checkDateStr)) {
         currentStreak++;
