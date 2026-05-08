@@ -31,8 +31,11 @@ export async function GET(request: NextRequest) {
     const user = await requireMobileAuth(request);
     const supabaseAdmin = createAdminSupabase();
 
+    // Honour the device's local timezone so date math doesn't drift to UTC.
+    const timezone = request.headers.get('x-client-timezone') || undefined;
+
     // Get streak status
-    const status = await getStreakStatus(user.id, supabaseAdmin);
+    const status = await getStreakStatus(user.id, supabaseAdmin, timezone);
 
     const response = NextResponse.json({
       success: true,
