@@ -472,7 +472,11 @@ export class CircleService {
 
   /**
    * List public, joinable circles the user is not already in.
-   * Returns up to `limit` circles, ordered by most recent first.
+   * Two buckets are returned together, ordered by recency:
+   *   - is_official=true circles (platform-curated; visible even if the
+   *     viewer is the creator — the creator is just whoever happens to
+   *     own the row in DB, not a meaningful authorship signal)
+   *   - other public circles created by anyone except the viewer
    */
   static async getJoinablePublicCircles(
     userId: string,
@@ -489,12 +493,15 @@ export class CircleService {
     const memberCircleIds = (memberships ?? []).map(m => m.fitcircle_id);
 
     // Build the public-circles query.
+    // Either is_official=true OR the caller isn't the creator. Supabase
+    // expresses OR via `.or()` with PostgREST filter syntax.
     let query = supabaseAdmin
       .from('fitcircles')
       .select('*')
       .eq('visibility', 'public')
       .in('status', ['upcoming', 'active'])
-      .neq('creator_id', userId)
+      .or(`is_official.eq.true,creator_id.neq.${userId}`)
+      .order('is_official', { ascending: false })
       .order('created_at', { ascending: false })
       .limit(limit);
 
