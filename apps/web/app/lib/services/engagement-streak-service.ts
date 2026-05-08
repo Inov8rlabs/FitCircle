@@ -90,10 +90,13 @@ export class EngagementStreakService {
    * Calculate and update engagement streak with grace logic
    * Returns current streak, longest streak, freezes available
    */
-  static async updateEngagementStreak(userId: string): Promise<EngagementStreakResponse> {
+  static async updateEngagementStreak(
+    userId: string,
+    todayStr?: string
+  ): Promise<EngagementStreakResponse> {
     const supabaseAdmin = createAdminSupabase();
 
-    console.log(`[EngagementStreakService.updateEngagementStreak] Updating streak for user ${userId}`);
+    console.log(`[EngagementStreakService.updateEngagementStreak] Updating streak for user ${userId}, today=${todayStr || 'UTC default'}`);
 
     // Get or create engagement streak record
     const fetchResult = await supabaseAdmin
@@ -160,7 +163,8 @@ export class EngagementStreakService {
     const calculation = this.calculateStreakWithGrace(
       claimActivities,
       streakRecord.streak_freezes_available,
-      streakRecord.last_engagement_date
+      streakRecord.last_engagement_date,
+      todayStr
     );
 
     console.log(`[EngagementStreakService.updateEngagementStreak] Calculation result:`, calculation);
@@ -326,8 +330,15 @@ export class EngagementStreakService {
 
     console.log(`[applyFreeze] Successfully applied freeze for ${targetDate}`);
 
-    // Recalculate streak (should now include the frozen day)
-    return await this.updateEngagementStreak(userId);
+    // Recalculate streak using the user's local "today" (= missedDate + 1).
+    // Without this, the recalc walks backwards from UTC's "today" which can be
+    // off by a day for users east of UTC late evening or west of UTC early
+    // morning, masking the freeze we just inserted on the user's yesterday.
+    const userTodayDate = new Date(`${targetDate}T00:00:00Z`);
+    userTodayDate.setUTCDate(userTodayDate.getUTCDate() + 1);
+    const userTodayStr = userTodayDate.toISOString().split('T')[0];
+
+    return await this.updateEngagementStreak(userId, userTodayStr);
   }
 
   /**
@@ -628,11 +639,21 @@ export class EngagementStreakService {
   private static calculateStreakWithGrace(
     activities: Array<{ activity_date: string }>,
     freezesAvailable: number,
-    lastEngagementDate: string | null
+    lastEngagementDate: string | null,
+    todayStr?: string
   ): StreakCalculationResult {
     const activityDates = new Set(activities.map(a => a.activity_date));
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    // Anchor "today" on the caller-provided date string when present (the
+    // user's local date as a YYYY-MM-DD string). Fall back to UTC midnight
+    // for backward compatibility. Iterate using UTC operations so day-string
+    // arithmetic doesn't drift across DST or server timezone changes.
+    const today = todayStr
+      ? new Date(`${todayStr}T00:00:00Z`)
+      : (() => {
+          const d = new Date();
+          d.setUTCHours(0, 0, 0, 0);
+          return d;
+        })();
 
     let currentStreak = 0;
     let streakBroken = false;
@@ -641,8 +662,8 @@ export class EngagementStreakService {
     // Stop at first day without activity (streak is broken)
     for (let i = 0; i < 90; i++) {
       const checkDate = new Date(today);
-      checkDate.setDate(checkDate.getDate() - i);
-      const checkDateStr = this.formatDate(checkDate);
+      checkDate.setUTCDate(checkDate.getUTCDate() - i);
+      const checkDateStr = checkDate.toISOString().split('T')[0];
 
       const hasActivity = activityDates.has(checkDateStr);
 
