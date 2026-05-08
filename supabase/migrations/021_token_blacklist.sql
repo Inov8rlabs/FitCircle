@@ -16,12 +16,12 @@ CREATE TABLE IF NOT EXISTS token_blacklist (
 );
 
 -- Add indexes for efficient lookups
-CREATE INDEX idx_token_blacklist_hash ON token_blacklist(token_hash);
-CREATE INDEX idx_token_blacklist_user ON token_blacklist(user_id);
-CREATE INDEX idx_token_blacklist_expires ON token_blacklist(expires_at);
+CREATE INDEX IF NOT EXISTS idx_token_blacklist_hash ON token_blacklist(token_hash);
+CREATE INDEX IF NOT EXISTS idx_token_blacklist_user ON token_blacklist(user_id);
+CREATE INDEX IF NOT EXISTS idx_token_blacklist_expires ON token_blacklist(expires_at);
 
 -- Add composite index for cleanup queries
-CREATE INDEX idx_token_blacklist_cleanup ON token_blacklist(expires_at, blacklisted_at);
+CREATE INDEX IF NOT EXISTS idx_token_blacklist_cleanup ON token_blacklist(expires_at, blacklisted_at);
 
 -- Comment on table
 COMMENT ON TABLE token_blacklist IS 'Stores invalidated JWT tokens to prevent reuse after logout or security events';
@@ -33,6 +33,7 @@ COMMENT ON COLUMN token_blacklist.expires_at IS 'When the token would have natur
 ALTER TABLE token_blacklist ENABLE ROW LEVEL SECURITY;
 
 -- Users can view their own blacklisted tokens (for debugging/audit)
+DROP POLICY IF EXISTS "Users can view own blacklisted tokens" ON token_blacklist;
 CREATE POLICY "Users can view own blacklisted tokens"
     ON token_blacklist FOR SELECT
     USING (auth.uid() = user_id);
