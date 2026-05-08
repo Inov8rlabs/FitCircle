@@ -35,12 +35,17 @@ export async function GET(request: NextRequest) {
     // Get user's circles (where they are members)
     const memberCircles = await CircleService.getUserCircles(user.id);
 
-    // Also get circles where user is the creator
+    // Also get circles where the user is the creator. Exclude is_official
+    // rows: those are platform-curated circles whose `creator_id` happens
+    // to point at whoever ran the seed, NOT at a user who's actually
+    // participating. They should only show up in someone's Active list
+    // after they explicitly join via the Library.
     const supabase = await import('@/lib/supabase-admin').then(m => m.createAdminSupabase());
     const { data: createdCircles } = await supabase
       .from('fitcircles')
       .select('*')
       .eq('creator_id', user.id)
+      .eq('is_official', false)
       .order('created_at', { ascending: false });
 
     // Combine and deduplicate circles
