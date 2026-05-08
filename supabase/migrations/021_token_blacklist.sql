@@ -41,19 +41,11 @@ CREATE POLICY "Users can view own blacklisted tokens"
 -- Service role can insert (via API only, not direct user access)
 -- No user-facing INSERT policy - only backend can blacklist tokens
 
--- Optional: Cleanup function to remove expired tokens (runs via API cron, not database cron)
--- This is a simple helper function, not business logic
-CREATE OR REPLACE FUNCTION cleanup_expired_blacklist_tokens()
-RETURNS INTEGER AS $$
-DECLARE
-    deleted_count INTEGER;
-BEGIN
-    DELETE FROM token_blacklist
-    WHERE expires_at < NOW();
+-- Cleanup of expired tokens lives in the TypeScript backend
+-- (apps/web/app/api/cron/cleanup-token-blacklist) per project rules:
+-- no stored procedures, all logic in the service layer.
 
-    GET DIAGNOSTICS deleted_count = ROW_COUNT;
-    RETURN deleted_count;
-END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
-
-COMMENT ON FUNCTION cleanup_expired_blacklist_tokens IS 'Simple cleanup function to remove expired tokens. Call from API cron endpoint, not database cron.';
+-- Drop the legacy plpgsql cleanup function if a previous version of
+-- this migration was applied somewhere — the project does not use
+-- stored procedures.
+DROP FUNCTION IF EXISTS cleanup_expired_blacklist_tokens();

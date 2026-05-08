@@ -35,6 +35,10 @@
     {
       "path": "/api/cron/validate-streaks",
       "schedule": "5 0 * * *"
+    },
+    {
+      "path": "/api/cron/cleanup-token-blacklist",
+      "schedule": "20 0 * * *"
     }
   ]
 }
