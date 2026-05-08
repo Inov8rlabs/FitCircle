@@ -471,6 +471,98 @@ export class CircleService {
   }
 
   /**
+   * List public, joinable circles the user is not already in.
+   * Returns up to `limit` circles, ordered by most recent first.
+   */
+  static async getJoinablePublicCircles(
+    userId: string,
+    limit: number = 50
+  ): Promise<unknown[]> {
+    const supabaseAdmin = createAdminSupabase();
+
+    // Pull the IDs the user is already a member of so we can exclude them.
+    const { data: memberships } = await supabaseAdmin
+      .from('fitcircle_members')
+      .select('fitcircle_id')
+      .eq('user_id', userId);
+
+    const memberCircleIds = (memberships ?? []).map(m => m.fitcircle_id);
+
+    // Build the public-circles query.
+    let query = supabaseAdmin
+      .from('fitcircles')
+      .select('*')
+      .eq('visibility', 'public')
+      .in('status', ['upcoming', 'active'])
+      .neq('creator_id', userId)
+      .order('created_at', { ascending: false })
+      .limit(limit);
+
+    if (memberCircleIds.length > 0) {
+      // Postgres `not.in` requires the comma-joined list form.
+      query = query.not('id', 'in', `(${memberCircleIds.join(',')})`);
+    }
+
+    const { data, error } = await query;
+    if (error) {
+      console.error('[CircleService.getJoinablePublicCircles] Error:', error);
+      throw error;
+    }
+    return data ?? [];
+  }
+
+  /**
+   * Join a public circle without an invite code. Errors if the circle is
+   * not public or the user is already a member.
+   */
+  static async joinPublicCircle(userId: string, circleId: string): Promise<void> {
+    const supabaseAdmin = createAdminSupabase();
+
+    console.log(`[CircleService.joinPublicCircle] User ${userId} joining circle ${circleId}`);
+
+    // Confirm the circle is public.
+    const { data: circle, error: circleError } = await supabaseAdmin
+      .from('fitcircles')
+      .select('id, creator_id, visibility, status, participant_count')
+      .eq('id', circleId)
+      .single();
+
+    if (circleError || !circle) {
+      throw new Error('Circle not found');
+    }
+    if (circle.visibility !== 'public') {
+      throw new Error('Circle is not public — invite code required');
+    }
+    if (circle.status === 'completed' || circle.status === 'cancelled') {
+      throw new Error('Circle is no longer joinable');
+    }
+
+    // Already a member?
+    const { data: existing } = await supabaseAdmin
+      .from('fitcircle_members')
+      .select('id')
+      .eq('fitcircle_id', circleId)
+      .eq('user_id', userId)
+      .maybeSingle();
+
+    if (existing) {
+      throw new Error('You are already a member of this circle');
+    }
+
+    // Add membership without a personal goal — v1 of public-join keeps it
+    // simple. The user can set a goal later from the circle's detail screen.
+    await this.addMemberToCircle(userId, circleId, circle.creator_id);
+
+    // Bump participant count.
+    await supabaseAdmin
+      .from('fitcircles')
+      .update({ participant_count: (circle.participant_count ?? 0) + 1 })
+      .eq('id', circleId);
+
+    console.log(`[CircleService.joinPublicCircle] Done.`);
+  }
+
+  /**
    * Set or update personal goal
    */
   static async setPersonalGoal(
