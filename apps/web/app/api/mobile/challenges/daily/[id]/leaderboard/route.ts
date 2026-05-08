@@ -1,25 +1,25 @@
 import { type NextRequest, NextResponse } from 'next/server';
+import { z } from 'zod';
 
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { DailyChallengeService } from '@/lib/services/daily-challenge-service';
 
+const idSchema = z.string().uuid();
+
 /**
- * GET /api/mobile/challenges/daily/leaderboard?challenge_id=xxx&limit=20
- * Get today's daily challenge leaderboard
+ * GET /api/mobile/challenges/daily/[id]/leaderboard?limit=20
+ * Top participants for a daily challenge, ordered by progress desc.
  */
-export async function GET(request: NextRequest) {
+export async function GET(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
   try {
     await requireMobileAuth(request);
+    const { id } = await params;
+    const challengeId = idSchema.parse(id);
+
     const { searchParams } = new URL(request.url);
-
-    const challengeId = searchParams.get('challenge_id');
-    if (!challengeId) {
-      return NextResponse.json(
-        { success: false, data: null, error: { code: 'VALIDATION_ERROR', message: 'challenge_id is required' } },
-        { status: 400 }
-      );
-    }
-
     const limit = Math.min(parseInt(searchParams.get('limit') || '20'), 100);
 
     const leaderboard = await DailyChallengeService.getLeaderboard(challengeId, limit);
@@ -29,7 +29,6 @@ export async function GET(request: NextRequest) {
       data: leaderboard,
       error: null,
     });
-
     response.headers.set('Cache-Control', 'private, max-age=15');
     return response;
   } catch (error: unknown) {
@@ -40,7 +39,14 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    console.error('[GET /api/mobile/challenges/daily/leaderboard] Error:', error);
+    if (error instanceof z.ZodError) {
+      return NextResponse.json(
+        { success: false, data: null, error: { code: 'VALIDATION_ERROR', message: 'Invalid challenge id', details: error.errors } },
+        { status: 400 }
+      );
+    }
+
+    console.error('[GET /api/mobile/challenges/daily/[id]/leaderboard] Error:', error);
     return NextResponse.json(
       { success: false, data: null, error: { code: 'INTERNAL_SERVER_ERROR' } },
       { status: 500 }
