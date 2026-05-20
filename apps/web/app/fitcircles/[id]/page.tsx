@@ -32,6 +32,7 @@ import { useState, useEffect } from 'react';
 import { toast } from 'sonner';
 
 import CircleChallengesSection from '@/components/challenges/CircleChallengesSection';
+import CircleQuestsSection from '@/components/CircleQuestsSection';
 import { CheckInCard } from '@/components/check-ins';
 import DashboardNav from '@/components/DashboardNav';
 import { BathroomScale } from '@/components/icons/BathroomScale';
@@ -1020,6 +1021,15 @@ export default function FitCirclePage() {
                 />
               </CardContent>
             </Card>
+          </motion.div>
+
+          {/* Quests + Boost (iOS / Android parity) */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.47 }}
+          >
+            <CircleQuestsSection circleId={circleId} />
           </motion.div>
 
           {/* Leaderboard */}
