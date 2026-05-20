@@ -126,10 +126,12 @@ export default function CheckInPage() {
         return;
       }
 
-      // Transform to match expected format
-      const transformedEntries = (entriesData || []).map((entry: any) => ({
-        date: entry.tracking_date,
-        value: entry[column],
+      // Transform to match expected format. Supabase's dynamic-column select
+      // can't be inferred statically — cast to a permissive shape.
+      const rows = (entriesData ?? []) as Array<Record<string, unknown>>;
+      const transformedEntries = rows.map((entry) => ({
+        date: entry.tracking_date as string,
+        value: entry[column] as number,
         is_public: true,
       }));
 
