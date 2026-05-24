@@ -36,6 +36,8 @@ export type MilkType = 'whole' | 'skim' | '2_percent' | 'oat' | 'almond' | 'soy'
  * Flexible customizations for beverages
  * Can include size, temperature, milk type, add-ins, etc.
  */
+export type AlcoholType = 'beer' | 'wine' | 'spirit' | 'cocktail' | 'other';
+
 export interface BeverageCustomizations {
   size?: Size;
   temperature?: Temperature;
@@ -45,7 +47,39 @@ export interface BeverageCustomizations {
   ice?: boolean;
   shots?: number; // for espresso drinks
   flavor?: string; // e.g., "vanilla", "caramel"
+
+  // Alcohol-specific keys (only meaningful when category === 'alcohol').
+  alcohol_type?: AlcoholType;
+  brand?: string;          // e.g. "Stella Artois"
+  name?: string;           // e.g. "Stella Artois Lager"
+  abv_percent?: number;    // 0–100
+  serving_count?: number;  // standard drinks consumed, default 1
+  serving_size_ml?: number;
+
   [key: string]: any; // Allow for custom properties
+}
+
+export interface BeverageLogImage {
+  id: string;
+  beverage_log_id: string;
+  user_id: string;
+  storage_path: string;
+  storage_bucket: string;
+  file_name: string;
+  file_size_bytes: number;
+  mime_type: string;
+  width?: number;
+  height?: number;
+  thumbnail_path?: string;
+  display_order: number;
+  metadata: Record<string, any>;
+  created_at: string;
+  updated_at: string;
+  deleted_at?: string;
+  // API URLs (added by backend, not stored in DB)
+  url?: string;
+  original_url?: string;
+  thumbnail_url?: string;
 }
 
 /**
@@ -108,6 +142,8 @@ export interface UpdateBeverageLogInput {
   is_favorite?: boolean;
   favorite_name?: string;
   is_private?: boolean;
+  logged_at?: string;
+  entry_date?: string;
 }
 
 /**

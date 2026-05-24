@@ -204,6 +204,8 @@ export class BeverageLogService {
       if (data.is_favorite !== undefined) updateData.is_favorite = data.is_favorite;
       if (data.favorite_name !== undefined) updateData.favorite_name = data.favorite_name;
       if (data.is_private !== undefined) updateData.is_private = data.is_private;
+      if (data.logged_at !== undefined) updateData.logged_at = data.logged_at;
+      if (data.entry_date !== undefined) updateData.entry_date = data.entry_date;
 
       // Update entry
       const { data: updated, error } = await supabase

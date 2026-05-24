@@ -149,6 +149,38 @@ export class FoodLogService {
   }
 
   /**
+   * Get all entries for one calendar day, ordered chronologically by
+   * logged_at (the time the user actually ate). This is what the per-day
+   * timeline UI consumes; the standard list endpoint stays DESC-by-time for
+   * the multi-day feed.
+   */
+  static async getEntriesForDay(
+    userId: string,
+    entryDate: string,
+    supabase: SupabaseClient
+  ): Promise<{ data: FoodLogEntry[]; error: Error | null }> {
+    try {
+      const { data, error } = await supabase
+        .from('food_log_entries')
+        .select('*')
+        .eq('user_id', userId)
+        .eq('entry_date', entryDate)
+        .is('deleted_at', null)
+        .order('logged_at', { ascending: true });
+
+      if (error) {
+        return { data: [], error: new Error(error.message) };
+      }
+      return { data: data || [], error: null };
+    } catch (error) {
+      return {
+        data: [],
+        error: error instanceof Error ? error : new Error('Unknown error'),
+      };
+    }
+  }
+
+  /**
    * Get single food log entry by ID
    */
   static async getEntryById(
@@ -210,23 +242,34 @@ export class FoodLogService {
         return { data: null, error: new Error('Not authorized') };
       }
 
-      // Update entry
+      // Build update payload — only include keys the caller actually provided
+      // so we don't blow away unrelated fields. logged_at and entry_date now
+      // flow through so the user can re-time a meal after the fact.
+      const updatePayload: Record<string, unknown> = {
+        updated_at: new Date().toISOString(),
+      };
+      const passthroughKeys: (keyof UpdateFoodLogEntryInput)[] = [
+        'logged_at',
+        'entry_date',
+        'meal_type',
+        'title',
+        'description',
+        'notes',
+        'nutrition_data',
+        'water_ml',
+        'supplement_name',
+        'supplement_dosage',
+        'is_private',
+        'visibility',
+        'tags',
+      ];
+      for (const key of passthroughKeys) {
+        if (data[key] !== undefined) updatePayload[key] = data[key];
+      }
+
       const { data: updated, error } = await supabase
         .from('food_log_entries')
-        .update({
-          meal_type: data.meal_type,
-          title: data.title,
-          description: data.description,
-          notes: data.notes,
-          nutrition_data: data.nutrition_data,
-          water_ml: data.water_ml,
-          supplement_name: data.supplement_name,
-          supplement_dosage: data.supplement_dosage,
-          is_private: data.is_private,
-          visibility: data.visibility,
-          tags: data.tags,
-          updated_at: new Date().toISOString(),
-        })
+        .update(updatePayload)
         .eq('id', entryId)
         .eq('user_id', userId)
         .select()

@@ -48,6 +48,11 @@ export const UpdateFoodLogEntrySchema = z.object({
   tags: z.array(z.string().max(50)).max(10).optional(),
 });
 
+// Day-grouped chronological view (breakfast → lunch → dinner ordering).
+export const FoodLogDayQuerySchema = z.object({
+  date: z.string().date(),
+});
+
 export const ShareFoodLogSchema = z.object({
   share_with: z.enum(['user', 'circle']),
   user_ids: z.array(z.string().uuid()).optional(),

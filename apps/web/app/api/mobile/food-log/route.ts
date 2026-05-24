@@ -90,30 +90,42 @@ export async function GET(request: NextRequest) {
       throw result.error;
     }
 
-    // For entries with images, attach the first image URL
-    const entriesWithImageUrls = await Promise.all(
-      result.data.map(async (entry) => {
-        if (entry.has_images && entry.image_count > 0) {
-          // Fetch first image for this entry
-          const { data: images } = await supabase
-            .from('food_log_images')
-            .select('id')
-            .eq('food_log_entry_id', entry.id)
-            .is('deleted_at', null)
-            .order('display_order', { ascending: true })
-            .limit(1);
-
-          if (images && images.length > 0) {
-            const apiBase = process.env.NEXT_PUBLIC_APP_URL || request.nextUrl.origin;
-            return {
-              ...entry,
-              photo_url: `${apiBase}/api/mobile/food-log/images/${images[0].id}?size=medium`,
-            };
-          }
-        }
-        return entry;
-      })
+    // For entries with images, attach a list of image URLs (ordered by
+    // display_order). Clients show the first as a thumbnail and use the
+    // full list for carousels in the detail view.
+    const apiBase = process.env.NEXT_PUBLIC_APP_URL || request.nextUrl.origin;
+    const entriesWithImages = result.data.filter(
+      (e) => e.has_images && e.image_count > 0
     );
+
+    let imagesByEntry = new Map<string, { id: string; display_order: number }[]>();
+    if (entriesWithImages.length > 0) {
+      const { data: images } = await supabase
+        .from('food_log_images')
+        .select('id, food_log_entry_id, display_order')
+        .in('food_log_entry_id', entriesWithImages.map((e) => e.id))
+        .is('deleted_at', null)
+        .order('display_order', { ascending: true });
+
+      for (const img of images || []) {
+        const list = imagesByEntry.get(img.food_log_entry_id) ?? [];
+        list.push({ id: img.id, display_order: img.display_order });
+        imagesByEntry.set(img.food_log_entry_id, list);
+      }
+    }
+
+    const entriesWithImageUrls = result.data.map((entry) => {
+      const imgs = imagesByEntry.get(entry.id);
+      if (!imgs || imgs.length === 0) return entry;
+      const image_urls = imgs.map(
+        (i) => `${apiBase}/api/mobile/food-log/images/${i.id}?size=medium`
+      );
+      return {
+        ...entry,
+        photo_url: image_urls[0], // back-compat: first image
+        image_urls,               // full ordered list for carousels
+      };
+    });
 
     const response = NextResponse.json({
       success: true,

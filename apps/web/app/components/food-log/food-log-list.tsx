@@ -286,13 +286,26 @@ export function FoodLogList({ entries, userId }: FoodLogListProps) {
         }
     };
 
-    // Group by date
-    const groupedEntries = entryList.reduce((acc, entry) => {
+    // Group by date. Within a day, sort ASCENDING by logged_at so the
+    // timeline reads breakfast → lunch → dinner. Days themselves are
+    // newest-first.
+    const groupedEntries: Record<string, any[]> = entryList.reduce((acc, entry) => {
         const date = entry.entry_date;
         if (!acc[date]) acc[date] = [];
         acc[date].push(entry);
         return acc;
     }, {} as Record<string, any[]>);
+    for (const key of Object.keys(groupedEntries)) {
+        groupedEntries[key].sort((a, b) => {
+            const ta = new Date(a.logged_at ?? a.created_at).getTime();
+            const tb = new Date(b.logged_at ?? b.created_at).getTime();
+            return ta - tb;
+        });
+    }
+    // Re-order the outer record so newest day comes first.
+    const sortedGroups = Object.entries(groupedEntries).sort(([a], [b]) =>
+        new Date(b).getTime() - new Date(a).getTime()
+    );
 
     if (entryList.length === 0) {
         return (
@@ -306,7 +319,7 @@ export function FoodLogList({ entries, userId }: FoodLogListProps) {
 
     return (
         <div className="space-y-8">
-            {Object.entries(groupedEntries).map(([date, items]) => (
+            {sortedGroups.map(([date, items]) => (
                 <div key={date} className="space-y-4">
                     <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wider sticky top-0 bg-background py-2 z-10">
                         {format(new Date(date), 'EEEE, MMMM d')}
@@ -368,7 +381,12 @@ function getBeverageIconConfig(category: string, beverageType: string) {
 function LogItem({ item, onDelete }: { item: any, onDelete: (id: string, type: 'food' | 'water' | 'beverage') => void }) {
     const isBeverage = item.category && item.category !== 'water';
     const isWater = item.entry_type === 'water' || item.category === 'water';
-    const hasImages = item.has_images && item.images && item.images.length > 0;
+    // image_urls[] from the new list endpoint is the source of truth; fall
+    // back to the legacy `images` array if present, then `image_count`.
+    const imageUrls: string[] = item.image_urls ?? (item.images?.map((i: any) => i.url) ?? []);
+    const totalImages: number = imageUrls.length || item.image_count || 0;
+    const hasImages = totalImages > 0;
+    item.images = item.images ?? imageUrls.map((url: string, i: number) => ({ id: `${item.id}-${i}`, url, thumbnail_url: url }));
 
     let Icon = Utensils;
     let color = 'text-orange-500';

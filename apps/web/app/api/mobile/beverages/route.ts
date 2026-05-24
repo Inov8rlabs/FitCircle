@@ -66,9 +66,37 @@ export async function GET(request: NextRequest) {
       throw result.error;
     }
 
+    // Attach image_urls[] to each beverage entry (mostly meaningful for
+    // alcohol logs). Single round-trip via .in() rather than per-entry.
+    const apiBase = process.env.NEXT_PUBLIC_APP_URL || request.nextUrl.origin;
+    let entriesWithImages = result.data as any[];
+
+    if (result.data.length > 0) {
+      const { data: images } = await supabase
+        .from('beverage_log_images')
+        .select('id, beverage_log_id, display_order')
+        .in('beverage_log_id', result.data.map((e) => e.id))
+        .is('deleted_at', null)
+        .order('display_order', { ascending: true });
+
+      if (images && images.length > 0) {
+        const byEntry = new Map<string, string[]>();
+        for (const img of images) {
+          const list = byEntry.get(img.beverage_log_id) ?? [];
+          list.push(`${apiBase}/api/mobile/beverages/images/${img.id}?size=medium`);
+          byEntry.set(img.beverage_log_id, list);
+        }
+        entriesWithImages = result.data.map((entry) => {
+          const urls = byEntry.get(entry.id);
+          if (!urls || urls.length === 0) return entry;
+          return { ...entry, photo_url: urls[0], image_urls: urls };
+        });
+      }
+    }
+
     const response = NextResponse.json({
       success: true,
-      data: result.data,
+      data: entriesWithImages,
       pagination: {
         page: validatedQuery.page || 1,
         limit: validatedQuery.limit || 20,

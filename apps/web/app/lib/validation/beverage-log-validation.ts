@@ -53,11 +53,20 @@ export const MilkTypeEnum = z.enum([
 export const BeverageSourceEnum = z.enum(['manual', 'import', 'api', 'ios', 'android', 'web']);
 
 /**
+ * Alcohol sub-type — covered keys clients should use for alcohol entries.
+ * Stored inside customizations JSONB. Indexed via the existing GIN index.
+ */
+export const AlcoholTypeEnum = z.enum(['beer', 'wine', 'spirit', 'cocktail', 'other']);
+
+/**
  * Beverage customizations schema
- * Flexible schema allowing various customization properties
+ * Flexible schema allowing various customization properties. For alcohol
+ * entries clients should populate the alcohol_* fields below; for coffee/
+ * tea the size/temperature/milk_type fields. Unknown keys pass through.
  */
 export const BeverageCustomizationsSchema = z
   .object({
+    // Generic
     size: SizeEnum.optional(),
     temperature: TemperatureEnum.optional(),
     milk_type: MilkTypeEnum.optional(),
@@ -66,6 +75,14 @@ export const BeverageCustomizationsSchema = z
     ice: z.boolean().optional(),
     shots: z.number().int().min(0).max(10).optional(),
     flavor: z.string().max(100).optional(),
+
+    // Alcohol-specific (only meaningful when category === 'alcohol')
+    alcohol_type: AlcoholTypeEnum.optional(),
+    brand: z.string().max(200).optional(),
+    name: z.string().max(200).optional(),
+    abv_percent: z.number().min(0).max(100).optional(),
+    serving_count: z.number().int().min(1).max(50).optional(),
+    serving_size_ml: z.number().int().min(1).max(5000).optional(),
   })
   .passthrough(); // Allow additional properties for flexibility
 
@@ -118,6 +135,8 @@ export const UpdateBeverageLogSchema = z
     is_favorite: z.boolean().optional(),
     favorite_name: z.string().min(1).max(200).optional(),
     is_private: z.boolean().optional(),
+    logged_at: z.string().datetime().optional(),
+    entry_date: z.string().date().optional(),
   })
   .refine(
     (data) => {

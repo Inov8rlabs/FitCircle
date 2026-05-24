@@ -122,6 +122,8 @@ export interface CreateFoodLogEntryInput {
 }
 
 export interface UpdateFoodLogEntryInput {
+  logged_at?: string;
+  entry_date?: string;
   meal_type?: MealType;
   title?: string;
   description?: string;

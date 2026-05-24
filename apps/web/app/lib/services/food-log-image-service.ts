@@ -147,6 +147,51 @@ export class FoodLogImageService {
   }
 
   /**
+   * Upload multiple images to a single entry in one call. Each upload is
+   * processed independently — partial success is possible. The returned
+   * payload describes which files succeeded and which failed.
+   *
+   * `display_order` is auto-assigned starting from the current image_count
+   * on the entry, in the order the files are provided.
+   */
+  static async uploadImages(
+    entryId: string,
+    userId: string,
+    files: File[],
+    supabase: SupabaseClient
+  ): Promise<{
+    uploaded: FoodLogImage[];
+    failed: { file_name: string; error: string }[];
+  }> {
+    if (files.length === 0) return { uploaded: [], failed: [] };
+
+    // Snapshot the starting display_order so the batch lays out in order
+    // even if a sibling upload happens mid-flight.
+    const { data: entry } = await supabase
+      .from('food_log_entries')
+      .select('image_count')
+      .eq('id', entryId)
+      .single();
+    const startOrder = entry?.image_count ?? 0;
+
+    const uploaded: FoodLogImage[] = [];
+    const failed: { file_name: string; error: string }[] = [];
+
+    // Serialize per file: parallelism here can race the image_count update
+    // and produce duplicate display_orders.
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      const result = await this.uploadImage(entryId, userId, file, startOrder + i, supabase);
+      if (result.success && result.image) {
+        uploaded.push(result.image);
+      } else {
+        failed.push({ file_name: file.name, error: result.error?.message ?? 'Unknown error' });
+      }
+    }
+    return { uploaded, failed };
+  }
+
+  /**
    * Get images for a food log entry
    */
   static async getImagesForEntry(

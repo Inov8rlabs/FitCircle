@@ -9,6 +9,7 @@ import { type NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
+import { BeverageLogImageService } from '@/lib/services/beverage-log-image-service';
 import { BeverageLogService } from '@/lib/services/beverage-log-service';
 import { createAdminSupabase } from '@/lib/supabase-admin';
 import { UpdateBeverageLogSchema } from '@/lib/validation/beverage-log-validation';
@@ -50,13 +51,20 @@ export async function GET(
       );
     }
 
-    // Check permissions
     const canEdit = entryResult.data?.user_id === user.id;
+
+    // Attach any photos (alcohol, latte art, etc.) attached to this entry.
+    const imagesResult = await BeverageLogImageService.getImagesForEntry(entryId, supabase);
+    const imagesWithUrls = BeverageLogImageService.addImageUrlsToMany(
+      imagesResult.data,
+      process.env.NEXT_PUBLIC_APP_URL || request.nextUrl.origin
+    );
 
     return NextResponse.json({
       success: true,
       data: {
         entry: entryResult.data,
+        images: imagesWithUrls,
         canEdit,
       },
       meta: {
