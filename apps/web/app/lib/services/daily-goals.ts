@@ -360,11 +360,13 @@ export class DailyGoalService {
       const completions: Partial<GoalCompletion>[] = [];
       const now = new Date().toISOString();
 
+      // `is_completed` is a STORED generated column on goal_completion_history
+      // (see migration 026), so we never write it directly — Postgres rejects
+      // any value, generated or not, with 428C9.
       for (const goal of goals) {
         let actualValue: number | null = null;
         let completionPercentage = 0;
         let completedAt: string | null = null;
-        let isCompleted = false;
 
         switch (goal.goal_type) {
           case 'steps':
@@ -373,7 +375,6 @@ export class DailyGoalService {
               completionPercentage = Math.min((actualValue / goal.target_value) * 100, 100);
               if (completionPercentage >= 100) {
                 completedAt = now;
-                isCompleted = true;
               }
             }
             console.log(`[updateGoalCompletion] Steps goal: actual=${actualValue}, target=${goal.target_value}, completion=${completionPercentage.toFixed(2)}%`);
@@ -383,24 +384,21 @@ export class DailyGoalService {
             // Weight log goal is binary: 1 if weight was logged, 0 if not
             actualValue = trackingData.weight_kg !== undefined && trackingData.weight_kg !== null ? 1 : 0;
             completionPercentage = actualValue === 1 ? 100 : 0;
-            isCompleted = actualValue === 1;
-            if (isCompleted) completedAt = now;
+            if (completionPercentage >= 100) completedAt = now;
             console.log(`[updateGoalCompletion] Weight log goal: actual=${actualValue}, completion=${completionPercentage}%`);
             break;
 
           case 'mood':
             actualValue = trackingData.mood_score !== undefined ? trackingData.mood_score : null;
             completionPercentage = actualValue !== null ? 100 : 0;
-            isCompleted = actualValue !== null;
-            if (isCompleted) completedAt = now;
+            if (completionPercentage >= 100) completedAt = now;
             console.log(`[updateGoalCompletion] Mood goal: actual=${actualValue}, completion=${completionPercentage}%`);
             break;
 
           case 'energy':
             actualValue = trackingData.energy_level !== undefined ? trackingData.energy_level : null;
             completionPercentage = actualValue !== null ? 100 : 0;
-            isCompleted = actualValue !== null;
-            if (isCompleted) completedAt = now;
+            if (completionPercentage >= 100) completedAt = now;
             console.log(`[updateGoalCompletion] Energy goal: actual=${actualValue}, completion=${completionPercentage}%`);
             break;
         }
@@ -412,7 +410,6 @@ export class DailyGoalService {
           target_value: goal.target_value,
           actual_value: actualValue,
           completion_percentage: parseFloat(completionPercentage.toFixed(2)),
-          is_completed: isCompleted,
           completed_at: completedAt,
         });
       }
