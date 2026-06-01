@@ -142,7 +142,7 @@ export async function POST(request: NextRequest) {
     const { data: participant, error: participantError } = await supabaseAdmin
       .from('fitcircle_members')
       .insert({
-        challenge_id: challengeId,
+        fitcircle_id: challengeId,
         user_id: user.id,
         status: 'active',
         joined_at: new Date().toISOString(),

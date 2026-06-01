@@ -65,7 +65,7 @@ export async function POST(request: NextRequest) {
     const { error: participantError } = await supabaseAdmin
       .from('fitcircle_members')
       .insert({
-        challenge_id: challenge.id,
+        fitcircle_id: challenge.id,
         user_id: user.id,
         status: 'active',
         joined_at: new Date().toISOString(),

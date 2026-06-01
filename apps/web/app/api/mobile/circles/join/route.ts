@@ -95,7 +95,7 @@ export async function POST(request: NextRequest) {
 
       // Add as member without goal
       const { error: memberError } = await supabaseAdmin.from('fitcircle_members').insert({
-        challenge_id: circle.id,
+        fitcircle_id: circle.id,
         user_id: user.id,
         invited_by: circle.created_by,
         status: 'active',

@@ -38,7 +38,7 @@ export async function GET(request: NextRequest) {
     const { data: participantData, error: participantError } = await supabase
       .from('fitcircle_members')
       .select(`
-        challenge_id,
+        fitcircle_id,
         fitcircles!inner (
           id,
           name,
@@ -67,7 +67,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Extract the challenges from the participant data
-    const participantChallenges = participantData?.map((p: any) => p.challenges).filter(Boolean) || [];
+    const participantChallenges = participantData?.map((p: any) => p.fitcircles).filter(Boolean) || [];
 
     console.log('Found challenges:', {
       creator: creatorChallenges?.length || 0,

@@ -63,18 +63,22 @@ async function authedFetch<T>(path: string, init?: RequestInit): Promise<T> {
     const msg = json?.error?.message ?? json?.error ?? `Request failed (${res.status})`;
     throw new Error(typeof msg === 'string' ? msg : 'Request failed');
   }
-  return json as T;
+  // Routes return the standard envelope { success, data, error, meta }. Unwrap to data.
+  return (json?.data ?? json) as T;
 }
 
+// NOTE: generics are the UNWRAPPED `data` shapes — authedFetch unwraps the envelope.
+// Routes return: quests -> data: QuestWithProgress[]; quest detail/progress -> data: quest;
+// boost -> data: BoostStatus; history -> data: BoostHistoryEntry[].
 export const questClient = {
   listForCircle: (circleId: string) =>
-    authedFetch<{ quests: QuestWithProgress[] }>(`/api/mobile/circles/${circleId}/quests`),
+    authedFetch<QuestWithProgress[]>(`/api/mobile/circles/${circleId}/quests`),
 
   getQuest: (circleId: string, questId: string) =>
-    authedFetch<{ quest: QuestWithProgress }>(`/api/mobile/circles/${circleId}/quests/${questId}`),
+    authedFetch<QuestWithProgress>(`/api/mobile/circles/${circleId}/quests/${questId}`),
 
   updateProgress: (circleId: string, questId: string, progress: number) =>
-    authedFetch<{ quest: QuestWithProgress }>(
+    authedFetch<QuestWithProgress>(
       `/api/mobile/circles/${circleId}/quests/${questId}/progress`,
       {
         method: 'POST',
@@ -88,7 +92,7 @@ export const boostClient = {
     authedFetch<BoostStatus>(`/api/mobile/circles/${circleId}/boost`),
 
   getHistory: (circleId: string, days = 7) =>
-    authedFetch<{ history: BoostHistoryEntry[] }>(
+    authedFetch<BoostHistoryEntry[]>(
       `/api/mobile/circles/${circleId}/boost/history?days=${days}`
     ),
 };

@@ -37,9 +37,9 @@ export default function CircleQuestsSection({ circleId }: Props) {
         boostClient.getStatus(circleId),
         boostClient.getHistory(circleId, 7),
       ]);
-      if (questsRes.status === 'fulfilled') setQuests(questsRes.value.quests);
+      if (questsRes.status === 'fulfilled') setQuests(questsRes.value ?? []);
       if (boostRes.status === 'fulfilled') setBoost(boostRes.value);
-      if (historyRes.status === 'fulfilled') setBoostHistory(historyRes.value.history);
+      if (historyRes.status === 'fulfilled') setBoostHistory(historyRes.value ?? []);
     } catch (e) {
       console.warn('[quests-boost] load failed', e);
     } finally {
@@ -58,7 +58,7 @@ export default function CircleQuestsSection({ circleId }: Props) {
   return (
     <div className="space-y-4">
       {boost && <BoostCard boost={boost} history={boostHistory} />}
-      {quests.length > 0 && <QuestsList quests={quests} />}
+      {quests && quests.length > 0 && <QuestsList quests={quests} />}
     </div>
   );
 }
