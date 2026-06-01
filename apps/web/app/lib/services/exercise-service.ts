@@ -233,6 +233,15 @@ export class ExerciseService {
         }
       }
 
+      // Post a "workout done" system post to the user's circle chats.
+      // Manual entries only — HealthKit/Health Connect imports are historical backfill
+      // and must NOT spam the chat (consistent with bulkSyncExercises, which omits this).
+      // Fire-and-forget: a chat failure must never affect the exercise log.
+      if (source === 'manual') {
+        const { ChatActivityHooks } = await import('./chat-activity-hooks');
+        ChatActivityHooks.onWorkoutCompleted(userId, exercise.id).catch(() => {});
+      }
+
       // Detect milestones and PRs
       const milestones = await this.detectMilestones(userId, supabase);
       const personalRecords = await this.detectPRs(userId, exercise, supabase);
