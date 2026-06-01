@@ -33,6 +33,8 @@ export interface SignalPayload {
   mealDescriptor?: string;        // notable_meal — e.g. "high-protein lunch" (NEVER calories)
   notableReason?: 'first_log_today' | 'advances_challenge'; // why a meal is notable
   loggedAtCount?: number;         // for circle_streak: "9 days strong"
+  checkedIn?: number;             // daily_summary: "{checkedIn} of {total} checked in"
+  total?: number;                 // daily_summary: circle member count
   // Hard rule: no weight, body measurements, alcohol/beverage, or raw calorie fields ever.
 }
 

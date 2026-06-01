@@ -26,12 +26,15 @@ import {
   X,
   Check,
   Loader2,
+  MessageCircle,
+  LayoutGrid,
 } from 'lucide-react';
 import { useParams, useRouter } from 'next/navigation';
 import { useState, useEffect } from 'react';
 import { toast } from 'sonner';
 
 import CircleChallengesSection from '@/components/challenges/CircleChallengesSection';
+import { CircleChat } from '@/components/chat/CircleChat';
 import CircleQuestsSection from '@/components/CircleQuestsSection';
 import { CheckInCard } from '@/components/check-ins';
 import DashboardNav from '@/components/DashboardNav';
@@ -43,6 +46,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { DateRangeDisplay, DatePicker } from '@/components/ui/date-picker';
 import { Progress } from '@/components/ui/progress';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useUnitPreference } from '@/hooks/useUnitPreference';
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/stores/auth-store';
@@ -1003,6 +1007,20 @@ export default function FitCirclePage() {
             </motion.div>
           </div>
 
+          {/* Sectioned content: Overview vs Chat */}
+          <Tabs defaultValue="overview" className="w-full">
+            <TabsList className="mb-4 grid w-full max-w-sm grid-cols-2 bg-slate-900/50 border border-slate-800/50 backdrop-blur-xl">
+              <TabsTrigger value="overview" className="gap-1.5 data-[state=active]:bg-slate-800 data-[state=active]:text-white">
+                <LayoutGrid className="h-4 w-4" />
+                Overview
+              </TabsTrigger>
+              <TabsTrigger value="chat" className="gap-1.5 data-[state=active]:bg-slate-800 data-[state=active]:text-white">
+                <MessageCircle className="h-4 w-4" />
+                Chat
+              </TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="overview" className="space-y-6 sm:space-y-8 mt-0">
           {/* Circle Challenges */}
           <motion.div
             initial={{ opacity: 0, y: 20 }}
@@ -1206,6 +1224,21 @@ export default function FitCirclePage() {
               </Button>
             )}
           </motion.div>
+            </TabsContent>
+
+            <TabsContent value="chat" className="mt-0">
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+              >
+                <Card className="bg-slate-900/50 border-slate-800/50 backdrop-blur-xl">
+                  <CardContent className="p-3 sm:p-4">
+                    <CircleChat circleId={circleId} />
+                  </CardContent>
+                </Card>
+              </motion.div>
+            </TabsContent>
+          </Tabs>
         </div>
 
         {/* Participant Detail Modal */}
