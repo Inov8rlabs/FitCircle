@@ -56,13 +56,13 @@ BEGIN
         ALTER TABLE circle_invites
         ALTER COLUMN invite_code TYPE VARCHAR(10);
 
-        -- Drop and recreate the constraint
+        -- Drop the legacy constraint if present. NOTE: the original ADD CONSTRAINT here
+        -- used a subquery CHECK (invite_code = (SELECT ... FROM challenges ...)), which is
+        -- invalid in Postgres ("cannot use subquery in check constraint") and broke
+        -- from-scratch apply. Invite-code/circle matching is validated in the application
+        -- layer (consistent with 008_fitcircle_mvp_fixed and the no-stored-procs rule).
         ALTER TABLE circle_invites
         DROP CONSTRAINT IF EXISTS fk_invite_code_matches_circle;
-
-        ALTER TABLE circle_invites
-        ADD CONSTRAINT fk_invite_code_matches_circle
-        CHECK (invite_code = (SELECT invite_code FROM challenges WHERE id = circle_id));
     END IF;
 END $$;
 

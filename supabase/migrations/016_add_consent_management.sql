@@ -33,8 +33,12 @@ CREATE TABLE user_consent (
 
 -- Indexes for performance
 CREATE INDEX idx_consent_user_type ON user_consent(user_id, consent_type, consent_timestamp DESC);
+-- NOTE (2026-05-30): removed `expires_at > NOW()` from the partial-index predicate —
+-- NOW() is STABLE, not IMMUTABLE, which Postgres rejects in an index predicate
+-- ("functions in index predicate must be marked IMMUTABLE"), breaking from-scratch apply.
+-- Active-consent expiry is filtered in the query layer.
 CREATE INDEX idx_consent_active ON user_consent(user_id, consent_type)
-    WHERE withdrawn_at IS NULL AND (expires_at IS NULL OR expires_at > NOW());
+    WHERE withdrawn_at IS NULL;
 CREATE INDEX idx_consent_timestamp ON user_consent(consent_timestamp DESC);
 
 -- RLS Policies

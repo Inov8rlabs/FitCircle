@@ -56,8 +56,13 @@ enabled = true
 schema_paths = []
 
 [db.seed]
+# DISABLED 2026-06-01: supabase/seed.sql is stale — it references challenge_participants.check_ins_count,
+# a column removed/renamed by migration 038 (challenges->fitcircles, challenge_participants->fitcircle_members),
+# so seeding aborts `supabase start`/`db reset` with: column cp.check_ins_count does not exist (42703).
+# This is developer sample data, NOT schema, and is not required for the build. Re-enable after seed.sql
+# is rewritten against the post-038 schema (tracked as a separate cleanup task).
 # If enabled, seeds the database after migrations during a db reset.
-enabled = true
+enabled = false
 # Specifies an ordered list of seed files to load during db reset.
 # Supports glob patterns relative to supabase directory: "./seeds/*.sql"
 sql_paths = ["./seed.sql"]
