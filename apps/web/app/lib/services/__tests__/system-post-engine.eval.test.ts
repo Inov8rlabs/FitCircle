@@ -10,6 +10,7 @@
 import { describe, it, expect } from 'vitest';
 
 import { SystemPostEngine } from '../system-post-engine';
+import { NOTIFICATION_TEMPLATES } from '../notification-orchestrator';
 import {
   DEFAULT_ENGINE_CONFIG,
   type EnginePlanInput,
@@ -273,5 +274,36 @@ describe('SystemPostEngine replay eval — safety guardrail (Build Spec §7)', (
     });
     expect(out).toBe('Priya logged a high-protein lunch 🍽️');
     expect(/\d/.test(out)).toBe(false);
+  });
+
+  // Audit gap A/D (CIRCLE_CHAT_HEALTHY_ENGAGEMENT_AUDIT.md): extend the forbidden-substring
+  // scan to the chat notification templates' STATIC chrome (titles + fallback bodies).
+  // The interpolated friendName/circleName/preview are member-typed content (assessed
+  // acceptable — §6.7 governs system copy, not member speech), so we scan the templates
+  // with neutral inputs to assert the wording the SYSTEM controls is body/food-neutral.
+  it('chat notification template chrome contains no forbidden substring', () => {
+    const neutral = { friendName: 'Sam', circleName: 'Squad', preview: 'hey', body: 'nice work' };
+    const offenders: { type: string; output: string; pattern: string }[] = [];
+    for (const type of ['chat_message', 'chat_mention', 'chat_rally'] as const) {
+      const c = NOTIFICATION_TEMPLATES[type](neutral);
+      const output = `${c.title} ${c.body}`;
+      for (const { name, re } of forbiddenPatterns) {
+        if (re.test(output)) offenders.push({ type, output, pattern: name });
+      }
+    }
+    expect(offenders).toEqual([]);
+  });
+
+  it('chat_rally carries the engine-rendered system body (a P0 rally post) cleanly', () => {
+    // chat_rally.body relays system-post copy from the engine — confirm a real P0 body
+    // (e.g. challenge_resolved) passes the same neutrality scan end-to-end.
+    const rallyBody = engine.renderCopy({
+      eventType: 'challenge_resolved',
+      actors: [{ name: 'Squad' }],
+      payload: { challengeName: 'Spring Cut' },
+    });
+    const c = NOTIFICATION_TEMPLATES.chat_rally({ circleName: 'Squad', body: rallyBody });
+    const output = `${c.title} ${c.body}`;
+    for (const { re } of forbiddenPatterns) expect(re.test(output)).toBe(false);
   });
 });

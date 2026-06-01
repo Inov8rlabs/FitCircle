@@ -1,4 +1,6 @@
 import { createAdminSupabase } from '../supabase-admin';
+import { ChatNotificationService } from './chat-notification-service';
+import { ChatSafetyService } from './chat-safety-service';
 import {
   type ChatMessageDTO,
   type CircleMessageRow,
@@ -95,6 +97,13 @@ export class CircleChatService {
       query = query.lt('created_at', params.before);
     }
 
+    // Hide messages from members this user has blocked (or who blocked them).
+    // System posts have sender_id = null, so `.not in` never excludes them.
+    const hiddenIds = await ChatSafetyService.getBlockedIdsFor(userId);
+    if (hiddenIds.length > 0) {
+      query = query.not('sender_id', 'in', `(${hiddenIds.join(',')})`);
+    }
+
     const { data, error } = await query;
     if (error) throw error;
 
@@ -182,7 +191,41 @@ export class CircleChatService {
     if (insertError) throw insertError;
 
     const [dto] = await this.mapRowsToDTOs([inserted as CircleMessageRow], userId);
+
+    // Fire-and-forget chat push fan-out. Never affects the send response.
+    const senderName = dto.sender?.name ?? 'Someone';
+    const preview = dto.kind === 'user_photo' ? '' : dto.body ?? '';
+    void this.resolveCircleName(circleId)
+      .then((circleName) =>
+        ChatNotificationService.notifyNewMessage(
+          circleId,
+          userId,
+          senderName,
+          circleName,
+          dto.id,
+          preview
+        )
+      )
+      .catch(() => {});
+
     return dto;
+  }
+
+  /**
+   * Best-effort circle display name lookup (used for notification copy).
+   */
+  private static async resolveCircleName(circleId: string): Promise<string> {
+    try {
+      const supabaseAdmin = createAdminSupabase();
+      const { data } = await supabaseAdmin
+        .from('fitcircles')
+        .select('name')
+        .eq('id', circleId)
+        .maybeSingle();
+      return (data?.name as string | undefined) ?? 'your circle';
+    } catch {
+      return 'your circle';
+    }
   }
 
   /**

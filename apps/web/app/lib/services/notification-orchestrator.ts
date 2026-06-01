@@ -42,6 +42,10 @@ export interface NotificationData {
   // Generic
   userName?: string;
 
+  // Circle Chat
+  preview?: string;
+  body?: string;
+
   // Deep link
   deepLink?: string;
 
@@ -81,7 +85,11 @@ export type NotificationType =
   | 'daily_drop'
   | 'milestone_achieved'
   | 'points_earned'
-  | 'circle_invite_received';
+  | 'circle_invite_received'
+  // Circle Chat (social + celebration)
+  | 'chat_message'
+  | 'chat_mention'
+  | 'chat_rally';
 
 interface NotificationContent {
   title: string;
@@ -104,7 +112,7 @@ interface NotificationLogEntry {
 // CONTENT TEMPLATES (Fitzy voice)
 // ============================================================================
 
-const NOTIFICATION_TEMPLATES: Record<
+export const NOTIFICATION_TEMPLATES: Record<
   NotificationType,
   (data: NotificationData) => NotificationContent
 > = {
@@ -256,6 +264,23 @@ const NOTIFICATION_TEMPLATES: Record<
     title: "You've been invited! 📬",
     body: `${data.friendName || 'Someone'} invited you to join "${data.circleName || 'a FitCircle'}". Check it out!`,
     category: 'social',
+  }),
+
+  // ---- Circle Chat ----
+  chat_message: (data) => ({
+    title: `${data.friendName || 'Someone'} in ${data.circleName || 'your circle'}`,
+    body: data.preview || 'sent a message',
+    category: 'social',
+  }),
+  chat_mention: (data) => ({
+    title: `${data.friendName || 'Someone'} mentioned you`,
+    body: data.preview || 'mentioned you in the chat',
+    category: 'social',
+  }),
+  chat_rally: (data) => ({
+    title: `🎉 Big moment in ${data.circleName || 'your circle'}`,
+    body: data.body || 'Something worth celebrating just happened!',
+    category: 'celebration',
   }),
 };
 

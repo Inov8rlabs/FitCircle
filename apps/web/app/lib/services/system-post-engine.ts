@@ -13,6 +13,7 @@
 //     mirroring how BoostService is invoked fire-and-forget).
 
 import { createAdminSupabase } from '../supabase-admin';
+import { ChatNotificationService } from './chat-notification-service';
 import { CircleChatService } from './circle-chat-service';
 import {
   EVENT_TAXONOMY,
@@ -198,7 +199,7 @@ export class SystemPostEngine {
           post.disposition === 'post_bundled' ||
           post.disposition === 'queued_quiet'
         ) {
-          await CircleChatService.emitSystemPost({
+          const written = await CircleChatService.emitSystemPost({
             fitcircleId: signal.fitcircleId,
             eventType: post.eventType ?? signal.eventType,
             priority: post.priority ?? EVENT_TAXONOMY[signal.eventType].priority,
@@ -208,6 +209,20 @@ export class SystemPostEngine {
             actorUserIds: post.actorUserIds ?? [signal.actorUserId],
             systemPayload: this.buildSystemPayload(signal, post),
           });
+
+          // P0 "rally" posts earn ONE celebratory push (in-app + push).
+          // queued_quiet defers the push (handled by quiet-hours), so only the
+          // immediately-posted P0 fires a rally push here. Fire-and-forget.
+          const effectivePriority =
+            post.priority ?? EVENT_TAXONOMY[signal.eventType].priority;
+          if (post.disposition === 'post' && effectivePriority === 'p0') {
+            void ChatNotificationService.notifyRallyPost(
+              signal.fitcircleId,
+              await this.resolveCircleName(signal.fitcircleId),
+              written.body ?? post.body ?? '',
+              post.eventType ?? signal.eventType
+            ).catch(() => {});
+          }
         } else {
           // 'drop_to_summary' | 'suppressed' -> no write.
           console.log(
@@ -318,6 +333,21 @@ export class SystemPostEngine {
     }
 
     return { perMemberRoutineToday, circlePostsThisHour, recentSameTypeInWindow };
+  }
+
+  /** Best-effort circle display name lookup (for rally push copy). */
+  private async resolveCircleName(circleId: string): Promise<string> {
+    try {
+      const supabaseAdmin = createAdminSupabase();
+      const { data } = await supabaseAdmin
+        .from('fitcircles')
+        .select('name')
+        .eq('id', circleId)
+        .maybeSingle();
+      return (data?.name as string | undefined) ?? 'your circle';
+    } catch {
+      return 'your circle';
+    }
   }
 
   private computeQuietHours(config: EngineConfig, nowISO: string): boolean {

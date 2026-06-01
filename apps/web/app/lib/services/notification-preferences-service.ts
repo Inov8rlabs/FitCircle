@@ -66,6 +66,11 @@ const TYPE_CATEGORY_MAP: Record<string, NotificationCategory> = {
   milestone_achieved: 'celebration',
   points_earned: 'celebration',
   circle_invite_received: 'social',
+
+  // Circle Chat
+  chat_message: 'social',
+  chat_mention: 'social',
+  chat_rally: 'celebration',
 };
 
 // ============================================================================
