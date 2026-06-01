@@ -1,6 +1,10 @@
 {
   "crons": [
     {
+      "path": "/api/cron/foods-loader",
+      "schedule": "0 4 * * 0"
+    },
+    {
       "path": "/api/cron/streaks/daily-check",
       "schedule": "0 0 * * *"
     },

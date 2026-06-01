@@ -47,7 +47,9 @@ CREATE INDEX IF NOT EXISTS foods_name_trgm_idx ON foods USING GIN(name gin_trgm_
 CREATE INDEX IF NOT EXISTS foods_barcode_idx ON foods(barcode) WHERE barcode IS NOT NULL;
 CREATE INDEX IF NOT EXISTS foods_owner_idx ON foods(owner_id) WHERE owner_id IS NOT NULL;
 -- One row per external item per source (lets the OFF/USDA loader upsert idempotently).
-CREATE UNIQUE INDEX IF NOT EXISTS foods_source_uniq ON foods(source, source_id) WHERE source_id IS NOT NULL;
+-- Must be a NON-partial unique constraint so it's usable for ON CONFLICT (source, source_id)
+-- inference. NULLs are distinct by default, so custom/recipe rows (source_id NULL) never collide.
+ALTER TABLE foods ADD CONSTRAINT foods_source_uniq UNIQUE (source, source_id);
 
 -- pg_trgm is needed for the trigram index. Enable if not already (idempotent).
 CREATE EXTENSION IF NOT EXISTS pg_trgm;
