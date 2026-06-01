@@ -5,6 +5,7 @@ import {
   type CircleMessageReactionRow,
   type ListMessagesParams,
   type ListMessagesResult,
+  type MessagePriority,
   type MessageReactionSummary,
   type MessageSender,
   type MessageSystemBlock,
@@ -181,6 +182,52 @@ export class CircleChatService {
     if (insertError) throw insertError;
 
     const [dto] = await this.mapRowsToDTOs([inserted as CircleMessageRow], userId);
+    return dto;
+  }
+
+  /**
+   * Used by the system-post engine (NOT exposed via a member route). Writes a
+   * kind='system_event' row (sender_id=null) and returns the mapped DTO.
+   * actorUserIds + renderHint are folded into system_payload as
+   * { render_hint, actors: [{ id }], ...systemPayload }.
+   */
+  static async emitSystemPost(params: {
+    fitcircleId: string;
+    eventType: SystemEventType;
+    priority: MessagePriority;
+    renderHint: RenderHint;
+    body: string;
+    refId?: string | null;
+    actorUserIds?: string[];
+    systemPayload?: Record<string, unknown>;
+  }): Promise<ChatMessageDTO> {
+    const supabaseAdmin = createAdminSupabase();
+
+    const systemPayload: Record<string, unknown> = {
+      render_hint: params.renderHint,
+      actors: (params.actorUserIds ?? []).map((id) => ({ id })),
+      ...(params.systemPayload ?? {}),
+    };
+
+    const { data: inserted, error: insertError } = await supabaseAdmin
+      .from('circle_messages')
+      .insert({
+        fitcircle_id: params.fitcircleId,
+        sender_id: null,
+        kind: 'system_event',
+        body: params.body,
+        system_event_type: params.eventType,
+        system_event_ref: params.refId ?? null,
+        system_payload: systemPayload,
+        priority: params.priority,
+      })
+      .select(MESSAGE_COLUMNS)
+      .single();
+
+    if (insertError) throw insertError;
+
+    // No viewer context for system writes; pass a sentinel so reactedByMe=false.
+    const [dto] = await this.mapRowsToDTOs([inserted as CircleMessageRow], '');
     return dto;
   }
 

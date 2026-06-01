@@ -73,6 +73,10 @@ export class ChallengeService {
       await this.inviteUsers(challenge.id, userId, input.invite_user_ids);
     }
 
+    // Surface a friendly circle-chat announcement (fire-and-forget; never throws).
+    const { ChatActivityHooks } = await import('./chat-activity-hooks');
+    ChatActivityHooks.onNewChallenge(input.fitcircle_id, challenge.id, name).catch(() => {});
+
     return this.enrichChallenge(challenge, userId);
   }
 
@@ -650,16 +654,26 @@ export class ChallengeService {
       .limit(1)
       .single();
 
-    const { error } = await supabaseAdmin
+    const { data: completed, error } = await supabaseAdmin
       .from('challenges')
       .update({
         status: 'completed',
         winner_user_id: winner?.user_id || null,
         updated_at: new Date().toISOString(),
       })
-      .eq('id', challengeId);
+      .eq('id', challengeId)
+      .select('fitcircle_id, name')
+      .single();
 
     if (error) throw error;
+
+    // Surface a friendly circle-chat update (fire-and-forget; never throws).
+    const { ChatActivityHooks } = await import('./chat-activity-hooks');
+    ChatActivityHooks.onChallengeResolved(
+      completed.fitcircle_id,
+      challengeId,
+      completed.name
+    ).catch(() => {});
   }
 
   // ============================================================================

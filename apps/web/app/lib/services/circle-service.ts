@@ -1194,6 +1194,14 @@ export class CircleService {
     }
 
     console.log(`[CircleService.addMemberToCircle] Successfully added user to challenge_participants`);
+
+    // Surface a friendly circle-chat update for genuine joins (fire-and-forget;
+    // never throws). Skip the creator's self-join at circle creation, which
+    // would post "say hi" into an otherwise empty circle.
+    if (invitedBy !== userId) {
+      const { ChatActivityHooks } = await import('./chat-activity-hooks');
+      ChatActivityHooks.onMemberJoined(circleId, userId).catch(() => {});
+    }
   }
 
   /**

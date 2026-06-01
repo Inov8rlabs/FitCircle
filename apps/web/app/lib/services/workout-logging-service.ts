@@ -166,6 +166,10 @@ export class WorkoutLoggingService {
       }
     }
 
+    // Surface a friendly circle-chat update (fire-and-forget; never throws).
+    const { ChatActivityHooks } = await import('./chat-activity-hooks');
+    ChatActivityHooks.onWorkoutCompleted(userId, exercise.id).catch(() => {});
+
     return { exercise, momentum: momentumResult };
   }
 

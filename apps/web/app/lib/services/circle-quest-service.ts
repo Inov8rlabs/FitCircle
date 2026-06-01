@@ -432,14 +432,26 @@ export class CircleQuestService {
   private static async completeQuest(questId: string): Promise<void> {
     const supabaseAdmin = createAdminSupabase();
 
-    const { error } = await supabaseAdmin
+    const { data: completed, error } = await supabaseAdmin
       .from('circle_quests')
       .update({ status: 'completed' })
-      .eq('id', questId);
+      .eq('id', questId)
+      .select('fitcircle_id, quest_name, created_by')
+      .single();
 
     if (error) {
       console.error('[CircleQuestService] Failed to complete quest:', error);
+      return;
     }
+
+    // Surface a friendly circle-chat update (fire-and-forget; never throws).
+    const { ChatActivityHooks } = await import('./chat-activity-hooks');
+    ChatActivityHooks.onQuestCompleted(
+      completed.fitcircle_id,
+      completed.created_by,
+      questId,
+      completed.quest_name
+    ).catch(() => {});
   }
 
   private static async verifyCircleMembership(

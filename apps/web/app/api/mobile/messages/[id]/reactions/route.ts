@@ -3,7 +3,7 @@ import { z } from 'zod';
 
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { CircleChatService } from '@/lib/services/circle-chat-service';
-import { REACTION_KINDS } from '@/lib/types/circle-chat';
+import { REACTION_KINDS, type ReactionKind } from '@/lib/types/circle-chat';
 
 // Validation schema for POST body
 const addReactionSchema = z.object({
@@ -31,7 +31,9 @@ export async function POST(
     const body = await request.json();
     const { reaction } = addReactionSchema.parse(body);
 
-    const summaries = await CircleChatService.addReaction(id, user.id, reaction);
+    // zod validated `reaction` against REACTION_KINDS at runtime; the enum cast above
+    // widens the static type to string, so narrow it back to ReactionKind here.
+    const summaries = await CircleChatService.addReaction(id, user.id, reaction as ReactionKind);
 
     return NextResponse.json({
       success: true,

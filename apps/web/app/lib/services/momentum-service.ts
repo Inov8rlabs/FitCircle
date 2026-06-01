@@ -138,6 +138,12 @@ export class MomentumService {
 
     console.log(`[MomentumService.checkIn] Momentum updated: ${newMomentum} (best: ${newBestMomentum}, flame: L${flameInfo.level})`);
 
+    // Surface a friendly circle-chat update on milestone (fire-and-forget; never throws).
+    if (milestone) {
+      const { ChatActivityHooks } = await import('./chat-activity-hooks');
+      ChatActivityHooks.onStreakMilestone(userId, newMomentum).catch(() => {});
+    }
+
     return {
       new_momentum: newMomentum,
       best_momentum: newBestMomentum,
