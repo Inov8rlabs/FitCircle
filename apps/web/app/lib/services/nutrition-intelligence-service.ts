@@ -23,6 +23,10 @@ import {
 // Gateway auth: AI_GATEWAY_API_KEY env, or Vercel OIDC in deployment.
 const VISION_MODEL = 'anthropic/claude-sonnet-4.6';
 
+// Voice parsing is text-only (client did STT) — same model family, no image. Verified current
+// against the live AI Gateway model list. p95 target < 1.2s (§7.6) — text is far cheaper/faster.
+const VOICE_MODEL = 'anthropic/claude-sonnet-4.6';
+
 const SYSTEM_PROMPT = [
   'You are a nutrition estimation assistant. Given a photo of a meal, identify every distinct',
   'food component and estimate its quantity and macros.',
@@ -32,6 +36,21 @@ const SYSTEM_PROMPT = [
   '- Macros (calories, proteinG, carbsG, fatG) are for the WHOLE item at the estimated quantity.',
   '- confidence (per item) and overallConfidence are 0..1.',
   '- Do not invent foods you cannot see. If the plate is unclear, return fewer items with lower confidence.',
+  '- Be body- and food-neutral: never judge the food, never comment on the eater. Just identify and estimate.',
+].join(' ');
+
+const VOICE_SYSTEM_PROMPT = [
+  'You are a nutrition estimation assistant. The user spoke a description of what they ate and it',
+  'was transcribed to text. Parse that text into every distinct food item with estimated quantity and macros.',
+  'Rules:',
+  '- Estimate, never claim exactness. Infer reasonable quantities from the words: "two eggs" → quantity 2,',
+  '  servingUnit "egg"; "a bowl of rice" → a typical bowl. When the amount is vague or unstated, set',
+  '  quantityRange {min,max} to a plausible span and quantity to its midpoint; when the speaker gave a clear',
+  '  count or measure, set quantityRange to null.',
+  '- Macros (calories, proteinG, carbsG, fatG) are for the WHOLE item at the estimated quantity.',
+  '- confidence (per item) and overallConfidence are 0..1; lower it when the transcript is ambiguous.',
+  '- Only include foods the transcript actually mentions. Ignore filler words and non-food chatter.',
+  '- If the transcript names no food at all, return an empty items array with low overallConfidence.',
   '- Be body- and food-neutral: never judge the food, never comment on the eater. Just identify and estimate.',
 ].join(' ');
 
@@ -46,7 +65,7 @@ export class NutritionIntelligenceService {
     const imageHash = createHash('sha256').update(imageBytes).digest('hex');
     const cached = await this.getCachedResult(imageHash);
     if (cached) {
-      return this.toDraft(cached, VISION_MODEL, true);
+      return this.toDraft(cached, VISION_MODEL, true, 'photo', 'llm_vision');
     }
 
     // 2. Per-user daily soft cap on premium vision calls (§9.2). Caching is checked first so
@@ -83,12 +102,63 @@ export class NutritionIntelligenceService {
     // 4. Record the call (for the daily cap) and cache the result by image hash.
     await this.recordParse(userId, imageHash, result);
 
-    return this.toDraft(result, VISION_MODEL, false);
+    return this.toDraft(result, VISION_MODEL, false, 'photo', 'llm_vision');
+  }
+
+  /**
+   * Parse a spoken (client-STT-transcribed) food description into a structured nutrition draft.
+   * Text-only — the native Speech framework / Web Speech API ran on the client and produced the
+   * transcript; we just turn it into the same draft shape as parsePhoto for confirm-then-commit.
+   *
+   * No daily soft cap: text parsing is much cheaper than the premium vision call, so it isn't
+   * gated by PHOTO_PARSE_DAILY_SOFT_CAP. We still record the call in nutrition_parse_log for
+   * accounting/observability (failure-isolated). No content cache: free-text transcripts are
+   * near-unique, so a hash cache would rarely hit; cached is always false. p95 target < 1.2s (§7.6).
+   *
+   * @throws Error('ParseFailed') when the model output cannot be validated
+   */
+  static async parseVoice(userId: string, transcript: string): Promise<NutritionDraftDTO> {
+    let result: PhotoParseResult;
+    try {
+      const { output } = await generateText({
+        model: VOICE_MODEL,
+        output: Output.object({ schema: photoParseResultSchema }),
+        system: VOICE_SYSTEM_PROMPT,
+        messages: [
+          {
+            role: 'user',
+            content: [
+              {
+                type: 'text',
+                text: `Parse this spoken food description into items with estimated quantities and macros:\n\n"${transcript}"`,
+              },
+            ],
+          },
+        ],
+      });
+      result = output;
+    } catch (err) {
+      console.error('[NutritionIntelligenceService.parseVoice] text call/validation failed:', err);
+      throw new Error('ParseFailed');
+    }
+
+    // Accounting only (no cap, no cache). The hash is over the transcript so the log row matches
+    // the not-null image_hash column convention; it is not used for lookups.
+    const transcriptHash = createHash('sha256').update(transcript).digest('hex');
+    await this.recordParseLog(userId, transcriptHash);
+
+    return this.toDraft(result, VOICE_MODEL, false, 'voice', 'llm_voice');
   }
 
   // ---- private helpers -------------------------------------------------------
 
-  private static toDraft(result: PhotoParseResult, model: string, cachedFlag: boolean): NutritionDraftDTO {
+  private static toDraft(
+    result: PhotoParseResult,
+    model: string,
+    cachedFlag: boolean,
+    inputMethod: NutritionDraftDTO['inputMethod'],
+    nutritionSource: NutritionDraftDTO['nutritionSource'],
+  ): NutritionDraftDTO {
     const totals = result.items.reduce(
       (acc, it) => ({
         calories: acc.calories + it.calories,
@@ -102,8 +172,8 @@ export class NutritionIntelligenceService {
       items: result.items,
       overallConfidence: result.overallConfidence,
       notes: result.notes,
-      inputMethod: 'photo',
-      nutritionSource: 'llm_vision',
+      inputMethod,
+      nutritionSource,
       model,
       cached: cachedFlag,
       totals,
@@ -147,6 +217,17 @@ export class NutritionIntelligenceService {
     } catch (err) {
       // Non-blocking: a logging/cache failure must not fail the user's parse.
       console.error('[NutritionIntelligenceService.recordParse] non-fatal:', err);
+    }
+  }
+
+  /** Log a parse call (accounting/observability only; no cache write). Failure-isolated. */
+  private static async recordParseLog(userId: string, hash: string): Promise<void> {
+    const supabase = createAdminSupabase();
+    try {
+      await supabase.from('nutrition_parse_log').insert({ user_id: userId, image_hash: hash });
+    } catch (err) {
+      // Non-blocking: a logging failure must not fail the user's parse.
+      console.error('[NutritionIntelligenceService.recordParseLog] non-fatal:', err);
     }
   }
 }
