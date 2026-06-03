@@ -28,6 +28,7 @@ import {
   Loader2,
   MessageCircle,
   LayoutGrid,
+  Salad,
 } from 'lucide-react';
 import { useParams, useRouter } from 'next/navigation';
 import { useState, useEffect } from 'react';
@@ -36,6 +37,14 @@ import { toast } from 'sonner';
 import CircleChallengesSection from '@/components/challenges/CircleChallengesSection';
 import { CircleChat } from '@/components/chat/CircleChat';
 import CircleQuestsSection from '@/components/CircleQuestsSection';
+import { CircleFoodFeed } from '@/components/nutrition/CircleFoodFeed';
+import { FoodSearch } from '@/components/nutrition/FoodSearch';
+import { InsightsList } from '@/components/nutrition/InsightsList';
+import { NutritionCoach } from '@/components/nutrition/NutritionCoach';
+import { PhotoLog } from '@/components/nutrition/PhotoLog';
+import { PlateScoreCard } from '@/components/nutrition/PlateScoreCard';
+import { VoiceLog } from '@/components/nutrition/VoiceLog';
+import { nutritionClient, type PrivacyTier } from '@/lib/api/nutrition-client';
 import { CheckInCard } from '@/components/check-ins';
 import DashboardNav from '@/components/DashboardNav';
 import { BathroomScale } from '@/components/icons/BathroomScale';
@@ -111,6 +120,8 @@ export default function FitCirclePage() {
   const [showShareDialog, setShowShareDialog] = useState(false);
   const [showSubmitProgressDialog, setShowSubmitProgressDialog] = useState(false);
   const [copySuccess, setCopySuccess] = useState(false);
+  const [foodPrivacyTier, setFoodPrivacyTier] = useState<PrivacyTier | null>(null);
+  const [foodFeedKey, setFoodFeedKey] = useState(0);
 
   // Generate invite URL using environment variable or window location
   const inviteUrl = fitCircle?.invite_code
@@ -146,6 +157,10 @@ export default function FitCirclePage() {
     if (circleId && user) {
       void fetchFitCircle();
       void fetchParticipants();
+      nutritionClient
+        .getFoodPrivacy(circleId)
+        .then((p) => setFoodPrivacyTier(p.tier))
+        .catch(() => setFoodPrivacyTier(null));
     }
   }, [circleId, user]);
 
@@ -1009,7 +1024,7 @@ export default function FitCirclePage() {
 
           {/* Sectioned content: Overview vs Chat */}
           <Tabs defaultValue="overview" className="w-full">
-            <TabsList className="mb-4 grid w-full max-w-sm grid-cols-2 bg-slate-900/50 border border-slate-800/50 backdrop-blur-xl">
+            <TabsList className="mb-4 grid w-full max-w-md grid-cols-3 bg-slate-900/50 border border-slate-800/50 backdrop-blur-xl">
               <TabsTrigger value="overview" className="gap-1.5 data-[state=active]:bg-slate-800 data-[state=active]:text-white">
                 <LayoutGrid className="h-4 w-4" />
                 Overview
@@ -1017,6 +1032,10 @@ export default function FitCirclePage() {
               <TabsTrigger value="chat" className="gap-1.5 data-[state=active]:bg-slate-800 data-[state=active]:text-white">
                 <MessageCircle className="h-4 w-4" />
                 Chat
+              </TabsTrigger>
+              <TabsTrigger value="nutrition" className="gap-1.5 data-[state=active]:bg-slate-800 data-[state=active]:text-white">
+                <Salad className="h-4 w-4" />
+                Nutrition
               </TabsTrigger>
             </TabsList>
 
@@ -1236,6 +1255,53 @@ export default function FitCirclePage() {
                     <CircleChat circleId={circleId} />
                   </CardContent>
                 </Card>
+              </motion.div>
+            </TabsContent>
+
+            <TabsContent value="nutrition" className="mt-0">
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="grid grid-cols-1 gap-4 lg:grid-cols-3"
+              >
+                {/* Logging + Plate Score column */}
+                <div className="space-y-4 lg:col-span-1">
+                  <Card className="bg-slate-900/50 border-slate-800/50 backdrop-blur-xl">
+                    <CardHeader className="p-4 pb-2">
+                      <CardTitle className="text-base">Log a meal</CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-3 p-4 pt-2">
+                      <PhotoLog onLogged={() => setFoodFeedKey((k) => k + 1)} />
+                      <VoiceLog onLogged={() => setFoodFeedKey((k) => k + 1)} />
+                      <FoodSearch />
+                    </CardContent>
+                  </Card>
+
+                  <PlateScoreCard />
+
+                  <NutritionCoach circleId={circleId} />
+                </div>
+
+                {/* Feed column */}
+                <div className="lg:col-span-2">
+                  <Card className="bg-slate-900/50 border-slate-800/50 backdrop-blur-xl">
+                    <CardHeader className="p-4 pb-2">
+                      <CardTitle className="text-base">Circle food feed</CardTitle>
+                    </CardHeader>
+                    <CardContent className="p-4 pt-2">
+                      <CircleFoodFeed key={foodFeedKey} circleId={circleId} privacyTier={foodPrivacyTier} />
+                    </CardContent>
+                  </Card>
+
+                  <Card className="mt-4 bg-slate-900/50 border-slate-800/50 backdrop-blur-xl">
+                    <CardHeader className="p-4 pb-2">
+                      <CardTitle className="text-base">Insights</CardTitle>
+                    </CardHeader>
+                    <CardContent className="p-4 pt-2">
+                      <InsightsList />
+                    </CardContent>
+                  </Card>
+                </div>
               </motion.div>
             </TabsContent>
           </Tabs>
