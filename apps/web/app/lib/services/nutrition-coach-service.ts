@@ -1,5 +1,6 @@
 import { generateText } from 'ai';
 
+import { DietaryPreferencesService } from './dietary-preferences-service';
 import { createAdminSupabase } from '../supabase-admin';
 import type { CoachResponse, INutritionCoachService } from '../types/nutrition-coach';
 
@@ -255,6 +256,21 @@ export class NutritionCoachService implements INutritionCoachService {
         );
       } else {
         parts.push('User has little or no recent food logging. Do not pressure them about logging.');
+      }
+
+      // (a2) Dietary preferences + allergens (PRD §6.15). So the coach tailors any food
+      // suggestions to the user's diet and avoids suggesting their declared allergens. Failure
+      // here is non-fatal — the surrounding try/catch degrades to a non-grounded safe reply.
+      const prefs = await DietaryPreferencesService.getPrefs(userId);
+      const prefBits: string[] = [];
+      if (prefs.diet !== 'none') prefBits.push(`follows a ${prefs.diet.replace(/_/g, ' ')} diet`);
+      if (prefs.allergens.length > 0) prefBits.push(`is allergic to ${prefs.allergens.join(', ')}`);
+      if (prefBits.length > 0) {
+        parts.push(
+          `The user ${prefBits.join(' and ')}. Tailor any food ideas accordingly: only suggest ` +
+            'foods compatible with these preferences, and never suggest anything containing a ' +
+            'listed allergen.'
+        );
       }
 
       // (b) Latest Plate Score (a positive, balance-oriented signal).

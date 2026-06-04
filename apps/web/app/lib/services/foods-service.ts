@@ -1,4 +1,6 @@
+import { DietaryPreferencesService } from './dietary-preferences-service';
 import { createAdminSupabase } from '../supabase-admin';
+import type { DietType } from '../types/dietary-prefs';
 import {
   type CreateCustomFoodInput,
   type FoodDTO,
@@ -51,9 +53,25 @@ export class FoodsService {
       rows = (fuzzy ?? []) as FoodRow[];
     }
 
+    // Pref-aware ranking nudge (PRD §6.15). Fetch the user's diet/allergens and DEPRIORITIZE
+    // (never hard-remove — a user may still want to log anything) foods whose name suggests a
+    // conflict. Failure-isolated: if prefs can't be read, search behaves exactly as before.
+    let prefPenalty: ((r: FoodRow) => number) | null = null;
+    try {
+      const prefs = await DietaryPreferencesService.getPrefs(userId);
+      if (prefs.diet !== 'none' || prefs.allergens.length > 0) {
+        prefPenalty = (r: FoodRow) => this.dietaryPenalty(r, prefs.diet, prefs.allergens);
+      }
+    } catch {
+      prefPenalty = null;
+    }
+
     const lowerQ = q.toLowerCase();
     const ranked = rows
-      .map((r) => ({ row: r, score: this.rankScore(r, lowerQ, userId, params.locale) }))
+      .map((r) => ({
+        row: r,
+        score: this.rankScore(r, lowerQ, userId, params.locale) - (prefPenalty ? prefPenalty(r) : 0),
+      }))
       .sort((a, b) => b.score - a.score)
       .slice(0, limit)
       .map((x) => this.toDTO(x.row));
@@ -131,6 +149,94 @@ export class FoodsService {
     if (r.barcode) s += 2; // packaged items with a barcode are slightly more "real"
     return s;
   }
+
+  /**
+   * Dietary-preference ranking NUDGE (PRD §6.15). Returns a non-negative penalty subtracted from
+   * a row's relevance score so foods that conflict with the user's declared diet/allergens sink
+   * toward the bottom of the results — but are NEVER removed (the user can still log anything).
+   *
+   * This is a deliberately lightweight NAME-token heuristic, not a nutrition-grade classifier:
+   * it pushes down items whose name contains tokens that strongly suggest a conflict (e.g.
+   * "chicken", "bacon", "fish" for vegetarian/vegan; the allergen word itself for an allergy).
+   * Both diet conflicts and allergen matches contribute, so a doubly-conflicting item sinks more.
+   */
+  private static dietaryPenalty(r: FoodRow, diet: DietType, allergens: string[]): number {
+    // Pad with spaces so single-word tokens match on word boundaries (avoids "ham" in "graham").
+    const name = ` ${(r.name ?? '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()} `;
+    let penalty = 0;
+
+    const hasAny = (tokens: readonly string[]) => tokens.some((t) => name.includes(` ${t} `));
+
+    // Diet-conflict tokens. Each tier subsumes the broader animal-protein tokens it forbids.
+    const MEAT = FoodsService.MEAT_TOKENS;
+    const FISH = FoodsService.FISH_TOKENS;
+    const ANIMAL = FoodsService.ANIMAL_PRODUCT_TOKENS; // dairy/egg/honey etc.
+    const PORK = FoodsService.PORK_TOKENS;
+    const GLUTEN = FoodsService.GLUTEN_TOKENS;
+
+    switch (diet) {
+      case 'vegetarian':
+        if (hasAny(MEAT) || hasAny(FISH)) penalty += 60;
+        break;
+      case 'vegan':
+        if (hasAny(MEAT) || hasAny(FISH) || hasAny(ANIMAL)) penalty += 60;
+        break;
+      case 'pescatarian':
+        // Fish is fine; other meat is not.
+        if (hasAny(MEAT)) penalty += 60;
+        break;
+      case 'halal':
+      case 'kosher':
+        // Pork/derived products are excluded under both (kosher also excludes shellfish).
+        if (hasAny(PORK)) penalty += 60;
+        if (diet === 'kosher' && hasAny(FoodsService.SHELLFISH_TOKENS)) penalty += 40;
+        break;
+      case 'gluten_free':
+        if (hasAny(GLUTEN)) penalty += 60;
+        break;
+      case 'none':
+        break;
+    }
+
+    // Allergen matches: push down any item whose name contains a declared allergen token
+    // (word-boundary match against the normalized name).
+    for (const a of allergens) {
+      const tok = a.trim().toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+      if (tok && name.includes(` ${tok} `)) penalty += 50;
+    }
+
+    return penalty;
+  }
+
+  // Name-token vocabularies for the §6.15 ranking nudge. Lowercase, matched as words within the
+  // food name. Intentionally small/high-signal to minimize false positives.
+  private static readonly MEAT_TOKENS = [
+    'beef', 'pork', 'chicken', 'turkey', 'lamb', 'veal', 'bacon', 'ham', 'sausage', 'steak',
+    'meat', 'meatball', 'pepperoni', 'salami', 'prosciutto', 'duck', 'venison', 'bison', 'goat',
+    'hot dog', 'hotdog', 'chorizo', 'mutton', 'ribs', 'brisket', 'gelatin',
+  ] as const;
+  private static readonly FISH_TOKENS = [
+    'fish', 'salmon', 'tuna', 'cod', 'shrimp', 'prawn', 'crab', 'lobster', 'anchovy', 'anchovies',
+    'sardine', 'sardines', 'tilapia', 'halibut', 'mackerel', 'oyster', 'oysters', 'mussel',
+    'mussels', 'clam', 'clams', 'scallop', 'scallops', 'squid', 'calamari', 'herring', 'trout',
+    'seafood', 'shellfish',
+  ] as const;
+  private static readonly SHELLFISH_TOKENS = [
+    'shrimp', 'prawn', 'crab', 'lobster', 'oyster', 'oysters', 'mussel', 'mussels', 'clam',
+    'clams', 'scallop', 'scallops', 'shellfish',
+  ] as const;
+  private static readonly ANIMAL_PRODUCT_TOKENS = [
+    'milk', 'cheese', 'butter', 'cream', 'yogurt', 'yoghurt', 'egg', 'eggs', 'honey', 'whey',
+    'casein', 'ghee', 'gelatin',
+  ] as const;
+  private static readonly PORK_TOKENS = [
+    'pork', 'bacon', 'ham', 'prosciutto', 'pepperoni', 'lard', 'chorizo', 'pancetta',
+  ] as const;
+  private static readonly GLUTEN_TOKENS = [
+    'wheat', 'bread', 'pasta', 'flour', 'barley', 'rye', 'gluten', 'cracker', 'crackers',
+    'cereal', 'noodle', 'noodles', 'bagel', 'croissant', 'tortilla', 'couscous', 'bulgur',
+    'malt', 'breaded', 'biscuit', 'pastry', 'muffin',
+  ] as const;
 
   private static toDTO(r: FoodRow): FoodDTO {
     return {
