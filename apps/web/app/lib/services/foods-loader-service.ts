@@ -29,6 +29,8 @@ interface OffProduct {
   serving_size?: string;
   countries_tags?: string[];
   nutriments?: OffNutriments;
+  image_url?: string;
+  image_front_url?: string;
 }
 
 // Our `foods` row shape for a global reference insert (owner_id NULL).
@@ -47,6 +49,7 @@ export interface FoodRefUpsert {
   fiber_per_100g: number | null;
   sugar_per_100g: number | null;
   locale: string | null;
+  image_url: string | null;
 }
 
 const UPSERT_BATCH = 500;
@@ -74,6 +77,7 @@ export class FoodsLoaderService {
       fiber_per_100g: num(n.fiber_100g),
       sugar_per_100g: num(n.sugars_100g),
       locale: this.localeFromCountries(p.countries_tags),
+      image_url: p.image_url || p.image_front_url || null,
     };
   }
 
@@ -86,7 +90,7 @@ export class FoodsLoaderService {
     const url =
       `https://world.openfoodfacts.org/cgi/search.pl?search_terms=${encodeURIComponent(term)}` +
       `&search_simple=1&action=process&json=1&page_size=${pageSize}` +
-      `&fields=code,product_name,brands,serving_size,countries_tags,nutriments`;
+      `&fields=code,product_name,brands,serving_size,countries_tags,nutriments,image_url,image_front_url`;
 
     const res = await fetch(url, { headers: { 'User-Agent': 'FitCircle/1.0 (nutrition loader)' } });
     if (!res.ok) throw new Error(`OFF search failed: ${res.status}`);

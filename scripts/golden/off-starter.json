@@ -1,0 +1,2079 @@
+[
+  {
+    "id": "off:8901552020497",
+    "imageUri": "https://images.openfoodfacts.org/images/products/890/155/202/0497/front_en.7.400.jpg",
+    "provenance": "label",
+    "groundTruth": {
+      "items": [
+        {
+          "name": "Tadka dal",
+          "canonicalId": "a2bc5cf1-9f9d-4d29-9505-41b13b6278da",
+          "grams": 100,
+          "calories": 72,
+          "protein": 1.6,
+          "carbs": 6.2,
+          "fat": 4.6
+        }
+      ],
+      "total": {
+        "calories": 72,
+        "protein": 1.6,
+        "carbs": 6.2,
+        "fat": 4.6
+      }
+    },
+    "slices": {
+      "cuisine": "south_asian",
+      "mealType": "snack",
+      "difficulty": "easy",
+      "lighting": "good"
+    },
+    "datasetVersion": "off-starter-v1"
+  },
+  {
+    "id": "off:8908020463497",
+    "imageUri": "https://images.openfoodfacts.org/images/products/890/802/046/3497/front_en.3.400.jpg",
+    "provenance": "label",
+    "groundTruth": {
+      "items": [
+        {
+          "name": "Crax Veg Biryani",
+          "canonicalId": "4be9f387-7ab7-4804-a35b-8484af08475d",
+          "grams": 100,
+          "calories": 492,
+          "protein": 9.8,
+          "carbs": 59,
+          "fat": 24.1
+        }
+      ],
+      "total": {
+        "calories": 492,
+        "protein": 9.8,
+        "carbs": 59,
+        "fat": 24.1
+      }
+    },
+    "slices": {
+      "cuisine": "south_asian",
+      "mealType": "snack",
+      "difficulty": "easy",
+      "lighting": "good"
+    },
+    "datasetVersion": "off-starter-v1"
+  },
+  {
+    "id": "off:0069276032405",
+    "imageUri": "https://images.openfoodfacts.org/images/products/006/927/603/2405/front_en.5.400.jpg",
+    "provenance": "label",
+    "groundTruth": {
+      "items": [
+        {
+          "name": "Pataks paste biryani",
+          "canonicalId": "981b6944-1d17-4334-8810-1df436298d12",
+          "grams": 100,
+          "calories": 266.66666666667,
+          "protein": 6.6666666666667,
+          "carbs": 20,
+          "fat": 20
+        }
+      ],
+      "total": {
+        "calories": 266.66666666667,
+        "protein": 6.6666666666667,
+        "carbs": 20,
+        "fat": 20
+      }
+    },
+    "slices": {
+      "cuisine": "south_asian",
+      "mealType": "snack",
+      "difficulty": "easy",
+      "lighting": "good"
+    },
+    "datasetVersion": "off-starter-v1"
+  },
+  {
+    "id": "off:00614047",
+    "imageUri": "https://images.openfoodfacts.org/images/products/000/000/061/4047/front_en.28.400.jpg",
+    "provenance": "label",
+    "groundTruth": {
+      "items": [
+        {
+          "name": "Yellow Tadka Dal",
+          "canonicalId": "9eee9095-8448-48d4-b7c4-d8978b6694f2",
+          "grams": 100,
+          "calories": 92.8571428571429,
+          "protein": 4.28571428571429,
+          "carbs": 12.1428571428571,
+          "fat": 3.57142857142857
+        }
+      ],
+      "total": {
+        "calories": 92.8571428571429,
+        "protein": 4.28571428571429,
+        "carbs": 12.1428571428571,
+        "fat": 3.57142857142857
+      }
+    },
+    "slices": {
+      "cuisine": "south_asian",
+      "mealType": "snack",
+      "difficulty": "easy",
+      "lighting": "good"
+    },
+    "datasetVersion": "off-starter-v1"
+  },
+  {
+    "id": "off:5060212650900",
+    "imageUri": "https://images.openfoodfacts.org/images/products/506/021/265/0900/front_en.13.400.jpg",
+    "provenance": "label",
+    "groundTruth": {
+      "items": [
+        {
+          "name": "Mutton Biryani",
+          "canonicalId": "74ed33ac-16eb-4621-9896-11f454fa1135",
+          "grams": 100,
+          "calories": 170,
+          "protein": 9.1,
+          "carbs": 20.6,
+          "fat": 5.2
+        }
+      ],
+      "total": {
+        "calories": 170,
+        "protein": 9.1,
+        "carbs": 20.6,
+        "fat": 5.2
+      }
+    },
+    "slices": {
+      "cuisine": "south_asian",
+      "mealType": "snack",
+      "difficulty": "easy",
+      "lighting": "good"
+    },
+    "datasetVersion": "off-starter-v1"
+  },
+  {
+    "id": "off:5056517318386",
+    "imageUri": "https://images.openfoodfacts.org/images/products/505/651/731/8386/front_en.3.400.jpg",
+    "provenance": "label",
+    "groundTruth": {
+      "items": [
+        {
+          "name": "Lamb Biryani",
+          "canonicalId": "84b8a9e2-774a-4bb3-9d84-7dbd787be6d2",
+          "grams": 100,
+          "calories": 178,
+          "protein": 8.8,
+          "carbs": 13.8,
+          "fat": 9.4
+        }
+      ],
+      "total": {
+        "calories": 178,
+        "protein": 8.8,
+        "carbs": 13.8,
+        "fat": 9.4
+      }
+    },
+    "slices": {
+      "cuisine": "south_asian",
+      "mealType": "snack",
+      "difficulty": "easy",
+      "lighting": "good"
+    },
+    "datasetVersion": "off-starter-v1"
+  },
+  {
+    "id": "off:8901552021470",
+    "imageUri": "https://images.openfoodfacts.org/images/products/890/155/202/1470/front_cs.22.400.jpg",
+    "provenance": "label",
+    "groundTruth": {
+      "items": [
+        {
+          "name": "Dal Tadka",
+          "canonicalId": "2030fd1a-86be-4c45-a8fe-aa09b6ba65b0",
+          "grams": 100,
+          "calories": 72,
+          "protein": 1.6,
+          "carbs": 6.2,
+          "fat": 4.6
+        }
+      ],
+      "total": {
+        "calories": 72,
+        "protein": 1.6,
+        "carbs": 6.2,
+        "fat": 4.6
+      }
+    },
+    "slices": {
+      "cuisine": "south_asian",
+      "mealType": "snack",
+      "difficulty": "easy",
+      "lighting": "good"
+    },
+    "datasetVersion": "off-starter-v1"
+  },
+  {
+    "id": "off:0788821001146",
+    "imageUri": "https://images.openfoodfacts.org/images/products/078/882/100/1146/front_en.7.400.jpg",
+    "provenance": "label",
+    "groundTruth": {
+      "items": [
+        {
+          "name": "Masala bombay biryani mix",
+          "canonicalId": "6edfbf94-a34a-42b1-9643-57672dade43a",
+          "grams": 100,
+          "calories": 301,
+          "protein": 10.3,
+          "carbs": 39.5,
+          "fat": 10.2
+        }
+      ],
+      "total": {
+        "calories": 301,
+        "protein": 10.3,
+        "carbs": 39.5,
+        "fat": 10.2
+      }
+    },
+    "slices": {
+      "cuisine": "south_asian",
+      "mealType": "snack",
+      "difficulty": "easy",
+      "lighting": "good"
+    },
+    "datasetVersion": "off-starter-v1"
+  },
+  {
+    "id": "off:0788821032027",
+    "imageUri": "https://images.openfoodfacts.org/images/products/078/882/103/2027/front_en.6.400.jpg",
+    "provenance": "label",
+    "groundTruth": {
+      "items": [
+        {
+          "name": "Spice Mix for Karachi Beef Biryani",
+          "canonicalId": "b825b775-90d6-4b61-947c-1c549dd2e0cd",
+          "grams": 100,
+          "calories": 292,
+          "protein": 8,
+          "carbs": 42,
+          "fat": 5
+        }
+      ],
+      "total": {
+        "calories": 292,
+        "protein": 8,
+        "carbs": 42,
+        "fat": 5
+      }
+    },
+    "slices": {
+      "cuisine": "south_asian",
+      "mealType": "snack",
+      "difficulty": "easy",
+      "lighting": "good"
+    },
+    "datasetVersion": "off-starter-v1"
+  },
+  {
+    "id": "off:0857063002041",
+    "imageUri": "https://images.openfoodfacts.org/images/products/085/706/300/2041/front_en.57.400.jpg",
+    "provenance": "label",
+    "groundTruth": {
+      "items": [
+        {
+          "name": "Chicken Biryani",
+          "canonicalId": "f2b68b78-6141-41d2-9fb3-f6a04a32a465",
+          "grams": 100,
+          "calories": 148.409893992933,
+          "protein": 5.65371024734982,
+          "carbs": 24.7349823321555,
+          "fat": 3.53356890459364
+        }
+      ],
+      "total": {
+        "calories": 148.409893992933,
+        "protein": 5.65371024734982,
+        "carbs": 24.7349823321555,
+        "fat": 3.53356890459364
+      }
+    },
+    "slices": {
+      "cuisine": "south_asian",
+      "mealType": "snack",
+      "difficulty": "easy",
+      "lighting": "good"
+    },
+    "datasetVersion": "off-starter-v1"
+  },
+  {
+    "id": "off:5057008495234",
+    "imageUri": "https://images.openfoodfacts.org/images/products/505/700/849/5234/front_en.3.400.jpg",
+    "provenance": "label",
+    "groundTruth": {
+      "items": [
+        {
+          "name": "Chicken Tikka Biryani",
+          "canonicalId": "978837ce-b4c7-46f2-abe6-36afba287071",
+          "grams": 100,
+          "calories": 164.109589041096,
+          "protein": 10.1917808219178,
+          "carbs": 20.6575342465753,
+          "fat": 3.75342465753425
+        }
+      ],
+      "total": {
+        "calories": 164.109589041096,
+        "protein": 10.1917808219178,
+        "carbs": 20.6575342465753,
+        "fat": 3.75342465753425
+      }
+    },
+    "slices": {
+      "cuisine": "south_asian",
+      "mealType": "snack",
+      "difficulty": "easy",
+      "lighting": "good"
+    },
+    "datasetVersion": "off-starter-v1"
+  },
+  {
+    "id": "off:5011308701648",
+    "imageUri": "https://images.openfoodfacts.org/images/products/501/130/870/1648/front_en.7.400.jpg",
+    "provenance": "label",
+    "groundTruth": {
+      "items": [
+        {
+          "name": "Patak's Vegetable Biryani",
+          "canonicalId": "8f88648b-81af-4207-b816-64eaad8deeb0",
+          "grams": 100,
+          "calories": 145,
+          "protein": 3.8,
+          "carbs": 23,
+          "fat": 3.6
+        }
+      ],
+      "total": {
+        "calories": 145,
+        "protein": 3.8,
+        "carbs": 23,
+        "fat": 3.6
+      }
+    },
+    "slices": {
+      "cuisine": "south_asian",
+      "mealType": "snack",
+      "difficulty": "easy",
+      "lighting": "good"
+    },
+    "datasetVersion": "off-starter-v1"
+  },
+  {
+    "id": "off:5000169373002",
+    "imageUri": "https://images.openfoodfacts.org/images/products/500/016/937/3002/front_en.3.400.jpg",
+    "provenance": "label",
+    "groundTruth": {
+      "items": [
+        {
+          "name": "Keralan Chicken Biryani",
+          "canonicalId": "78d323b9-f42c-4537-951f-6f581bbbafa2",
+          "grams": 100,
+          "calories": 98,
+          "protein": 6.2,
+          "carbs": 11.1,
+          "fat": 2.6
+        }
+      ],
+      "total": {
+        "calories": 98,
+        "protein": 6.2,
+        "carbs": 11.1,
+        "fat": 2.6
+      }
+    },
+    "slices": {
+      "cuisine": "south_asian",
+      "mealType": "snack",
+      "difficulty": "easy",
+      "lighting": "good"
+    },
+    "datasetVersion": "off-starter-v1"
+  },
+  {
+    "id": "off:8904004403725",
+    "imageUri": "https://images.openfoodfacts.org/images/products/890/400/440/3725/front_en.20.400.jpg",
+    "provenance": "label",
+    "groundTruth": {
+      "items": [
+        {
+          "name": "Moong Dal",
+          "canonicalId": "f8fd8594-a25b-4de0-8d33-fcd81fcd0e0c",
+          "grams": 100,
+          "calories": 476,
+          "protein": 21.31,
+          "carbs": 50.66,
+          "fat": 20.93
+        }
+      ],
+      "total": {
+        "calories": 476,
+        "protein": 21.31,
+        "carbs": 50.66,
+        "fat": 20.93
+      }
+    },
+    "slices": {
+      "cuisine": "south_asian",
+      "mealType": "snack",
+      "difficulty": "easy",
+      "lighting": "good"
+    },
+    "datasetVersion": "off-starter-v1"
+  },
+  {
+    "id": "off:00248877",
+    "imageUri": "https://images.openfoodfacts.org/images/products/000/000/024/8877/front_en.20.400.jpg",
+    "provenance": "label",
+    "groundTruth": {
+      "items": [
+        {
+          "name": "Vegetable biryani",
+          "canonicalId": "33e29131-9476-4302-a137-bd30b8080293",
+          "grams": 100,
+          "calories": 120.25,
+          "protein": 2.275,
+          "carbs": 17.725,
+          "fat": 4.95
+        }
+      ],
+      "total": {
+        "calories": 120.25,
+        "protein": 2.275,
+        "carbs": 17.725,
+        "fat": 4.95
+      }
+    },
+    "slices": {
+      "cuisine": "south_asian",
+      "mealType": "snack",
+      "difficulty": "easy",
+      "lighting": "good"
+    },
+    "datasetVersion": "off-starter-v1"
+  },
+  {
+    "id": "off:5028217001103",
+    "imageUri": "https://images.openfoodfacts.org/images/products/502/821/700/1103/front_fr.3.400.jpg",
+    "provenance": "label",
+    "groundTruth": {
+      "items": [
+        {
+          "name": "Laziza Biryani Plain Mix 100G",
+          "canonicalId": "5b5ca47e-2b7c-4487-94bd-65a976a388cf",
+          "grams": 100,
+          "calories": 425,
+          "protein": 14,
+          "carbs": 57,
+          "fat": 14.2
+        }
+      ],
+      "total": {
+        "calories": 425,
+        "protein": 14,
+        "carbs": 57,
+        "fat": 14.2
+      }
+    },
+    "slices": {
+      "cuisine": "south_asian",
+      "mealType": "snack",
+      "difficulty": "easy",
+      "lighting": "good"
+    },
+    "datasetVersion": "off-starter-v1"
+  },
+  {
+    "id": "off:8901552021432",
+    "imageUri": "https://images.openfoodfacts.org/images/products/890/155/202/1432/front_fr.4.400.jpg",
+    "provenance": "label",
+    "groundTruth": {
+      "items": [
+        {
+          "name": "Delhi Dal Makhani",
+          "canonicalId": "392a12fe-7d2c-4711-a9d0-8e70cf5d3db5",
+          "grams": 100,
+          "calories": 115,
+          "protein": 4.1,
+          "carbs": 9.8,
+          "fat": 6.7
+        }
+      ],
+      "total": {
+        "calories": 115,
+        "protein": 4.1,
+        "carbs": 9.8,
+        "fat": 6.7
+      }
+    },
+    "slices": {
+      "cuisine": "south_asian",
+      "mealType": "snack",
+      "difficulty": "easy",
+      "lighting": "good"
+    },
+    "datasetVersion": "off-starter-v1"
+  },
+  {
+    "id": "off:3270160864669",
+    "imageUri": "https://images.openfoodfacts.org/images/products/327/016/086/4669/front_en.3.400.jpg",
+    "provenance": "label",
+    "groundTruth": {
+      "items": [
+        {
+          "name": "Poulet biryani riz aux raisins secs",
+          "canonicalId": "464f156f-3920-43e3-8eff-655b07478ca2",
+          "grams": 100,
+          "calories": 147,
+          "protein": 6,
+          "carbs": 17,
+          "fat": 5.7
+        }
+      ],
+      "total": {
+        "calories": 147,
+        "protein": 6,
+        "carbs": 17,
+        "fat": 5.7
+      }
+    },
+    "slices": {
+      "cuisine": "south_asian",
+      "mealType": "snack",
+      "difficulty": "easy",
+      "lighting": "good"
+    },
+    "datasetVersion": "off-starter-v1"
+  },
+  {
+    "id": "off:8904004403800",
+    "imageUri": "https://images.openfoodfacts.org/images/products/890/400/440/3800/front_en.17.400.jpg",
+    "provenance": "label",
+    "groundTruth": {
+      "items": [
+        {
+          "name": "Moong dal",
+          "canonicalId": "e3ccf012-5fe3-4e1f-be80-0b8171520e04",
+          "grams": 100,
+          "calories": 476,
+          "protein": 21.31,
+          "carbs": 50.66,
+          "fat": 20.93
+        }
+      ],
+      "total": {
+        "calories": 476,
+        "protein": 21.31,
+        "carbs": 50.66,
+        "fat": 20.93
+      }
+    },
+    "slices": {
+      "cuisine": "south_asian",
+      "mealType": "snack",
+      "difficulty": "easy",
+      "lighting": "good"
+    },
+    "datasetVersion": "off-starter-v1"
+  },
+  {
+    "id": "off:00246057",
+    "imageUri": "https://images.openfoodfacts.org/images/products/000/000/024/6057/front_en.15.400.jpg",
+    "provenance": "label",
+    "groundTruth": {
+      "items": [
+        {
+          "name": "Chicken Tikka Biryani",
+          "canonicalId": "124fffca-098e-4d01-aeef-64da27865b3a",
+          "grams": 100,
+          "calories": 136.5,
+          "protein": 7.725,
+          "carbs": 15.1,
+          "fat": 4.725
+        }
+      ],
+      "total": {
+        "calories": 136.5,
+        "protein": 7.725,
+        "carbs": 15.1,
+        "fat": 4.725
+      }
+    },
+    "slices": {
+      "cuisine": "south_asian",
+      "mealType": "snack",
+      "difficulty": "easy",
+      "lighting": "good"
+    },
+    "datasetVersion": "off-starter-v1"
+  },
+  {
+    "id": "off:8906010500559",
+    "imageUri": "https://images.openfoodfacts.org/images/products/890/601/050/0559/front_es.15.400.jpg",
+    "provenance": "label",
+    "groundTruth": {
+      "items": [
+        {
+          "name": "Mung Dal",
+          "canonicalId": "c14ba713-3267-46c9-92a5-02a6d6cfbfd9",
+          "grams": 100,
+          "calories": 504,
+          "protein": 22.7,
+          "carbs": 54,
+          "fat": 17.5
+        }
+      ],
+      "total": {
+        "calories": 504,
+        "protein": 22.7,
+        "carbs": 54,
+        "fat": 17.5
+      }
+    },
+    "slices": {
+      "cuisine": "south_asian",
+      "mealType": "snack",
+      "difficulty": "easy",
+      "lighting": "good"
+    },
+    "datasetVersion": "off-starter-v1"
+  },
+  {
+    "id": "off:0788821122124",
+    "imageUri": "https://images.openfoodfacts.org/images/products/078/882/112/2124/front_en.6.400.jpg",
+    "provenance": "label",
+    "groundTruth": {
+      "items": [
+        {
+          "name": "Shan biryani mixed masala",
+          "canonicalId": "d88aacaf-07af-47ad-8418-ec826e2d820f",
+          "grams": 100,
+          "calories": 413,
+          "protein": 12.5,
+          "carbs": 62.5,
+          "fat": 12.5
+        }
+      ],
+      "total": {
+        "calories": 413,
+        "protein": 12.5,
+        "carbs": 62.5,
+        "fat": 12.5
+      }
+    },
+    "slices": {
+      "cuisine": "south_asian",
+      "mealType": "snack",
+      "difficulty": "easy",
+      "lighting": "good"
+    },
+    "datasetVersion": "off-starter-v1"
+  },
+  {
+    "id": "off:5010482874582",
+    "imageUri": "https://images.openfoodfacts.org/images/products/501/048/287/4582/front_en.3.400.jpg",
+    "provenance": "label",
+    "groundTruth": {
+      "items": [
+        {
+          "name": "Chicken Biryani",
+          "canonicalId": "b9f72f81-b51b-42ae-8b59-9352e1909499",
+          "grams": 100,
+          "calories": 152,
+          "protein": 7.6,
+          "carbs": 18.9,
+          "fat": 4.9
+        }
+      ],
+      "total": {
+        "calories": 152,
+        "protein": 7.6,
+        "carbs": 18.9,
+        "fat": 4.9
+      }
+    },
+    "slices": {
+      "cuisine": "south_asian",
+      "mealType": "snack",
+      "difficulty": "easy",
+      "lighting": "good"
+    },
+    "datasetVersion": "off-starter-v1"
+  },
+  {
+    "id": "off:5000169525234",
+    "imageUri": "https://images.openfoodfacts.org/images/products/500/016/952/5234/front_en.7.400.jpg",
+    "provenance": "label",
+    "groundTruth": {
+      "items": [
+        {
+          "name": "Vegetable biryani",
+          "canonicalId": "eeef6d14-931e-4b4b-9948-18bc5c0a6495",
+          "grams": 100,
+          "calories": 139,
+          "protein": 2.8,
+          "carbs": 17.5,
+          "fat": 5.6
+        }
+      ],
+      "total": {
+        "calories": 139,
+        "protein": 2.8,
+        "carbs": 17.5,
+        "fat": 5.6
+      }
+    },
+    "slices": {
+      "cuisine": "south_asian",
+      "mealType": "snack",
+      "difficulty": "easy",
+      "lighting": "good"
+    },
+    "datasetVersion": "off-starter-v1"
+  },
+  {
+    "id": "off:5011308002301",
+    "imageUri": "https://images.openfoodfacts.org/images/products/501/130/800/2301/front_fr.3.400.jpg",
+    "provenance": "label",
+    "groundTruth": {
+      "items": [
+        {
+          "name": "Patak's Biryani Paste",
+          "canonicalId": "53f86342-c753-4889-9fa1-e67ace55982f",
+          "grams": 100,
+          "calories": 257,
+          "protein": 4.5,
+          "carbs": 8.2,
+          "fat": 19.6
+        }
+      ],
+      "total": {
+        "calories": 257,
+        "protein": 4.5,
+        "carbs": 8.2,
+        "fat": 19.6
+      }
+    },
+    "slices": {
+      "cuisine": "south_asian",
+      "mealType": "snack",
+      "difficulty": "easy",
+      "lighting": "good"
+    },
+    "datasetVersion": "off-starter-v1"
+  },
+  {
+    "id": "off:0066701009216",
+    "imageUri": "https://images.openfoodfacts.org/images/products/006/670/100/9216/front_fr.3.400.jpg",
+    "provenance": "label",
+    "groundTruth": {
+      "items": [
+        {
+          "name": "Sauce poutine prête à servir",
+          "canonicalId": "78ee49b9-874c-4a2f-80e3-391dffcda8c1",
+          "grams": 100,
+          "calories": 20,
+          "protein": 1.5,
+          "carbs": 6,
+          "fat": 0
+        }
+      ],
+      "total": {
+        "calories": 20,
+        "protein": 1.5,
+        "carbs": 6,
+        "fat": 0
+      }
+    },
+    "slices": {
+      "cuisine": "canadian",
+      "mealType": "snack",
+      "difficulty": "easy",
+      "lighting": "good"
+    },
+    "datasetVersion": "off-starter-v1"
+  },
+  {
+    "id": "off:0064300474008",
+    "imageUri": "https://images.openfoodfacts.org/images/products/006/430/047/4008/front_fr.4.400.jpg",
+    "provenance": "label",
+    "groundTruth": {
+      "items": [
+        {
+          "name": "Cordon bleu Sauce Poutine",
+          "canonicalId": "b04fddbc-123a-497a-8a52-f1759ab98770",
+          "grams": 100,
+          "calories": 20,
+          "protein": 0.4,
+          "carbs": 4,
+          "fat": 0
+        }
+      ],
+      "total": {
+        "calories": 20,
+        "protein": 0.4,
+        "carbs": 4,
+        "fat": 0
+      }
+    },
+    "slices": {
+      "cuisine": "canadian",
+      "mealType": "snack",
+      "difficulty": "easy",
+      "lighting": "good"
+    },
+    "datasetVersion": "off-starter-v1"
+  },
+  {
+    "id": "off:0066200020569",
+    "imageUri": "https://images.openfoodfacts.org/images/products/006/620/002/0569/front_fr.4.400.jpg",
+    "provenance": "label",
+    "groundTruth": {
+      "items": [
+        {
+          "name": "Organic biologique poutine",
+          "canonicalId": "2bb84c17-6340-4301-8314-8ef38edcc2a9",
+          "grams": 100,
+          "calories": 0,
+          "protein": 0,
+          "carbs": 0,
+          "fat": 0
+        }
+      ],
+      "total": {
+        "calories": 0,
+        "protein": 0,
+        "carbs": 0,
+        "fat": 0
+      }
+    },
+    "slices": {
+      "cuisine": "canadian",
+      "mealType": "snack",
+      "difficulty": "easy",
+      "lighting": "good"
+    },
+    "datasetVersion": "off-starter-v1"
+  },
+  {
+    "id": "off:0059749875516",
+    "imageUri": "https://images.openfoodfacts.org/images/products/005/974/987/5516/front_fr.14.400.jpg",
+    "provenance": "label",
+    "groundTruth": {
+      "items": [
+        {
+          "name": "Sauce a Poutine",
+          "canonicalId": "46f426ae-3db7-4ab6-855c-e5c62efb456a",
+          "grams": 100,
+          "calories": 41.6666666666667,
+          "protein": 1.66666666666667,
+          "carbs": 6.66666666666667,
+          "fat": 1.66666666666667
+        }
+      ],
+      "total": {
+        "calories": 41.6666666666667,
+        "protein": 1.66666666666667,
+        "carbs": 6.66666666666667,
+        "fat": 1.66666666666667
+      }
+    },
+    "slices": {
+      "cuisine": "canadian",
+      "mealType": "snack",
+      "difficulty": "easy",
+      "lighting": "good"
+    },
+    "datasetVersion": "off-starter-v1"
+  },
+  {
+    "id": "off:0066701006611",
+    "imageUri": "https://images.openfoodfacts.org/images/products/006/670/100/6611/front_fr.11.400.jpg",
+    "provenance": "label",
+    "groundTruth": {
+      "items": [
+        {
+          "name": "Sauce à Poutine",
+          "canonicalId": "83dee9c8-1cba-4b28-acd6-9acc2262e034",
+          "grams": 100,
+          "calories": 10,
+          "protein": 0.2,
+          "carbs": 3,
+          "fat": 0.01
+        }
+      ],
+      "total": {
+        "calories": 10,
+        "protein": 0.2,
+        "carbs": 3,
+        "fat": 0.01
+      }
+    },
+    "slices": {
+      "cuisine": "canadian",
+      "mealType": "snack",
+      "difficulty": "easy",
+      "lighting": "good"
+    },
+    "datasetVersion": "off-starter-v1"
+  },
+  {
+    "id": "off:0621879004243",
+    "imageUri": "https://images.openfoodfacts.org/images/products/062/187/900/4243/front_fr.3.400.jpg",
+    "provenance": "label",
+    "groundTruth": {
+      "items": [
+        {
+          "name": "Fromage a poutine",
+          "canonicalId": "5b9885a5-adf8-4bbe-bbcb-2931fedb6164",
+          "grams": 100,
+          "calories": 400,
+          "protein": 23.3,
+          "carbs": 0,
+          "fat": 30
+        }
+      ],
+      "total": {
+        "calories": 400,
+        "protein": 23.3,
+        "carbs": 0,
+        "fat": 30
+      }
+    },
+    "slices": {
+      "cuisine": "canadian",
+      "mealType": "snack",
+      "difficulty": "easy",
+      "lighting": "good"
+    },
+    "datasetVersion": "off-starter-v1"
+  },
+  {
+    "id": "off:0066200026110",
+    "imageUri": "https://images.openfoodfacts.org/images/products/006/620/002/6110/front_en.18.400.jpg",
+    "provenance": "label",
+    "groundTruth": {
+      "items": [
+        {
+          "name": "Mélange à sauce poutine",
+          "canonicalId": "3d9c6c62-8b22-4d9f-9184-3e694465775d",
+          "grams": 100,
+          "calories": 283.018867924528,
+          "protein": 1.88679245283019,
+          "carbs": 75.4716981132076,
+          "fat": 0
+        }
+      ],
+      "total": {
+        "calories": 283.018867924528,
+        "protein": 1.88679245283019,
+        "carbs": 75.4716981132076,
+        "fat": 0
+      }
+    },
+    "slices": {
+      "cuisine": "canadian",
+      "mealType": "snack",
+      "difficulty": "easy",
+      "lighting": "good"
+    },
+    "datasetVersion": "off-starter-v1"
+  },
+  {
+    "id": "off:0066701001029",
+    "imageUri": "https://images.openfoodfacts.org/images/products/006/670/100/1029/front_fr.6.400.jpg",
+    "provenance": "label",
+    "groundTruth": {
+      "items": [
+        {
+          "name": "St hubert poutine gravy",
+          "canonicalId": "27283664-c617-4dab-827c-33657bc6502e",
+          "grams": 100,
+          "calories": 33.333333333333,
+          "protein": 0.83333333333333,
+          "carbs": 5,
+          "fat": 1.6666666666667
+        }
+      ],
+      "total": {
+        "calories": 33.333333333333,
+        "protein": 0.83333333333333,
+        "carbs": 5,
+        "fat": 1.6666666666667
+      }
+    },
+    "slices": {
+      "cuisine": "canadian",
+      "mealType": "snack",
+      "difficulty": "easy",
+      "lighting": "good"
+    },
+    "datasetVersion": "off-starter-v1"
+  },
+  {
+    "id": "off:0066701004303",
+    "imageUri": "https://images.openfoodfacts.org/images/products/006/670/100/4303/front_fr.4.400.jpg",
+    "provenance": "label",
+    "groundTruth": {
+      "items": [
+        {
+          "name": "Poutine",
+          "canonicalId": "459d00fe-55e2-4682-be56-3a66a0f72e06",
+          "grams": 100,
+          "calories": 33.3333333333333,
+          "protein": 0.333333333333333,
+          "carbs": 6.66666666666667,
+          "fat": 0
+        }
+      ],
+      "total": {
+        "calories": 33.3333333333333,
+        "protein": 0.333333333333333,
+        "carbs": 6.66666666666667,
+        "fat": 0
+      }
+    },
+    "slices": {
+      "cuisine": "canadian",
+      "mealType": "snack",
+      "difficulty": "easy",
+      "lighting": "good"
+    },
+    "datasetVersion": "off-starter-v1"
+  },
+  {
+    "id": "off:0060383665906",
+    "imageUri": "https://images.openfoodfacts.org/images/products/006/038/366/5906/front_fr.3.400.jpg",
+    "provenance": "label",
+    "groundTruth": {
+      "items": [
+        {
+          "name": "Sauce poutine",
+          "canonicalId": "6d9a4f75-0578-4502-b834-a00bf5bc426f",
+          "grams": 100,
+          "calories": 41.666666666667,
+          "protein": 0.83333333333333,
+          "carbs": 5,
+          "fat": 1.6666666666667
+        }
+      ],
+      "total": {
+        "calories": 41.666666666667,
+        "protein": 0.83333333333333,
+        "carbs": 5,
+        "fat": 1.6666666666667
+      }
+    },
+    "slices": {
+      "cuisine": "canadian",
+      "mealType": "snack",
+      "difficulty": "easy",
+      "lighting": "good"
+    },
+    "datasetVersion": "off-starter-v1"
+  },
+  {
+    "id": "off:7540013105413",
+    "imageUri": "https://images.openfoodfacts.org/images/products/754/001/310/5413/front_fr.4.400.jpg",
+    "provenance": "label",
+    "groundTruth": {
+      "items": [
+        {
+          "name": "Poutine",
+          "canonicalId": "8fc3cd21-be6a-4b2c-b9d1-6c691351b23e",
+          "grams": 100,
+          "calories": 15,
+          "protein": 0,
+          "carbs": 3,
+          "fat": 0
+        }
+      ],
+      "total": {
+        "calories": 15,
+        "protein": 0,
+        "carbs": 3,
+        "fat": 0
+      }
+    },
+    "slices": {
+      "cuisine": "canadian",
+      "mealType": "snack",
+      "difficulty": "easy",
+      "lighting": "good"
+    },
+    "datasetVersion": "off-starter-v1"
+  },
+  {
+    "id": "off:0772291027508",
+    "imageUri": "https://images.openfoodfacts.org/images/products/077/229/102/7508/front_fr.4.400.jpg",
+    "provenance": "label",
+    "groundTruth": {
+      "items": [
+        {
+          "name": "Poutine sauce mix",
+          "canonicalId": "35a229ce-8beb-4af7-ae0f-4da3461c739f",
+          "grams": 100,
+          "calories": 250,
+          "protein": 37.5,
+          "carbs": 2,
+          "fat": 37.5
+        }
+      ],
+      "total": {
+        "calories": 250,
+        "protein": 37.5,
+        "carbs": 2,
+        "fat": 37.5
+      }
+    },
+    "slices": {
+      "cuisine": "canadian",
+      "mealType": "snack",
+      "difficulty": "easy",
+      "lighting": "good"
+    },
+    "datasetVersion": "off-starter-v1"
+  },
+  {
+    "id": "off:0061979136909",
+    "imageUri": "https://images.openfoodfacts.org/images/products/006/197/913/6909/front_fr.3.400.jpg",
+    "provenance": "label",
+    "groundTruth": {
+      "items": [
+        {
+          "name": "Poutine",
+          "canonicalId": "c435faa2-728a-4273-addc-c43ea947b0f4",
+          "grams": 100,
+          "calories": 15,
+          "protein": 0.10000000149012,
+          "carbs": 2.9000000953674,
+          "fat": 0.10000000149012
+        }
+      ],
+      "total": {
+        "calories": 15,
+        "protein": 0.10000000149012,
+        "carbs": 2.9000000953674,
+        "fat": 0.10000000149012
+      }
+    },
+    "slices": {
+      "cuisine": "canadian",
+      "mealType": "snack",
+      "difficulty": "easy",
+      "lighting": "good"
+    },
+    "datasetVersion": "off-starter-v1"
+  },
+  {
+    "id": "off:0064300471502",
+    "imageUri": "https://images.openfoodfacts.org/images/products/006/430/047/1502/front_en.6.400.jpg",
+    "provenance": "label",
+    "groundTruth": {
+      "items": [
+        {
+          "name": "Sauce à poutine",
+          "canonicalId": "cd64e54c-8fe3-40cb-a9ef-63fb63613aaf",
+          "grams": 100,
+          "calories": 33.333333333333,
+          "protein": 1.6666666666667,
+          "carbs": 6.6666666666667,
+          "fat": 0
+        }
+      ],
+      "total": {
+        "calories": 33.333333333333,
+        "protein": 1.6666666666667,
+        "carbs": 6.6666666666667,
+        "fat": 0
+      }
+    },
+    "slices": {
+      "cuisine": "canadian",
+      "mealType": "snack",
+      "difficulty": "easy",
+      "lighting": "good"
+    },
+    "datasetVersion": "off-starter-v1"
+  },
+  {
+    "id": "off:0627843972648",
+    "imageUri": "https://images.openfoodfacts.org/images/products/062/784/397/2648/front_fr.3.400.jpg",
+    "provenance": "label",
+    "groundTruth": {
+      "items": [
+        {
+          "name": "Poutine",
+          "canonicalId": "1f00824a-12b3-4aaa-96da-4e70cb076972",
+          "grams": 100,
+          "calories": 35,
+          "protein": 1,
+          "carbs": 7,
+          "fat": 0.2
+        }
+      ],
+      "total": {
+        "calories": 35,
+        "protein": 1,
+        "carbs": 7,
+        "fat": 0.2
+      }
+    },
+    "slices": {
+      "cuisine": "canadian",
+      "mealType": "snack",
+      "difficulty": "easy",
+      "lighting": "good"
+    },
+    "datasetVersion": "off-starter-v1"
+  },
+  {
+    "id": "off:0067709432440",
+    "imageUri": "https://images.openfoodfacts.org/images/products/006/770/943/2440/front_fr.3.400.jpg",
+    "provenance": "label",
+    "groundTruth": {
+      "items": [
+        {
+          "name": "Poutine",
+          "canonicalId": "3e561a70-4f55-4579-aec7-92e39a560913",
+          "grams": 100,
+          "calories": 30,
+          "protein": 0,
+          "carbs": 0,
+          "fat": 0
+        }
+      ],
+      "total": {
+        "calories": 30,
+        "protein": 0,
+        "carbs": 0,
+        "fat": 0
+      }
+    },
+    "slices": {
+      "cuisine": "canadian",
+      "mealType": "snack",
+      "difficulty": "easy",
+      "lighting": "good"
+    },
+    "datasetVersion": "off-starter-v1"
+  },
+  {
+    "id": "off:0621879007596",
+    "imageUri": "https://images.openfoodfacts.org/images/products/062/187/900/7596/front_fr.3.400.jpg",
+    "provenance": "label",
+    "groundTruth": {
+      "items": [
+        {
+          "name": "Poutine",
+          "canonicalId": "e9f52254-c7f8-4eaa-b2c7-de9517d29c22",
+          "grams": 100,
+          "calories": 33.3333333333333,
+          "protein": 0.5,
+          "carbs": 6.66666666666667,
+          "fat": 0.333333333333333
+        }
+      ],
+      "total": {
+        "calories": 33.3333333333333,
+        "protein": 0.5,
+        "carbs": 6.66666666666667,
+        "fat": 0.333333333333333
+      }
+    },
+    "slices": {
+      "cuisine": "canadian",
+      "mealType": "snack",
+      "difficulty": "easy",
+      "lighting": "good"
+    },
+    "datasetVersion": "off-starter-v1"
+  },
+  {
+    "id": "off:0067924464714",
+    "imageUri": "https://images.openfoodfacts.org/images/products/006/792/446/4714/front_fr.9.400.jpg",
+    "provenance": "label",
+    "groundTruth": {
+      "items": [
+        {
+          "name": "Melange pour sauce poutine",
+          "canonicalId": "956270b3-0259-4035-af62-c6317183d7bf",
+          "grams": 100,
+          "calories": 333.33333333333,
+          "protein": 6.6666666666667,
+          "carbs": 50,
+          "fat": 3.3333333333333
+        }
+      ],
+      "total": {
+        "calories": 333.33333333333,
+        "protein": 6.6666666666667,
+        "carbs": 50,
+        "fat": 3.3333333333333
+      }
+    },
+    "slices": {
+      "cuisine": "canadian",
+      "mealType": "snack",
+      "difficulty": "easy",
+      "lighting": "good"
+    },
+    "datasetVersion": "off-starter-v1"
+  },
+  {
+    "id": "off:3270160862115",
+    "imageUri": "https://images.openfoodfacts.org/images/products/327/016/086/2115/front_fr.3.400.jpg",
+    "provenance": "label",
+    "groundTruth": {
+      "items": [
+        {
+          "name": "Poutine",
+          "canonicalId": "0325ccb7-a3e1-4276-86cd-fc9146c31425",
+          "grams": 100,
+          "calories": 200,
+          "protein": 7,
+          "carbs": 18,
+          "fat": 11
+        }
+      ],
+      "total": {
+        "calories": 200,
+        "protein": 7,
+        "carbs": 18,
+        "fat": 11
+      }
+    },
+    "slices": {
+      "cuisine": "canadian",
+      "mealType": "snack",
+      "difficulty": "easy",
+      "lighting": "good"
+    },
+    "datasetVersion": "off-starter-v1"
+  },
+  {
+    "id": "off:43000012",
+    "imageUri": "https://images.openfoodfacts.org/images/products/000/004/300/0012/front_fr.3.400.jpg",
+    "provenance": "label",
+    "groundTruth": {
+      "items": [
+        {
+          "name": "Poutine",
+          "canonicalId": "b73325f7-23e7-4aa2-8cd4-0b9c23d234e6",
+          "grams": 100,
+          "calories": 33.333333333333,
+          "protein": 0.83333333333333,
+          "carbs": 5,
+          "fat": 0.83333333333333
+        }
+      ],
+      "total": {
+        "calories": 33.333333333333,
+        "protein": 0.83333333333333,
+        "carbs": 5,
+        "fat": 0.83333333333333
+      }
+    },
+    "slices": {
+      "cuisine": "canadian",
+      "mealType": "snack",
+      "difficulty": "easy",
+      "lighting": "good"
+    },
+    "datasetVersion": "off-starter-v1"
+  },
+  {
+    "id": "off:0066701009780",
+    "imageUri": "https://images.openfoodfacts.org/images/products/006/670/100/9780/front_fr.17.400.jpg",
+    "provenance": "label",
+    "groundTruth": {
+      "items": [
+        {
+          "name": "Mélange à sauce poutine",
+          "canonicalId": "0c0c2c42-1a50-44fa-87d4-f840c4136b90",
+          "grams": 100,
+          "calories": 333.33333333333,
+          "protein": 3.3333333333333,
+          "carbs": 66.666666666667,
+          "fat": 0
+        }
+      ],
+      "total": {
+        "calories": 333.33333333333,
+        "protein": 3.3333333333333,
+        "carbs": 66.666666666667,
+        "fat": 0
+      }
+    },
+    "slices": {
+      "cuisine": "canadian",
+      "mealType": "snack",
+      "difficulty": "easy",
+      "lighting": "good"
+    },
+    "datasetVersion": "off-starter-v1"
+  },
+  {
+    "id": "off:0064300001266",
+    "imageUri": "https://images.openfoodfacts.org/images/products/006/430/000/1266/front_fr.3.400.jpg",
+    "provenance": "label",
+    "groundTruth": {
+      "items": [
+        {
+          "name": "Sauce poutine",
+          "canonicalId": "0814caa2-00e8-4cfe-b20b-2af988f8eedf",
+          "grams": 100,
+          "calories": 33.3333333333333,
+          "protein": 1.66666666666667,
+          "carbs": 5,
+          "fat": 0.833333333333333
+        }
+      ],
+      "total": {
+        "calories": 33.3333333333333,
+        "protein": 1.66666666666667,
+        "carbs": 5,
+        "fat": 0.833333333333333
+      }
+    },
+    "slices": {
+      "cuisine": "canadian",
+      "mealType": "snack",
+      "difficulty": "easy",
+      "lighting": "good"
+    },
+    "datasetVersion": "off-starter-v1"
+  },
+  {
+    "id": "off:0060612258947",
+    "imageUri": "https://images.openfoodfacts.org/images/products/006/061/225/8947/front_fr.23.400.jpg",
+    "provenance": "label",
+    "groundTruth": {
+      "items": [
+        {
+          "name": "Sauce traditionnelle poutine Québecoise",
+          "canonicalId": "8225ce9e-4185-4d1b-b58a-1a4ec8fb0d36",
+          "grams": 100,
+          "calories": 333.333333333333,
+          "protein": 5,
+          "carbs": 66.6666666666667,
+          "fat": 0
+        }
+      ],
+      "total": {
+        "calories": 333.333333333333,
+        "protein": 5,
+        "carbs": 66.6666666666667,
+        "fat": 0
+      }
+    },
+    "slices": {
+      "cuisine": "canadian",
+      "mealType": "snack",
+      "difficulty": "easy",
+      "lighting": "good"
+    },
+    "datasetVersion": "off-starter-v1"
+  },
+  {
+    "id": "off:0066200005450",
+    "imageUri": "https://images.openfoodfacts.org/images/products/006/620/000/5450/front_en.14.400.jpg",
+    "provenance": "label",
+    "groundTruth": {
+      "items": [
+        {
+          "name": "Poutine gravy mix",
+          "canonicalId": "6ad3e4a7-193a-4a63-8f31-b8dc8f2dbd67",
+          "grams": 100,
+          "calories": 25,
+          "protein": 0.4,
+          "carbs": 5,
+          "fat": 0
+        }
+      ],
+      "total": {
+        "calories": 25,
+        "protein": 0.4,
+        "carbs": 5,
+        "fat": 0
+      }
+    },
+    "slices": {
+      "cuisine": "canadian",
+      "mealType": "snack",
+      "difficulty": "easy",
+      "lighting": "good"
+    },
+    "datasetVersion": "off-starter-v1"
+  },
+  {
+    "id": "off:0064300400748",
+    "imageUri": "https://images.openfoodfacts.org/images/products/006/430/040/0748/front_fr.3.400.jpg",
+    "provenance": "label",
+    "groundTruth": {
+      "items": [
+        {
+          "name": "Sauce à poutine",
+          "canonicalId": "0e94fe79-cd03-4530-8626-1edac6325dca",
+          "grams": 100,
+          "calories": 33.3333,
+          "protein": 0.6667,
+          "carbs": 6.6667,
+          "fat": 0
+        }
+      ],
+      "total": {
+        "calories": 33.3333,
+        "protein": 0.6667,
+        "carbs": 6.6667,
+        "fat": 0
+      }
+    },
+    "slices": {
+      "cuisine": "canadian",
+      "mealType": "snack",
+      "difficulty": "easy",
+      "lighting": "good"
+    },
+    "datasetVersion": "off-starter-v1"
+  },
+  {
+    "id": "off:4088600060941",
+    "imageUri": "https://images.openfoodfacts.org/images/products/408/860/006/0941/front_en.122.400.jpg",
+    "provenance": "label",
+    "groundTruth": {
+      "items": [
+        {
+          "name": "Greek 0% Fat Authentic Greek Yogurt",
+          "canonicalId": "322770ca-f67b-4ed1-906c-c23e1aefbd7b",
+          "grams": 100,
+          "calories": 57,
+          "protein": 10.4,
+          "carbs": 3.9,
+          "fat": 0
+        }
+      ],
+      "total": {
+        "calories": 57,
+        "protein": 10.4,
+        "carbs": 3.9,
+        "fat": 0
+      }
+    },
+    "slices": {
+      "cuisine": "western",
+      "mealType": "snack",
+      "difficulty": "easy",
+      "lighting": "good"
+    },
+    "datasetVersion": "off-starter-v1"
+  },
+  {
+    "id": "off:8906005501080",
+    "imageUri": "https://images.openfoodfacts.org/images/products/890/600/550/1080/front_fr.14.400.jpg",
+    "provenance": "label",
+    "groundTruth": {
+      "items": [
+        {
+          "name": "Bikaji (moong Dal) 400GM",
+          "canonicalId": "b2a2435a-14da-4fcf-a4ef-e5279dc1533a",
+          "grams": 100,
+          "calories": 476,
+          "protein": 23,
+          "carbs": 49,
+          "fat": 20
+        }
+      ],
+      "total": {
+        "calories": 476,
+        "protein": 23,
+        "carbs": 49,
+        "fat": 20
+      }
+    },
+    "slices": {
+      "cuisine": "south_asian",
+      "mealType": "snack",
+      "difficulty": "easy",
+      "lighting": "good"
+    },
+    "datasetVersion": "off-starter-v1"
+  },
+  {
+    "id": "off:5028217002261",
+    "imageUri": "https://images.openfoodfacts.org/images/products/502/821/700/2261/front_fr.7.400.jpg",
+    "provenance": "label",
+    "groundTruth": {
+      "items": [
+        {
+          "name": "Sindhi biryani masala spice mix",
+          "canonicalId": "eb3d7e97-6db2-412e-8bda-645919f19a37",
+          "grams": 100,
+          "calories": 375,
+          "protein": 12.5,
+          "carbs": 50,
+          "fat": 12.5
+        }
+      ],
+      "total": {
+        "calories": 375,
+        "protein": 12.5,
+        "carbs": 50,
+        "fat": 12.5
+      }
+    },
+    "slices": {
+      "cuisine": "south_asian",
+      "mealType": "snack",
+      "difficulty": "easy",
+      "lighting": "good"
+    },
+    "datasetVersion": "off-starter-v1"
+  },
+  {
+    "id": "off:8906001052029",
+    "imageUri": "https://images.openfoodfacts.org/images/products/890/600/105/2029/front_fr.3.400.jpg",
+    "provenance": "label",
+    "groundTruth": {
+      "items": [
+        {
+          "name": "Vegetable Biryani",
+          "canonicalId": "e454d2ee-e566-486c-a20d-ad2836d513e7",
+          "grams": 100,
+          "calories": 220,
+          "protein": 2,
+          "carbs": 16,
+          "fat": 16
+        }
+      ],
+      "total": {
+        "calories": 220,
+        "protein": 2,
+        "carbs": 16,
+        "fat": 16
+      }
+    },
+    "slices": {
+      "cuisine": "south_asian",
+      "mealType": "snack",
+      "difficulty": "easy",
+      "lighting": "good"
+    },
+    "datasetVersion": "off-starter-v1"
+  },
+  {
+    "id": "off:8711812480783",
+    "imageUri": "https://images.openfoodfacts.org/images/products/871/181/248/0783/front_en.60.400.jpg",
+    "provenance": "label",
+    "groundTruth": {
+      "items": [
+        {
+          "name": "GREEK STYLE NATURAL Coconut with live yoghurt cultures",
+          "canonicalId": "4c99e360-5145-4637-9be9-df9752fdee43",
+          "grams": 100,
+          "calories": 177,
+          "protein": 3,
+          "carbs": 3.8,
+          "fat": 9.9
+        }
+      ],
+      "total": {
+        "calories": 177,
+        "protein": 3,
+        "carbs": 3.8,
+        "fat": 9.9
+      }
+    },
+    "slices": {
+      "cuisine": "western",
+      "mealType": "snack",
+      "difficulty": "easy",
+      "lighting": "good"
+    },
+    "datasetVersion": "off-starter-v1"
+  },
+  {
+    "id": "off:4088600284897",
+    "imageUri": "https://images.openfoodfacts.org/images/products/408/860/028/4897/front_en.37.400.jpg",
+    "provenance": "label",
+    "groundTruth": {
+      "items": [
+        {
+          "name": "Greek Style Natural Yogurt",
+          "canonicalId": "4ebf9a57-94e9-41f5-a832-1951a4856096",
+          "grams": 100,
+          "calories": 121.6,
+          "protein": 3.1,
+          "carbs": 4.3,
+          "fat": 10.3
+        }
+      ],
+      "total": {
+        "calories": 121.6,
+        "protein": 3.1,
+        "carbs": 4.3,
+        "fat": 10.3
+      }
+    },
+    "slices": {
+      "cuisine": "western",
+      "mealType": "snack",
+      "difficulty": "easy",
+      "lighting": "good"
+    },
+    "datasetVersion": "off-starter-v1"
+  },
+  {
+    "id": "off:8901552011600",
+    "imageUri": "https://images.openfoodfacts.org/images/products/890/155/201/1600/front_en.23.400.jpg",
+    "provenance": "label",
+    "groundTruth": {
+      "items": [
+        {
+          "name": "Bombay Biryani",
+          "canonicalId": "3e46572d-9c23-40ae-9982-2ff41d2acaa7",
+          "grams": 100,
+          "calories": 182.142857142857,
+          "protein": 3.42857142857143,
+          "carbs": 31.5714285714286,
+          "fat": 4.71428571428571
+        }
+      ],
+      "total": {
+        "calories": 182.142857142857,
+        "protein": 3.42857142857143,
+        "carbs": 31.5714285714286,
+        "fat": 4.71428571428571
+      }
+    },
+    "slices": {
+      "cuisine": "south_asian",
+      "mealType": "snack",
+      "difficulty": "easy",
+      "lighting": "good"
+    },
+    "datasetVersion": "off-starter-v1"
+  },
+  {
+    "id": "off:5036589253471",
+    "imageUri": "https://images.openfoodfacts.org/images/products/503/658/925/3471/front_en.3.400.jpg",
+    "provenance": "label",
+    "groundTruth": {
+      "items": [
+        {
+          "name": "Greek Recipe Strained Natural Yogurt",
+          "canonicalId": "b039f329-3cc0-4d46-9981-0a59552010ea",
+          "grams": 100,
+          "calories": 12.6666666666667,
+          "protein": 10,
+          "carbs": 3.5,
+          "fat": 0.5
+        }
+      ],
+      "total": {
+        "calories": 12.6666666666667,
+        "protein": 10,
+        "carbs": 3.5,
+        "fat": 0.5
+      }
+    },
+    "slices": {
+      "cuisine": "western",
+      "mealType": "snack",
+      "difficulty": "easy",
+      "lighting": "good"
+    },
+    "datasetVersion": "off-starter-v1"
+  },
+  {
+    "id": "off:00282123",
+    "imageUri": "https://images.openfoodfacts.org/images/products/000/000/028/2123/front_en.20.400.jpg",
+    "provenance": "label",
+    "groundTruth": {
+      "items": [
+        {
+          "name": "Authentic Greek Yogurt",
+          "canonicalId": "37ed1b86-07c2-4979-8ab7-ecbfce9a8dee",
+          "grams": 100,
+          "calories": 137,
+          "protein": 6,
+          "carbs": 4.1,
+          "fat": 10.7
+        }
+      ],
+      "total": {
+        "calories": 137,
+        "protein": 6,
+        "carbs": 4.1,
+        "fat": 10.7
+      }
+    },
+    "slices": {
+      "cuisine": "western",
+      "mealType": "snack",
+      "difficulty": "easy",
+      "lighting": "good"
+    },
+    "datasetVersion": "off-starter-v1"
+  },
+  {
+    "id": "off:0621001000112",
+    "imageUri": "https://images.openfoodfacts.org/images/products/062/100/100/0112/front_fr.4.400.jpg",
+    "provenance": "label",
+    "groundTruth": {
+      "items": [
+        {
+          "name": "Sauce poutine",
+          "canonicalId": "f32f4e63-93b0-4d26-96e6-ff94360691d3",
+          "grams": 100,
+          "calories": 15,
+          "protein": 0,
+          "carbs": 1,
+          "fat": 0
+        }
+      ],
+      "total": {
+        "calories": 15,
+        "protein": 0,
+        "carbs": 1,
+        "fat": 0
+      }
+    },
+    "slices": {
+      "cuisine": "canadian",
+      "mealType": "snack",
+      "difficulty": "easy",
+      "lighting": "good"
+    },
+    "datasetVersion": "off-starter-v1"
+  },
+  {
+    "id": "off:4056489263951",
+    "imageUri": "https://images.openfoodfacts.org/images/products/405/648/926/3951/front_en.36.400.jpg",
+    "provenance": "label",
+    "groundTruth": {
+      "items": [
+        {
+          "name": "Authentic Greek Natural Yogurt 5% Fat",
+          "canonicalId": "db995681-712e-4b28-8ca0-5c0eab43c943",
+          "grams": 100,
+          "calories": 76,
+          "protein": 7.8,
+          "carbs": 4.5,
+          "fat": 5
+        }
+      ],
+      "total": {
+        "calories": 76,
+        "protein": 7.8,
+        "carbs": 4.5,
+        "fat": 5
+      }
+    },
+    "slices": {
+      "cuisine": "western",
+      "mealType": "snack",
+      "difficulty": "easy",
+      "lighting": "good"
+    },
+    "datasetVersion": "off-starter-v1"
+  },
+  {
+    "id": "off:5033665217945",
+    "imageUri": "https://images.openfoodfacts.org/images/products/503/366/521/7945/front_en.12.400.jpg",
+    "provenance": "label",
+    "groundTruth": {
+      "items": [
+        {
+          "name": "Charlie Bigham's Chicken Tikka Biryani Yoghurt & h",
+          "canonicalId": "f50eda95-a4cd-4c4c-beed-26386d1fdb32",
+          "grams": 100,
+          "calories": 131.970802919708,
+          "protein": 6.89051094890511,
+          "carbs": 16.9051094890511,
+          "fat": 4.4963503649635
+        }
+      ],
+      "total": {
+        "calories": 131.970802919708,
+        "protein": 6.89051094890511,
+        "carbs": 16.9051094890511,
+        "fat": 4.4963503649635
+      }
+    },
+    "slices": {
+      "cuisine": "south_asian",
+      "mealType": "snack",
+      "difficulty": "easy",
+      "lighting": "good"
+    },
+    "datasetVersion": "off-starter-v1"
+  },
+  {
+    "id": "off:0689544083016",
+    "imageUri": "https://images.openfoodfacts.org/images/products/068/954/408/3016/front_en.419.400.jpg",
+    "provenance": "label",
+    "groundTruth": {
+      "items": [
+        {
+          "name": "Total 0% Milkfat",
+          "canonicalId": "9eae6902-7c90-4dc8-8d7c-cca72c8f54a2",
+          "grams": 100,
+          "calories": 52.9411764705882,
+          "protein": 10.5882352941176,
+          "carbs": 2.94117647058824,
+          "fat": 0
+        }
+      ],
+      "total": {
+        "calories": 52.9411764705882,
+        "protein": 10.5882352941176,
+        "carbs": 2.94117647058824,
+        "fat": 0
+      }
+    },
+    "slices": {
+      "cuisine": "western",
+      "mealType": "snack",
+      "difficulty": "easy",
+      "lighting": "good"
+    },
+    "datasetVersion": "off-starter-v1"
+  },
+  {
+    "id": "off:0857361001234",
+    "imageUri": "https://images.openfoodfacts.org/images/products/085/736/100/1234/front_fr.7.400.jpg",
+    "provenance": "label",
+    "groundTruth": {
+      "items": [
+        {
+          "name": "Pause poutine time",
+          "canonicalId": "c0e91f47-ec63-492b-8a68-d0de62ab5a55",
+          "grams": 100,
+          "calories": 182.35294117647,
+          "protein": 5.8823529411765,
+          "carbs": 19.705882352941,
+          "fat": 8.8235294117647
+        }
+      ],
+      "total": {
+        "calories": 182.35294117647,
+        "protein": 5.8823529411765,
+        "carbs": 19.705882352941,
+        "fat": 8.8235294117647
+      }
+    },
+    "slices": {
+      "cuisine": "canadian",
+      "mealType": "snack",
+      "difficulty": "easy",
+      "lighting": "good"
+    },
+    "datasetVersion": "off-starter-v1"
+  },
+  {
+    "id": "off:8017596001511",
+    "imageUri": "https://images.openfoodfacts.org/images/products/801/759/600/1511/front_en.3.400.jpg",
+    "provenance": "label",
+    "groundTruth": {
+      "items": [
+        {
+          "name": "Piselli fini",
+          "canonicalId": "43e7c4a2-a31d-49eb-9526-811c3bdac945",
+          "grams": 100,
+          "calories": 80,
+          "protein": 5.1,
+          "carbs": 14,
+          "fat": 0
+        }
+      ],
+      "total": {
+        "calories": 80,
+        "protein": 5.1,
+        "carbs": 14,
+        "fat": 0
+      }
+    },
+    "slices": {
+      "cuisine": "western",
+      "mealType": "snack",
+      "difficulty": "easy",
+      "lighting": "good"
+    },
+    "datasetVersion": "off-starter-v1"
+  },
+  {
+    "id": "off:8901537071018",
+    "imageUri": "https://images.openfoodfacts.org/images/products/890/153/707/1018/front_fr.6.400.jpg",
+    "provenance": "label",
+    "groundTruth": {
+      "items": [
+        {
+          "name": "Daawat Biryani Basmati Rice 1kg",
+          "canonicalId": "93427d50-15d4-4272-a7d2-05e7b19bf0f8",
+          "grams": 100,
+          "calories": 350,
+          "protein": 8.8000001907349,
+          "carbs": 78,
+          "fat": 0.46999999880791
+        }
+      ],
+      "total": {
+        "calories": 350,
+        "protein": 8.8000001907349,
+        "carbs": 78,
+        "fat": 0.46999999880791
+      }
+    },
+    "slices": {
+      "cuisine": "south_asian",
+      "mealType": "snack",
+      "difficulty": "easy",
+      "lighting": "good"
+    },
+    "datasetVersion": "off-starter-v1"
+  },
+  {
+    "id": "off:0894700010434",
+    "imageUri": "https://images.openfoodfacts.org/images/products/089/470/001/0434/front_en.91.400.jpg",
+    "provenance": "label",
+    "groundTruth": {
+      "items": [
+        {
+          "name": "Greek Yogurt Whole Milk Plain",
+          "canonicalId": "479fbf86-480f-40f6-a57f-f9b014ef654b",
+          "grams": 100,
+          "calories": 100,
+          "protein": 8.82352941176471,
+          "carbs": 4.11764705882353,
+          "fat": 5.29411764705882
+        }
+      ],
+      "total": {
+        "calories": 100,
+        "protein": 8.82352941176471,
+        "carbs": 4.11764705882353,
+        "fat": 5.29411764705882
+      }
+    },
+    "slices": {
+      "cuisine": "western",
+      "mealType": "snack",
+      "difficulty": "easy",
+      "lighting": "good"
+    },
+    "datasetVersion": "off-starter-v1"
+  }
+]

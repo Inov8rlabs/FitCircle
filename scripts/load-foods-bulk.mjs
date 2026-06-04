@@ -72,12 +72,13 @@ function transformOff(p) {
     fiber_per_100g: num(n.fiber_100g),
     sugar_per_100g: num(n.sugars_100g),
     locale: localeFromCountries(p.countries_tags),
+    image_url: p.image_url || p.image_front_url || null,
   };
 }
 
 // ---- batched idempotent upsert --------------------------------------------------------------
 const COLS = ['source','source_id','name','brand','barcode','serving_size_g','serving_unit',
-  'calories_per_100g','protein_per_100g','carbs_per_100g','fat_per_100g','fiber_per_100g','sugar_per_100g','locale'];
+  'calories_per_100g','protein_per_100g','carbs_per_100g','fat_per_100g','fiber_per_100g','sugar_per_100g','locale','image_url'];
 
 async function upsertBatch(rows) {
   if (!rows.length) return 0;
@@ -179,7 +180,7 @@ async function loadUsda(dir) {
       serving_size_g: b.serving ?? null, serving_unit: null,
       calories_per_100g: num(mac.energy), protein_per_100g: num(mac.protein), carbs_per_100g: num(mac.carbs),
       fat_per_100g: num(mac.fat), fiber_per_100g: num(mac.fiber), sugar_per_100g: num(mac.sugar),
-      locale: 'en-US',
+      locale: 'en-US', image_url: null,
     });
     if (batch.length >= BATCH) await flush();
   }
