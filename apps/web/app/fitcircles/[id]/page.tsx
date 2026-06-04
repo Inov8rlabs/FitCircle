@@ -38,8 +38,12 @@ import CircleChallengesSection from '@/components/challenges/CircleChallengesSec
 import { CircleChat } from '@/components/chat/CircleChat';
 import CircleQuestsSection from '@/components/CircleQuestsSection';
 import { CircleFoodFeed } from '@/components/nutrition/CircleFoodFeed';
+import { CircleStreakCard } from '@/components/nutrition/CircleStreakCard';
 import { FoodSearch } from '@/components/nutrition/FoodSearch';
+import { GroupMealComposer } from '@/components/nutrition/GroupMealComposer';
+import { GroupMealInbox } from '@/components/nutrition/GroupMealInbox';
 import { InsightsList } from '@/components/nutrition/InsightsList';
+import { NutritionChallengeCard } from '@/components/nutrition/NutritionChallengeCard';
 import { NutritionCoach } from '@/components/nutrition/NutritionCoach';
 import { PhotoLog } from '@/components/nutrition/PhotoLog';
 import { PlateScoreCard } from '@/components/nutrition/PlateScoreCard';
@@ -1279,6 +1283,18 @@ export default function FitCirclePage() {
 
                   <PlateScoreCard />
 
+                  <CircleStreakCard
+                    circleId={circleId}
+                    members={participants.map((p) => ({
+                      user_id: p.user_id,
+                      display_name: p.display_name,
+                      avatar_url: p.avatar_url,
+                    }))}
+                    currentUserId={user?.id}
+                  />
+
+                  <NutritionChallengeCard circleId={circleId} isCreator={fitCircle.is_creator} />
+
                   <NutritionCoach circleId={circleId} />
                 </div>
 
@@ -1292,6 +1308,31 @@ export default function FitCirclePage() {
                       <CircleFoodFeed key={foodFeedKey} circleId={circleId} privacyTier={foodPrivacyTier} />
                     </CardContent>
                   </Card>
+
+                  <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                    <GroupMealComposer
+                      circleId={circleId}
+                      members={participants.map((p) => ({
+                        user_id: p.user_id,
+                        display_name: p.display_name,
+                        avatar_url: p.avatar_url,
+                      }))}
+                      currentUserId={user?.id}
+                      onCreated={() => setFoodFeedKey((k) => k + 1)}
+                    />
+
+                    <Card className="bg-slate-900/50 border-slate-800/50 backdrop-blur-xl">
+                      <CardHeader className="p-4 pb-2">
+                        <CardTitle className="text-base">Meal invites</CardTitle>
+                      </CardHeader>
+                      <CardContent className="p-4 pt-2">
+                        <GroupMealInbox
+                          circleId={circleId}
+                          onChanged={() => setFoodFeedKey((k) => k + 1)}
+                        />
+                      </CardContent>
+                    </Card>
+                  </div>
 
                   <Card className="mt-4 bg-slate-900/50 border-slate-800/50 backdrop-blur-xl">
                     <CardHeader className="p-4 pb-2">

@@ -66,8 +66,12 @@ export function PlateScoreCard({ score: initial, date }: PlateScoreCardProps) {
   return (
     <div className="rounded-xl border border-slate-800/60 bg-slate-900/60 p-5 backdrop-blur-xl">
       <div className="flex items-center gap-5">
-        <div className="relative h-32 w-32 shrink-0">
-          <svg viewBox="0 0 120 120" className="h-full w-full -rotate-90">
+        <div
+          className="relative h-32 w-32 shrink-0"
+          role="img"
+          aria-label={`Plate Score ${Math.round(pct)} out of 100`}
+        >
+          <svg viewBox="0 0 120 120" className="h-full w-full -rotate-90" aria-hidden="true">
             <circle cx="60" cy="60" r={radius} fill="none" stroke="rgba(148,163,184,0.15)" strokeWidth="10" />
             <circle
               cx="60"

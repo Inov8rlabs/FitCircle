@@ -3,11 +3,13 @@
 import { Barcode, Loader2, Plus, Search } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 
+import { useDietaryUnits } from '@/hooks/useDietaryUnits';
 import {
   nutritionClient,
   type CreateCustomFood,
   type Food,
 } from '@/lib/api/nutrition-client';
+import { formatGrams, type DietaryUnits } from '@/lib/format/units';
 import { cn } from '@/lib/utils';
 
 interface FoodSearchProps {
@@ -15,12 +17,13 @@ interface FoodSearchProps {
   onSelect?: (food: Food) => void;
 }
 
-function macroLine(food: Food): string {
+function macroLine(food: Food, units: DietaryUnits): string {
   const p = food.per100g;
   const parts: string[] = [];
   if (p.calories != null) parts.push(`${Math.round(p.calories)} cal`);
-  if (p.proteinG != null) parts.push(`${Math.round(p.proteinG)}g protein`);
-  return parts.length ? `${parts.join(' · ')} / 100g` : 'No macro data';
+  if (p.proteinG != null) parts.push(`${formatGrams(p.proteinG, units)} protein`);
+  const per = units === 'imperial' ? '3.5oz' : '100g';
+  return parts.length ? `${parts.join(' · ')} / ${per}` : 'No macro data';
 }
 
 /**
@@ -29,6 +32,7 @@ function macroLine(food: Food): string {
  * entry per the contract note).
  */
 export function FoodSearch({ onSelect }: FoodSearchProps) {
+  const units = useDietaryUnits();
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<Food[]>([]);
   const [searching, setSearching] = useState(false);
@@ -50,7 +54,7 @@ export function FoodSearch({ onSelect }: FoodSearchProps) {
       return;
     }
     setSearching(true);
-    debounceRef.current = setTimeout(async () => {
+    const run = async () => {
       try {
         const found = await nutritionClient.searchFoods(q, { limit: 20 });
         setResults(found);
@@ -60,7 +64,8 @@ export function FoodSearch({ onSelect }: FoodSearchProps) {
       } finally {
         setSearching(false);
       }
-    }, 300);
+    };
+    debounceRef.current = setTimeout(() => void run(), 300);
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
@@ -87,10 +92,11 @@ export function FoodSearch({ onSelect }: FoodSearchProps) {
       {/* Search box */}
       <div>
         <div className="relative">
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500" />
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500" aria-hidden="true" />
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
+            aria-label="Search foods"
             placeholder="Search foods…"
             className="w-full rounded-lg border border-slate-700/60 bg-slate-800/60 py-2.5 pl-9 pr-9 text-sm text-white placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-indigo-500"
           />
@@ -114,7 +120,7 @@ export function FoodSearch({ onSelect }: FoodSearchProps) {
                       {food.brand && <span className="text-gray-400"> · {food.brand}</span>}
                     </span>
                     <span className="block truncate text-xs text-gray-400">
-                      {macroLine(food)}
+                      {macroLine(food, units)}
                     </span>
                   </span>
                   {food.isCustom && (
@@ -132,11 +138,12 @@ export function FoodSearch({ onSelect }: FoodSearchProps) {
       {/* Manual barcode */}
       <div className="flex gap-2">
         <div className="relative flex-1">
-          <Barcode className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500" />
+          <Barcode className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500" aria-hidden="true" />
           <input
             value={barcode}
             onChange={(e) => setBarcode(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && lookupBarcode()}
+            aria-label="Enter barcode"
             placeholder="Enter barcode"
             inputMode="numeric"
             className="w-full rounded-lg border border-slate-700/60 bg-slate-800/60 py-2.5 pl-9 pr-3 text-sm text-white placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-indigo-500"

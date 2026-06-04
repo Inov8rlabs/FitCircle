@@ -5,10 +5,11 @@
  * Mirrors iOS `DisplaySettingsView`.
  */
 
-import { ArrowLeft, Palette, Ruler, Globe } from 'lucide-react';
+import { ArrowLeft, Palette, Ruler, Globe, Salad } from 'lucide-react';
 import Link from 'next/link';
 
 import { Navbar } from '@/components/layout/navbar';
+import { DietaryPreferencesForm } from '@/components/nutrition/DietaryPreferencesForm';
 import { Card, CardContent } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
@@ -51,6 +52,22 @@ export default function DisplaySettingsPage() {
                 disabled={isLoading}
               />
             </div>
+          </CardContent>
+        </Card>
+
+        {/* Dietary preferences / nutrition units (§6.15) */}
+        <Card>
+          <CardContent className="p-4 space-y-4">
+            <div className="flex items-center gap-3">
+              <Salad className="h-5 w-5 text-green-400" />
+              <div>
+                <h2 className="font-semibold">Diet &amp; nutrition</h2>
+                <p className="text-xs text-muted-foreground">
+                  Diet pattern, allergens, and how macros are shown
+                </p>
+              </div>
+            </div>
+            <DietaryPreferencesForm />
           </CardContent>
         </Card>
 

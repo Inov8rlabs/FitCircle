@@ -4,6 +4,7 @@ import { Lock } from 'lucide-react';
 import Image from 'next/image';
 import { useCallback, useEffect, useState } from 'react';
 
+import { useDietaryUnits } from '@/hooks/useDietaryUnits';
 import {
   nutritionClient,
   type FoodFeedCard,
@@ -11,6 +12,7 @@ import {
   type PrivacyTier,
   type ReactionKind,
 } from '@/lib/api/nutrition-client';
+import { formatCalories, formatGrams } from '@/lib/format/units';
 import { cn } from '@/lib/utils';
 
 const REACTION_KINDS: ReactionKind[] = ['flame', 'clap', 'eyes', 'same', 'heart', 'laugh'];
@@ -128,6 +130,7 @@ function FoodFeedItem({
   card: FoodFeedCard;
   onReactionChange: (id: string, r: FoodReactionSummary[]) => void;
 }) {
+  const units = useDietaryUnits();
   const time = new Date(card.loggedAt).toLocaleString('en-US', {
     month: 'short',
     day: 'numeric',
@@ -169,8 +172,8 @@ function FoodFeedItem({
 
       {card.macros ? (
         <p className="mt-1 text-xs text-gray-400">
-          {Math.round(card.macros.calories)} cal · {Math.round(card.macros.proteinG)}g protein ·{' '}
-          {Math.round(card.macros.carbsG)}g carbs · {Math.round(card.macros.fatG)}g fat
+          {formatCalories(card.macros.calories)} · {formatGrams(card.macros.proteinG, units)} protein ·{' '}
+          {formatGrams(card.macros.carbsG, units)} carbs · {formatGrams(card.macros.fatG, units)} fat
         </p>
       ) : (
         <p className="mt-1 text-xs italic text-gray-500">Macros hidden</p>

@@ -123,22 +123,181 @@ export interface NutritionLeaderboardRow {
   nutritionLogStreak: number;
 }
 
-export interface NutritionChallengeProgressRow {
-  userId: string;
+// --- Nutrition-driven challenge (§6.5) -------------------------------------
+// Shapes mirror app/lib/types/nutrition-challenge.ts (the server DTOs).
+
+export type NutritionMetricType =
+  | 'calorie_target'
+  | 'protein_target'
+  | 'carb_target'
+  | 'veg_days'
+  | 'sober_days'
+  | 'standard';
+
+export const NUTRITION_METRIC_TYPES: readonly NutritionMetricType[] = [
+  'calorie_target',
+  'protein_target',
+  'carb_target',
+  'veg_days',
+  'sober_days',
+  'standard',
+] as const;
+
+/** Metric types that require a numeric daily target_value to be meaningful. */
+export const TARGET_REQUIRED_METRICS: readonly NutritionMetricType[] = [
+  'calorie_target',
+  'protein_target',
+  'carb_target',
+] as const;
+
+export interface NutritionChallengeConfig {
+  id: string;
+  fitcircleId: string;
+  metricType: NutritionMetricType;
+  targetValue: number | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface NutritionChallengeMember {
+  id: string;
   name: string;
-  value: number;
-  [key: string]: unknown;
+  avatarUrl: string | null;
+}
+
+export interface NutritionChallengeMemberProgress {
+  member: NutritionChallengeMember;
+  successDays: number;
+  daysLogged: number;
+  challengeDays: number;
+  adherencePct: number;
+  averageValue: number | null;
+  rank: number;
+  isCurrentUser: boolean;
+}
+
+export interface NutritionChallengeProgress {
+  fitcircleId: string;
+  metricType: NutritionMetricType;
+  targetValue: number | null;
+  rangeStart: string | null;
+  rangeEnd: string | null;
+  challengeDays: number;
+  rows: NutritionChallengeMemberProgress[];
 }
 
 export interface NutritionChallenge {
-  config: Record<string, unknown>;
-  progress: NutritionChallengeProgressRow[];
+  config: NutritionChallengeConfig | null;
+  progress: NutritionChallengeProgress | null;
 }
 
+// --- Circle streak (§6.13) -------------------------------------------------
+
 export interface CircleStreak {
+  fitcircleId: string;
   currentStreak: number;
   longestStreak: number;
-  lastActiveDate: string;
+  lastActiveDate: string | null;
+  updatedAt: string | null;
+}
+
+export interface CircleStreakSaveResult {
+  save: {
+    id: string;
+    fitcircleId: string;
+    saverUserId: string;
+    coveredUserId: string;
+    saveDate: string;
+    createdAt: string;
+  };
+  created: boolean;
+  streak: CircleStreak;
+}
+
+// --- Group meals / dining-out (§6.12) --------------------------------------
+
+export type GroupMealType = 'breakfast' | 'lunch' | 'dinner' | 'snack' | 'other';
+export type GroupMealTagStatus = 'pending' | 'accepted' | 'declined';
+
+export interface GroupMealMacros {
+  calories: number | null;
+  proteinG: number | null;
+  carbsG: number | null;
+  fatG: number | null;
+}
+
+export interface GroupMealTag {
+  id: string;
+  groupMealId: string;
+  taggedUserId: string;
+  status: GroupMealTagStatus;
+  acceptedFoodLogEntryId: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface GroupMeal {
+  id: string;
+  fitcircleId: string;
+  creatorId: string;
+  name: string;
+  restaurantName: string | null;
+  loggedAt: string;
+  mealType: GroupMealType;
+  macros: GroupMealMacros;
+  photoUrl: string | null;
+  createdAt: string;
+  tags: GroupMealTag[];
+}
+
+export interface PendingGroupMealTag {
+  tag: GroupMealTag;
+  groupMeal: GroupMeal;
+}
+
+export interface CreateGroupMealInput {
+  fitcircleId: string;
+  name: string;
+  restaurantName?: string;
+  mealType: GroupMealType;
+  macros?: { calories: number; proteinG: number; carbsG: number; fatG: number };
+  photoUrl?: string;
+  taggedUserIds: string[];
+}
+
+// --- Dietary preferences / units (§6.15) -----------------------------------
+
+export type DietType =
+  | 'none'
+  | 'vegetarian'
+  | 'vegan'
+  | 'pescatarian'
+  | 'halal'
+  | 'kosher'
+  | 'gluten_free';
+
+export const DIET_TYPES: readonly DietType[] = [
+  'none',
+  'vegetarian',
+  'vegan',
+  'pescatarian',
+  'halal',
+  'kosher',
+  'gluten_free',
+] as const;
+
+export type DietaryUnits = 'metric' | 'imperial';
+
+export interface DietaryPreferences {
+  diet: DietType;
+  allergens: string[];
+  units: DietaryUnits;
+}
+
+export interface SetDietaryPreferencesInput {
+  diet?: DietType;
+  allergens?: string[];
+  units?: DietaryUnits;
 }
 
 export interface CoachAnswer {
@@ -302,28 +461,68 @@ export const nutritionClient = {
       body: JSON.stringify({ tier }),
     }),
 
-  // Nutrition-driven challenge
+  // Nutrition-driven challenge (§6.5)
   getNutritionChallenge: (circleId: string) =>
     authedFetch<NutritionChallenge>(`/api/mobile/circles/${circleId}/nutrition-challenge`),
 
-  createNutritionChallenge: (
+  setNutritionChallenge: (
     circleId: string,
-    metricType: string,
-    targetValue: number
+    metricType: NutritionMetricType,
+    targetValue: number | null
   ) =>
-    authedFetch<NutritionChallenge>(`/api/mobile/circles/${circleId}/nutrition-challenge`, {
-      method: 'POST',
-      body: JSON.stringify({ metricType, targetValue }),
-    }),
+    authedFetch<{ config: NutritionChallengeConfig }>(
+      `/api/mobile/circles/${circleId}/nutrition-challenge`,
+      { method: 'POST', body: JSON.stringify({ metricType, targetValue }) }
+    ),
 
-  // Circle streak
+  // Circle streak (§6.13)
   getCircleStreak: (circleId: string) =>
     authedFetch<CircleStreak>(`/api/mobile/circles/${circleId}/streak`),
 
-  saveCircleStreak: (circleId: string, coveredUserId: string, date?: string) =>
-    authedFetch<CircleStreak>(`/api/mobile/circles/${circleId}/streak/save`, {
+  /** "Cover for a member" — record a pro-social streak save. */
+  useStreakSave: (circleId: string, coveredUserId: string, date?: string) =>
+    authedFetch<CircleStreakSaveResult>(`/api/mobile/circles/${circleId}/streak/save`, {
       method: 'POST',
       body: JSON.stringify({ coveredUserId, ...(date ? { date } : {}) }),
+    }),
+
+  // Group meals / dining-out (§6.12)
+  createGroupMeal: (input: CreateGroupMealInput) =>
+    authedFetch<GroupMeal>('/api/mobile/group-meals', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+
+  getPendingGroupMeals: () =>
+    authedFetch<PendingGroupMealTag[]>('/api/mobile/group-meals/pending'),
+
+  acceptGroupMealTag: (tagId: string) =>
+    authedFetch<GroupMealTag>(
+      `/api/mobile/group-meals/tags/${encodeURIComponent(tagId)}/accept`,
+      { method: 'POST' }
+    ),
+
+  declineGroupMealTag: (tagId: string) =>
+    authedFetch<GroupMealTag>(
+      `/api/mobile/group-meals/tags/${encodeURIComponent(tagId)}/decline`,
+      { method: 'POST' }
+    ),
+
+  getGroupMeal: (id: string) =>
+    authedFetch<GroupMeal>(`/api/mobile/group-meals/${encodeURIComponent(id)}`),
+
+  /** Restaurant menu-item lookup (Nutritionix). Empty without server keys → fall back to photo. */
+  searchRestaurant: (q: string) =>
+    authedFetch<Food[]>(`/api/mobile/foods/restaurant?q=${encodeURIComponent(q)}`),
+
+  // Dietary preferences / units (§6.15)
+  getDietaryPreferences: () =>
+    authedFetch<DietaryPreferences>('/api/mobile/dietary-preferences'),
+
+  setDietaryPreferences: (input: SetDietaryPreferencesInput) =>
+    authedFetch<DietaryPreferences>('/api/mobile/dietary-preferences', {
+      method: 'POST',
+      body: JSON.stringify(input),
     }),
 
   // AI coach

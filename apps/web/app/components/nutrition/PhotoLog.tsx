@@ -73,7 +73,7 @@ export function PhotoLog({ onLogged }: PhotoLogProps) {
         disabled={parsing}
         className="inline-flex w-full items-center justify-center gap-2 rounded-lg border border-slate-700/60 bg-slate-800/60 px-4 py-3 text-sm font-medium text-gray-200 hover:bg-slate-700/60 disabled:opacity-50"
       >
-        {parsing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Camera className="h-4 w-4" />}
+        {parsing ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Camera className="h-4 w-4" aria-hidden="true" />}
         {parsing ? 'Reading photo…' : 'Log from photo'}
       </button>
       {error && <p className="mt-2 text-sm text-amber-300">{error}</p>}

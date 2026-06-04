@@ -3,12 +3,14 @@
 import { Check, Loader2, Trash2, X } from 'lucide-react';
 import { useState } from 'react';
 
+import { useDietaryUnits } from '@/hooks/useDietaryUnits';
 import {
   LOW_CONFIDENCE_THRESHOLD,
   nutritionClient,
   type NutritionDraft,
   type NutritionDraftItem,
 } from '@/lib/api/nutrition-client';
+import { formatGrams } from '@/lib/format/units';
 import { cn } from '@/lib/utils';
 
 type MealType = 'breakfast' | 'lunch' | 'dinner' | 'snack' | 'other';
@@ -42,6 +44,7 @@ function emptyItem(): NutritionDraftItem {
  * Confirm commits via the existing food-log create endpoint; cancel discards.
  */
 export function NutritionConfirm({ draft, onCommitted, onCancel }: NutritionConfirmProps) {
+  const units = useDietaryUnits();
   const lowConfidence =
     !draft || draft.overallConfidence < LOW_CONFIDENCE_THRESHOLD;
 
@@ -213,9 +216,9 @@ export function NutritionConfirm({ draft, onCommitted, onCancel }: NutritionConf
       {/* Totals */}
       <div className="mt-4 grid grid-cols-4 gap-2 rounded-lg border border-slate-700/50 bg-slate-800/40 p-3 text-center">
         <Total label="Cal" value={Math.round(totals.calories)} />
-        <Total label="Protein" value={`${Math.round(totals.proteinG)}g`} />
-        <Total label="Carbs" value={`${Math.round(totals.carbsG)}g`} />
-        <Total label="Fat" value={`${Math.round(totals.fatG)}g`} />
+        <Total label="Protein" value={formatGrams(totals.proteinG, units)} />
+        <Total label="Carbs" value={formatGrams(totals.carbsG, units)} />
+        <Total label="Fat" value={formatGrams(totals.fatG, units)} />
       </div>
 
       {/* Meal type */}

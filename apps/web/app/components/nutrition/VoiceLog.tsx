@@ -126,24 +126,25 @@ export function VoiceLog({ onLogged }: VoiceLogProps) {
         type="button"
         onClick={listening ? stop : start}
         disabled={parsing}
+        aria-pressed={listening}
         className="inline-flex w-full items-center justify-center gap-2 rounded-lg border border-slate-700/60 bg-slate-800/60 px-4 py-3 text-sm font-medium text-gray-200 hover:bg-slate-700/60 disabled:opacity-50"
       >
         {parsing ? (
           <>
-            <Loader2 className="h-4 w-4 animate-spin" /> Parsing…
+            <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> Parsing…
           </>
         ) : listening ? (
           <>
-            <Square className="h-4 w-4 text-red-400" /> Stop &amp; log
+            <Square className="h-4 w-4 text-red-400" aria-hidden="true" /> Stop &amp; log
           </>
         ) : (
           <>
-            <Mic className="h-4 w-4" /> Log by voice
+            <Mic className="h-4 w-4" aria-hidden="true" /> Log by voice
           </>
         )}
       </button>
       {(listening || transcript) && !parsing && (
-        <p className="mt-2 text-sm text-gray-400">
+        <p className="mt-2 text-sm text-gray-400" aria-live="polite">
           {transcript || 'Listening… describe what you ate.'}
         </p>
       )}

@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { redirect } from 'next/navigation';
 
 import { FoodLogList } from '@/components/food-log/food-log-list';
+import { FirstFoodLogPrompt } from '@/components/nutrition/FirstFoodLogPrompt';
 import { Button } from '@/components/ui/button';
 import { BeverageLogService } from '@/lib/services/beverage-log-service';
 import { FoodLogImageService } from '@/lib/services/food-log-image-service';
@@ -66,6 +67,9 @@ export default async function FoodLogPage() {
                     </Button>
                 </Link>
             </div>
+
+            {/* First-run nudge (§6.14) — only when the user has no logs yet */}
+            <FirstFoodLogPrompt hasLogs={allEntries.length > 0} />
 
             {/* Stats Overview */}
             <div className="grid grid-cols-2 gap-4">
