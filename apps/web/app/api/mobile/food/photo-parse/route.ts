@@ -25,6 +25,8 @@ export async function POST(request: NextRequest) {
 
     const formData = await request.formData();
     const file = formData.get('image') as File | null;
+    // Optional caption the user typed about the food — preserved if the parse fails.
+    const note = (formData.get('note') as string | null)?.trim() || null;
 
     if (!file) {
       return NextResponse.json(
@@ -69,14 +71,48 @@ export async function POST(request: NextRequest) {
 
     const imageBytes = Buffer.from(await file.arrayBuffer());
 
-    const draft = await NutritionIntelligenceService.parsePhoto(user.id, imageBytes, file.type);
+    try {
+      const draft = await NutritionIntelligenceService.parsePhoto(user.id, imageBytes, file.type);
 
-    return NextResponse.json({
-      success: true,
-      data: draft,
-      meta: { requestTime: Date.now() - startTime },
-      error: null,
-    });
+      return NextResponse.json({
+        success: true,
+        data: draft,
+        meta: { requestTime: Date.now() - startTime },
+        error: null,
+      });
+    } catch (parseError: any) {
+      // Option B (§6.1): a failed OR rate-limited parse must not lose the user's photo. Save it
+      // as a normal food-log entry (blank macros) and hand the client its id so it can drop the
+      // user straight into that entry to finish manually.
+      const isRate = parseError?.message === 'RateLimited';
+      if (!isRate && parseError?.message !== 'ParseFailed') {
+        throw parseError; // Unauthorized / unexpected → outer catch
+      }
+
+      let saved: { entryId: string; imageUrls: string[] } | null = null;
+      try {
+        saved = await NutritionIntelligenceService.saveUnparsedPhoto(user.id, file, note);
+      } catch (saveError) {
+        console.error('[Mobile API] Photo parse fallback save failed:', saveError);
+      }
+
+      return NextResponse.json(
+        {
+          success: false,
+          data: null,
+          error: {
+            code: isRate ? 'RATE_LIMITED' : 'PARSE_FAILED',
+            message: isRate
+              ? "You've reached today's photo-estimate limit — we saved your photo so you can add the details."
+              : "Couldn't auto-detect the food — we saved your photo so you can add the details.",
+            details: saved ? { savedEntryId: saved.entryId, imageUrls: saved.imageUrls } : {},
+            timestamp: new Date().toISOString(),
+          },
+          meta: { requestTime: Date.now() - startTime },
+        },
+        { status: isRate ? 429 : 422 }
+      );
+    }
   } catch (error: any) {
     console.error('[Mobile API] Photo parse error:', {
       message: error?.message,
@@ -87,41 +123,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { success: false, data: null, error: { code: 'UNAUTHORIZED', message: 'Invalid or expired token', details: {}, timestamp: new Date().toISOString() }, meta: null },
         { status: 401 }
-      );
-    }
-
-    if (error?.message === 'RateLimited') {
-      // Soft cap (PRD §9.2): ask the user to use search/manual instead of the vision model.
-      return NextResponse.json(
-        {
-          success: false,
-          data: null,
-          error: {
-            code: 'RATE_LIMITED',
-            message: "You've reached today's photo-estimate limit. Try search or manual entry.",
-            details: {},
-            timestamp: new Date().toISOString(),
-          },
-          meta: null,
-        },
-        { status: 429 }
-      );
-    }
-
-    if (error?.message === 'ParseFailed') {
-      return NextResponse.json(
-        {
-          success: false,
-          data: null,
-          error: {
-            code: 'PARSE_FAILED',
-            message: "Couldn't read that photo. Try a clearer shot, or use search/manual entry.",
-            details: {},
-            timestamp: new Date().toISOString(),
-          },
-          meta: null,
-        },
-        { status: 422 }
       );
     }
 
