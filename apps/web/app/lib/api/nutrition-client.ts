@@ -335,8 +335,23 @@ export interface CreateFoodLogEntry {
 interface ApiEnvelope<T> {
   success: boolean;
   data: T | null;
-  error: { code: string; message: string } | null;
+  error: { code: string; message: string; details?: Record<string, unknown> | null } | null;
   meta: unknown;
+}
+
+/**
+ * Error that preserves the API envelope's `code` + `details` (plain Error loses them).
+ * Lets callers act on e.g. PARSE_FAILED with details.savedEntryId (Option B fallback).
+ */
+export class ApiError extends Error {
+  code: string;
+  details: Record<string, unknown> | null;
+  constructor(message: string, code: string, details: Record<string, unknown> | null) {
+    super(message);
+    this.name = 'ApiError';
+    this.code = code;
+    this.details = details;
+  }
 }
 
 function authToken(): string {
@@ -358,7 +373,11 @@ async function authedFetch<T>(path: string, init?: RequestInit): Promise<T> {
   const json = (await res.json().catch(() => ({}))) as ApiEnvelope<T>;
   if (!res.ok || json?.success === false) {
     const msg = json?.error?.message ?? `Request failed (${res.status})`;
-    throw new Error(typeof msg === 'string' ? msg : 'Request failed');
+    throw new ApiError(
+      typeof msg === 'string' ? msg : 'Request failed',
+      json?.error?.code ?? 'UNKNOWN',
+      json?.error?.details ?? null,
+    );
   }
   return json.data as T;
 }
@@ -374,7 +393,11 @@ async function authedFetchForm<T>(path: string, form: FormData): Promise<T> {
   const json = (await res.json().catch(() => ({}))) as ApiEnvelope<T>;
   if (!res.ok || json?.success === false) {
     const msg = json?.error?.message ?? `Request failed (${res.status})`;
-    throw new Error(typeof msg === 'string' ? msg : 'Request failed');
+    throw new ApiError(
+      typeof msg === 'string' ? msg : 'Request failed',
+      json?.error?.code ?? 'UNKNOWN',
+      json?.error?.details ?? null,
+    );
   }
   return json.data as T;
 }

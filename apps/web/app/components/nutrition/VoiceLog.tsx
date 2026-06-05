@@ -3,7 +3,7 @@
 import { Loader2, Mic, Square } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 
-import { nutritionClient, type NutritionDraft } from '@/lib/api/nutrition-client';
+import { nutritionClient, ApiError, type NutritionDraft } from '@/lib/api/nutrition-client';
 
 import { NutritionConfirm } from './NutritionConfirm';
 
@@ -59,7 +59,14 @@ export function VoiceLog({ onLogged }: VoiceLogProps) {
       setDraft(result);
       setShowConfirm(true);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not parse that. Try again or use search.');
+      // Option B: parse failed/rate-limited, but the server saved the transcript as a
+      // food-log entry so it's not lost. Show the friendly note and refresh so it appears.
+      if (err instanceof ApiError && err.details?.savedEntryId) {
+        setError(err.message);
+        onLogged?.();
+      } else {
+        setError(err instanceof Error ? err.message : 'Could not parse that. Try again or use search.');
+      }
     } finally {
       setParsing(false);
     }
