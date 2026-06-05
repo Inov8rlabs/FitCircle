@@ -3,7 +3,7 @@
 import { Camera, Loader2 } from 'lucide-react';
 import { useRef, useState } from 'react';
 
-import { nutritionClient, type NutritionDraft } from '@/lib/api/nutrition-client';
+import { nutritionClient, ApiError, type NutritionDraft } from '@/lib/api/nutrition-client';
 
 import { NutritionConfirm } from './NutritionConfirm';
 
@@ -33,7 +33,14 @@ export function PhotoLog({ onLogged }: PhotoLogProps) {
       setDraft(result);
       setShowConfirm(true);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not read that photo. Try search or manual entry.');
+      // Option B: the parse failed/was rate-limited, but the server saved the photo as a
+      // food-log entry so it's not lost. Show the friendly note and refresh so it appears.
+      if (err instanceof ApiError && err.details?.savedEntryId) {
+        setError(err.message);
+        onLogged?.();
+      } else {
+        setError(err instanceof Error ? err.message : 'Could not read that photo. Try search or manual entry.');
+      }
     } finally {
       setParsing(false);
     }

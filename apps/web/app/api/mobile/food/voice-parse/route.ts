@@ -60,14 +60,48 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const draft = await NutritionIntelligenceService.parseVoice(user.id, parsed.data.transcript);
+    try {
+      const draft = await NutritionIntelligenceService.parseVoice(user.id, parsed.data.transcript);
 
-    return NextResponse.json({
-      success: true,
-      data: draft,
-      meta: { requestTime: Date.now() - startTime },
-      error: null,
-    });
+      return NextResponse.json({
+        success: true,
+        data: draft,
+        meta: { requestTime: Date.now() - startTime },
+        error: null,
+      });
+    } catch (parseError: any) {
+      // Option B (§6.1): a failed OR rate-limited parse must not lose the user's spoken note.
+      // Save the transcript as a normal food-log entry and return its id so the client can drop
+      // the user into that entry to finish manually.
+      const isRate = parseError?.message === 'RateLimited';
+      if (!isRate && parseError?.message !== 'ParseFailed') {
+        throw parseError; // Unauthorized / unexpected → outer catch
+      }
+
+      let saved: { entryId: string } | null = null;
+      try {
+        saved = await NutritionIntelligenceService.saveUnparsedVoice(user.id, parsed.data.transcript);
+      } catch (saveError) {
+        console.error('[Mobile API] Voice parse fallback save failed:', saveError);
+      }
+
+      return NextResponse.json(
+        {
+          success: false,
+          data: null,
+          error: {
+            code: isRate ? 'RATE_LIMITED' : 'PARSE_FAILED',
+            message: isRate
+              ? "You've reached today's voice-estimate limit — we saved your note so you can add the details."
+              : "Couldn't understand that — we saved your note so you can add the details.",
+            details: saved ? { savedEntryId: saved.entryId } : {},
+            timestamp: new Date().toISOString(),
+          },
+          meta: { requestTime: Date.now() - startTime },
+        },
+        { status: isRate ? 429 : 422 }
+      );
+    }
   } catch (error: any) {
     console.error('[Mobile API] Voice parse error:', {
       message: error?.message,
@@ -78,40 +112,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { success: false, data: null, error: { code: 'UNAUTHORIZED', message: 'Invalid or expired token', details: {}, timestamp: new Date().toISOString() }, meta: null },
         { status: 401 }
-      );
-    }
-
-    if (error?.message === 'RateLimited') {
-      return NextResponse.json(
-        {
-          success: false,
-          data: null,
-          error: {
-            code: 'RATE_LIMITED',
-            message: "You've reached today's voice-estimate limit. Try search or manual entry.",
-            details: {},
-            timestamp: new Date().toISOString(),
-          },
-          meta: null,
-        },
-        { status: 429 }
-      );
-    }
-
-    if (error?.message === 'ParseFailed') {
-      return NextResponse.json(
-        {
-          success: false,
-          data: null,
-          error: {
-            code: 'PARSE_FAILED',
-            message: "Couldn't understand that. Try saying it again, or use search/manual entry.",
-            details: {},
-            timestamp: new Date().toISOString(),
-          },
-          meta: null,
-        },
-        { status: 422 }
       );
     }
 

@@ -10,6 +10,9 @@ import {
   PHOTO_PARSE_DAILY_SOFT_CAP,
 } from '../types/nutrition';
 
+import { FoodLogService } from './food-log-service';
+import { FoodLogImageService } from './food-log-image-service';
+
 /**
  * NutritionIntelligenceService — the server-side "brain" for nutrition (PRD §6.1, §7.2.1).
  * Turns a meal photo into a structured, validated nutrition DRAFT via the Vercel AI Gateway
@@ -150,7 +153,85 @@ export class NutritionIntelligenceService {
     return this.toDraft(result, VOICE_MODEL, false, 'voice', 'llm_voice');
   }
 
+  /**
+   * Fallback for a FAILED / rate-limited photo parse (§6.1, "Option B"): persist the user's
+   * photo as a normal food-log entry with macros left blank, so their input is NEVER lost and
+   * shows up exactly like any logged meal — they (or a later re-parse) fill in the nutrition.
+   * Confirm-then-commit still governs the SUCCESS path; this only catches the failure path.
+   *
+   * Returns the new entry id + uploaded image URLs so the route can hand the client straight to
+   * that entry's edit screen. Best-effort: a failed image upload still yields the (text) entry.
+   */
+  static async saveUnparsedPhoto(
+    userId: string,
+    file: File,
+    note: string | null,
+  ): Promise<{ entryId: string; imageUrls: string[] }> {
+    const supabase = createAdminSupabase();
+    const { data: entry, error } = await FoodLogService.createEntry(
+      userId,
+      {
+        entry_type: 'food',
+        meal_type: this.defaultMealType(),
+        title: note?.trim() || 'Food photo',
+        notes: "Saved from a photo we couldn't auto-analyze — add the details.",
+      },
+      supabase,
+    );
+    if (error || !entry) {
+      throw new Error(`FallbackSaveFailed: ${error?.message ?? 'no entry returned'}`);
+    }
+
+    const imageUrls: string[] = [];
+    try {
+      const res = await FoodLogImageService.uploadImage(entry.id, userId, file, 0, supabase);
+      const url = res.image?.url ?? res.image?.original_url ?? res.image?.thumbnail_url;
+      if (url) imageUrls.push(url);
+    } catch (err) {
+      // Non-fatal: the entry + text are saved; a failed image upload must not lose them.
+      console.error('[NutritionIntelligenceService.saveUnparsedPhoto] image upload failed:', err);
+    }
+
+    return { entryId: entry.id, imageUrls };
+  }
+
+  /**
+   * Fallback for a FAILED / rate-limited voice parse: persist the transcript as a normal
+   * food-log entry (no image) so the user's spoken note isn't lost. Mirrors saveUnparsedPhoto.
+   */
+  static async saveUnparsedVoice(
+    userId: string,
+    transcript: string,
+  ): Promise<{ entryId: string }> {
+    const supabase = createAdminSupabase();
+    const text = transcript.trim();
+    const { data: entry, error } = await FoodLogService.createEntry(
+      userId,
+      {
+        entry_type: 'food',
+        meal_type: this.defaultMealType(),
+        title: text.length > 80 ? `${text.slice(0, 77)}…` : text || 'Voice note',
+        description: text || undefined,
+        notes: "Saved from a voice note we couldn't auto-analyze — add the details.",
+      },
+      supabase,
+    );
+    if (error || !entry) {
+      throw new Error(`FallbackSaveFailed: ${error?.message ?? 'no entry returned'}`);
+    }
+    return { entryId: entry.id };
+  }
+
   // ---- private helpers -------------------------------------------------------
+
+  /** Best-guess meal slot from the server clock; the user can change it on the entry. */
+  private static defaultMealType(): 'breakfast' | 'lunch' | 'dinner' | 'snack' {
+    const h = new Date().getUTCHours();
+    if (h >= 4 && h < 11) return 'breakfast';
+    if (h >= 11 && h < 15) return 'lunch';
+    if (h >= 17 && h < 22) return 'dinner';
+    return 'snack';
+  }
 
   private static toDraft(
     result: PhotoParseResult,
