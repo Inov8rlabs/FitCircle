@@ -1,0 +1,2287 @@
+[
+  {
+    "id": "nutrition5k:dish_1561662216",
+    "imageUri": "https://storage.googleapis.com/nutrition5k_dataset/nutrition5k_dataset/imagery/realsense_overhead/dish_1561662216/rgb.png",
+    "provenance": "nutrition5k",
+    "groundTruth": {
+      "items": [
+        {
+          "name": "soy sauce",
+          "canonicalId": null,
+          "grams": 3.4,
+          "calories": 1.8,
+          "protein": 0.28,
+          "carbs": 0.17,
+          "fat": 0.02
+        },
+        {
+          "name": "garlic",
+          "canonicalId": null,
+          "grams": 2.12,
+          "calories": 3.16,
+          "protein": 0.14,
+          "carbs": 0.7,
+          "fat": 0.01
+        },
+        {
+          "name": "white rice",
+          "canonicalId": null,
+          "grams": 8.5,
+          "calories": 11.05,
+          "protein": 0.23,
+          "carbs": 2.38,
+          "fat": 0.03
+        },
+        {
+          "name": "parsley",
+          "canonicalId": null,
+          "grams": 0.21,
+          "calories": 0.08,
+          "protein": 0.01,
+          "carbs": 0.01,
+          "fat": 0
+        },
+        {
+          "name": "onions",
+          "canonicalId": null,
+          "grams": 1.71,
+          "calories": 0.68,
+          "protein": 0.02,
+          "carbs": 0.15,
+          "fat": 0
+        },
+        {
+          "name": "brown rice",
+          "canonicalId": null,
+          "grams": 68,
+          "calories": 75.48,
+          "protein": 1.77,
+          "carbs": 15.64,
+          "fat": 0.61
+        },
+        {
+          "name": "vinegar",
+          "canonicalId": null,
+          "grams": 0.85,
+          "calories": 0,
+          "protein": 0,
+          "carbs": 0,
+          "fat": 0
+        },
+        {
+          "name": "apple",
+          "canonicalId": null,
+          "grams": 4.27,
+          "calories": 2.22,
+          "protein": 0.01,
+          "carbs": 0.6,
+          "fat": 0.01
+        },
+        {
+          "name": "mixed greens",
+          "canonicalId": null,
+          "grams": 21.34,
+          "calories": 5.98,
+          "protein": 0.47,
+          "carbs": 1.13,
+          "fat": 0.09
+        },
+        {
+          "name": "sugar",
+          "canonicalId": null,
+          "grams": 6.37,
+          "calories": 24.72,
+          "protein": 0,
+          "carbs": 6.37,
+          "fat": 0
+        },
+        {
+          "name": "salt",
+          "canonicalId": null,
+          "grams": 0.53,
+          "calories": 0,
+          "protein": 0,
+          "carbs": 0,
+          "fat": 0
+        },
+        {
+          "name": "lemon juice",
+          "canonicalId": null,
+          "grams": 0.85,
+          "calories": 0.15,
+          "protein": 0,
+          "carbs": 0.05,
+          "fat": 0
+        },
+        {
+          "name": "olive oil",
+          "canonicalId": null,
+          "grams": 3.24,
+          "calories": 28.67,
+          "protein": 0,
+          "carbs": 0,
+          "fat": 3.24
+        },
+        {
+          "name": "pork",
+          "canonicalId": null,
+          "grams": 59.47,
+          "calories": 141.55,
+          "protein": 15.46,
+          "carbs": 0,
+          "fat": 8.33
+        },
+        {
+          "name": "bok choy",
+          "canonicalId": null,
+          "grams": 8.5,
+          "calories": 1.1,
+          "protein": 0.13,
+          "carbs": 0.19,
+          "fat": 0.02
+        },
+        {
+          "name": "pepper",
+          "canonicalId": null,
+          "grams": 0.21,
+          "calories": 0.08,
+          "protein": 0,
+          "carbs": 0.02,
+          "fat": 0
+        },
+        {
+          "name": "millet",
+          "canonicalId": null,
+          "grams": 3.41,
+          "calories": 4.06,
+          "protein": 0.12,
+          "carbs": 0.81,
+          "fat": 0.03
+        }
+      ],
+      "total": {
+        "calories": 300.79,
+        "protein": 18.63,
+        "carbs": 28.22,
+        "fat": 12.39
+      }
+    },
+    "slices": {
+      "cuisine": "western",
+      "mealType": "lunch",
+      "difficulty": "hard",
+      "lighting": "good"
+    },
+    "datasetVersion": "nutrition5k-v1"
+  },
+  {
+    "id": "nutrition5k:dish_1561662054",
+    "imageUri": "https://storage.googleapis.com/nutrition5k_dataset/nutrition5k_dataset/imagery/realsense_overhead/dish_1561662054/rgb.png",
+    "provenance": "nutrition5k",
+    "groundTruth": {
+      "items": [
+        {
+          "name": "pepper",
+          "canonicalId": null,
+          "grams": 0.3,
+          "calories": 0.12,
+          "protein": 0.01,
+          "carbs": 0.03,
+          "fat": 0
+        },
+        {
+          "name": "white rice",
+          "canonicalId": null,
+          "grams": 12.03,
+          "calories": 15.64,
+          "protein": 0.32,
+          "carbs": 3.37,
+          "fat": 0.04
+        },
+        {
+          "name": "mixed greens",
+          "canonicalId": null,
+          "grams": 75.28,
+          "calories": 21.08,
+          "protein": 1.66,
+          "carbs": 3.99,
+          "fat": 0.3
+        },
+        {
+          "name": "garlic",
+          "canonicalId": null,
+          "grams": 3.01,
+          "calories": 4.48,
+          "protein": 0.19,
+          "carbs": 0.99,
+          "fat": 0.02
+        },
+        {
+          "name": "soy sauce",
+          "canonicalId": null,
+          "grams": 4.81,
+          "calories": 2.55,
+          "protein": 0.39,
+          "carbs": 0.24,
+          "fat": 0.03
+        },
+        {
+          "name": "millet",
+          "canonicalId": null,
+          "grams": 12.05,
+          "calories": 14.33,
+          "protein": 0.42,
+          "carbs": 2.85,
+          "fat": 0.12
+        },
+        {
+          "name": "lemon juice",
+          "canonicalId": null,
+          "grams": 3.01,
+          "calories": 0.51,
+          "protein": 0.01,
+          "carbs": 0.17,
+          "fat": 0
+        },
+        {
+          "name": "bok choy",
+          "canonicalId": null,
+          "grams": 12.03,
+          "calories": 1.56,
+          "protein": 0.18,
+          "carbs": 0.26,
+          "fat": 0.02
+        },
+        {
+          "name": "olive oil",
+          "canonicalId": null,
+          "grams": 11.44,
+          "calories": 101.15,
+          "protein": 0,
+          "carbs": 0,
+          "fat": 11.44
+        },
+        {
+          "name": "onions",
+          "canonicalId": null,
+          "grams": 6.02,
+          "calories": 2.41,
+          "protein": 0.07,
+          "carbs": 0.54,
+          "fat": 0.01
+        },
+        {
+          "name": "vinegar",
+          "canonicalId": null,
+          "grams": 3.01,
+          "calories": 0,
+          "protein": 0,
+          "carbs": 0,
+          "fat": 0
+        },
+        {
+          "name": "green beans",
+          "canonicalId": null,
+          "grams": 39,
+          "calories": 12.09,
+          "protein": 0.7,
+          "carbs": 2.73,
+          "fat": 0.04
+        },
+        {
+          "name": "pork",
+          "canonicalId": null,
+          "grams": 84.2,
+          "calories": 200.4,
+          "protein": 21.89,
+          "carbs": 0,
+          "fat": 11.79
+        },
+        {
+          "name": "apple",
+          "canonicalId": null,
+          "grams": 15.06,
+          "calories": 7.83,
+          "protein": 0.05,
+          "carbs": 2.11,
+          "fat": 0.03
+        },
+        {
+          "name": "sugar",
+          "canonicalId": null,
+          "grams": 9.02,
+          "calories": 35,
+          "protein": 0,
+          "carbs": 9.02,
+          "fat": 0
+        },
+        {
+          "name": "salt",
+          "canonicalId": null,
+          "grams": 0.98,
+          "calories": 0,
+          "protein": 0,
+          "carbs": 0,
+          "fat": 0
+        },
+        {
+          "name": "parsley",
+          "canonicalId": null,
+          "grams": 0.75,
+          "calories": 0.28,
+          "protein": 0.02,
+          "carbs": 0.05,
+          "fat": 0.01
+        }
+      ],
+      "total": {
+        "calories": 419.44,
+        "protein": 25.91,
+        "carbs": 26.35,
+        "fat": 23.84
+      }
+    },
+    "slices": {
+      "cuisine": "western",
+      "mealType": "lunch",
+      "difficulty": "hard",
+      "lighting": "good"
+    },
+    "datasetVersion": "nutrition5k-v1"
+  },
+  {
+    "id": "nutrition5k:dish_1562008979",
+    "imageUri": "https://storage.googleapis.com/nutrition5k_dataset/nutrition5k_dataset/imagery/realsense_overhead/dish_1562008979/rgb.png",
+    "provenance": "nutrition5k",
+    "groundTruth": {
+      "items": [
+        {
+          "name": "jalapenos",
+          "canonicalId": null,
+          "grams": 0.19,
+          "calories": 0.06,
+          "protein": 0,
+          "carbs": 0.01,
+          "fat": 0
+        },
+        {
+          "name": "lemon juice",
+          "canonicalId": null,
+          "grams": 1.54,
+          "calories": 0.26,
+          "protein": 0.01,
+          "carbs": 0.09,
+          "fat": 0
+        },
+        {
+          "name": "pork",
+          "canonicalId": null,
+          "grams": 115.78,
+          "calories": 275.55,
+          "protein": 30.1,
+          "carbs": 0,
+          "fat": 16.21
+        },
+        {
+          "name": "wheat berry",
+          "canonicalId": null,
+          "grams": 15.44,
+          "calories": 14.05,
+          "protein": 0.65,
+          "carbs": 2.95,
+          "fat": 0.08
+        },
+        {
+          "name": "cabbage",
+          "canonicalId": null,
+          "grams": 15.44,
+          "calories": 3.24,
+          "protein": 0.2,
+          "carbs": 0.49,
+          "fat": 0.08
+        },
+        {
+          "name": "pepper",
+          "canonicalId": null,
+          "grams": 0.39,
+          "calories": 0.15,
+          "protein": 0.01,
+          "carbs": 0.04,
+          "fat": 0
+        },
+        {
+          "name": "salt",
+          "canonicalId": null,
+          "grams": 0.19,
+          "calories": 0,
+          "protein": 0,
+          "carbs": 0,
+          "fat": 0
+        },
+        {
+          "name": "carrot",
+          "canonicalId": null,
+          "grams": 3.86,
+          "calories": 1.58,
+          "protein": 0.03,
+          "carbs": 0.39,
+          "fat": 0.01
+        },
+        {
+          "name": "garlic",
+          "canonicalId": null,
+          "grams": 1.54,
+          "calories": 2.3,
+          "protein": 0.1,
+          "carbs": 0.51,
+          "fat": 0.01
+        },
+        {
+          "name": "caesar salad",
+          "canonicalId": null,
+          "grams": 131,
+          "calories": 57.64,
+          "protein": 4.19,
+          "carbs": 5.63,
+          "fat": 2.75
+        },
+        {
+          "name": "olive oil",
+          "canonicalId": null,
+          "grams": 0.77,
+          "calories": 6.82,
+          "protein": 0,
+          "carbs": 0,
+          "fat": 0.77
+        },
+        {
+          "name": "parsley",
+          "canonicalId": null,
+          "grams": 0.77,
+          "calories": 0.29,
+          "protein": 0.02,
+          "carbs": 0.05,
+          "fat": 0.01
+        },
+        {
+          "name": "mayonnaise",
+          "canonicalId": null,
+          "grams": 3.09,
+          "calories": 20.99,
+          "protein": 0.03,
+          "carbs": 0.02,
+          "fat": 2.32
+        }
+      ],
+      "total": {
+        "calories": 382.94,
+        "protein": 35.35,
+        "carbs": 10.17,
+        "fat": 22.22
+      }
+    },
+    "slices": {
+      "cuisine": "western",
+      "mealType": "lunch",
+      "difficulty": "hard",
+      "lighting": "good"
+    },
+    "datasetVersion": "nutrition5k-v1"
+  },
+  {
+    "id": "nutrition5k:dish_1560455030",
+    "imageUri": "https://storage.googleapis.com/nutrition5k_dataset/nutrition5k_dataset/imagery/realsense_overhead/dish_1560455030/rgb.png",
+    "provenance": "nutrition5k",
+    "groundTruth": {
+      "items": [
+        {
+          "name": "cherry tomatoes",
+          "canonicalId": null,
+          "grams": 55,
+          "calories": 9.9,
+          "protein": 0.5,
+          "carbs": 2.15,
+          "fat": 0.11
+        },
+        {
+          "name": "cucumbers",
+          "canonicalId": null,
+          "grams": 29,
+          "calories": 2.9,
+          "protein": 0.29,
+          "carbs": 0.58,
+          "fat": 0
+        },
+        {
+          "name": "baby carrots",
+          "canonicalId": null,
+          "grams": 19,
+          "calories": 7.79,
+          "protein": 0.17,
+          "carbs": 1.9,
+          "fat": 0.04
+        }
+      ],
+      "total": {
+        "calories": 20.59,
+        "protein": 0.96,
+        "carbs": 4.63,
+        "fat": 0.15
+      }
+    },
+    "slices": {
+      "cuisine": "western",
+      "mealType": "lunch",
+      "difficulty": "medium",
+      "lighting": "good"
+    },
+    "datasetVersion": "nutrition5k-v1"
+  },
+  {
+    "id": "nutrition5k:dish_1565640549",
+    "imageUri": "https://storage.googleapis.com/nutrition5k_dataset/nutrition5k_dataset/imagery/realsense_overhead/dish_1565640549/rgb.png",
+    "provenance": "nutrition5k",
+    "groundTruth": {
+      "items": [
+        {
+          "name": "tomatoes",
+          "canonicalId": null,
+          "grams": 10.7,
+          "calories": 3.64,
+          "protein": 0.07,
+          "carbs": 0.73,
+          "fat": 0.07
+        },
+        {
+          "name": "cilantro",
+          "canonicalId": null,
+          "grams": 1.07,
+          "calories": 0.24,
+          "protein": 0.02,
+          "carbs": 0.04,
+          "fat": 0.01
+        },
+        {
+          "name": "olive oil",
+          "canonicalId": null,
+          "grams": 1.07,
+          "calories": 9.46,
+          "protein": 0,
+          "carbs": 0,
+          "fat": 1.07
+        },
+        {
+          "name": "mustard greens",
+          "canonicalId": null,
+          "grams": 21.4,
+          "calories": 5.78,
+          "protein": 0.62,
+          "carbs": 1.01,
+          "fat": 0.09
+        },
+        {
+          "name": "lemon juice",
+          "canonicalId": null,
+          "grams": 1.61,
+          "calories": 0.27,
+          "protein": 0.01,
+          "carbs": 0.09,
+          "fat": 0
+        },
+        {
+          "name": "onions",
+          "canonicalId": null,
+          "grams": 2.14,
+          "calories": 0.86,
+          "protein": 0.02,
+          "carbs": 0.19,
+          "fat": 0
+        },
+        {
+          "name": "cucumbers",
+          "canonicalId": null,
+          "grams": 10.7,
+          "calories": 1.07,
+          "protein": 0.11,
+          "carbs": 0.21,
+          "fat": 0
+        },
+        {
+          "name": "salt",
+          "canonicalId": null,
+          "grams": 0.13,
+          "calories": 0,
+          "protein": 0,
+          "carbs": 0,
+          "fat": 0
+        },
+        {
+          "name": "arugula",
+          "canonicalId": null,
+          "grams": 32.1,
+          "calories": 8.03,
+          "protein": 0.83,
+          "carbs": 1.19,
+          "fat": 0.22
+        },
+        {
+          "name": "jalapenos",
+          "canonicalId": null,
+          "grams": 1.07,
+          "calories": 0.31,
+          "protein": 0.01,
+          "carbs": 0.07,
+          "fat": 0
+        },
+        {
+          "name": "asparagus",
+          "canonicalId": null,
+          "grams": 34,
+          "calories": 6.94,
+          "protein": 0.75,
+          "carbs": 1.33,
+          "fat": 0.03
+        },
+        {
+          "name": "lime",
+          "canonicalId": null,
+          "grams": 1.61,
+          "calories": 0.48,
+          "protein": 0.01,
+          "carbs": 0.17,
+          "fat": 0
+        },
+        {
+          "name": "mangos",
+          "canonicalId": null,
+          "grams": 10.7,
+          "calories": 6.48,
+          "protein": 0.09,
+          "carbs": 1.61,
+          "fat": 0.04
+        },
+        {
+          "name": "cherry tomatoes",
+          "canonicalId": null,
+          "grams": 10.7,
+          "calories": 1.93,
+          "protein": 0.1,
+          "carbs": 0.42,
+          "fat": 0.02
+        }
+      ],
+      "total": {
+        "calories": 45.48,
+        "protein": 2.64,
+        "carbs": 7.04,
+        "fat": 1.57
+      }
+    },
+    "slices": {
+      "cuisine": "western",
+      "mealType": "lunch",
+      "difficulty": "hard",
+      "lighting": "good"
+    },
+    "datasetVersion": "nutrition5k-v1"
+  },
+  {
+    "id": "nutrition5k:dish_1563207364",
+    "imageUri": "https://storage.googleapis.com/nutrition5k_dataset/nutrition5k_dataset/imagery/realsense_overhead/dish_1563207364/rgb.png",
+    "provenance": "nutrition5k",
+    "groundTruth": {
+      "items": [
+        {
+          "name": "scrambled eggs",
+          "canonicalId": null,
+          "grams": 68,
+          "calories": 100.64,
+          "protein": 6.8,
+          "carbs": 1.09,
+          "fat": 7.48
+        },
+        {
+          "name": "yam",
+          "canonicalId": null,
+          "grams": 50,
+          "calories": 62.05,
+          "protein": 0.8,
+          "carbs": 14.7,
+          "fat": 0.1
+        },
+        {
+          "name": "grapes",
+          "canonicalId": null,
+          "grams": 30,
+          "calories": 20.7,
+          "protein": 0.21,
+          "carbs": 5.4,
+          "fat": 0.06
+        },
+        {
+          "name": "egg whites",
+          "canonicalId": null,
+          "grams": 67,
+          "calories": 34.84,
+          "protein": 6.7,
+          "carbs": 0.47,
+          "fat": 0.13
+        },
+        {
+          "name": "olive oil",
+          "canonicalId": null,
+          "grams": 6,
+          "calories": 53.04,
+          "protein": 0,
+          "carbs": 0,
+          "fat": 6
+        },
+        {
+          "name": "sweet potato",
+          "canonicalId": null,
+          "grams": 50,
+          "calories": 38,
+          "protein": 0.5,
+          "carbs": 9,
+          "fat": 0
+        }
+      ],
+      "total": {
+        "calories": 309.27,
+        "protein": 15.01,
+        "carbs": 30.66,
+        "fat": 13.77
+      }
+    },
+    "slices": {
+      "cuisine": "western",
+      "mealType": "lunch",
+      "difficulty": "hard",
+      "lighting": "good"
+    },
+    "datasetVersion": "nutrition5k-v1"
+  },
+  {
+    "id": "nutrition5k:dish_1561575474",
+    "imageUri": "https://storage.googleapis.com/nutrition5k_dataset/nutrition5k_dataset/imagery/realsense_overhead/dish_1561575474/rgb.png",
+    "provenance": "nutrition5k",
+    "groundTruth": {
+      "items": [
+        {
+          "name": "salt",
+          "canonicalId": null,
+          "grams": 0.58,
+          "calories": 0,
+          "protein": 0,
+          "carbs": 0,
+          "fat": 0
+        },
+        {
+          "name": "eggplant",
+          "canonicalId": null,
+          "grams": 57.84,
+          "calories": 14.35,
+          "protein": 0.58,
+          "carbs": 3.41,
+          "fat": 0.12
+        },
+        {
+          "name": "roasted potatoes",
+          "canonicalId": null,
+          "grams": 60,
+          "calories": 84.6,
+          "protein": 1.26,
+          "carbs": 10.8,
+          "fat": 4.08
+        },
+        {
+          "name": "cauliflower",
+          "canonicalId": null,
+          "grams": 64,
+          "calories": 16,
+          "protein": 1.15,
+          "carbs": 3.2,
+          "fat": 0.19
+        },
+        {
+          "name": "olive oil",
+          "canonicalId": null,
+          "grams": 0.58,
+          "calories": 5.11,
+          "protein": 0,
+          "carbs": 0,
+          "fat": 0.58
+        }
+      ],
+      "total": {
+        "calories": 120.06,
+        "protein": 2.99,
+        "carbs": 17.41,
+        "fat": 4.97
+      }
+    },
+    "slices": {
+      "cuisine": "western",
+      "mealType": "lunch",
+      "difficulty": "hard",
+      "lighting": "good"
+    },
+    "datasetVersion": "nutrition5k-v1"
+  },
+  {
+    "id": "nutrition5k:dish_1563216717",
+    "imageUri": "https://storage.googleapis.com/nutrition5k_dataset/nutrition5k_dataset/imagery/realsense_overhead/dish_1563216717/rgb.png",
+    "provenance": "nutrition5k",
+    "groundTruth": {
+      "items": [
+        {
+          "name": "garlic",
+          "canonicalId": null,
+          "grams": 0.9,
+          "calories": 1.33,
+          "protein": 0.06,
+          "carbs": 0.3,
+          "fat": 0
+        },
+        {
+          "name": "squash",
+          "canonicalId": null,
+          "grams": 63.13,
+          "calories": 12.94,
+          "protein": 0.57,
+          "carbs": 2.15,
+          "fat": 0.19
+        },
+        {
+          "name": "cherry tomatoes",
+          "canonicalId": null,
+          "grams": 4.48,
+          "calories": 0.81,
+          "protein": 0.04,
+          "carbs": 0.17,
+          "fat": 0.01
+        },
+        {
+          "name": "chicken breast",
+          "canonicalId": null,
+          "grams": 89.53,
+          "calories": 147.9,
+          "protein": 27.84,
+          "carbs": 0,
+          "fat": 3.22
+        },
+        {
+          "name": "spinach (raw)",
+          "canonicalId": null,
+          "grams": 2.24,
+          "calories": 0.51,
+          "protein": 0.06,
+          "carbs": 0.08,
+          "fat": 0.01
+        },
+        {
+          "name": "parmesan cheese",
+          "canonicalId": null,
+          "grams": 2.24,
+          "calories": 9.64,
+          "protein": 0.86,
+          "carbs": 0.09,
+          "fat": 0.64
+        },
+        {
+          "name": "wheat berry",
+          "canonicalId": null,
+          "grams": 8.95,
+          "calories": 8.15,
+          "protein": 0.38,
+          "carbs": 1.71,
+          "fat": 0.04
+        },
+        {
+          "name": "olive oil",
+          "canonicalId": null,
+          "grams": 0.97,
+          "calories": 8.55,
+          "protein": 0,
+          "carbs": 0,
+          "fat": 0.97
+        },
+        {
+          "name": "thyme",
+          "canonicalId": null,
+          "grams": 0.22,
+          "calories": 0.23,
+          "protein": 0.01,
+          "carbs": 0.05,
+          "fat": 0
+        },
+        {
+          "name": "honeydew melons",
+          "canonicalId": null,
+          "grams": 30,
+          "calories": 10.8,
+          "protein": 0.15,
+          "carbs": 2.7,
+          "fat": 0.03
+        },
+        {
+          "name": "salt",
+          "canonicalId": null,
+          "grams": 0.35,
+          "calories": 0,
+          "protein": 0,
+          "carbs": 0,
+          "fat": 0
+        },
+        {
+          "name": "broccoli",
+          "canonicalId": null,
+          "grams": 129,
+          "calories": 45.15,
+          "protein": 3.1,
+          "carbs": 9.03,
+          "fat": 0.52
+        }
+      ],
+      "total": {
+        "calories": 246.01,
+        "protein": 33.07,
+        "carbs": 16.28,
+        "fat": 5.64
+      }
+    },
+    "slices": {
+      "cuisine": "western",
+      "mealType": "lunch",
+      "difficulty": "hard",
+      "lighting": "good"
+    },
+    "datasetVersion": "nutrition5k-v1"
+  },
+  {
+    "id": "nutrition5k:dish_1565972591",
+    "imageUri": "https://storage.googleapis.com/nutrition5k_dataset/nutrition5k_dataset/imagery/realsense_overhead/dish_1565972591/rgb.png",
+    "provenance": "nutrition5k",
+    "groundTruth": {
+      "items": [
+        {
+          "name": "chicken apple sausage",
+          "canonicalId": null,
+          "grams": 122,
+          "calories": 195.2,
+          "protein": 17.08,
+          "carbs": 3.66,
+          "fat": 12.2
+        }
+      ],
+      "total": {
+        "calories": 195.2,
+        "protein": 17.08,
+        "carbs": 3.66,
+        "fat": 12.2
+      }
+    },
+    "slices": {
+      "cuisine": "western",
+      "mealType": "lunch",
+      "difficulty": "easy",
+      "lighting": "good"
+    },
+    "datasetVersion": "nutrition5k-v1"
+  },
+  {
+    "id": "nutrition5k:dish_1568649312",
+    "imageUri": "https://storage.googleapis.com/nutrition5k_dataset/nutrition5k_dataset/imagery/realsense_overhead/dish_1568649312/rgb.png",
+    "provenance": "nutrition5k",
+    "groundTruth": {
+      "items": [
+        {
+          "name": "berries",
+          "canonicalId": null,
+          "grams": 78,
+          "calories": 44.46,
+          "protein": 0.55,
+          "carbs": 10.92,
+          "fat": 0.23
+        }
+      ],
+      "total": {
+        "calories": 44.46,
+        "protein": 0.55,
+        "carbs": 10.92,
+        "fat": 0.23
+      }
+    },
+    "slices": {
+      "cuisine": "western",
+      "mealType": "lunch",
+      "difficulty": "easy",
+      "lighting": "good"
+    },
+    "datasetVersion": "nutrition5k-v1"
+  },
+  {
+    "id": "nutrition5k:dish_1562183096",
+    "imageUri": "https://storage.googleapis.com/nutrition5k_dataset/nutrition5k_dataset/imagery/realsense_overhead/dish_1562183096/rgb.png",
+    "provenance": "nutrition5k",
+    "groundTruth": {
+      "items": [
+        {
+          "name": "pepper",
+          "canonicalId": null,
+          "grams": 0.02,
+          "calories": 0.01,
+          "protein": 0,
+          "carbs": 0,
+          "fat": 0
+        },
+        {
+          "name": "chard",
+          "canonicalId": null,
+          "grams": 2.41,
+          "calories": 0.46,
+          "protein": 0.04,
+          "carbs": 0.09,
+          "fat": 0
+        },
+        {
+          "name": "blueberries",
+          "canonicalId": null,
+          "grams": 0.96,
+          "calories": 0.55,
+          "protein": 0.01,
+          "carbs": 0.14,
+          "fat": 0
+        },
+        {
+          "name": "mushroom",
+          "canonicalId": null,
+          "grams": 75,
+          "calories": 16.5,
+          "protein": 2.33,
+          "carbs": 2.48,
+          "fat": 0.23
+        },
+        {
+          "name": "vinegar",
+          "canonicalId": null,
+          "grams": 0.45,
+          "calories": 0,
+          "protein": 0,
+          "carbs": 0,
+          "fat": 0
+        },
+        {
+          "name": "arugula",
+          "canonicalId": null,
+          "grams": 13.5,
+          "calories": 3.38,
+          "protein": 0.35,
+          "carbs": 0.5,
+          "fat": 0.09
+        },
+        {
+          "name": "mustard",
+          "canonicalId": null,
+          "grams": 0.15,
+          "calories": 0.09,
+          "protein": 0.01,
+          "carbs": 0.01,
+          "fat": 0
+        },
+        {
+          "name": "olive oil",
+          "canonicalId": null,
+          "grams": 1.93,
+          "calories": 17.05,
+          "protein": 0,
+          "carbs": 0,
+          "fat": 1.93
+        },
+        {
+          "name": "walnuts",
+          "canonicalId": null,
+          "grams": 0.48,
+          "calories": 3.15,
+          "protein": 0.07,
+          "carbs": 0.07,
+          "fat": 0.31
+        },
+        {
+          "name": "salt",
+          "canonicalId": null,
+          "grams": 0.09,
+          "calories": 0,
+          "protein": 0,
+          "carbs": 0,
+          "fat": 0
+        }
+      ],
+      "total": {
+        "calories": 41.19,
+        "protein": 2.8,
+        "carbs": 3.28,
+        "fat": 2.57
+      }
+    },
+    "slices": {
+      "cuisine": "western",
+      "mealType": "lunch",
+      "difficulty": "hard",
+      "lighting": "good"
+    },
+    "datasetVersion": "nutrition5k-v1"
+  },
+  {
+    "id": "nutrition5k:dish_1563476551",
+    "imageUri": "https://storage.googleapis.com/nutrition5k_dataset/nutrition5k_dataset/imagery/realsense_overhead/dish_1563476551/rgb.png",
+    "provenance": "nutrition5k",
+    "groundTruth": {
+      "items": [
+        {
+          "name": "shallots",
+          "canonicalId": null,
+          "grams": 6.27,
+          "calories": 1.25,
+          "protein": 0.09,
+          "carbs": 0.21,
+          "fat": 0.01
+        },
+        {
+          "name": "salmon",
+          "canonicalId": null,
+          "grams": 208.88,
+          "calories": 371.82,
+          "protein": 50.13,
+          "carbs": 0,
+          "fat": 16.71
+        },
+        {
+          "name": "mushroom",
+          "canonicalId": null,
+          "grams": 11.44,
+          "calories": 2.52,
+          "protein": 0.35,
+          "carbs": 0.38,
+          "fat": 0.03
+        },
+        {
+          "name": "ginger",
+          "canonicalId": null,
+          "grams": 1.04,
+          "calories": 0.84,
+          "protein": 0.02,
+          "carbs": 0.19,
+          "fat": 0.01
+        },
+        {
+          "name": "squash",
+          "canonicalId": null,
+          "grams": 69.33,
+          "calories": 14.21,
+          "protein": 0.62,
+          "carbs": 2.36,
+          "fat": 0.21
+        },
+        {
+          "name": "brownies",
+          "canonicalId": null,
+          "grams": 51,
+          "calories": 237.71,
+          "protein": 3.16,
+          "carbs": 25.4,
+          "fat": 14.69
+        },
+        {
+          "name": "lemon juice",
+          "canonicalId": null,
+          "grams": 2.09,
+          "calories": 0.36,
+          "protein": 0.01,
+          "carbs": 0.12,
+          "fat": 0
+        },
+        {
+          "name": "sour cream",
+          "canonicalId": null,
+          "grams": 3.05,
+          "calories": 6.04,
+          "protein": 0.07,
+          "carbs": 0.14,
+          "fat": 0.58
+        },
+        {
+          "name": "lime",
+          "canonicalId": null,
+          "grams": 0.26,
+          "calories": 0.08,
+          "protein": 0,
+          "carbs": 0.03,
+          "fat": 0
+        },
+        {
+          "name": "garlic",
+          "canonicalId": null,
+          "grams": 7.79,
+          "calories": 11.61,
+          "protein": 0.5,
+          "carbs": 2.57,
+          "fat": 0.04
+        },
+        {
+          "name": "cheese pizza",
+          "canonicalId": null,
+          "grams": 29,
+          "calories": 77.11,
+          "protein": 3.25,
+          "carbs": 9.72,
+          "fat": 2.73
+        },
+        {
+          "name": "wine",
+          "canonicalId": null,
+          "grams": 1.53,
+          "calories": 1.3,
+          "protein": 0,
+          "carbs": 0.04,
+          "fat": 0
+        },
+        {
+          "name": "cream",
+          "canonicalId": null,
+          "grams": 3.05,
+          "calories": 10.26,
+          "protein": 0.09,
+          "carbs": 0.08,
+          "fat": 1.12
+        },
+        {
+          "name": "brown rice",
+          "canonicalId": null,
+          "grams": 41.78,
+          "calories": 46.37,
+          "protein": 1.09,
+          "carbs": 9.61,
+          "fat": 0.38
+        },
+        {
+          "name": "jalapenos",
+          "canonicalId": null,
+          "grams": 2.09,
+          "calories": 0.61,
+          "protein": 0.02,
+          "carbs": 0.14,
+          "fat": 0.01
+        },
+        {
+          "name": "spinach (raw)",
+          "canonicalId": null,
+          "grams": 18.07,
+          "calories": 4.16,
+          "protein": 0.52,
+          "carbs": 0.65,
+          "fat": 0.07
+        },
+        {
+          "name": "beef",
+          "canonicalId": null,
+          "grams": 76.27,
+          "calories": 190.68,
+          "protein": 19.83,
+          "carbs": 0,
+          "fat": 11.44
+        },
+        {
+          "name": "pasta",
+          "canonicalId": null,
+          "grams": 61.02,
+          "calories": 80.3,
+          "protein": 3.11,
+          "carbs": 15.13,
+          "fat": 0.67
+        },
+        {
+          "name": "thyme",
+          "canonicalId": null,
+          "grams": 0.19,
+          "calories": 0.19,
+          "protein": 0.01,
+          "carbs": 0.05,
+          "fat": 0
+        },
+        {
+          "name": "olive oil",
+          "canonicalId": null,
+          "grams": 2.14,
+          "calories": 18.91,
+          "protein": 0,
+          "carbs": 0,
+          "fat": 2.14
+        },
+        {
+          "name": "broccoli",
+          "canonicalId": null,
+          "grams": 69.33,
+          "calories": 24.27,
+          "protein": 1.66,
+          "carbs": 4.85,
+          "fat": 0.28
+        },
+        {
+          "name": "onions",
+          "canonicalId": null,
+          "grams": 11.81,
+          "calories": 4.72,
+          "protein": 0.13,
+          "carbs": 1.06,
+          "fat": 0.01
+        },
+        {
+          "name": "zucchini",
+          "canonicalId": null,
+          "grams": 69.33,
+          "calories": 10.4,
+          "protein": 0.76,
+          "carbs": 1.87,
+          "fat": 0.28
+        },
+        {
+          "name": "salt",
+          "canonicalId": null,
+          "grams": 0.62,
+          "calories": 0,
+          "protein": 0,
+          "carbs": 0,
+          "fat": 0
+        },
+        {
+          "name": "cilantro",
+          "canonicalId": null,
+          "grams": 2.09,
+          "calories": 0.48,
+          "protein": 0.05,
+          "carbs": 0.08,
+          "fat": 0.01
+        },
+        {
+          "name": "chili",
+          "canonicalId": null,
+          "grams": 0.52,
+          "calories": 0.21,
+          "protein": 0.01,
+          "carbs": 0.05,
+          "fat": 0
+        }
+      ],
+      "total": {
+        "calories": 1116.39,
+        "protein": 85.5,
+        "carbs": 74.71,
+        "fat": 51.41
+      }
+    },
+    "slices": {
+      "cuisine": "western",
+      "mealType": "lunch",
+      "difficulty": "hard",
+      "lighting": "good"
+    },
+    "datasetVersion": "nutrition5k-v1"
+  },
+  {
+    "id": "nutrition5k:dish_1559844951",
+    "imageUri": "https://storage.googleapis.com/nutrition5k_dataset/nutrition5k_dataset/imagery/realsense_overhead/dish_1559844951/rgb.png",
+    "provenance": "nutrition5k",
+    "groundTruth": {
+      "items": [
+        {
+          "name": "almonds",
+          "canonicalId": null,
+          "grams": 36,
+          "calories": 208.12,
+          "protein": 8.06,
+          "carbs": 8.17,
+          "fat": 17.82
+        },
+        {
+          "name": "potatoes",
+          "canonicalId": null,
+          "grams": 86,
+          "calories": 66.22,
+          "protein": 1.72,
+          "carbs": 14.62,
+          "fat": 0.09
+        }
+      ],
+      "total": {
+        "calories": 274.34,
+        "protein": 9.78,
+        "carbs": 22.79,
+        "fat": 17.91
+      }
+    },
+    "slices": {
+      "cuisine": "western",
+      "mealType": "lunch",
+      "difficulty": "medium",
+      "lighting": "good"
+    },
+    "datasetVersion": "nutrition5k-v1"
+  },
+  {
+    "id": "nutrition5k:dish_1562963704",
+    "imageUri": "https://storage.googleapis.com/nutrition5k_dataset/nutrition5k_dataset/imagery/realsense_overhead/dish_1562963704/rgb.png",
+    "provenance": "nutrition5k",
+    "groundTruth": {
+      "items": [
+        {
+          "name": "radishes",
+          "canonicalId": null,
+          "grams": 3.51,
+          "calories": 0.56,
+          "protein": 0.02,
+          "carbs": 0.12,
+          "fat": 0
+        },
+        {
+          "name": "bok choy",
+          "canonicalId": null,
+          "grams": 12.32,
+          "calories": 1.6,
+          "protein": 0.18,
+          "carbs": 0.27,
+          "fat": 0.02
+        },
+        {
+          "name": "vinegar",
+          "canonicalId": null,
+          "grams": 3.51,
+          "calories": 0,
+          "protein": 0,
+          "carbs": 0,
+          "fat": 0
+        },
+        {
+          "name": "salt",
+          "canonicalId": null,
+          "grams": 0.62,
+          "calories": 0,
+          "protein": 0,
+          "carbs": 0,
+          "fat": 0
+        },
+        {
+          "name": "roasted potatoes",
+          "canonicalId": null,
+          "grams": 103,
+          "calories": 145.23,
+          "protein": 2.16,
+          "carbs": 18.54,
+          "fat": 7
+        },
+        {
+          "name": "mixed greens",
+          "canonicalId": null,
+          "grams": 17.54,
+          "calories": 4.91,
+          "protein": 0.39,
+          "carbs": 0.93,
+          "fat": 0.07
+        },
+        {
+          "name": "soy sauce",
+          "canonicalId": null,
+          "grams": 5.8,
+          "calories": 3.08,
+          "protein": 0.47,
+          "carbs": 0.28,
+          "fat": 0.03
+        },
+        {
+          "name": "caesar salad",
+          "canonicalId": null,
+          "grams": 104,
+          "calories": 45.76,
+          "protein": 3.33,
+          "carbs": 4.47,
+          "fat": 2.18
+        },
+        {
+          "name": "garlic",
+          "canonicalId": null,
+          "grams": 3.74,
+          "calories": 5.57,
+          "protein": 0.24,
+          "carbs": 1.23,
+          "fat": 0.02
+        },
+        {
+          "name": "sugar",
+          "canonicalId": null,
+          "grams": 9.24,
+          "calories": 35.84,
+          "protein": 0,
+          "carbs": 9.24,
+          "fat": 0
+        },
+        {
+          "name": "pepper",
+          "canonicalId": null,
+          "grams": 0.31,
+          "calories": 0.12,
+          "protein": 0.01,
+          "carbs": 0.03,
+          "fat": 0
+        },
+        {
+          "name": "white rice",
+          "canonicalId": null,
+          "grams": 12.32,
+          "calories": 16.01,
+          "protein": 0.33,
+          "carbs": 3.45,
+          "fat": 0.04
+        },
+        {
+          "name": "pork",
+          "canonicalId": null,
+          "grams": 86.21,
+          "calories": 205.17,
+          "protein": 22.41,
+          "carbs": 0,
+          "fat": 12.07
+        },
+        {
+          "name": "rice noodles",
+          "canonicalId": null,
+          "grams": 35.08,
+          "calories": 38.24,
+          "protein": 0.32,
+          "carbs": 8.77,
+          "fat": 0.07
+        },
+        {
+          "name": "cabbage",
+          "canonicalId": null,
+          "grams": 17.54,
+          "calories": 3.68,
+          "protein": 0.23,
+          "carbs": 0.56,
+          "fat": 0.09
+        },
+        {
+          "name": "pizza",
+          "canonicalId": null,
+          "grams": 52,
+          "calories": 138.32,
+          "protein": 5.72,
+          "carbs": 17.16,
+          "fat": 5.04
+        },
+        {
+          "name": "olive oil",
+          "canonicalId": null,
+          "grams": 1.75,
+          "calories": 15.51,
+          "protein": 0,
+          "carbs": 0,
+          "fat": 1.75
+        },
+        {
+          "name": "carrot",
+          "canonicalId": null,
+          "grams": 8.77,
+          "calories": 3.6,
+          "protein": 0.08,
+          "carbs": 0.88,
+          "fat": 0.02
+        },
+        {
+          "name": "green onions",
+          "canonicalId": null,
+          "grams": 1.75,
+          "calories": 0.56,
+          "protein": 0.03,
+          "carbs": 0.12,
+          "fat": 0
+        }
+      ],
+      "total": {
+        "calories": 663.76,
+        "protein": 35.92,
+        "carbs": 66.05,
+        "fat": 28.42
+      }
+    },
+    "slices": {
+      "cuisine": "western",
+      "mealType": "lunch",
+      "difficulty": "hard",
+      "lighting": "good"
+    },
+    "datasetVersion": "nutrition5k-v1"
+  },
+  {
+    "id": "nutrition5k:dish_1566417398",
+    "imageUri": "https://storage.googleapis.com/nutrition5k_dataset/nutrition5k_dataset/imagery/realsense_overhead/dish_1566417398/rgb.png",
+    "provenance": "nutrition5k",
+    "groundTruth": {
+      "items": [
+        {
+          "name": "mustard",
+          "canonicalId": null,
+          "grams": 0.41,
+          "calories": 0.25,
+          "protein": 0.02,
+          "carbs": 0.02,
+          "fat": 0.01
+        },
+        {
+          "name": "vinegar",
+          "canonicalId": null,
+          "grams": 2.6,
+          "calories": 0,
+          "protein": 0,
+          "carbs": 0,
+          "fat": 0
+        },
+        {
+          "name": "mixed greens",
+          "canonicalId": null,
+          "grams": 32.51,
+          "calories": 9.1,
+          "protein": 0.72,
+          "carbs": 1.72,
+          "fat": 0.13
+        },
+        {
+          "name": "celery root",
+          "canonicalId": null,
+          "grams": 2.6,
+          "calories": 1.09,
+          "protein": 0.04,
+          "carbs": 0.24,
+          "fat": 0.01
+        },
+        {
+          "name": "olive oil",
+          "canonicalId": null,
+          "grams": 5.2,
+          "calories": 45.98,
+          "protein": 0,
+          "carbs": 0,
+          "fat": 5.2
+        },
+        {
+          "name": "salt",
+          "canonicalId": null,
+          "grams": 0.08,
+          "calories": 0,
+          "protein": 0,
+          "carbs": 0,
+          "fat": 0
+        },
+        {
+          "name": "cherry tomatoes",
+          "canonicalId": null,
+          "grams": 2.6,
+          "calories": 0.47,
+          "protein": 0.02,
+          "carbs": 0.1,
+          "fat": 0.01
+        }
+      ],
+      "total": {
+        "calories": 56.89,
+        "protein": 0.79,
+        "carbs": 2.09,
+        "fat": 5.36
+      }
+    },
+    "slices": {
+      "cuisine": "western",
+      "mealType": "lunch",
+      "difficulty": "hard",
+      "lighting": "good"
+    },
+    "datasetVersion": "nutrition5k-v1"
+  },
+  {
+    "id": "nutrition5k:dish_1561739238",
+    "imageUri": "https://storage.googleapis.com/nutrition5k_dataset/nutrition5k_dataset/imagery/realsense_overhead/dish_1561739238/rgb.png",
+    "provenance": "nutrition5k",
+    "groundTruth": {
+      "items": [
+        {
+          "name": "egg whites",
+          "canonicalId": null,
+          "grams": 71,
+          "calories": 36.92,
+          "protein": 7.1,
+          "carbs": 0.5,
+          "fat": 0.14
+        },
+        {
+          "name": "hash browns",
+          "canonicalId": null,
+          "grams": 43,
+          "calories": 140.18,
+          "protein": 1.12,
+          "carbs": 13.76,
+          "fat": 9.46
+        },
+        {
+          "name": "berries",
+          "canonicalId": null,
+          "grams": 61,
+          "calories": 34.77,
+          "protein": 0.43,
+          "carbs": 8.54,
+          "fat": 0.18
+        },
+        {
+          "name": "sweet potato",
+          "canonicalId": null,
+          "grams": 82,
+          "calories": 62.32,
+          "protein": 0.82,
+          "carbs": 14.76,
+          "fat": 0
+        }
+      ],
+      "total": {
+        "calories": 274.19,
+        "protein": 9.47,
+        "carbs": 37.56,
+        "fat": 9.79
+      }
+    },
+    "slices": {
+      "cuisine": "western",
+      "mealType": "lunch",
+      "difficulty": "medium",
+      "lighting": "good"
+    },
+    "datasetVersion": "nutrition5k-v1"
+  },
+  {
+    "id": "nutrition5k:dish_1562611680",
+    "imageUri": "https://storage.googleapis.com/nutrition5k_dataset/nutrition5k_dataset/imagery/realsense_overhead/dish_1562611680/rgb.png",
+    "provenance": "nutrition5k",
+    "groundTruth": {
+      "items": [
+        {
+          "name": "cilantro",
+          "canonicalId": null,
+          "grams": 0.07,
+          "calories": 0.02,
+          "protein": 0,
+          "carbs": 0,
+          "fat": 0
+        },
+        {
+          "name": "garlic",
+          "canonicalId": null,
+          "grams": 0.35,
+          "calories": 0.53,
+          "protein": 0.02,
+          "carbs": 0.12,
+          "fat": 0
+        },
+        {
+          "name": "olive oil",
+          "canonicalId": null,
+          "grams": 7.09,
+          "calories": 62.66,
+          "protein": 0,
+          "carbs": 0,
+          "fat": 7.09
+        },
+        {
+          "name": "pepperoni pizza",
+          "canonicalId": null,
+          "grams": 50,
+          "calories": 141,
+          "protein": 6,
+          "carbs": 16,
+          "fat": 6
+        },
+        {
+          "name": "lemon juice",
+          "canonicalId": null,
+          "grams": 0.13,
+          "calories": 0.02,
+          "protein": 0,
+          "carbs": 0.01,
+          "fat": 0
+        },
+        {
+          "name": "onions",
+          "canonicalId": null,
+          "grams": 1.59,
+          "calories": 0.64,
+          "protein": 0.02,
+          "carbs": 0.14,
+          "fat": 0
+        },
+        {
+          "name": "vinegar",
+          "canonicalId": null,
+          "grams": 3.68,
+          "calories": 0,
+          "protein": 0,
+          "carbs": 0,
+          "fat": 0
+        },
+        {
+          "name": "blueberries",
+          "canonicalId": null,
+          "grams": 7.09,
+          "calories": 4.05,
+          "protein": 0.05,
+          "carbs": 1.02,
+          "fat": 0.02
+        },
+        {
+          "name": "salt",
+          "canonicalId": null,
+          "grams": 0.25,
+          "calories": 0,
+          "protein": 0,
+          "carbs": 0,
+          "fat": 0
+        },
+        {
+          "name": "caesar salad",
+          "canonicalId": null,
+          "grams": 110,
+          "calories": 48.4,
+          "protein": 3.52,
+          "carbs": 4.73,
+          "fat": 2.31
+        },
+        {
+          "name": "steak",
+          "canonicalId": null,
+          "grams": 19.87,
+          "calories": 53.85,
+          "protein": 4.97,
+          "carbs": 0,
+          "fat": 3.78
+        },
+        {
+          "name": "kale",
+          "canonicalId": null,
+          "grams": 0.66,
+          "calories": 0.32,
+          "protein": 0.02,
+          "carbs": 0.06,
+          "fat": 0
+        },
+        {
+          "name": "jalapenos",
+          "canonicalId": null,
+          "grams": 0.07,
+          "calories": 0.02,
+          "protein": 0,
+          "carbs": 0,
+          "fat": 0
+        },
+        {
+          "name": "spinach (raw)",
+          "canonicalId": null,
+          "grams": 44.3,
+          "calories": 10.19,
+          "protein": 1.28,
+          "carbs": 1.59,
+          "fat": 0.18
+        },
+        {
+          "name": "mustard",
+          "canonicalId": null,
+          "grams": 0.44,
+          "calories": 0.27,
+          "protein": 0.02,
+          "carbs": 0.03,
+          "fat": 0.01
+        },
+        {
+          "name": "white rice",
+          "canonicalId": null,
+          "grams": 2.65,
+          "calories": 3.44,
+          "protein": 0.07,
+          "carbs": 0.74,
+          "fat": 0.01
+        },
+        {
+          "name": "radishes",
+          "canonicalId": null,
+          "grams": 7.09,
+          "calories": 1.13,
+          "protein": 0.05,
+          "carbs": 0.24,
+          "fat": 0.01
+        },
+        {
+          "name": "pineapple",
+          "canonicalId": null,
+          "grams": 0.66,
+          "calories": 0.33,
+          "protein": 0,
+          "carbs": 0.09,
+          "fat": 0
+        }
+      ],
+      "total": {
+        "calories": 326.89,
+        "protein": 16.03,
+        "carbs": 24.78,
+        "fat": 19.41
+      }
+    },
+    "slices": {
+      "cuisine": "western",
+      "mealType": "lunch",
+      "difficulty": "hard",
+      "lighting": "good"
+    },
+    "datasetVersion": "nutrition5k-v1"
+  },
+  {
+    "id": "nutrition5k:dish_1564432238",
+    "imageUri": "https://storage.googleapis.com/nutrition5k_dataset/nutrition5k_dataset/imagery/realsense_overhead/dish_1564432238/rgb.png",
+    "provenance": "nutrition5k",
+    "groundTruth": {
+      "items": [
+        {
+          "name": "cherry tomatoes",
+          "canonicalId": null,
+          "grams": 3.64,
+          "calories": 0.65,
+          "protein": 0.03,
+          "carbs": 0.14,
+          "fat": 0.01
+        },
+        {
+          "name": "cauliflower",
+          "canonicalId": null,
+          "grams": 60,
+          "calories": 15,
+          "protein": 1.08,
+          "carbs": 3,
+          "fat": 0.18
+        },
+        {
+          "name": "lime",
+          "canonicalId": null,
+          "grams": 0.45,
+          "calories": 0.14,
+          "protein": 0,
+          "carbs": 0.05,
+          "fat": 0
+        },
+        {
+          "name": "mayonnaise",
+          "canonicalId": null,
+          "grams": 1.84,
+          "calories": 12.54,
+          "protein": 0.02,
+          "carbs": 0.01,
+          "fat": 1.38
+        },
+        {
+          "name": "jalapenos",
+          "canonicalId": null,
+          "grams": 0.12,
+          "calories": 0.03,
+          "protein": 0,
+          "carbs": 0.01,
+          "fat": 0
+        },
+        {
+          "name": "pepperoni pizza",
+          "canonicalId": null,
+          "grams": 63,
+          "calories": 177.66,
+          "protein": 7.56,
+          "carbs": 20.16,
+          "fat": 7.56
+        },
+        {
+          "name": "parsley",
+          "canonicalId": null,
+          "grams": 0.46,
+          "calories": 0.17,
+          "protein": 0.01,
+          "carbs": 0.03,
+          "fat": 0
+        },
+        {
+          "name": "vinegar",
+          "canonicalId": null,
+          "grams": 1.82,
+          "calories": 0,
+          "protein": 0,
+          "carbs": 0,
+          "fat": 0
+        },
+        {
+          "name": "lemon juice",
+          "canonicalId": null,
+          "grams": 0.92,
+          "calories": 0.16,
+          "protein": 0,
+          "carbs": 0.05,
+          "fat": 0
+        },
+        {
+          "name": "cabbage",
+          "canonicalId": null,
+          "grams": 9.22,
+          "calories": 1.94,
+          "protein": 0.12,
+          "carbs": 0.3,
+          "fat": 0.05
+        },
+        {
+          "name": "mixed greens",
+          "canonicalId": null,
+          "grams": 13.64,
+          "calories": 3.82,
+          "protein": 0.3,
+          "carbs": 0.72,
+          "fat": 0.05
+        },
+        {
+          "name": "lettuce",
+          "canonicalId": null,
+          "grams": 9.1,
+          "calories": 1.36,
+          "protein": 0.13,
+          "carbs": 0.26,
+          "fat": 0.02
+        },
+        {
+          "name": "salt",
+          "canonicalId": null,
+          "grams": 0.34,
+          "calories": 0,
+          "protein": 0,
+          "carbs": 0,
+          "fat": 0
+        },
+        {
+          "name": "pepper",
+          "canonicalId": null,
+          "grams": 0.34,
+          "calories": 0.14,
+          "protein": 0.01,
+          "carbs": 0.03,
+          "fat": 0
+        },
+        {
+          "name": "pineapple",
+          "canonicalId": null,
+          "grams": 58,
+          "calories": 29,
+          "protein": 0.29,
+          "carbs": 7.54,
+          "fat": 0.06
+        },
+        {
+          "name": "pork",
+          "canonicalId": null,
+          "grams": 69.17,
+          "calories": 164.64,
+          "protein": 17.99,
+          "carbs": 0,
+          "fat": 9.68
+        },
+        {
+          "name": "wheat berry",
+          "canonicalId": null,
+          "grams": 9.22,
+          "calories": 8.39,
+          "protein": 0.39,
+          "carbs": 1.76,
+          "fat": 0.05
+        },
+        {
+          "name": "onions",
+          "canonicalId": null,
+          "grams": 1.82,
+          "calories": 0.73,
+          "protein": 0.02,
+          "carbs": 0.16,
+          "fat": 0
+        },
+        {
+          "name": "cucumbers",
+          "canonicalId": null,
+          "grams": 4.55,
+          "calories": 0.45,
+          "protein": 0.05,
+          "carbs": 0.09,
+          "fat": 0
+        },
+        {
+          "name": "olive oil",
+          "canonicalId": null,
+          "grams": 4.1,
+          "calories": 36.24,
+          "protein": 0,
+          "carbs": 0,
+          "fat": 4.1
+        },
+        {
+          "name": "garlic",
+          "canonicalId": null,
+          "grams": 0.92,
+          "calories": 1.37,
+          "protein": 0.06,
+          "carbs": 0.3,
+          "fat": 0
+        },
+        {
+          "name": "carrot",
+          "canonicalId": null,
+          "grams": 2.31,
+          "calories": 0.95,
+          "protein": 0.02,
+          "carbs": 0.23,
+          "fat": 0
+        }
+      ],
+      "total": {
+        "calories": 455.39,
+        "protein": 28.07,
+        "carbs": 34.85,
+        "fat": 23.15
+      }
+    },
+    "slices": {
+      "cuisine": "western",
+      "mealType": "lunch",
+      "difficulty": "hard",
+      "lighting": "good"
+    },
+    "datasetVersion": "nutrition5k-v1"
+  },
+  {
+    "id": "nutrition5k:dish_1563468327",
+    "imageUri": "https://storage.googleapis.com/nutrition5k_dataset/nutrition5k_dataset/imagery/realsense_overhead/dish_1563468327/rgb.png",
+    "provenance": "nutrition5k",
+    "groundTruth": {
+      "items": [
+        {
+          "name": "yam",
+          "canonicalId": null,
+          "grams": 46.23,
+          "calories": 57.37,
+          "protein": 0.74,
+          "carbs": 13.59,
+          "fat": 0.09
+        },
+        {
+          "name": "sweet potato",
+          "canonicalId": null,
+          "grams": 46.23,
+          "calories": 35.13,
+          "protein": 0.46,
+          "carbs": 8.32,
+          "fat": 0
+        },
+        {
+          "name": "cottage cheese",
+          "canonicalId": null,
+          "grams": 83,
+          "calories": 81.34,
+          "protein": 9.13,
+          "carbs": 2.82,
+          "fat": 3.57
+        },
+        {
+          "name": "pineapple",
+          "canonicalId": null,
+          "grams": 107,
+          "calories": 53.5,
+          "protein": 0.54,
+          "carbs": 13.91,
+          "fat": 0.11
+        },
+        {
+          "name": "watermelon",
+          "canonicalId": null,
+          "grams": 132,
+          "calories": 39.6,
+          "protein": 0.79,
+          "carbs": 10.03,
+          "fat": 0.26
+        },
+        {
+          "name": "olive oil",
+          "canonicalId": null,
+          "grams": 5.55,
+          "calories": 49.04,
+          "protein": 0,
+          "carbs": 0,
+          "fat": 5.55
+        },
+        {
+          "name": "berries",
+          "canonicalId": null,
+          "grams": 63,
+          "calories": 35.91,
+          "protein": 0.44,
+          "carbs": 8.82,
+          "fat": 0.19
+        }
+      ],
+      "total": {
+        "calories": 351.89,
+        "protein": 12.1,
+        "carbs": 57.5,
+        "fat": 9.77
+      }
+    },
+    "slices": {
+      "cuisine": "western",
+      "mealType": "lunch",
+      "difficulty": "hard",
+      "lighting": "good"
+    },
+    "datasetVersion": "nutrition5k-v1"
+  },
+  {
+    "id": "nutrition5k:dish_1562862493",
+    "imageUri": "https://storage.googleapis.com/nutrition5k_dataset/nutrition5k_dataset/imagery/realsense_overhead/dish_1562862493/rgb.png",
+    "provenance": "nutrition5k",
+    "groundTruth": {
+      "items": [
+        {
+          "name": "scrambled eggs",
+          "canonicalId": null,
+          "grams": 134,
+          "calories": 198.32,
+          "protein": 13.4,
+          "carbs": 2.14,
+          "fat": 14.74
+        }
+      ],
+      "total": {
+        "calories": 198.32,
+        "protein": 13.4,
+        "carbs": 2.14,
+        "fat": 14.74
+      }
+    },
+    "slices": {
+      "cuisine": "western",
+      "mealType": "lunch",
+      "difficulty": "easy",
+      "lighting": "good"
+    },
+    "datasetVersion": "nutrition5k-v1"
+  }
+]
