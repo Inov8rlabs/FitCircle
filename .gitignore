@@ -94,3 +94,7 @@ settings.local.json
 
 # Misc
 .gitattributes
+
+# Bulk food-data downloads (OFF/USDA dumps loaded by scripts/load-foods-bulk.mjs).
+# Multi-GB source files — never commit; the load is idempotent and re-downloadable.
+data/
