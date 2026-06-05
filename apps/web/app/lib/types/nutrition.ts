@@ -18,26 +18,45 @@ export type NutritionSource = 'llm_vision' | 'llm_voice' | 'foods_db' | 'user' |
 // Per-item: name, estimated quantity (+ optional range), serving unit, macros, confidence.
 // Macros are per the WHOLE item as logged (already scaled to the estimated quantity).
 // ============================================================================
+
+// Robustness clamps (applied at the validation boundary).
+//
+// Macros/quantities are physically non-negative and confidence is a 0..1 probability, but the
+// vision model occasionally emits a glitch value (observed in the §8.3 eval: carbsG: -1). A bare
+// `z.number().nonnegative()` REJECTS the whole object on one bad field, which surfaced as
+// NoObjectGeneratedError -> ParseFailed and discarded an otherwise-usable parse. Instead we
+// `preprocess` impossible values into range BEFORE the bound check runs, so a single hallucinated
+// field is corrected (−1 g -> 0 g) rather than failing the entire photo. Non-finite / missing
+// coerce to the conservative floor (0): a glitchy confidence must never read as HIGH confidence.
+const toFiniteNumber = (v: unknown): number => {
+  const n = typeof v === 'number' ? v : Number(v);
+  return Number.isFinite(n) ? n : 0;
+};
+// ≥ 0, clamped (calories, macros, quantities).
+const nonNegative = z.preprocess((v) => Math.max(0, toFiniteNumber(v)), z.number().nonnegative());
+// 0..1, clamped (per-item and overall confidence).
+const unitInterval = z.preprocess((v) => Math.min(1, Math.max(0, toFiniteNumber(v))), z.number().min(0).max(1));
+
 export const parsedFoodItemSchema = z.object({
   name: z.string().min(1).describe('Common food name, e.g. "grilled chicken breast"'),
-  quantity: z.number().nonnegative().describe('Estimated amount in the serving unit (midpoint if a range)'),
+  quantity: nonNegative.describe('Estimated amount in the serving unit (midpoint if a range)'),
   quantityRange: z
-    .object({ min: z.number().nonnegative(), max: z.number().nonnegative() })
+    .object({ min: nonNegative, max: nonNegative })
     .nullable()
     .describe('Min/max when the model is uncertain; null when confident. UI defaults to quantity (midpoint).'),
   servingUnit: z.string().min(1).describe('Unit for quantity, e.g. "g", "cup", "piece", "slice"'),
-  calories: z.number().nonnegative(),
-  proteinG: z.number().nonnegative(),
-  carbsG: z.number().nonnegative(),
-  fatG: z.number().nonnegative(),
-  confidence: z.number().min(0).max(1).describe('Model confidence for THIS item, 0..1'),
+  calories: nonNegative,
+  proteinG: nonNegative,
+  carbsG: nonNegative,
+  fatG: nonNegative,
+  confidence: unitInterval.describe('Model confidence for THIS item, 0..1'),
 });
 export type ParsedFoodItem = z.infer<typeof parsedFoodItemSchema>;
 
 // The full LLM result for one photo: the plate is an array of items + an overall confidence.
 export const photoParseResultSchema = z.object({
   items: z.array(parsedFoodItemSchema).describe('Every distinct food component visible on the plate'),
-  overallConfidence: z.number().min(0).max(1).describe('Confidence the plate as a whole was identified'),
+  overallConfidence: unitInterval.describe('Confidence the plate as a whole was identified'),
   notes: z.string().nullable().describe('Optional caveat, e.g. "sauce contents uncertain"; null if none'),
 });
 export type PhotoParseResult = z.infer<typeof photoParseResultSchema>;
