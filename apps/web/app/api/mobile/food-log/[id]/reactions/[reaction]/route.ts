@@ -4,7 +4,7 @@ import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { CircleFoodFeedService } from '@/lib/services/circle-food-feed-service';
 import { REACTION_KINDS, type ReactionKind } from '@/lib/types/food-feed';
 
-import { mapReactionError } from '../route';
+import { mapReactionError } from '../reaction-errors';
 
 /**
  * DELETE /api/mobile/food-log/[id]/reactions/[reaction]
