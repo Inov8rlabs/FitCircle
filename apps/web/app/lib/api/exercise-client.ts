@@ -1,9 +1,9 @@
-import { useAuthStore } from '@/stores/auth-store';
 import type {
   ExerciseLog,
   ExerciseLogCreateInput,
   ExerciseStatsResponse,
 } from '@/lib/types/exercise';
+import { useAuthStore } from '@/stores/auth-store';
 
 async function authedFetch<T>(path: string, init?: RequestInit): Promise<T> {
   const token = useAuthStore.getState().token;

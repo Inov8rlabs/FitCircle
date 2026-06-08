@@ -1,8 +1,9 @@
 import { generateText } from 'ai';
 
-import { DietaryPreferencesService } from './dietary-preferences-service';
 import { createAdminSupabase } from '../supabase-admin';
 import type { CoachResponse, INutritionCoachService } from '../types/nutrition-coach';
+
+import { DietaryPreferencesService } from './dietary-preferences-service';
 
 /**
  * NutritionCoachService — the AI Nutrition Coach (PRD v4 §6.9).

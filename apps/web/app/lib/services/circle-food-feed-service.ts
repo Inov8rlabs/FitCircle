@@ -1,5 +1,4 @@
 import { createAdminSupabase } from '../supabase-admin';
-import { FoodPrivacyService } from './food-privacy-service';
 import {
   type FoodFeedCardDTO,
   type FoodFeedMacros,
@@ -15,6 +14,8 @@ import {
   FOOD_FEED_MAX_LIMIT,
   REACTION_KINDS,
 } from '../types/food-feed';
+
+import { FoodPrivacyService } from './food-privacy-service';
 
 /**
  * CircleFoodFeedService — promotes food logs into circle content (PRD v4 §6.3).

@@ -12,9 +12,9 @@ import { useCallback, useEffect, useState } from 'react';
 import { toast } from 'sonner';
 
 import Celebration from '@/components/Celebration';
+import { Navbar } from '@/components/layout/navbar';
 import { MomentumFlame } from '@/components/MomentumFlame';
 import { ShareCardButton } from '@/components/ShareCardButton';
-import { Navbar } from '@/components/layout/navbar';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import {

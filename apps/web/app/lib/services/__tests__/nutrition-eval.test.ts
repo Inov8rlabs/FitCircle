@@ -4,14 +4,14 @@
 
 import { describe, it, expect } from 'vitest';
 
+import type { PhotoParseResult } from '../../types/nutrition';
+import type { EvalCase, GoldenRecord } from '../../types/nutrition-eval';
 import {
   buildReport,
   expectedCalibrationError,
   nameSimilarity,
   scoreRecord,
 } from '../nutrition-eval';
-import type { PhotoParseResult } from '../../types/nutrition';
-import type { EvalCase, GoldenRecord } from '../../types/nutrition-eval';
 
 // --- helpers to build cases compactly ---------------------------------------
 function golden(id: string, cuisine: string, items: Array<[string, number, number]>, totalCal: number): GoldenRecord {

@@ -11,9 +11,11 @@
 // EXACTLY those static signatures.
 
 import { createAdminSupabase } from '../supabase-admin';
-import { SystemPostEngine } from './system-post-engine';
-import type { ActivitySignal, SignalPayload } from '../types/circle-chat-engine';
 import type { SystemEventType } from '../types/circle-chat';
+import type { ActivitySignal, SignalPayload } from '../types/circle-chat-engine';
+
+import { SystemPostEngine } from './system-post-engine';
+
 
 export class ChatActivityHooks {
   // ==========================================================================

@@ -10,8 +10,8 @@ import {
   PHOTO_PARSE_DAILY_SOFT_CAP,
 } from '../types/nutrition';
 
-import { FoodLogService } from './food-log-service';
 import { FoodLogImageService } from './food-log-image-service';
+import { FoodLogService } from './food-log-service';
 
 /**
  * NutritionIntelligenceService — the server-side "brain" for nutrition (PRD §6.1, §7.2.1).

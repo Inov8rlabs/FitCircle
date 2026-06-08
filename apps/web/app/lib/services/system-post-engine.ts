@@ -13,8 +13,7 @@
 //     mirroring how BoostService is invoked fire-and-forget).
 
 import { createAdminSupabase } from '../supabase-admin';
-import { ChatNotificationService } from './chat-notification-service';
-import { CircleChatService } from './circle-chat-service';
+import type { SystemEventType } from '../types/circle-chat';
 import {
   EVENT_TAXONOMY,
   HARD_EXCLUDED_SOURCES,
@@ -27,7 +26,10 @@ import {
   type PlannedPost,
   type RecentPostStats,
 } from '../types/circle-chat-engine';
-import type { SystemEventType } from '../types/circle-chat';
+
+import { ChatNotificationService } from './chat-notification-service';
+import { CircleChatService } from './circle-chat-service';
+
 
 export class SystemPostEngine {
   private readonly config: EngineConfig;

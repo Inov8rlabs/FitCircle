@@ -1,4 +1,3 @@
-import { DietaryPreferencesService } from './dietary-preferences-service';
 import { createAdminSupabase } from '../supabase-admin';
 import type { DietType } from '../types/dietary-prefs';
 import {
@@ -9,6 +8,8 @@ import {
   FOOD_SEARCH_DEFAULT_LIMIT,
   FOOD_SEARCH_MAX_LIMIT,
 } from '../types/foods';
+
+import { DietaryPreferencesService } from './dietary-preferences-service';
 
 /**
  * FoodsService — search / barcode / custom foods over the `foods` reference table (PRD §6.1).

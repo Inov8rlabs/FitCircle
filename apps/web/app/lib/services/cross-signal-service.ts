@@ -54,9 +54,9 @@ export class CrossSignalService {
     for (const row of (tracking ?? []) as TrackingRow[]) {
       const d = row.tracking_date;
       if (!d) continue;
-      if (isNum(row.mood_score)) mood.set(d, row.mood_score as number);
-      if (isNum(row.energy_level)) energy.set(d, row.energy_level as number);
-      if (isNum(row.steps)) steps.set(d, row.steps as number);
+      if (isNum(row.mood_score)) mood.set(d, row.mood_score);
+      if (isNum(row.energy_level)) energy.set(d, row.energy_level);
+      if (isNum(row.steps)) steps.set(d, row.steps);
     }
 
     // beverage_logs: multiple rows per day -> sum caffeine_mg per entry_date.

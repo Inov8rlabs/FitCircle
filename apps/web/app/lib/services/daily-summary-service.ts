@@ -17,8 +17,9 @@
 // Failure-isolated PER CIRCLE: one circle's DB error must not abort the batch.
 
 import { createAdminSupabase } from '../supabase-admin';
-import { SystemPostEngine } from './system-post-engine';
 import type { ActivitySignal } from '../types/circle-chat-engine';
+
+import { SystemPostEngine } from './system-post-engine';
 
 /**
  * "Checked in today" definition

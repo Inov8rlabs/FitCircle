@@ -26,6 +26,15 @@ vi.mock('sonner', () => ({
   }
 }));
 
+vi.mock('framer-motion', () => ({
+  motion: {
+    div: ({ children, className, style, 'data-testid': testId }: any) => (
+      <div className={className} style={style} data-testid={testId}>{children}</div>
+    ),
+  },
+  AnimatePresence: ({ children }: any) => <>{children}</>,
+}));
+
 describe('CircleCreationWizard', () => {
   const mockOnClose = vi.fn();
   const mockOnSuccess = vi.fn();
@@ -63,7 +72,8 @@ describe('CircleCreationWizard', () => {
         />
       );
 
-      expect(screen.getByText('Basic Info')).toBeInTheDocument();
+      expect(screen.getByText('Info')).toBeInTheDocument();
+      expect(screen.getByText('Challenge')).toBeInTheDocument();
       expect(screen.getByText('Timeline')).toBeInTheDocument();
       expect(screen.getByText('Settings')).toBeInTheDocument();
       expect(screen.getByText('Invite')).toBeInTheDocument();
@@ -78,8 +88,8 @@ describe('CircleCreationWizard', () => {
         />
       );
 
-      const basicInfoLabel = screen.getByText('Basic Info');
-      expect(basicInfoLabel).toHaveClass('text-orange-400');
+      const infoLabel = screen.getByText('Info');
+      expect(infoLabel).toHaveClass('text-orange-400');
     });
 
     it('should show inactive steps with gray color', () => {
@@ -243,7 +253,7 @@ describe('CircleCreationWizard', () => {
   });
 
   describe('Challenge Types', () => {
-    it('should render all 4 challenge type cards', () => {
+    it('should render challenge mode options on step 2', async () => {
       render(
         <CircleCreationWizard
           isOpen={true}
@@ -252,14 +262,19 @@ describe('CircleCreationWizard', () => {
         />
       );
 
-      expect(screen.getByText('Weight Loss')).toBeInTheDocument();
-      expect(screen.getByText('Daily Steps')).toBeInTheDocument();
-      expect(screen.getByText('Workout Frequency')).toBeInTheDocument();
-      expect(screen.getByText('Custom Goal')).toBeInTheDocument();
+      fireEvent.change(screen.getByLabelText(/Circle Name/i), { target: { value: 'Test Circle' } });
+      await waitFor(() => expect(screen.getByRole('button', { name: /Next/i })).not.toBeDisabled());
+      fireEvent.click(screen.getByRole('button', { name: /Next/i }));
+
+      await waitFor(() => {
+        expect(screen.getByText('Quick Start')).toBeInTheDocument();
+        expect(screen.getAllByText('Custom').length).toBeGreaterThan(0);
+        expect(screen.getByText('Add Later')).toBeInTheDocument();
+      });
     });
 
-    it('should select Weight Loss by default', () => {
-      const { container } = render(
+    it('should select Quick Start (template) mode by default', async () => {
+      render(
         <CircleCreationWizard
           isOpen={true}
           onClose={mockOnClose}
@@ -267,8 +282,14 @@ describe('CircleCreationWizard', () => {
         />
       );
 
-      const weightLossCard = screen.getByText('Weight Loss').closest('[class*="cursor-pointer"]');
-      expect(weightLossCard).toHaveClass('border-orange-500');
+      fireEvent.change(screen.getByLabelText(/Circle Name/i), { target: { value: 'Test Circle' } });
+      await waitFor(() => expect(screen.getByRole('button', { name: /Next/i })).not.toBeDisabled());
+      fireEvent.click(screen.getByRole('button', { name: /Next/i }));
+
+      await waitFor(() => {
+        const quickStartButton = screen.getByText('Quick Start').closest('button');
+        expect(quickStartButton).toHaveClass('border-orange-500/60');
+      });
     });
   });
 
@@ -310,7 +331,7 @@ describe('CircleCreationWizard', () => {
 
       // Check for min-width constraint on step groups (prevents layout shift)
       const stepGroup1 = screen.getByTestId('step-group-1');
-      expect(stepGroup1).toHaveClass('sm:min-w-[60px]');
+      expect(stepGroup1).toHaveClass('sm:min-w-[56px]');
     });
 
     it('should use responsive line widths', () => {
@@ -322,10 +343,10 @@ describe('CircleCreationWizard', () => {
         />
       );
 
-      // Check for responsive width classes on connecting lines (w-12 sm:w-16)
+      // Check for responsive width classes on connecting lines (w-4 sm:w-8 md:w-12)
       const line = screen.getByTestId('connecting-line-1');
-      expect(line).toHaveClass('sm:w-12');
-      expect(line).toHaveClass('md:w-16');
+      expect(line).toHaveClass('sm:w-8');
+      expect(line).toHaveClass('md:w-12');
     });
   });
 });

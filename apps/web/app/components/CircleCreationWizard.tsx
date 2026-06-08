@@ -33,8 +33,6 @@ import {
 import React, { useState } from 'react';
 import { toast } from 'sonner';
 
-import { CHALLENGE_TEMPLATES } from '@/lib/data/challenge-templates';
-import { type ChallengeCategory } from '@/lib/types/circle-challenge';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -45,7 +43,9 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 // import { Switch } from '@/components/ui/switch'; // Temporarily disabled
 import { Textarea } from '@/components/ui/textarea';
+import { CHALLENGE_TEMPLATES } from '@/lib/data/challenge-templates';
 import { supabase } from '@/lib/supabase';
+import { type ChallengeCategory } from '@/lib/types/circle-challenge';
 import { useAuthStore } from '@/stores/auth-store';
 
 interface CircleCreationWizardProps {
