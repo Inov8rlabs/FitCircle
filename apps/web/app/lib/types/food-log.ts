@@ -104,7 +104,30 @@ export interface FoodLogStats {
   streak_days: number;
 }
 
-export interface CreateFoodLogEntryInput {
+/**
+ * Typed nutrition columns on food_log_entries (migration 054). These are what Plate Score,
+ * Fitzy's macro context, insights, and the nutrition leaderboard READ — so create/update must
+ * populate them (the service derives them from nutrition_data when not passed explicitly).
+ */
+export interface NutritionColumnsInput {
+  /** Per the entry as logged (already scaled). */
+  calories?: number;
+  protein_g?: number;
+  carbs_g?: number;
+  fat_g?: number;
+  /** Multiplier applied to the matched food/portion. */
+  servings?: number;
+  /** FK to a foods row, when matched. */
+  food_id?: string;
+  /** photo | voice | barcode | search | recent | manual | imported */
+  input_method?: string;
+  /** llm_vision | llm_voice | foods_db | user | healthkit | healthconnect | mfp */
+  nutrition_source?: string;
+  /** 0..1 overall confidence when produced by an LLM. */
+  llm_confidence?: number;
+}
+
+export interface CreateFoodLogEntryInput extends NutritionColumnsInput {
   entry_type: EntryType;
   logged_at?: string;
   entry_date?: string;
@@ -121,7 +144,7 @@ export interface CreateFoodLogEntryInput {
   tags?: string[];
 }
 
-export interface UpdateFoodLogEntryInput {
+export interface UpdateFoodLogEntryInput extends NutritionColumnsInput {
   logged_at?: string;
   entry_date?: string;
   meal_type?: MealType;

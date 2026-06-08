@@ -46,6 +46,10 @@ export class FoodLogService {
           description: data.description,
           notes: data.notes,
           nutrition_data: data.nutrition_data,
+          // Typed nutrition columns (migration 054) — what Plate Score / Fitzy / insights READ.
+          // Derived from nutrition_data when not passed explicitly, so existing clients that only
+          // send nutrition_data still populate them (fixes the empty Plate Score).
+          ...this.nutritionColumns(data),
           water_ml: data.water_ml,
           supplement_name: data.supplement_name,
           supplement_dosage: data.supplement_dosage,
@@ -266,6 +270,9 @@ export class FoodLogService {
       for (const key of passthroughKeys) {
         if (data[key] !== undefined) updatePayload[key] = data[key];
       }
+      // Keep the typed nutrition columns (migration 054) in sync on edit — derived from
+      // nutrition_data when not passed explicitly. These are what Plate Score / Fitzy / insights read.
+      Object.assign(updatePayload, this.nutritionColumns(data));
 
       const { data: updated, error } = await supabase
         .from('food_log_entries')
@@ -599,6 +606,33 @@ export class FoodLogService {
   }
 
   // Private helper methods
+
+  /**
+   * Build the typed nutrition columns (migration 054) for an insert/update. Uses explicit fields
+   * when present, else derives macros from `nutrition_data` — so clients that only send
+   * nutrition_data still populate the columns Plate Score / Fitzy / insights / leaderboard READ.
+   * Only includes keys that resolve to a value, so an update never nulls out untouched columns.
+   */
+  private static nutritionColumns(
+    data: Partial<CreateFoodLogEntryInput & UpdateFoodLogEntryInput>
+  ): Record<string, unknown> {
+    const nd = data.nutrition_data;
+    const cols: Record<string, unknown> = {};
+    const cal = data.calories ?? nd?.calories;
+    const p = data.protein_g ?? nd?.protein_g;
+    const c = data.carbs_g ?? nd?.carbs_g;
+    const f = data.fat_g ?? nd?.fat_g;
+    if (cal !== undefined) cols.calories = cal;
+    if (p !== undefined) cols.protein_g = p;
+    if (c !== undefined) cols.carbs_g = c;
+    if (f !== undefined) cols.fat_g = f;
+    if (data.servings !== undefined) cols.servings = data.servings;
+    if (data.food_id !== undefined) cols.food_id = data.food_id;
+    if (data.input_method !== undefined) cols.input_method = data.input_method;
+    if (data.nutrition_source !== undefined) cols.nutrition_source = data.nutrition_source;
+    if (data.llm_confidence !== undefined) cols.llm_confidence = data.llm_confidence;
+    return cols;
+  }
 
   private static validateEntryData(data: any): void {
     if (data.entry_type === 'food' && !data.meal_type) {
