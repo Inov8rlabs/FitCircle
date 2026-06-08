@@ -5,6 +5,7 @@
 // All assertions live in ../system-post-engine.eval.test.ts — this file holds NO
 // expect()s, just the inputs and the expected-copy table.
 
+import type { SystemEventType } from '../../../types/circle-chat';
 import {
   DEFAULT_ENGINE_CONFIG,
   type ActivitySignal,
@@ -12,7 +13,6 @@ import {
   type EnginePlanInput,
   type RecentPostStats,
 } from '../../../types/circle-chat-engine';
-import type { SystemEventType } from '../../../types/circle-chat';
 
 // ----------------------------------------------------------------------------
 // Stable IDs for a single circle + its members.

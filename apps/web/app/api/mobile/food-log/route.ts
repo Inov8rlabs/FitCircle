@@ -98,7 +98,7 @@ export async function GET(request: NextRequest) {
       (e) => e.has_images && e.image_count > 0
     );
 
-    let imagesByEntry = new Map<string, { id: string; display_order: number }[]>();
+    const imagesByEntry = new Map<string, { id: string; display_order: number }[]>();
     if (entriesWithImages.length > 0) {
       const { data: images } = await supabase
         .from('food_log_images')

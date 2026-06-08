@@ -1,6 +1,4 @@
 import { createAdminSupabase } from '../supabase-admin';
-import { ChatNotificationService } from './chat-notification-service';
-import { ChatSafetyService } from './chat-safety-service';
 import {
   type ChatMessageDTO,
   type CircleMessageRow,
@@ -20,6 +18,9 @@ import {
   MESSAGE_PAGE_DEFAULT_LIMIT,
   MESSAGE_PAGE_MAX_LIMIT,
 } from '../types/circle-chat';
+
+import { ChatNotificationService } from './chat-notification-service';
+import { ChatSafetyService } from './chat-safety-service';
 
 // Columns selected for circle_messages rows mapped to ChatMessageDTO.
 const MESSAGE_COLUMNS =
@@ -502,11 +503,11 @@ export class CircleChatService {
   }
 
   private static buildSystemBlock(row: CircleMessageRow): MessageSystemBlock {
-    const payload = (row.system_payload ?? {}) as Record<string, unknown>;
+    const payload = (row.system_payload ?? {});
 
     const renderHint = (
       typeof payload.render_hint === 'string' ? (payload.render_hint as RenderHint) : 'text'
-    ) as RenderHint;
+    );
 
     const actors = Array.isArray(payload.actors)
       ? (payload.actors as Array<{ id: string; name: string }>)

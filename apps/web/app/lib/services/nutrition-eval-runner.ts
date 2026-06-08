@@ -1,10 +1,11 @@
 import { readFileSync } from 'fs';
 
-import { FoodsService } from './foods-service';
-import { NutritionIntelligenceService } from './nutrition-intelligence-service';
-import { buildReport } from './nutrition-eval';
-import type { EvalReport, GoldenRecord, EvalCase } from '../types/nutrition-eval';
 import type { PhotoParseResult } from '../types/nutrition';
+import type { EvalReport, GoldenRecord, EvalCase } from '../types/nutrition-eval';
+
+import { FoodsService } from './foods-service';
+import { buildReport } from './nutrition-eval';
+import { NutritionIntelligenceService } from './nutrition-intelligence-service';
 
 /**
  * NutritionEvalRunner — drives golden images through the LIVE parse pipeline and scores them

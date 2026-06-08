@@ -1,6 +1,5 @@
 'use client';
 
-import Image from 'next/image';
 import {
   Activity,
   Award,
@@ -9,6 +8,7 @@ import {
   Trophy,
   UserPlus,
 } from 'lucide-react';
+import Image from 'next/image';
 import { useState } from 'react';
 
 import { ReactionBar } from '@/components/chat/ReactionBar';

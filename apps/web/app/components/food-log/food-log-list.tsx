@@ -326,7 +326,7 @@ export function FoodLogList({ entries, userId }: FoodLogListProps) {
                     </h3>
 
                     <div className="grid gap-3">
-                        {(items as any[]).map((item) => (
+                        {(items).map((item) => (
                             <LogItem key={item.id} item={item} onDelete={handleDelete} />
                         ))}
                     </div>

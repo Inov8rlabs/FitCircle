@@ -1,8 +1,9 @@
 import { generateText } from 'ai';
 
-import { DietaryPreferencesService } from './dietary-preferences-service';
 import { createAdminSupabase } from '../supabase-admin';
 import type { FitzyChatResponse, FitzyMessage, IFitzyService } from '../types/fitzy';
+
+import { DietaryPreferencesService } from './dietary-preferences-service';
 
 /**
  * FitzyService — "Fitzy", the FitCircle AI coach (full fitness + nutrition).

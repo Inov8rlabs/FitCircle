@@ -9,13 +9,14 @@
 
 import { describe, it, expect } from 'vitest';
 
-import { SystemPostEngine } from '../system-post-engine';
-import { NOTIFICATION_TEMPLATES } from '../notification-orchestrator';
 import {
   DEFAULT_ENGINE_CONFIG,
   type EnginePlanInput,
   type PlannedPost,
 } from '../../types/circle-chat-engine';
+import { NOTIFICATION_TEMPLATES } from '../notification-orchestrator';
+import { SystemPostEngine } from '../system-post-engine';
+
 import {
   buildPlanInput,
   signalByRef,

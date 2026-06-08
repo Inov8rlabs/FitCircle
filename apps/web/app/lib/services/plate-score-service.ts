@@ -174,7 +174,7 @@ export class PlateScoreService {
       .gte('score_date', startDate)
       .lte('score_date', endDate)
       .order('score_date', { ascending: false });
-    return ((data ?? []) as any[]).map((r) => this.toDTO(r));
+    return ((data ?? [])).map((r) => this.toDTO(r));
   }
 
   // ---- private --------------------------------------------------------------
