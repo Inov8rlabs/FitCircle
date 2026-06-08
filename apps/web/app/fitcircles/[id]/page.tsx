@@ -45,9 +45,9 @@ import { CircleStreakCard } from '@/components/nutrition/CircleStreakCard';
 import { FoodSearch } from '@/components/nutrition/FoodSearch';
 import { GroupMealComposer } from '@/components/nutrition/GroupMealComposer';
 import { GroupMealInbox } from '@/components/nutrition/GroupMealInbox';
+import { FitzyChat } from '@/components/nutrition/FitzyChat';
 import { InsightsList } from '@/components/nutrition/InsightsList';
 import { NutritionChallengeCard } from '@/components/nutrition/NutritionChallengeCard';
-import { NutritionCoach } from '@/components/nutrition/NutritionCoach';
 import { PhotoLog } from '@/components/nutrition/PhotoLog';
 import { PlateScoreCard } from '@/components/nutrition/PlateScoreCard';
 import { VoiceLog } from '@/components/nutrition/VoiceLog';
@@ -1295,7 +1295,7 @@ export default function FitCirclePage() {
 
                   <NutritionChallengeCard circleId={circleId} isCreator={fitCircle.is_creator} />
 
-                  <NutritionCoach circleId={circleId} />
+                  <FitzyChat circleId={circleId} />
                 </div>
 
                 {/* Feed column */}

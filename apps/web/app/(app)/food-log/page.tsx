@@ -4,6 +4,7 @@ import { redirect } from 'next/navigation';
 
 import { FoodLogList } from '@/components/food-log/food-log-list';
 import { FirstFoodLogPrompt } from '@/components/nutrition/FirstFoodLogPrompt';
+import { FoodLogNutritionSection } from '@/components/nutrition/FoodLogNutritionSection';
 import { Button } from '@/components/ui/button';
 import { BeverageLogService } from '@/lib/services/beverage-log-service';
 import { FoodLogImageService } from '@/lib/services/food-log-image-service';
@@ -82,6 +83,9 @@ export default async function FoodLogPage() {
                     <div className="text-2xl font-bold text-cyan-600">{Math.round(totalWater)} ml</div>
                 </div>
             </div>
+
+            {/* Nutrition: Plate Score, Insights, Dietary preferences */}
+            <FoodLogNutritionSection />
 
             <div className="space-y-4">
                 <h2 className="text-xl font-semibold">Recent Entries</h2>
