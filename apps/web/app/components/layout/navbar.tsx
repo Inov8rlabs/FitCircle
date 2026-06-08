@@ -14,6 +14,7 @@ import Link from 'next/link';
 import { useRouter, usePathname } from 'next/navigation';
 import { useState, useRef, useEffect } from 'react';
 
+import { FitzyLauncher } from '@/components/nutrition/FitzyLauncher';
 import { Logo } from '@/components/ui/logo';
 import { useAuthStore } from '@/stores/auth-store';
 
@@ -79,6 +80,7 @@ export function Navbar() {
                 </Link>
               );
             })}
+            <FitzyLauncher variant="nav" />
           </div>
 
           {/* Desktop User Menu */}
@@ -135,10 +137,13 @@ export function Navbar() {
             </AnimatePresence>
           </div>
 
+          {/* Mobile actions */}
+          <div className="md:hidden flex items-center gap-1">
+            <FitzyLauncher variant="icon" />
           {/* Mobile Menu Button */}
           <button
             type="button"
-            className="md:hidden p-2 rounded-lg text-gray-300 hover:bg-slate-800 hover:text-white transition-colors"
+            className="p-2 rounded-lg text-gray-300 hover:bg-slate-800 hover:text-white transition-colors"
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
           >
             {mobileMenuOpen ? (
@@ -147,6 +152,7 @@ export function Navbar() {
               <Menu className="w-6 h-6" />
             )}
           </button>
+          </div>
         </div>
       </div>
 
@@ -197,6 +203,7 @@ export function Navbar() {
                   </Link>
                 );
               })}
+              <FitzyLauncher variant="mobile-row" onOpen={() => setMobileMenuOpen(false)} />
             </div>
           </motion.div>
         )}

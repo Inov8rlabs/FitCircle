@@ -305,6 +305,21 @@ export interface CoachAnswer {
   disclaimer: string;
 }
 
+// --- Fitzy — the FitCircle AI coach (multi-turn; client holds history) ------
+
+export type FitzyRole = 'user' | 'assistant';
+
+export interface FitzyMessage {
+  role: FitzyRole;
+  content: string;
+}
+
+export interface FitzyChatResponse {
+  /** Markdown. */
+  answer: string;
+  disclaimer: string;
+}
+
 export interface Insight {
   id: string;
   headline: string;
@@ -548,11 +563,21 @@ export const nutritionClient = {
       body: JSON.stringify(input),
     }),
 
-  // AI coach
+  // AI coach (legacy single Q&A — superseded by Fitzy multi-turn chat)
   askCoach: (question: string, circleId?: string) =>
     authedFetch<CoachAnswer>('/api/mobile/nutrition-coach', {
       method: 'POST',
       body: JSON.stringify({ question, ...(circleId ? { circleId } : {}) }),
+    }),
+
+  /**
+   * Fitzy — multi-turn AI coach. The client owns the conversation: pass the recent
+   * turns (oldest→newest, last = the new user message). Backend stays stateless.
+   */
+  fitzyChat: (messages: FitzyMessage[], circleId?: string) =>
+    authedFetch<FitzyChatResponse>('/api/mobile/fitzy/chat', {
+      method: 'POST',
+      body: JSON.stringify({ messages, ...(circleId ? { circleId } : {}) }),
     }),
 
   // Cross-signal insights
