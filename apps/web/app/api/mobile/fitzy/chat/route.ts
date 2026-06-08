@@ -26,6 +26,8 @@ const requestSchema = z.object({
   // Cap inbound history defensively; the service also keeps only the tail.
   messages: z.array(messageSchema).min(1, 'At least one message is required').max(50),
   circleId: z.string().trim().min(1).max(100).optional(),
+  // Target conversation for the server-side store; omitted → the user's active conversation.
+  conversationId: z.string().uuid().optional(),
 });
 
 export async function POST(request: NextRequest) {
@@ -59,9 +61,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { messages, circleId } = parsed.data;
+    const { messages, circleId, conversationId } = parsed.data;
 
-    const result: FitzyChatResponse = await FitzyService.chat(user.id, messages, circleId);
+    const result: FitzyChatResponse = await FitzyService.chat(user.id, messages, circleId, conversationId);
 
     return NextResponse.json({
       success: true,

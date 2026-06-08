@@ -4,6 +4,7 @@ import { createAdminSupabase } from '../supabase-admin';
 import type { FitzyChatResponse, FitzyMessage, IFitzyService } from '../types/fitzy';
 
 import { DietaryPreferencesService } from './dietary-preferences-service';
+import { FitzyConversationService } from './fitzy-conversation-service';
 
 /**
  * FitzyService — "Fitzy", the FitCircle AI coach (full fitness + nutrition).
@@ -91,15 +92,28 @@ const SYSTEM_PROMPT = [
 ].join('\n');
 
 export class FitzyService implements IFitzyService {
-  chat(userId: string, messages: FitzyMessage[], circleId?: string): Promise<FitzyChatResponse> {
-    return FitzyService.chat(userId, messages, circleId);
+  chat(
+    userId: string,
+    messages: FitzyMessage[],
+    circleId?: string,
+    conversationId?: string
+  ): Promise<FitzyChatResponse> {
+    return FitzyService.chat(userId, messages, circleId, conversationId);
   }
 
   /**
-   * Run one multi-turn exchange. `messages` is the conversation oldest→newest (the last turn
-   * should be the user's new message). Always returns a guardrail-safe response.
+   * Run one multi-turn exchange. `messages` is the conversation oldest→newest (the last turn is
+   * the user's new message). History is now SERVER-AUTHORITATIVE: we ground the model on the
+   * stored recent turns (cross-device), falling back to the client-sent turns only when the store
+   * is empty (first messages / transition). Every exchange is persisted (with token usage) for
+   * cross-device history + analysis. Always returns a guardrail-safe response.
    */
-  static async chat(userId: string, messages: FitzyMessage[], circleId?: string): Promise<FitzyChatResponse> {
+  static async chat(
+    userId: string,
+    messages: FitzyMessage[],
+    circleId?: string,
+    conversationId?: string
+  ): Promise<FitzyChatResponse> {
     const turns = (messages ?? [])
       .filter((m) => m && typeof m.content === 'string' && m.content.trim().length > 0)
       .slice(-MAX_TURNS);
@@ -108,30 +122,70 @@ export class FitzyService implements IFitzyService {
       return { answer: SAFE_FALLBACK, disclaimer: DISCLAIMER };
     }
 
+    // The new user message is the last user-role turn the client sent.
+    const newUser = [...turns].reverse().find((t) => t.role === 'user') ?? turns[turns.length - 1];
+
+    // Resolve the conversation (get-or-create) and pull server-side recent memory.
+    let convId: string | undefined;
+    let serverRecent: { role: 'user' | 'assistant'; content: string }[] = [];
+    try {
+      convId = await FitzyConversationService.getOrCreateActiveConversation(userId, conversationId);
+      serverRecent = await FitzyConversationService.getRecentTurns(convId, userId, MAX_TURNS);
+    } catch (err) {
+      console.error('[FitzyService.chat] conversation load non-fatal:', err);
+    }
+
+    // Model context: server memory + the new message; fall back to client-sent turns when the
+    // store is empty (so old-style clients keep full context during the transition).
+    const modelMessages =
+      serverRecent.length > 0
+        ? [...serverRecent, { role: 'user' as const, content: newUser.content }]
+        : turns.map((m) => ({ role: m.role, content: m.content }));
+
     const context = await this.buildContext(userId, circleId);
     const system = context
       ? `${SYSTEM_PROMPT}\n\nGROUNDING CONTEXT about this user (use to be supportive; never quote verbatim, never judge):\n${context}`
       : SYSTEM_PROMPT;
 
-    let answer: string;
+    let answer = '';
+    let inputTokens: number | null = null;
+    let outputTokens: number | null = null;
     try {
-      const { text } = await generateText({
-        model: FITZY_MODEL,
-        system,
-        messages: turns.map((m) => ({ role: m.role, content: m.content })),
-      });
+      const { text, usage } = await generateText({ model: FITZY_MODEL, system, messages: modelMessages });
       answer = (text ?? '').trim();
+      inputTokens = (usage as any)?.inputTokens ?? null;
+      outputTokens = (usage as any)?.outputTokens ?? null;
     } catch (err) {
       console.error('[FitzyService.chat] generation failed:', err);
-      return { answer: SAFE_FALLBACK, disclaimer: DISCLAIMER };
     }
 
+    let usedFallback = false;
     if (!answer || this.containsForbiddenContent(answer)) {
       if (answer) console.warn('[FitzyService.chat] output guard tripped; returning safe fallback');
-      return { answer: SAFE_FALLBACK, disclaimer: DISCLAIMER };
+      answer = SAFE_FALLBACK;
+      usedFallback = true;
     }
 
-    return { answer, disclaimer: DISCLAIMER };
+    // Persist the exchange (failure-isolated — a store error must not break the reply). Token
+    // usage is attributed only to a real model answer, not the fallback.
+    if (convId) {
+      try {
+        await FitzyConversationService.appendTurns(convId, userId, [
+          { role: 'user', content: newUser.content },
+          {
+            role: 'assistant',
+            content: answer,
+            model: usedFallback ? undefined : FITZY_MODEL,
+            inputTokens: usedFallback ? null : inputTokens,
+            outputTokens: usedFallback ? null : outputTokens,
+          },
+        ]);
+      } catch (err) {
+        console.error('[FitzyService.chat] persist non-fatal:', err);
+      }
+    }
+
+    return { answer, disclaimer: DISCLAIMER, conversationId: convId };
   }
 
   // ---- output guard (mirrors NutritionCoachService; safety-critical, kept self-contained) -----
