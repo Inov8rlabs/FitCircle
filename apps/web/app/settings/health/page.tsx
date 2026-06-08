@@ -55,7 +55,7 @@ export default function HealthSettingsPage() {
             <div className="flex-1">
               <p className="font-semibold">Auto-claim streak</p>
               <p className="text-xs text-muted-foreground">
-                When new step data syncs from your phone, automatically claim today's streak.
+                When new step data syncs from your phone, automatically claim today&apos;s streak.
               </p>
             </div>
             <Switch checked={autoClaim} onCheckedChange={setAutoClaim} />

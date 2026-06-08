@@ -138,7 +138,7 @@ export default function StreaksPage() {
     }
   };
 
-  const useShield = async (date: string) => {
+  const activateShield = async (date: string) => {
     setShieldDialogDate(null);
     if (!shield?.can_activate && shield && shield.available <= 0) return;
     try {
@@ -230,7 +230,7 @@ export default function StreaksPage() {
           <ShieldDialog
             available={shield.available}
             date={shieldDialogDate}
-            onConfirm={() => useShield(shieldDialogDate)}
+            onConfirm={() => activateShield(shieldDialogDate)}
             onCancel={() => setShieldDialogDate(null)}
           />
         )}
@@ -315,7 +315,7 @@ function HealthSyncCard() {
         <div className="flex-1">
           <p className="font-semibold">Health data missing</p>
           <p className="text-sm text-muted-foreground">
-            Log today's steps or weight to unlock streak claiming.
+            Log today&apos;s steps or weight to unlock streak claiming.
           </p>
         </div>
       </CardContent>
