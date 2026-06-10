@@ -33,6 +33,8 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/use-toast';
+
+import { NutritionDetailDialog } from './nutrition-detail-dialog';
 import { BeverageLogService } from '@/lib/services/beverage-log-service';
 import { FoodLogService } from '@/lib/services/food-log-service';
 import { supabase } from '@/lib/supabase';
@@ -422,7 +424,8 @@ function LogItem({ item, onDelete }: { item: any, onDelete: (id: string, type: '
             "hover:shadow-md hover:border-primary/20 transition-all duration-200 group",
             hasImages && "ring-1 ring-primary/5"
         )}>
-            <div className="flex items-center gap-4 flex-1 min-w-0">
+            <NutritionDetailDialog entry={item}>
+            <div className="flex items-center gap-4 flex-1 min-w-0 cursor-pointer">
                 {/* Image or Icon */}
                 {hasImages && thumbnailImage ? (
                     <div className="relative w-14 h-14 rounded-xl overflow-hidden flex-shrink-0 ring-2 ring-primary/10 shadow-sm">
@@ -461,6 +464,7 @@ function LogItem({ item, onDelete }: { item: any, onDelete: (id: string, type: '
                     )}
                 </div>
             </div>
+            </NutritionDetailDialog>
 
             <AlertDialog>
                 <AlertDialogTrigger asChild>
