@@ -30,7 +30,8 @@ function golden(id: string, cuisine: string, items: Array<[string, number, numbe
 function model(items: Array<[string, number, number, number]>, conf: number): PhotoParseResult {
   return {
     items: items.map(([name, quantity, calories, confidence]) => ({
-      name, quantity, quantityRange: null, servingUnit: 'g', calories, proteinG: 0, carbsG: 0, fatG: 0, confidence,
+      name, quantity, quantityRange: null, servingUnit: 'g', grams: quantity, gramsPerUnit: 1,
+      calories, proteinG: 0, carbsG: 0, fatG: 0, fiberG: 0, sugarG: 0, sodiumMg: 0, confidence,
     })),
     overallConfidence: conf,
     notes: null,

@@ -44,14 +44,39 @@ export const parsedFoodItemSchema = z.object({
     .object({ min: nonNegative, max: nonNegative })
     .nullable()
     .describe('Min/max when the model is uncertain; null when confident. UI defaults to quantity (midpoint).'),
-  servingUnit: z.string().min(1).describe('Unit for quantity, e.g. "g", "cup", "piece", "slice"'),
+  servingUnit: z
+    .string()
+    .min(1)
+    .describe('Natural unit for THIS food, e.g. "skewer", "piece", "cup", "slice", "serving", or "g"'),
+  // Canonical edible weight — every macro scales linearly from this, and the client
+  // converts between the natural unit and grams using gramsPerUnit.
+  grams: nonNegative.describe('Total estimated edible weight of this item, in grams'),
+  gramsPerUnit: nonNegative.describe('Weight in grams of ONE serving unit (so quantity × gramsPerUnit ≈ grams)'),
   calories: nonNegative,
   proteinG: nonNegative,
   carbsG: nonNegative,
   fatG: nonNegative,
+  fiberG: nonNegative.describe('Dietary fiber, grams'),
+  sugarG: nonNegative.describe('Sugars, grams'),
+  sodiumMg: nonNegative.describe('Sodium, milligrams'),
   confidence: unitInterval.describe('Model confidence for THIS item, 0..1'),
 });
 export type ParsedFoodItem = z.infer<typeof parsedFoodItemSchema>;
+
+// An alternate measurement the UI can offer for an item (the pill selector).
+export interface UnitOption {
+  label: string;        // "skewer", "g", "oz", "serving", …
+  gramsPerUnit: number; // weight of one such unit, so the client can rescale macros by grams
+}
+
+// A draft item AFTER server enrichment: the parsed fields plus DB-grounding provenance
+// and the unit choices the client renders. Macros here are authoritative (DB-grounded
+// when matched, else the model's estimate).
+export interface NutritionDraftItem extends ParsedFoodItem {
+  matchedFoodId: string | null;   // foods.id when grounded against the DB, else null
+  itemSource: NutritionSource;    // 'foods_db' when grounded, else 'llm_vision'
+  unitOptions: UnitOption[];
+}
 
 // The full LLM result for one photo: the plate is an array of items + an overall confidence.
 export const photoParseResultSchema = z.object({
@@ -65,7 +90,7 @@ export type PhotoParseResult = z.infer<typeof photoParseResultSchema>;
 // API DTO (camelCase) — the photo-parse endpoint response. This is a DRAFT, not a committed log.
 // ============================================================================
 export interface NutritionDraftDTO {
-  items: ParsedFoodItem[];
+  items: NutritionDraftItem[];
   overallConfidence: number;
   notes: string | null;
   inputMethod: NutritionInputMethod;   // 'photo'
@@ -73,7 +98,9 @@ export interface NutritionDraftDTO {
   model: string;                        // which model produced it (provenance)
   cached: boolean;                      // true if served from the perceptual-hash cache (no LLM bill)
   // Totals are a convenience sum the client can show immediately; client may still edit per-item.
-  totals: { calories: number; proteinG: number; carbsG: number; fatG: number };
+  totals: { calories: number; proteinG: number; carbsG: number; fatG: number; fiberG: number; sugarG: number; sodiumMg: number };
+  // 0–10 per-meal health score (heuristic over the totals), or null if not computable.
+  healthScore: number | null;
 }
 
 // ============================================================================
