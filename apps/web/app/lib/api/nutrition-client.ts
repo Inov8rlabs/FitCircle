@@ -13,16 +13,29 @@ export const LOW_CONFIDENCE_THRESHOLD = 0.6;
 
 // --- DTO shapes (camelCase JSON from the contract) -------------------------
 
+export interface UnitOption {
+  label: string;
+  gramsPerUnit: number;
+}
+
 export interface NutritionDraftItem {
   name: string;
   quantity: number;
   quantityRange: { min: number; max: number } | null;
   servingUnit: string;
+  grams?: number;
+  gramsPerUnit?: number;
   calories: number;
   proteinG: number;
   carbsG: number;
   fatG: number;
+  fiberG?: number;
+  sugarG?: number;
+  sodiumMg?: number;
   confidence: number;
+  matchedFoodId?: string | null;
+  itemSource?: string;
+  unitOptions?: UnitOption[];
 }
 
 export interface NutritionTotals {
@@ -30,6 +43,9 @@ export interface NutritionTotals {
   proteinG: number;
   carbsG: number;
   fatG: number;
+  fiberG?: number;
+  sugarG?: number;
+  sodiumMg?: number;
 }
 
 export interface NutritionDraft {
@@ -41,6 +57,7 @@ export interface NutritionDraft {
   model: string;
   cached: boolean;
   totals: NutritionTotals;
+  healthScore?: number | null;
 }
 
 export interface FoodPer100g {
@@ -333,14 +350,42 @@ export interface Insight {
 
 // --- Food-log create (existing endpoint; confirm-then-commit commits here) --
 
+/** One persisted ingredient inside nutrition_data.items (snake_case wire shape). */
+export interface SavedFoodItemPayload {
+  name: string;
+  quantity?: number | null;
+  serving_unit?: string | null;
+  grams?: number | null;
+  calories?: number | null;
+  protein_g?: number | null;
+  carbs_g?: number | null;
+  fat_g?: number | null;
+  fiber_g?: number | null;
+  sugar_g?: number | null;
+  sodium_mg?: number | null;
+}
+
+/** nutrition_data payload: the four core macros (drive the typed columns) plus an
+ *  optional rich breakdown the backend stores whole and returns on read. */
+export interface NutritionDataPayload {
+  calories?: number;
+  protein_g?: number;
+  carbs_g?: number;
+  fat_g?: number;
+  fiber_g?: number;
+  sugar_g?: number;
+  sodium_mg?: number;
+  health_score?: number | null;
+  items?: SavedFoodItemPayload[];
+}
+
 export interface CreateFoodLogEntry {
   entry_type: 'food';
   meal_type: 'breakfast' | 'lunch' | 'dinner' | 'snack' | 'other';
   title: string;
   description?: string;
   notes?: string;
-  /** macro map e.g. { calories, protein_g, carbs_g, fat_g } */
-  nutrition_data?: Record<string, number>;
+  nutrition_data?: NutritionDataPayload;
   logged_at?: string;
   visibility?: 'private' | 'shared' | 'circle';
 }
