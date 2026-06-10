@@ -3,15 +3,20 @@ import { createHash } from 'crypto';
 import { generateText, Output } from 'ai';
 
 import { createAdminSupabase } from '../supabase-admin';
+import type { FoodDTO } from '../types/foods';
 import {
   type NutritionDraftDTO,
+  type NutritionDraftItem,
+  type ParsedFoodItem,
   type PhotoParseResult,
+  type UnitOption,
   photoParseResultSchema,
   PHOTO_PARSE_DAILY_SOFT_CAP,
 } from '../types/nutrition';
 
 import { FoodLogImageService } from './food-log-image-service';
 import { FoodLogService } from './food-log-service';
+import { FoodsService } from './foods-service';
 
 /**
  * NutritionIntelligenceService — the server-side "brain" for nutrition (PRD §6.1, §7.2.1).
@@ -36,7 +41,12 @@ const SYSTEM_PROMPT = [
   'Rules:',
   '- Estimate, never claim exactness. When unsure of a quantity, set quantityRange {min,max} and',
   '  set quantity to the midpoint; when confident, set quantityRange to null.',
-  '- Macros (calories, proteinG, carbsG, fatG) are for the WHOLE item at the estimated quantity.',
+  '- servingUnit is the NATURAL unit a person would use for THIS food: e.g. "skewer" for a kebab,',
+  '  "piece" for chicken tikka, "cup" for rice, "slice" for bread, "serving" for a salad, or "g".',
+  '- quantity is how many of that unit. gramsPerUnit is the weight of ONE such unit, and grams is the',
+  '  TOTAL edible weight (quantity × gramsPerUnit). Always provide grams — it is the source of truth.',
+  '- Macros are for the WHOLE item at the estimated grams: calories, proteinG, carbsG, fatG, fiberG,',
+  '  sugarG (grams) and sodiumMg (milligrams). Give your best estimate for every field.',
   '- confidence (per item) and overallConfidence are 0..1.',
   '- Do not invent foods you cannot see. If the plate is unclear, return fewer items with lower confidence.',
   '- Be body- and food-neutral: never judge the food, never comment on the eater. Just identify and estimate.',
@@ -50,7 +60,10 @@ const VOICE_SYSTEM_PROMPT = [
   '  servingUnit "egg"; "a bowl of rice" → a typical bowl. When the amount is vague or unstated, set',
   '  quantityRange {min,max} to a plausible span and quantity to its midpoint; when the speaker gave a clear',
   '  count or measure, set quantityRange to null.',
-  '- Macros (calories, proteinG, carbsG, fatG) are for the WHOLE item at the estimated quantity.',
+  '- servingUnit is the natural unit for the food ("egg", "cup", "slice", "serving", or "g"); quantity is',
+  '  how many; gramsPerUnit is the weight of one; grams is the TOTAL edible weight (always provide it).',
+  '- Macros are for the WHOLE item at the estimated grams: calories, proteinG, carbsG, fatG, fiberG,',
+  '  sugarG (grams), sodiumMg (milligrams). Give your best estimate for every field.',
   '- confidence (per item) and overallConfidence are 0..1; lower it when the transcript is ambiguous.',
   '- Only include foods the transcript actually mentions. Ignore filler words and non-food chatter.',
   '- If the transcript names no food at all, return an empty items array with low overallConfidence.',
@@ -68,7 +81,7 @@ export class NutritionIntelligenceService {
     const imageHash = createHash('sha256').update(imageBytes).digest('hex');
     const cached = await this.getCachedResult(imageHash);
     if (cached) {
-      return this.toDraft(cached, VISION_MODEL, true, 'photo', 'llm_vision');
+      return await this.toDraft(userId, cached, VISION_MODEL, true, 'photo', 'llm_vision');
     }
 
     // 2. Per-user daily soft cap on premium vision calls (§9.2). Caching is checked first so
@@ -105,7 +118,7 @@ export class NutritionIntelligenceService {
     // 4. Record the call (for the daily cap) and cache the result by image hash.
     await this.recordParse(userId, imageHash, result);
 
-    return this.toDraft(result, VISION_MODEL, false, 'photo', 'llm_vision');
+    return await this.toDraft(userId, result, VISION_MODEL, false, 'photo', 'llm_vision');
   }
 
   /**
@@ -150,7 +163,7 @@ export class NutritionIntelligenceService {
     const transcriptHash = createHash('sha256').update(transcript).digest('hex');
     await this.recordParseLog(userId, transcriptHash);
 
-    return this.toDraft(result, VOICE_MODEL, false, 'voice', 'llm_voice');
+    return await this.toDraft(userId, result, VOICE_MODEL, false, 'voice', 'llm_voice');
   }
 
   /**
@@ -233,24 +246,32 @@ export class NutritionIntelligenceService {
     return 'snack';
   }
 
-  private static toDraft(
+  private static async toDraft(
+    userId: string,
     result: PhotoParseResult,
     model: string,
     cachedFlag: boolean,
     inputMethod: NutritionDraftDTO['inputMethod'],
     nutritionSource: NutritionDraftDTO['nutritionSource'],
-  ): NutritionDraftDTO {
-    const totals = result.items.reduce(
+  ): Promise<NutritionDraftDTO> {
+    // Ground each parsed item against the foods DB (authoritative macros) where we
+    // can confidently match; otherwise keep the model's estimate.
+    const items = await this.groundItems(userId, result.items);
+
+    const totals = items.reduce(
       (acc, it) => ({
         calories: acc.calories + it.calories,
         proteinG: acc.proteinG + it.proteinG,
         carbsG: acc.carbsG + it.carbsG,
         fatG: acc.fatG + it.fatG,
+        fiberG: acc.fiberG + it.fiberG,
+        sugarG: acc.sugarG + it.sugarG,
+        sodiumMg: acc.sodiumMg + it.sodiumMg,
       }),
-      { calories: 0, proteinG: 0, carbsG: 0, fatG: 0 }
+      { calories: 0, proteinG: 0, carbsG: 0, fatG: 0, fiberG: 0, sugarG: 0, sodiumMg: 0 }
     );
     return {
-      items: result.items,
+      items,
       overallConfidence: result.overallConfidence,
       notes: result.notes,
       inputMethod,
@@ -258,7 +279,152 @@ export class NutritionIntelligenceService {
       model,
       cached: cachedFlag,
       totals,
+      healthScore: this.healthScore(totals),
     };
+  }
+
+  // MARK: - DB grounding (PRD §7.2.1 single-source-of-truth)
+
+  /**
+   * For each parsed item, look it up in the foods DB and — when we find a
+   * confident name match — recompute its macros from the DB's per-100g panel
+   * scaled by the estimated grams. The LLM's portion estimate (grams) is kept;
+   * only the *nutrient density* is upgraded to DB-grade. Sodium isn't in the
+   * foods table, so the model's sodium estimate is retained.
+   *
+   * Failure-isolated and parallel: a search error just leaves that item on the
+   * model's own numbers.
+   */
+  private static async groundItems(
+    userId: string,
+    items: ParsedFoodItem[]
+  ): Promise<NutritionDraftItem[]> {
+    return Promise.all(
+      items.map(async (it) => {
+        const grams = this.effectiveGrams(it);
+        let match: FoodDTO | null = null;
+        try {
+          const candidates = await FoodsService.search(userId, { query: it.name, limit: 5 });
+          match = this.pickBestFood(it.name, candidates);
+        } catch {
+          match = null;
+        }
+
+        if (match && grams > 0 && match.per100g.calories != null) {
+          const f = grams / 100;
+          const r = (n: number | null | undefined) => Math.round(((n ?? 0) * f) * 10) / 10;
+          return {
+            ...it,
+            grams,
+            calories: r(match.per100g.calories),
+            proteinG: r(match.per100g.proteinG),
+            carbsG: r(match.per100g.carbsG),
+            fatG: r(match.per100g.fatG),
+            fiberG: r(match.per100g.fiberG),
+            sugarG: r(match.per100g.sugarG),
+            sodiumMg: it.sodiumMg, // foods table has no sodium → keep the model's estimate
+            matchedFoodId: match.id,
+            itemSource: 'foods_db' as const,
+            unitOptions: this.unitOptionsFor(it, match),
+          };
+        }
+
+        return {
+          ...it,
+          grams: grams || it.grams,
+          matchedFoodId: null,
+          itemSource: 'llm_vision' as const,
+          unitOptions: this.unitOptionsFor(it, null),
+        };
+      })
+    );
+  }
+
+  /** Best gram estimate for an item: explicit grams, else quantity × gramsPerUnit. */
+  private static effectiveGrams(it: ParsedFoodItem): number {
+    if (it.grams > 0) return it.grams;
+    if (it.quantity > 0 && it.gramsPerUnit > 0) return it.quantity * it.gramsPerUnit;
+    return it.grams;
+  }
+
+  /**
+   * Pick the best DB candidate for a parsed name, or null when none is close
+   * enough (grounding to a wrong food is worse than keeping the estimate). Uses
+   * a token Sørensen–Dice similarity with a 0.5 floor.
+   */
+  private static pickBestFood(name: string, candidates: FoodDTO[]): FoodDTO | null {
+    let best: FoodDTO | null = null;
+    let bestScore = 0;
+    for (const c of candidates) {
+      const score = this.diceSimilarity(name, c.name);
+      if (score > bestScore) {
+        bestScore = score;
+        best = c;
+      }
+    }
+    return bestScore >= 0.5 ? best : null;
+  }
+
+  private static tokens(s: string): Set<string> {
+    return new Set(
+      s
+        .toLowerCase()
+        .replace(/[^a-z0-9\s]/g, ' ')
+        .split(/\s+/)
+        .filter((t) => t.length > 1)
+    );
+  }
+
+  private static diceSimilarity(a: string, b: string): number {
+    const ta = this.tokens(a);
+    const tb = this.tokens(b);
+    if (ta.size === 0 || tb.size === 0) return 0;
+    let inter = 0;
+    for (const t of ta) if (tb.has(t)) inter++;
+    return (2 * inter) / (ta.size + tb.size);
+  }
+
+  /** Measurement choices for the client's unit picker: the natural unit, grams, oz,
+   *  plus the matched food's serving unit when known. Deduped by label. */
+  private static unitOptionsFor(it: ParsedFoodItem, match: FoodDTO | null): UnitOption[] {
+    const out: UnitOption[] = [];
+    const push = (label: string, gramsPerUnit: number) => {
+      const key = label.trim().toLowerCase();
+      if (!key || out.some((o) => o.label.toLowerCase() === key)) return;
+      out.push({ label, gramsPerUnit });
+    };
+    const natural = it.servingUnit?.trim();
+    if (natural && natural.toLowerCase() !== 'g') {
+      push(natural, it.gramsPerUnit > 0 ? it.gramsPerUnit : this.effectiveGrams(it) || 1);
+    }
+    push('g', 1);
+    push('oz', 28.3495);
+    if (match?.servingUnit && match.servingSizeG) {
+      push(match.servingUnit, match.servingSizeG);
+    }
+    return out;
+  }
+
+  /**
+   * Heuristic 0–10 per-meal health score (the competitor surfaces one). Rewards
+   * protein and fiber density, penalises high added sugar and sodium. This is a
+   * presentation aid, not a clinical metric.
+   */
+  private static healthScore(t: {
+    calories: number;
+    proteinG: number;
+    fiberG: number;
+    sugarG: number;
+    sodiumMg: number;
+  }): number | null {
+    if (t.calories <= 0) return null;
+    let score = 5;
+    const per1000 = 1000 / t.calories;
+    score += Math.min(2, (t.proteinG * per1000) / 25); // protein density (g per 1000 kcal)
+    score += Math.min(2, (t.fiberG * per1000) / 14); // fiber density
+    score -= Math.min(2, (t.sugarG * per1000) / 50); // sugar penalty
+    score -= Math.min(2, (t.sodiumMg * per1000) / 2300); // sodium penalty
+    return Math.max(0, Math.min(10, Math.round(score)));
   }
 
   /** Look up a previously-parsed identical image (content-hash cache). */
