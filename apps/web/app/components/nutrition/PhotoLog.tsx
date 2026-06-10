@@ -21,12 +21,12 @@ export function PhotoLog({ onLogged }: PhotoLogProps) {
   const [draft, setDraft] = useState<NutritionDraft | null>(null);
   const [showConfirm, setShowConfirm] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [lastFile, setLastFile] = useState<File | null>(null);
 
-  const onPick = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    e.target.value = ''; // allow re-picking the same file
-    if (!file) return;
+  const parse = async (file: File) => {
+    setLastFile(file);
     setParsing(true);
+    setShowConfirm(false);
     setError(null);
     try {
       const result = await nutritionClient.photoParse(file);
@@ -46,6 +46,12 @@ export function PhotoLog({ onLogged }: PhotoLogProps) {
     }
   };
 
+  const onPick = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = ''; // allow re-picking the same file
+    if (file) void parse(file);
+  };
+
   const reset = () => {
     setShowConfirm(false);
     setDraft(null);
@@ -60,6 +66,7 @@ export function PhotoLog({ onLogged }: PhotoLogProps) {
           onLogged?.();
         }}
         onCancel={reset}
+        onReanalyze={lastFile ? () => void parse(lastFile) : undefined}
       />
     );
   }
