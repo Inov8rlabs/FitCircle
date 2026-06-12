@@ -13,7 +13,8 @@ import { NutritionIntelligenceService } from '@/lib/services/nutrition-intellige
  * JSON body: { name: string, grams?: number, quantity?: number, servingUnit?: string }
  * Returns a single enriched draft item (same shape as one element of photo-parse's `items`).
  *
- * Text-only — no premium vision call — so it is NOT gated by the photo daily soft cap.
+ * Text-only (no premium vision call), but still counts toward the shared per-user daily
+ * paid-parse cap — exceeding it returns 429 (handled below).
  * Thin route: all nutrition logic lives in NutritionIntelligenceService (§7.2.1).
  */
 
@@ -79,6 +80,23 @@ export async function POST(request: NextRequest) {
         error: null,
       });
     } catch (estimateError: any) {
+      // Per-user daily soft cap hit on paid parses (§9.2) → 429 with a friendly message.
+      if (estimateError?.message === 'RateLimited') {
+        return NextResponse.json(
+          {
+            success: false,
+            data: null,
+            error: {
+              code: 'RATE_LIMITED',
+              message: "You've reached today's estimate limit — try again tomorrow or set the macros yourself.",
+              details: {},
+              timestamp: new Date().toISOString(),
+            },
+            meta: { requestTime: Date.now() - startTime },
+          },
+          { status: 429 }
+        );
+      }
       if (estimateError?.message !== 'ParseFailed') {
         throw estimateError; // Unauthorized / unexpected → outer catch
       }

@@ -69,6 +69,16 @@ const goals = [
   { value: 'health', label: 'General Health', icon: User },
 ];
 
+// Only honor same-origin relative return paths — never an absolute/protocol-relative
+// URL — so a crafted /onboarding?returnUrl=https://evil.com can't open-redirect.
+function safeReturnUrl(value: string | null): string {
+  if (!value) return '/dashboard';
+  if (!value.startsWith('/')) return '/dashboard';
+  if (value.startsWith('//') || value.startsWith('/\\')) return '/dashboard';
+  if (/^[a-z][a-z0-9+.-]*:/i.test(value)) return '/dashboard';
+  return value;
+}
+
 function OnboardingForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -162,12 +172,9 @@ function OnboardingForm() {
   };
 
   const handleCelebrationComplete = () => {
-    // Redirect to returnUrl if provided (e.g., from invite link), otherwise go to dashboard
-    if (returnUrl) {
-      router.push(returnUrl);
-    } else {
-      router.push('/dashboard');
-    }
+    // Redirect to returnUrl if provided (e.g., from invite link), otherwise go to dashboard.
+    // Only honor same-origin relative paths to avoid an open redirect.
+    router.push(safeReturnUrl(returnUrl));
   };
 
   const handleBack = () => {

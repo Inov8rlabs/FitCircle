@@ -21,7 +21,9 @@ export async function verifyMobileAuth(request: NextRequest): Promise<any | null
   if (authHeader && authHeader.startsWith('Bearer ')) {
     const token = authHeader.substring(7);
     if (token) {
-      console.log('[verifyMobileAuth] Verifying Bearer token...');
+      if (process.env.NODE_ENV === 'development') {
+        console.log('[verifyMobileAuth] Verifying Bearer token...');
+      }
       try {
         const user = await MobileAPIService.authenticateWithToken(token);
         return user;
@@ -33,12 +35,16 @@ export async function verifyMobileAuth(request: NextRequest): Promise<any | null
 
   // 2. Try Session Cookie (Web App)
   try {
-    console.log('[verifyMobileAuth] Checking for session cookie...');
+    if (process.env.NODE_ENV === 'development') {
+      console.log('[verifyMobileAuth] Checking for session cookie...');
+    }
     const supabase = await createServerSupabase();
     const { data: { user: authUser }, error } = await supabase.auth.getUser();
 
     if (authUser && !error) {
-      console.log('[verifyMobileAuth] Valid session cookie found for user:', authUser.id);
+      if (process.env.NODE_ENV === 'development') {
+        console.log('[verifyMobileAuth] Valid session cookie found for user:', authUser.id);
+      }
 
       // Fetch full profile to match mobile auth behavior
       const supabaseAdmin = createAdminSupabase();
@@ -59,7 +65,9 @@ export async function verifyMobileAuth(request: NextRequest): Promise<any | null
     console.error('[verifyMobileAuth] Cookie auth error:', error);
   }
 
-  console.log('[verifyMobileAuth] No valid auth found');
+  if (process.env.NODE_ENV === 'development') {
+    console.log('[verifyMobileAuth] No valid auth found');
+  }
   return null;
 }
 
@@ -68,18 +76,23 @@ export async function verifyMobileAuth(request: NextRequest): Promise<any | null
  */
 export async function requireMobileAuth(request: NextRequest): Promise<any> {
   const authHeader = request.headers.get('Authorization');
-  console.log('[requireMobileAuth] Authorization header:', authHeader ? 'present' : 'missing');
+  if (process.env.NODE_ENV === 'development') {
+    console.log('[requireMobileAuth] Authorization header:', authHeader ? 'present' : 'missing');
+  }
 
   const user = await verifyMobileAuth(request);
 
-  console.log('[requireMobileAuth] User object:', user ? { id: user.id, email: user.email } : null);
+  if (process.env.NODE_ENV === 'development') {
+    console.log('[requireMobileAuth] User object:', user ? { id: user.id, email: user.email } : null);
+  }
 
   if (!user) {
     const error = new Error('Unauthorized');
-    console.error('[requireMobileAuth] Authentication failed:', {
-      hasAuthHeader: !!authHeader,
-      authHeaderFormat: authHeader?.substring(0, 20),
-    });
+    if (process.env.NODE_ENV === 'development') {
+      console.error('[requireMobileAuth] Authentication failed:', {
+        hasAuthHeader: !!authHeader,
+      });
+    }
     throw error;
   }
 

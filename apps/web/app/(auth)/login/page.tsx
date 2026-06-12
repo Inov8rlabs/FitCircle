@@ -24,6 +24,17 @@ const loginSchema = z.object({
 
 type LoginFormData = z.infer<typeof loginSchema>;
 
+// Only honor a returnUrl when it's a same-origin relative path to avoid open
+// redirects. It must start with a single "/" (not "//" or "/\" which are
+// protocol-relative) and must not contain a scheme (e.g. "https:").
+function safeReturnUrl(value: string | null): string {
+  if (!value) return '/dashboard';
+  if (!value.startsWith('/')) return '/dashboard';
+  if (value.startsWith('//') || value.startsWith('/\\')) return '/dashboard';
+  if (/^[a-z][a-z0-9+.-]*:/i.test(value)) return '/dashboard';
+  return value;
+}
+
 function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -60,12 +71,9 @@ function LoginForm() {
       await login(data.email, data.password);
       showToast('Welcome back!', 'success');
 
-      // Redirect to returnUrl if provided, otherwise go to dashboard
-      if (returnUrl) {
-        router.push(returnUrl);
-      } else {
-        router.push('/dashboard');
-      }
+      // Redirect to returnUrl if it's a safe same-origin path, otherwise go to
+      // dashboard (safeReturnUrl falls back to '/dashboard').
+      router.push(safeReturnUrl(returnUrl));
     } catch {
       // Error state lives in the store; clear the password field so the user
       // can retry without manually deleting their last attempt, and refocus
@@ -231,7 +239,7 @@ function LoginForm() {
             <div className="mt-6 text-center text-sm">
               <span className="text-gray-400">Don&apos;t have an account? </span>
               <Link
-                href={returnUrl ? `/register?returnUrl=${encodeURIComponent(returnUrl)}` : '/register'}
+                href={returnUrl && safeReturnUrl(returnUrl) !== '/dashboard' ? `/register?returnUrl=${encodeURIComponent(returnUrl)}` : '/register'}
                 className="text-indigo-400 hover:underline font-medium"
               >
                 Sign up

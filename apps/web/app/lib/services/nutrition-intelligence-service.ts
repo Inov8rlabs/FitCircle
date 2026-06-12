@@ -156,14 +156,20 @@ export class NutritionIntelligenceService {
    * Text-only — the native Speech framework / Web Speech API ran on the client and produced the
    * transcript; we just turn it into the same draft shape as parsePhoto for confirm-then-commit.
    *
-   * No daily soft cap: text parsing is much cheaper than the premium vision call, so it isn't
-   * gated by PHOTO_PARSE_DAILY_SOFT_CAP. We still record the call in nutrition_parse_log for
-   * accounting/observability (failure-isolated). No content cache: free-text transcripts are
-   * near-unique, so a hash cache would rarely hit; cached is always false. p95 target < 1.2s (§7.6).
+   * We still record the call in nutrition_parse_log for accounting/observability (failure-isolated)
+   * and gate it on the daily cap. No content cache: free-text transcripts are near-unique, so a hash
+   * cache would rarely hit; cached is always false. p95 target < 1.2s (§7.6).
    *
+   * @throws Error('RateLimited') when the per-user daily soft cap is exceeded
    * @throws Error('ParseFailed') when the model output cannot be validated
    */
   static async parseVoice(userId: string, transcript: string): Promise<NutritionDraftDTO> {
+    // Per-user daily soft cap. PHOTO_PARSE_DAILY_SOFT_CAP is the COMBINED cap shared across all
+    // paid parses (photo/voice/item) — every recorded parse counts toward the same daily budget.
+    if ((await this.countTodayParses(userId)) >= PHOTO_PARSE_DAILY_SOFT_CAP) {
+      throw new Error('RateLimited');
+    }
+
     let result: PhotoParseResult;
     try {
       const { output } = await generateText({
@@ -188,7 +194,7 @@ export class NutritionIntelligenceService {
       throw new Error('ParseFailed');
     }
 
-    // Accounting only (no cap, no cache). The hash is over the transcript so the log row matches
+    // Cap accounting (no cache). The hash is over the transcript so the log row matches
     // the not-null image_hash column convention; it is not used for lookups.
     const transcriptHash = createHash('sha256').update(transcript).digest('hex');
     await this.recordParseLog(userId, transcriptHash);
@@ -202,8 +208,7 @@ export class NutritionIntelligenceService {
    * set the portion; we re-run the estimate for that exact food + amount and ground it against the
    * foods DB the same way the photo flow does, so the corrected calories/macros are authoritative.
    *
-   * Text-only (no premium vision call) → not gated by the daily soft cap.
-   *
+   * @throws Error('RateLimited') when the per-user daily soft cap is exceeded
    * @throws Error('ParseFailed') when the model output cannot be validated
    */
   static async estimateItem(
@@ -213,6 +218,12 @@ export class NutritionIntelligenceService {
     quantity?: number,
     servingUnit?: string,
   ): Promise<NutritionDraftItem> {
+    // Per-user daily soft cap. PHOTO_PARSE_DAILY_SOFT_CAP is the COMBINED cap shared across all
+    // paid parses (photo/voice/item) — every recorded parse counts toward the same daily budget.
+    if ((await this.countTodayParses(userId)) >= PHOTO_PARSE_DAILY_SOFT_CAP) {
+      throw new Error('RateLimited');
+    }
+
     const portionBits: string[] = [];
     if (quantity && quantity > 0) portionBits.push(`${quantity} ${servingUnit?.trim() || 'serving'}`);
     if (grams && grams > 0) portionBits.push(`${Math.round(grams)} g total`);
@@ -269,6 +280,12 @@ export class NutritionIntelligenceService {
 
     // Ground against the foods DB exactly like the photo flow (DB density wins on a confident match).
     const [grounded] = await this.groundItems(userId, [item]);
+
+    // Count this paid LLM call toward the shared daily cap (accounting only; failure-isolated).
+    // Without this, the cap check above would never advance and item re-estimates would be uncapped.
+    const itemHash = createHash('sha256').update(`item:${name.trim()}:${targetGrams}`).digest('hex');
+    await this.recordParseLog(userId, itemHash);
+
     return grounded;
   }
 

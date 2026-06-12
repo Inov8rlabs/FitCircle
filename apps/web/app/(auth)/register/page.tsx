@@ -50,6 +50,17 @@ const benefits = [
 
 const FORM_STORAGE_KEY = 'fitcircle_signup_form';
 
+// Only honor a returnUrl when it's a same-origin relative path to avoid open
+// redirects. It must start with a single "/" (not "//" or "/\" which are
+// protocol-relative) and must not contain a scheme (e.g. "https:").
+function safeReturnUrl(value: string | null): string {
+  if (!value) return '/dashboard';
+  if (!value.startsWith('/')) return '/dashboard';
+  if (value.startsWith('//') || value.startsWith('/\\')) return '/dashboard';
+  if (/^[a-z][a-z0-9+.-]*:/i.test(value)) return '/dashboard';
+  return value;
+}
+
 function RegisterForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -132,7 +143,8 @@ function RegisterForm() {
       showToast('Account created successfully!', 'success');
 
       // New users need to complete onboarding first, but preserve returnUrl
-      if (returnUrl) {
+      // only when it's a safe same-origin path to avoid open redirects.
+      if (returnUrl && safeReturnUrl(returnUrl) !== '/dashboard') {
         router.push(`/onboarding?returnUrl=${encodeURIComponent(returnUrl)}`);
       } else {
         router.push('/onboarding');
@@ -310,7 +322,7 @@ function RegisterForm() {
               <span className="text-sm text-gray-400">
                 Already have an account?{' '}
                 <a
-                  href={returnUrl ? `/login?returnUrl=${encodeURIComponent(returnUrl)}` : '/login'}
+                  href={returnUrl && safeReturnUrl(returnUrl) !== '/dashboard' ? `/login?returnUrl=${encodeURIComponent(returnUrl)}` : '/login'}
                   className="font-medium text-indigo-400 hover:underline"
                 >
                   Sign in

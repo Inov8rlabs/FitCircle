@@ -231,15 +231,21 @@ export class MobileAPIService {
    * Authenticate user with access token and return user data
    */
   static async authenticateWithToken(accessToken: string): Promise<any | null> {
-    console.log('[authenticateWithToken] Verifying access token...');
+    if (process.env.NODE_ENV === 'development') {
+      console.log('[authenticateWithToken] Verifying access token...');
+    }
     const payload = await this.verifyAccessToken(accessToken);
 
     if (!payload) {
-      console.log('[authenticateWithToken] Token verification failed - invalid or expired token');
+      if (process.env.NODE_ENV === 'development') {
+        console.log('[authenticateWithToken] Token verification failed - invalid or expired token');
+      }
       return null;
     }
 
-    console.log('[authenticateWithToken] Token verified, userId:', payload.userId);
+    if (process.env.NODE_ENV === 'development') {
+      console.log('[authenticateWithToken] Token verified, userId:', payload.userId);
+    }
 
     // Fetch user from database
     const supabaseAdmin = createAdminSupabase();
@@ -256,11 +262,15 @@ export class MobileAPIService {
     }
 
     if (!user) {
-      console.log('[authenticateWithToken] User not found in database for userId:', payload.userId);
+      if (process.env.NODE_ENV === 'development') {
+        console.log('[authenticateWithToken] User not found in database for userId:', payload.userId);
+      }
       return null;
     }
 
-    console.log('[authenticateWithToken] User found:', { id: user.id, email: user.email });
+    if (process.env.NODE_ENV === 'development') {
+      console.log('[authenticateWithToken] User found:', { id: user.id, email: user.email });
+    }
     return user;
   }
 
