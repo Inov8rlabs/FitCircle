@@ -29,5 +29,11 @@
   "dependencies": {
     "@amplitude/analytics-browser": "^2.25.4",
     "@amplitude/plugin-session-replay-browser": "^1.22.21"
+  },
+  "overrides": {
+    "flatted": "^3.4.0",
+    "postcss": "^8.5.10",
+    "mdast-util-to-hast": "^13.2.1",
+    "ws": "^8.20.1"
   }
 }
