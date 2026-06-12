@@ -10,6 +10,7 @@ import {
   type ParsedFoodItem,
   type PhotoParseResult,
   type UnitOption,
+  parsedFoodItemSchema,
   photoParseResultSchema,
   PHOTO_PARSE_DAILY_SOFT_CAP,
 } from '../types/nutrition';
@@ -36,7 +37,7 @@ const VISION_MODEL = 'anthropic/claude-sonnet-4.6';
 const VOICE_MODEL = 'anthropic/claude-sonnet-4.6';
 
 const SYSTEM_PROMPT = [
-  'You are a nutrition estimation assistant. Given a photo of a meal, identify every distinct',
+  'You are a careful nutrition estimation assistant. Given a photo of a meal, identify every distinct',
   'food component and estimate its quantity and macros.',
   'Rules:',
   '- Estimate, never claim exactness. When unsure of a quantity, set quantityRange {min,max} and',
@@ -50,6 +51,35 @@ const SYSTEM_PROMPT = [
   '- confidence (per item) and overallConfidence are 0..1.',
   '- Do not invent foods you cannot see. If the plate is unclear, return fewer items with lower confidence.',
   '- Be body- and food-neutral: never judge the food, never comment on the eater. Just identify and estimate.',
+  'PORTION REALISM — this is where estimates most often go wrong, so weigh it heavily:',
+  '- Estimate the amount that is ACTUALLY VISIBLE on the plate, not a default "standard serving".',
+  '  Use on-image scale cues: a dinner plate rim is ~26-28cm, a small katori/side bowl holds ~150ml,',
+  '  a teaspoon ~5ml, a tablespoon ~15ml. Judge each portion against these, not against a generic recipe.',
+  '- Shared platters, thalis, tasting/sampler plates and buffet plates show MODEST amounts of each item —',
+  '  frequently half a standard serving or less. A small mound of rice is ~½ cup (~80g), not a full cup;',
+  '  a few spoons of curry is ~½ cup (~100-120g), not a brimming bowl.',
+  '- When torn between two portion sizes, choose the SMALLER. Over-estimation is the more common and the',
+  '  more harmful error here.',
+  '- Only count edible food actually present. Bones, peels, pits, garnish and packaging are not food weight.',
+  '  A dry roasted or grilled vegetable is mostly the vegetable plus a little oil — do not inflate its fat.',
+  '- Sanity-check the whole plate: the sum of calories should look right for the total volume of food shown.',
+  '  If the total seems high for the amount visible, revise the portions DOWN before returning.',
+].join(' ');
+
+// Single-item re-estimate: the user corrected a food's name (or set a portion) and wants its
+// macros recomputed for that exact food and amount. Text-only — same model family as voice.
+const ITEM_SYSTEM_PROMPT = [
+  'You are a careful nutrition estimation assistant. The user names ONE food and the portion they ate.',
+  'Return that single item with its best-estimate macros for THAT portion.',
+  'Rules:',
+  '- grams is the total edible weight of the portion and is the source of truth; every macro is for the',
+  '  WHOLE portion at that gram weight. If the user gave grams, use exactly that; otherwise estimate a',
+  '  realistic portion for the stated quantity/unit (or a typical single serving if none was given).',
+  '- servingUnit is the natural unit for the food; gramsPerUnit is the weight of one such unit so that',
+  '  quantity × gramsPerUnit ≈ grams.',
+  '- Provide calories, proteinG, carbsG, fatG, fiberG, sugarG (grams) and sodiumMg (milligrams).',
+  '- Prefer realistic, slightly conservative values; do not inflate. confidence is 0..1.',
+  '- Be body- and food-neutral: just identify and estimate.',
 ].join(' ');
 
 const VOICE_SYSTEM_PROMPT = [
@@ -164,6 +194,82 @@ export class NutritionIntelligenceService {
     await this.recordParseLog(userId, transcriptHash);
 
     return await this.toDraft(userId, result, VOICE_MODEL, false, 'voice', 'llm_voice');
+  }
+
+  /**
+   * Re-estimate the macros for ONE food the user corrected on the confirm card (§6.1 "tap to fix").
+   * The user fixed the name (e.g. the model said "eggplant" but it was "stuffed bitter gourd") and/or
+   * set the portion; we re-run the estimate for that exact food + amount and ground it against the
+   * foods DB the same way the photo flow does, so the corrected calories/macros are authoritative.
+   *
+   * Text-only (no premium vision call) → not gated by the daily soft cap.
+   *
+   * @throws Error('ParseFailed') when the model output cannot be validated
+   */
+  static async estimateItem(
+    userId: string,
+    name: string,
+    grams?: number,
+    quantity?: number,
+    servingUnit?: string,
+  ): Promise<NutritionDraftItem> {
+    const portionBits: string[] = [];
+    if (quantity && quantity > 0) portionBits.push(`${quantity} ${servingUnit?.trim() || 'serving'}`);
+    if (grams && grams > 0) portionBits.push(`${Math.round(grams)} g total`);
+    const portion = portionBits.length ? portionBits.join(', ') : 'one typical serving';
+
+    let llm: ParsedFoodItem;
+    try {
+      const { output } = await generateText({
+        model: VOICE_MODEL,
+        output: Output.object({ schema: parsedFoodItemSchema }),
+        system: ITEM_SYSTEM_PROMPT,
+        messages: [
+          {
+            role: 'user',
+            content: [
+              {
+                type: 'text',
+                text: `Estimate the nutrition for: "${name.trim()}". Portion: ${portion}.`,
+              },
+            ],
+          },
+        ],
+      });
+      llm = output;
+    } catch (err) {
+      console.error('[NutritionIntelligenceService.estimateItem] text call/validation failed:', err);
+      throw new Error('ParseFailed');
+    }
+
+    // Honour the user's explicit portion as the source of truth: when they gave grams (or a
+    // quantity we can map to grams), pin the item to it and scale the model's macros onto that
+    // weight, so the returned numbers match exactly the portion shown on the card.
+    const targetGrams = grams && grams > 0 ? grams : this.effectiveGrams(llm);
+    const item: ParsedFoodItem = {
+      ...llm,
+      name: name.trim() || llm.name,
+      quantity: quantity && quantity > 0 ? quantity : llm.quantity,
+      servingUnit: servingUnit?.trim() || llm.servingUnit,
+      grams: targetGrams,
+      gramsPerUnit:
+        quantity && quantity > 0 && targetGrams > 0 ? targetGrams / quantity : llm.gramsPerUnit,
+    };
+    if (llm.grams > 0 && targetGrams > 0 && Math.abs(targetGrams - llm.grams) > 0.5) {
+      const f = targetGrams / llm.grams;
+      const r = (n: number) => Math.round(n * f * 10) / 10;
+      item.calories = r(llm.calories);
+      item.proteinG = r(llm.proteinG);
+      item.carbsG = r(llm.carbsG);
+      item.fatG = r(llm.fatG);
+      item.fiberG = r(llm.fiberG);
+      item.sugarG = r(llm.sugarG);
+      item.sodiumMg = r(llm.sodiumMg);
+    }
+
+    // Ground against the foods DB exactly like the photo flow (DB density wins on a confident match).
+    const [grounded] = await this.groundItems(userId, [item]);
+    return grounded;
   }
 
   /**
@@ -350,7 +456,10 @@ export class NutritionIntelligenceService {
   /**
    * Pick the best DB candidate for a parsed name, or null when none is close
    * enough (grounding to a wrong food is worse than keeping the estimate). Uses
-   * a token Sørensen–Dice similarity with a 0.5 floor.
+   * a token Sørensen–Dice similarity with a 0.6 floor. The floor is deliberately
+   * strict: grounding to a wrong DB food (e.g. "sour cream or yogurt" → "sour cream")
+   * silently swaps in the wrong nutrient density and is worse than keeping the
+   * model's own estimate, so we only ground on a confident name match.
    */
   private static pickBestFood(name: string, candidates: FoodDTO[]): FoodDTO | null {
     let best: FoodDTO | null = null;
@@ -362,7 +471,7 @@ export class NutritionIntelligenceService {
         best = c;
       }
     }
-    return bestScore >= 0.5 ? best : null;
+    return bestScore >= 0.6 ? best : null;
   }
 
   private static tokens(s: string): Set<string> {
