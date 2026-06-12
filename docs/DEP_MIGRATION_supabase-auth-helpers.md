@@ -1,10 +1,31 @@
 # Dependency migration: drop `@supabase/auth-helpers-nextjs` → `@supabase/ssr`
 
-**Status:** TODO (deferred from the 2026-06-12 launch-hardening pass)
-**Priority:** High — `@supabase/auth-helpers-nextjs` is **deprecated** and is the most
-likely culprit behind the GitHub Dependabot **critical** alert on this repo's default branch.
-**Risk/size:** Low — it's used in **exactly one file**; the rest of the app already uses
-`@supabase/ssr`. Estimated effort: ~30 min including build verification.
+**Status: ✅ DONE (2026-06-12, commit `7295830`).** Migrated the one usage to
+`createServerSupabase()`, removed the package, `bun.lock` pruned it + transitives.
+Verified: `tsc` clean, `next build` succeeds with the package removed from `node_modules`.
+
+> **Correction:** this package was NOT the source of the Dependabot **critical** alert.
+> A `bun audit` (this is a Bun workspace with a committed `bun.lock`) shows the critical is
+> **`vitest` < 3.2.6** — a **dev/test** dependency (GHSA-5xrq-8626-4rwp, "Vitest UI server
+> arbitrary file read/execute"). It has no production runtime exposure (the Vitest UI server
+> isn't run in prod), but it still trips Dependabot. See "Outstanding vulnerabilities" below.
+
+The original rationale (deprecated package, single-file fix) still held — it was correct
+hygiene — but it doesn't clear the critical alert.
+
+## Outstanding vulnerabilities (from `bun audit`, 2026-06-12)
+
+29 total: **1 critical, 14 high, 13 moderate, 1 low**. Highlights:
+- **CRITICAL — `vitest` <3.2.6** (dev). Fix needs a MAJOR bump (current range `^2.0.0` →
+  `^3.2.6`); verify the test suite after. Dev-only → no prod runtime risk.
+- **HIGH — `js-cookie` <=3.0.5** (runtime, client cookies). Fix `3.0.6+` is IN-RANGE
+  (`^3.0.5`) → `bun update js-cookie` is low-risk and worth doing.
+- HIGH/MOD — `picomatch` (ReDoS), `ws` (memory disclosure), MOD — `postcss` (XSS in
+  stringify): all transitive (tailwind/jsdom/supabase-js/bundle-analyzer/amplitude); resolve
+  via `bun update` (stays in-range) or by bumping the parents.
+
+Recommended: `bun update js-cookie` now (safe); schedule the `vitest` 2→3 major bump as its
+own test-verified change; re-run `bun audit` after.
 
 ---
 
