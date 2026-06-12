@@ -41,6 +41,7 @@ export async function middleware(request: NextRequest) {
     '/',
     '/login',
     '/register',
+    '/auth',
     '/join',
     '/privacy',
     '/terms',

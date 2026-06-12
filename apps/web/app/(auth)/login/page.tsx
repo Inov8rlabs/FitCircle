@@ -164,8 +164,8 @@ function LoginForm() {
                       <Link
                         href={
                           getValues('email')
-                            ? `/forgot-password?email=${encodeURIComponent(getValues('email'))}`
-                            : '/forgot-password'
+                            ? `/auth/forgot-password?email=${encodeURIComponent(getValues('email'))}`
+                            : '/auth/forgot-password'
                         }
                         className="inline-flex items-center text-sm font-medium text-indigo-300 hover:text-indigo-200 hover:underline"
                       >
@@ -216,7 +216,7 @@ function LoginForm() {
                   <span className="text-gray-300">Remember me</span>
                 </label>
                 <Link
-                  href="/forgot-password"
+                  href="/auth/forgot-password"
                   className="text-sm text-indigo-400 hover:underline"
                 >
                   Forgot password?
