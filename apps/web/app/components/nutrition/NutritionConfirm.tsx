@@ -124,7 +124,17 @@ function scaleItem(item: NutritionDraftItem, factor: number) {
   };
 }
 
-const numFmt = (v: number) => (v === Math.round(v) ? String(v) : v.toFixed(1));
+// Display formatter for read-only quantity/servings labels: whole numbers stay
+// whole, common fractions render as glyphs (½, ¼, ¾, ⅓, ⅔), else up to 2 trimmed
+// decimals. (Editable fields use raw <input type="number"> values, not this.)
+const numFmt = (v: number) => {
+  const whole = Math.floor(v);
+  const frac = Math.round((v - whole) * 100);
+  const glyph: Record<number, string> = { 25: '¼', 50: '½', 75: '¾', 33: '⅓', 66: '⅔', 67: '⅔', 20: '⅕', 12: '⅛', 13: '⅛' };
+  if (glyph[frac]) return whole === 0 ? glyph[frac] : `${whole}${glyph[frac]}`;
+  if (v === Math.round(v)) return String(v);
+  return parseFloat(v.toFixed(2)).toString();
+};
 
 /**
  * Competitor-grade meal review: a macro + secondary-nutrient summary with a
@@ -143,6 +153,7 @@ export function NutritionConfirm({ draft, onCommitted, onCancel, onReanalyze }: 
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [openIdx, setOpenIdx] = useState<number | null>(null);
+  const [reanalyzingIdx, setReanalyzingIdx] = useState<number | null>(null);
 
   const base = items.reduce(
     (a, it) => ({
@@ -168,6 +179,55 @@ export function NutritionConfirm({ draft, onCommitted, onCancel, onReanalyze }: 
 
   const removeItem = (idx: number) =>
     setItems((prev) => (prev.length > 1 ? prev.filter((_, i) => i !== idx) : prev));
+
+  /** Re-estimate one item's macros from its corrected name + current portion. */
+  const reanalyze = async (idx: number) => {
+    const it = items[idx];
+    const name = it.name.trim();
+    if (!name) {
+      setError('Add a name first, then reanalyze.');
+      return;
+    }
+    setReanalyzingIdx(idx);
+    setError(null);
+    try {
+      const grams = it.grams && it.grams > 0 ? it.grams : (it.quantity || 0) * (it.gramsPerUnit || 0);
+      const est = await nutritionClient.estimateItem({
+        name,
+        grams: grams > 0 ? grams : undefined,
+        quantity: it.quantity > 0 ? it.quantity : undefined,
+        servingUnit: it.servingUnit || undefined,
+      });
+      // Keep the user's corrected name; adopt the fresh nutrition + grounding.
+      setItems((prev) =>
+        prev.map((cur, i) =>
+          i === idx
+            ? {
+                ...cur,
+                grams: est.grams,
+                gramsPerUnit: est.gramsPerUnit,
+                quantity: est.quantity ?? cur.quantity,
+                servingUnit: est.servingUnit || cur.servingUnit,
+                calories: est.calories,
+                proteinG: est.proteinG,
+                carbsG: est.carbsG,
+                fatG: est.fatG,
+                fiberG: est.fiberG,
+                sugarG: est.sugarG,
+                sodiumMg: est.sodiumMg,
+                matchedFoodId: est.matchedFoodId,
+                itemSource: est.itemSource,
+                unitOptions: est.unitOptions,
+              }
+            : cur
+        )
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Reanalyze failed');
+    } finally {
+      setReanalyzingIdx(null);
+    }
+  };
 
   const num = (v: string) => (v === '' ? 0 : Number(v));
 
@@ -358,6 +418,27 @@ export function NutritionConfirm({ draft, onCommitted, onCancel, onReanalyze }: 
                   className="w-full rounded-md border border-slate-600 bg-slate-900/60 px-2 py-1.5 text-sm text-white placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-indigo-500"
                 />
 
+                {/* Reanalyze: correct the AI's guess → refresh calories & macros */}
+                <button
+                  type="button"
+                  onClick={() => reanalyze(idx)}
+                  disabled={reanalyzingIdx === idx || !it.name.trim()}
+                  className="inline-flex w-full items-center justify-center gap-1.5 rounded-md border border-indigo-500/40 bg-indigo-500/10 px-2 py-1.5 text-xs font-medium text-indigo-200 hover:bg-indigo-500/20 disabled:opacity-50"
+                >
+                  {reanalyzingIdx === idx ? (
+                    <>
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" /> Reanalyzing…
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="h-3.5 w-3.5" /> Reanalyze nutrition
+                    </>
+                  )}
+                </button>
+                <p className="-mt-1 text-[11px] text-gray-500">
+                  Fix the name if the AI guessed wrong, then reanalyze to update the macros below.
+                </p>
+
                 {/* Measurement pills */}
                 <div className="flex flex-wrap gap-1.5">
                   {unitLabels(it).map((label) => {
@@ -384,14 +465,15 @@ export function NutritionConfirm({ draft, onCommitted, onCancel, onReanalyze }: 
                 <div className="flex items-center justify-between">
                   <span className="text-xs text-gray-400">Amount</span>
                   <div className="flex items-center gap-3 rounded-lg bg-slate-900/60 px-2 py-1">
-                    <Step icon={<Minus className="h-3.5 w-3.5" />} onClick={() => setPortion(idx, Math.max(0, it.quantity - stepSize(it)), it.servingUnit)} />
+                    <Step icon={<Minus className="h-3.5 w-3.5" />} onClick={() => setPortion(idx, Math.max(0, Math.round((it.quantity - stepSize(it)) * 100) / 100), it.servingUnit)} />
                     <input
                       type="number"
+                      step={stepSize(it)}
                       value={it.quantity}
                       onChange={(e) => setPortion(idx, num(e.target.value), it.servingUnit)}
                       className="w-16 bg-transparent text-center text-sm font-bold text-white focus:outline-none"
                     />
-                    <Step icon={<Plus className="h-3.5 w-3.5" />} onClick={() => setPortion(idx, it.quantity + stepSize(it), it.servingUnit)} />
+                    <Step icon={<Plus className="h-3.5 w-3.5" />} onClick={() => setPortion(idx, Math.round((it.quantity + stepSize(it)) * 100) / 100, it.servingUnit)} />
                   </div>
                 </div>
 
@@ -471,8 +553,27 @@ export function NutritionConfirm({ draft, onCommitted, onCancel, onReanalyze }: 
 }
 
 function stepSize(item: NutritionDraftItem): number {
-  const u = (item.servingUnit || 'g').toLowerCase();
-  return u === 'g' || u === 'oz' || u === 'ml' ? 10 : 1;
+  switch ((item.servingUnit || 'g').toLowerCase()) {
+    case 'g':
+    case 'gram':
+    case 'grams':
+    case 'ml':
+    case 'milliliter':
+      return 10;
+    case 'oz':
+    case 'ounce':
+    case 'ounces':
+      return 1;
+    case 'cup':
+    case 'cups':
+    case 'tbsp':
+    case 'tablespoon':
+    case 'tsp':
+    case 'teaspoon':
+      return 0.25; // volume units — quarter-steps so ¼/½/¾ are reachable
+    default:
+      return 0.5; // count units (piece, slice, serving, …) — allow halves
+  }
 }
 
 function Step({ icon, onClick }: { icon: React.ReactNode; onClick: () => void }) {

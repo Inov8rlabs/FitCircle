@@ -478,6 +478,14 @@ export const nutritionClient = {
       body: JSON.stringify({ transcript }),
     }),
 
+  // Single-item re-estimate ("tap to fix"): correct an ingredient's name/portion
+  // and get fresh calories/macros for it, grounded against the foods DB.
+  estimateItem: (input: { name: string; grams?: number; quantity?: number; servingUnit?: string }) =>
+    authedFetch<NutritionDraftItem>('/api/mobile/food/estimate-item', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+
   // Foods search / barcode / custom
   searchFoods: (q: string, opts?: { limit?: number; locale?: string }) => {
     const qs = new URLSearchParams({ q });
