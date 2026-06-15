@@ -129,6 +129,12 @@ export class NutritionIntelligenceService {
         model: VISION_MODEL,
         output: Output.object({ schema: photoParseResultSchema }),
         system: SYSTEM_PROMPT,
+        // Bound latency: one extra try at most (default is 2 retries → up to 3×
+        // a ~20-40s vision call, which blows the function/client timeout), and a
+        // hard 50s ceiling so a hung gateway call fails fast into the Option-B
+        // "we saved your photo" fallback instead of hanging until the client gives up.
+        maxRetries: 1,
+        abortSignal: AbortSignal.timeout(50_000),
         messages: [
           {
             role: 'user',
@@ -176,6 +182,8 @@ export class NutritionIntelligenceService {
         model: VOICE_MODEL,
         output: Output.object({ schema: photoParseResultSchema }),
         system: VOICE_SYSTEM_PROMPT,
+        maxRetries: 1,
+        abortSignal: AbortSignal.timeout(25_000), // text parse is fast; fail over quickly
         messages: [
           {
             role: 'user',
@@ -235,6 +243,8 @@ export class NutritionIntelligenceService {
         model: VOICE_MODEL,
         output: Output.object({ schema: parsedFoodItemSchema }),
         system: ITEM_SYSTEM_PROMPT,
+        maxRetries: 1,
+        abortSignal: AbortSignal.timeout(25_000), // single-item estimate is fast
         messages: [
           {
             role: 'user',

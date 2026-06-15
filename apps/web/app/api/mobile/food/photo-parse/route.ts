@@ -3,6 +3,11 @@ import { type NextRequest, NextResponse } from 'next/server';
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { NutritionIntelligenceService } from '@/lib/services/nutrition-intelligence-service';
 
+// The vision parse routinely takes 20-40s. Without this, the function is killed at
+// the platform default (~10s) and the request appears to "time out". 60s is the max
+// allowed on every Vercel plan and leaves headroom for the LLM (≤50s) + DB grounding.
+export const maxDuration = 60;
+
 /**
  * POST /api/mobile/food/photo-parse
  * PRD v4 §6.1 / §7.6 — multimodal photo → structured nutrition DRAFT.

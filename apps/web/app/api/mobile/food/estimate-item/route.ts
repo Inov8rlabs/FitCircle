@@ -4,6 +4,9 @@ import { z } from 'zod';
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { NutritionIntelligenceService } from '@/lib/services/nutrition-intelligence-service';
 
+// LLM parse can exceed the platform default function timeout; give it room.
+export const maxDuration = 60;
+
 /**
  * POST /api/mobile/food/estimate-item
  * PRD v4 §6.1 ("tap to fix") — re-estimate the macros for ONE food the user corrected on the
