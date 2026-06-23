@@ -28,12 +28,19 @@ import { FoodsService } from './foods-service';
  * food-log create/PATCH route writes the entry (carrying input_method/nutrition_source).
  */
 
-// Newest Anthropic vision model via the AI Gateway (verified against the live model list).
+// Vision model via the AI Gateway (slug verified against the live model list).
 // Gateway auth: AI_GATEWAY_API_KEY env, or Vercel OIDC in deployment.
-const VISION_MODEL = 'anthropic/claude-sonnet-4.6';
+//
+// SPEED: Haiku 4.5 is materially faster than Sonnet 4.6 on the photo→nutrition
+// call (the user's "takes too long / times out" pain). Macro accuracy is largely
+// preserved because we DB-ground each matched item's macros from the foods table
+// and the user reviews the draft before committing; the model's main job here is
+// to identify foods + estimate portions, which Haiku handles well. To trade speed
+// back for Sonnet's portion nuance, set this to 'anthropic/claude-sonnet-4.6'.
+const VISION_MODEL = 'anthropic/claude-haiku-4.5';
 
-// Voice parsing is text-only (client did STT) — same model family, no image. Verified current
-// against the live AI Gateway model list. p95 target < 1.2s (§7.6) — text is far cheaper/faster.
+// Voice / single-item parsing is text-only (no image), already fast — kept on
+// Sonnet 4.6 for slightly better free-text parsing. p95 target < 1.2s (§7.6).
 const VOICE_MODEL = 'anthropic/claude-sonnet-4.6';
 
 const SYSTEM_PROMPT = [
