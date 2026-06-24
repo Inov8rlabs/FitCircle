@@ -16,6 +16,18 @@ type MealType = 'breakfast' | 'lunch' | 'dinner' | 'snack' | 'other';
 const MEAL_TYPES: MealType[] = ['breakfast', 'lunch', 'dinner', 'snack', 'other'];
 const UNIT_EXTRAS = ['serving', 'piece', 'cup'];
 
+/**
+ * A sensible default meal type for a meal logged at the given local hour (0–23),
+ * used when the user hasn't explicitly chosen one. Boundaries are shared across
+ * iOS/Android/web: breakfast 04–10, lunch 11–15, dinner 16–21, snack otherwise.
+ */
+function defaultMealTypeForHour(hour: number): MealType {
+  if (hour >= 4 && hour <= 10) return 'breakfast';
+  if (hour >= 11 && hour <= 15) return 'lunch';
+  if (hour >= 16 && hour <= 21) return 'dinner';
+  return 'snack';
+}
+
 interface NutritionConfirmProps {
   /** Draft returned by photo/voice parse. When null, starts an empty manual entry. */
   draft: NutritionDraft | null;
@@ -149,7 +161,7 @@ export function NutritionConfirm({ draft, onCommitted, onCancel, onReanalyze }: 
     draft && draft.items.length > 0 ? draft.items.map((i) => ({ ...i })) : [emptyItem()]
   );
   const [servings, setServings] = useState(1);
-  const [mealType, setMealType] = useState<MealType>('snack');
+  const [mealType, setMealType] = useState<MealType>(() => defaultMealTypeForHour(new Date().getHours()));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [openIdx, setOpenIdx] = useState<number | null>(null);
