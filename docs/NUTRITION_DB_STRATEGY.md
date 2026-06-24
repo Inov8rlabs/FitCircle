@@ -27,20 +27,33 @@ coverage, and the correction flywheel.** We just wired the flywheel (see
 - We have an **eval harness** (`nutrition-eval.ts`, Nutrition5k baseline: identTop1 0.45,
   cal‑within‑±40% 0.50, **dbMatchCoverage 0.64**) — use it to gate every change below.
 
-## Lever 1 — MATCHING (highest ROI, pure code, no new data)
+## Lever 1 — MATCHING (highest ROI, pure code, no new data) — ✅ IMPLEMENTED
 
-Replace/augment lexical matching with **semantic retrieval**:
-1. Enable `pgvector`; add an `embedding` column to `foods`; embed every row's name(+brand)
-   once (batch). Embeddings via the AI Gateway (`text-embedding-3-small`‑class) or a small
-   local model.
-2. At grounding time, embed each parsed item name and retrieve by **cosine similarity**,
-   then **re‑rank** with a blend of: semantic score + lexical (current Dice) + locale +
-   brand/restaurant signal + source priority (custom > restaurant > branded > generic).
-3. **Brand/restaurant awareness:** if the photo or the user's note mentions a brand or
-   restaurant, bias retrieval to that source.
+Semantic retrieval is now built (gated OFF until backfilled + enabled):
+- **Migration 068**: `pgvector` + `foods.name_embedding vector(1536)` + HNSW cosine index.
+- **`lib/embeddings.ts`**: embeds food names via the AI Gateway (`openai/text-embedding-3-small`).
+- **`FoodsEmbeddingService`** + **`/api/cron/embed-foods`** (weekly) keep new foods embedded;
+  **`scripts/backfill-food-embeddings.ts`** does the one-off ~1.9M bulk backfill.
+- **`FoodsSemanticService`**: KNN by cosine (`embedding <=> $1`) via raw parameterized SQL
+  (`lib/db.ts` pg pool — no stored proc), scoped to global + the user's own foods.
+- **`groundItems` → `pickBest`**: unions semantic KNN + lexical (FTS/trigram) candidates and
+  re-ranks by `0.55·semantic + 0.45·dice + sourceBoost`; accepts on `semantic ≥ 0.5` OR
+  `dice ≥ 0.6`. Falls back to lexical-only whenever semantic is unavailable.
 
-Impact: directly lifts `dbMatchCoverage` and kills the wrong‑match calorie blowups.
-Effort: **medium** (one‑time embed of ~1.9M rows + 1 embedding call per query item).
+This makes "baingan" match "eggplant" and stops wrong lexical matches (the "sour cream"
+class). Thresholds (`SEMANTIC_FLOOR`/`LEXICAL_FLOOR`) are tunable — gate on the eval.
+
+### Enablement runbook
+1. Apply **migration 068** to the prod Supabase (`pgvector` must be allowed — it is on Supabase).
+2. Ensure **`DATABASE_URL`** in Vercel is the **pooled** (transaction, port 6543) connstr.
+3. Backfill: `AI_GATEWAY_API_KEY=… DATABASE_URL=… npx tsx scripts/backfill-food-embeddings.ts`
+   (optionally drop the HNSW index first, then recreate after — faster bulk build).
+4. Set **`NUTRITION_SEMANTIC_MATCH=true`** in Vercel.
+5. Re-run the eval (`scripts/run-nutrition-eval.mjs`) and confirm `dbMatchCoverage` ↑; tune
+   the floors if needed. The weekly cron keeps new foods embedded.
+
+Cost: one-time embed of ~1.9M short names ≈ a few M tokens (~single-digit dollars) +
+1 embed call per logged meal.
 
 ## Lever 2 — COVERAGE (data loading; where Cal AI is strong)
 

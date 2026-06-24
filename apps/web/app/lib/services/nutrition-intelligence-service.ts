@@ -17,6 +17,7 @@ import {
 
 import { FoodLogImageService } from './food-log-image-service';
 import { FoodLogService } from './food-log-service';
+import { FoodsSemanticService, type SemanticCandidate } from './foods-semantic-service';
 import { FoodsService } from './foods-service';
 
 /**
@@ -439,13 +440,25 @@ export class NutritionIntelligenceService {
     userId: string,
     items: ParsedFoodItem[]
   ): Promise<NutritionDraftItem[]> {
+    // Semantic candidate retrieval for the whole plate in one shot (one embedMany call +
+    // a KNN per item). Returns null when semantic matching is disabled / unavailable, in
+    // which case we ground on lexical search alone (the previous behaviour).
+    let semanticByIndex: Array<SemanticCandidate[]> | null = null;
+    try {
+      semanticByIndex = await FoodsSemanticService.searchMany(userId, items.map((it) => it.name));
+    } catch {
+      semanticByIndex = null;
+    }
+
     return Promise.all(
-      items.map(async (it) => {
+      items.map(async (it, idx) => {
         const grams = this.effectiveGrams(it);
         let match: FoodDTO | null = null;
         try {
-          const candidates = await FoodsService.search(userId, { query: it.name, limit: 5 });
-          match = this.pickBestFood(it.name, candidates);
+          // Hybrid: combine semantic KNN candidates with the lexical (FTS/trigram) ones,
+          // then re-rank by semantic + lexical + source before grounding.
+          const lexical = await FoodsService.search(userId, { query: it.name, limit: 5 });
+          match = this.pickBest(it.name, semanticByIndex?.[idx] ?? null, lexical);
         } catch {
           match = null;
         }
@@ -487,25 +500,49 @@ export class NutritionIntelligenceService {
     return it.grams;
   }
 
+  // Acceptance floors (tunable — gate changes on the §8.3 eval, esp. dbMatchCoverage and
+  // cal-within-±40%). A match is accepted on a strong SEMANTIC match OR a strong LEXICAL
+  // match; the combined score only decides WHICH candidate wins. Grounding to a wrong food
+  // (e.g. "sour cream or yogurt" → "sour cream") is worse than keeping the model's estimate,
+  // so both floors stay conservative.
+  private static readonly SEMANTIC_FLOOR = 0.5; // cosine similarity (text-embedding-3-small)
+  private static readonly LEXICAL_FLOOR = 0.6;  // token Sørensen–Dice
+
   /**
-   * Pick the best DB candidate for a parsed name, or null when none is close
-   * enough (grounding to a wrong food is worse than keeping the estimate). Uses
-   * a token Sørensen–Dice similarity with a 0.6 floor. The floor is deliberately
-   * strict: grounding to a wrong DB food (e.g. "sour cream or yogurt" → "sour cream")
-   * silently swaps in the wrong nutrient density and is worse than keeping the
-   * model's own estimate, so we only ground on a confident name match.
+   * Pick the best DB candidate for a parsed name from the union of semantic (vector KNN) and
+   * lexical (FTS/trigram) candidates, or null when none is close enough. Re-ranks by a blend
+   * of semantic similarity + lexical Dice + a small boost for the user's own/verified foods.
+   * Falls back to lexical-only when `semantic` is null (semantic matching off/unavailable).
    */
-  private static pickBestFood(name: string, candidates: FoodDTO[]): FoodDTO | null {
+  private static pickBest(
+    name: string,
+    semantic: SemanticCandidate[] | null,
+    lexical: FoodDTO[],
+  ): FoodDTO | null {
+    // Union the two candidate pools by food id, carrying the semantic score (0 for
+    // lexical-only candidates, which have no embedding score).
+    const byId = new Map<string, { food: FoodDTO; sem: number }>();
+    for (const c of semantic ?? []) byId.set(c.food.id, { food: c.food, sem: c.semanticScore });
+    for (const f of lexical) if (!byId.has(f.id)) byId.set(f.id, { food: f, sem: 0 });
+
     let best: FoodDTO | null = null;
     let bestScore = 0;
-    for (const c of candidates) {
-      const score = this.diceSimilarity(name, c.name);
+    let bestSem = 0;
+    let bestDice = 0;
+    for (const { food, sem } of byId.values()) {
+      const dice = this.diceSimilarity(name, food.name);
+      const sourceBoost = food.source === 'custom' || food.source === 'recipe' ? 0.08 : 0;
+      const score = 0.55 * sem + 0.45 * dice + sourceBoost;
       if (score > bestScore) {
         bestScore = score;
-        best = c;
+        best = food;
+        bestSem = sem;
+        bestDice = dice;
       }
     }
-    return bestScore >= 0.6 ? best : null;
+
+    if (best && (bestSem >= this.SEMANTIC_FLOOR || bestDice >= this.LEXICAL_FLOOR)) return best;
+    return null;
   }
 
   private static tokens(s: string): Set<string> {
