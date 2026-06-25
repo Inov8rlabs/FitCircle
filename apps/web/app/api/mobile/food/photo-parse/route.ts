@@ -101,6 +101,27 @@ export async function POST(request: NextRequest) {
         console.error('[Mobile API] Photo parse fallback save failed:', saveError);
       }
 
+      // Route-level correlation log for a real analysis failure (rate-limits are
+      // expected and already gated, so skip those). The service logs WHY the AI
+      // parse failed ([nutrition-parse-failure]); this ties that failure to the
+      // saved entry the user sees, plus the request's file metadata + latency.
+      if (!isRate) {
+        console.error(
+          '[nutrition-parse-failure:route]',
+          JSON.stringify({
+            source: 'photo',
+            userId: user.id,
+            code: 'PARSE_FAILED',
+            mimeType: file.type,
+            fileBytes: file.size,
+            hasNote: !!note,
+            requestMs: Date.now() - startTime,
+            fallbackSaved: !!saved,
+            savedEntryId: saved?.entryId ?? null,
+          })
+        );
+      }
+
       return NextResponse.json(
         {
           success: false,

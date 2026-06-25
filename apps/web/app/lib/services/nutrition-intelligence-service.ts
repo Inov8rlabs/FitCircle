@@ -132,6 +132,7 @@ export class NutritionIntelligenceService {
     // 3. Structured vision call via the AI Gateway. generateText + Output.object validates
     //    the result against the Zod schema (retries internally on malformed output).
     let result: PhotoParseResult;
+    const startedAt = Date.now();
     try {
       const { output } = await generateText({
         model: VISION_MODEL,
@@ -155,7 +156,11 @@ export class NutritionIntelligenceService {
       });
       result = output;
     } catch (err) {
-      console.error('[NutritionIntelligenceService.parsePhoto] vision call/validation failed:', err);
+      this.logParseFailure('photo', userId, VISION_MODEL, Date.now() - startedAt, {
+        mimeType,
+        imageBytes: imageBytes.length,
+        imageHash: imageHash.slice(0, 12),
+      }, err);
       throw new Error('ParseFailed');
     }
 
@@ -185,6 +190,7 @@ export class NutritionIntelligenceService {
     }
 
     let result: PhotoParseResult;
+    const startedAt = Date.now();
     try {
       const { output } = await generateText({
         model: VOICE_MODEL,
@@ -206,7 +212,9 @@ export class NutritionIntelligenceService {
       });
       result = output;
     } catch (err) {
-      console.error('[NutritionIntelligenceService.parseVoice] text call/validation failed:', err);
+      this.logParseFailure('voice', userId, VOICE_MODEL, Date.now() - startedAt, {
+        transcriptLength: transcript.length,
+      }, err);
       throw new Error('ParseFailed');
     }
 
@@ -246,6 +254,7 @@ export class NutritionIntelligenceService {
     const portion = portionBits.length ? portionBits.join(', ') : 'one typical serving';
 
     let llm: ParsedFoodItem;
+    const startedAt = Date.now();
     try {
       const { output } = await generateText({
         model: VOICE_MODEL,
@@ -267,7 +276,10 @@ export class NutritionIntelligenceService {
       });
       llm = output;
     } catch (err) {
-      console.error('[NutritionIntelligenceService.estimateItem] text call/validation failed:', err);
+      this.logParseFailure('item', userId, VOICE_MODEL, Date.now() - startedAt, {
+        name: name.trim(),
+        portion,
+      }, err);
       throw new Error('ParseFailed');
     }
 
@@ -631,6 +643,82 @@ export class NutritionIntelligenceService {
       .eq('user_id', userId)
       .gte('created_at', since.toISOString());
     return count ?? 0;
+  }
+
+  /**
+   * Pull the diagnostically useful fields out of whatever `generateText` threw so a
+   * parse failure produces ONE structured, greppable log line we can analyse and
+   * alert on. Duck-typed (no `ai` SDK class imports) to stay robust across versions.
+   * NEVER includes raw model input (image bytes, transcripts) — only metadata.
+   *
+   * Classifies the failure into `kind` so we can group them:
+   *  - `timeout_or_abort`   — our AbortSignal.timeout fired (model too slow)
+   *  - `api_call_error`     — gateway/provider HTTP error (APICallError: statusCode/url)
+   *  - `no_object_generated`— model replied but its output failed schema validation
+   *  - `schema_validation`  — Zod/type validation error
+   *  - `unknown`            — anything else
+   */
+  private static describeParseError(err: unknown): Record<string, unknown> {
+    const e = err as any;
+    const name: string = e?.name ?? 'Error';
+    const message: string = e?.message ?? String(err);
+
+    let kind = 'unknown';
+    if (/Abort|Timeout/i.test(name) || /abort|timed?\s?out/i.test(message)) {
+      kind = 'timeout_or_abort';
+    } else if (e?.statusCode != null || e?.url != null) {
+      kind = 'api_call_error';
+    } else if (name === 'NoObjectGeneratedError' || e?.text != null) {
+      kind = 'no_object_generated';
+    } else if (name === 'TypeValidationError' || name === 'ZodError') {
+      kind = 'schema_validation';
+    }
+
+    const truncate = (s: unknown, n = 600): string | undefined =>
+      typeof s === 'string' ? (s.length > n ? `${s.slice(0, n)}…(+${s.length - n} more)` : s) : undefined;
+
+    return {
+      kind,
+      name,
+      message,
+      statusCode: e?.statusCode,
+      url: e?.url,
+      isRetryable: e?.isRetryable,
+      finishReason: e?.finishReason,
+      usage: e?.usage,
+      // NoObjectGeneratedError carries the raw text the model produced that failed validation.
+      modelText: truncate(e?.text),
+      responseBody: truncate(e?.responseBody),
+      causeName: e?.cause?.name,
+      causeMessage: truncate(e?.cause?.message, 300),
+    };
+  }
+
+  /**
+   * Emit one structured log line for a failed AI parse. Tagged `[nutrition-parse-failure]`
+   * so it can be grepped/alerted on. `input` holds non-sensitive request metadata
+   * (sizes, hashes, item name) — never raw photos or transcripts.
+   */
+  private static logParseFailure(
+    source: 'photo' | 'voice' | 'item',
+    userId: string,
+    model: string,
+    durationMs: number,
+    input: Record<string, unknown>,
+    err: unknown
+  ): void {
+    console.error(
+      '[nutrition-parse-failure]',
+      JSON.stringify({
+        source,
+        userId,
+        model,
+        durationMs,
+        input,
+        error: this.describeParseError(err),
+        at: new Date().toISOString(),
+      })
+    );
   }
 
   /** Log the call (cap accounting) + cache the result by image hash. Failure-isolated. */

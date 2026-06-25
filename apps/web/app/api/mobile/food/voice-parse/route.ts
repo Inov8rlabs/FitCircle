@@ -88,6 +88,24 @@ export async function POST(request: NextRequest) {
         console.error('[Mobile API] Voice parse fallback save failed:', saveError);
       }
 
+      // Route-level correlation log for a real analysis failure (rate-limits skipped).
+      // The service logs WHY the parse failed ([nutrition-parse-failure]); this ties it
+      // to the saved entry the user sees, plus request latency.
+      if (!isRate) {
+        console.error(
+          '[nutrition-parse-failure:route]',
+          JSON.stringify({
+            source: 'voice',
+            userId: user.id,
+            code: 'PARSE_FAILED',
+            transcriptLength: parsed.data.transcript.length,
+            requestMs: Date.now() - startTime,
+            fallbackSaved: !!saved,
+            savedEntryId: saved?.entryId ?? null,
+          })
+        );
+      }
+
       return NextResponse.json(
         {
           success: false,
