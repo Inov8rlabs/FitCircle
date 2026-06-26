@@ -35,14 +35,21 @@ async function verifyGoogleIdToken(idToken: string): Promise<GoogleJWTPayload | 
     const GOOGLE_JWKS_URL = new URL('https://www.googleapis.com/oauth2/v3/certs');
     const jwks = createRemoteJWKSet(GOOGLE_JWKS_URL);
 
-    const clientId = process.env.GOOGLE_CLIENT_ID;
-    if (!clientId) {
+    // A Google ID token's `aud` is the OAuth client ID that requested it, which differs
+    // per platform (iOS client id vs the Web/server client id Android uses as its
+    // serverClientId). Accept a comma-separated allowlist so one backend serves all
+    // platforms. jose verifies the token's aud against any entry in the array.
+    const audiences = (process.env.GOOGLE_CLIENT_ID ?? '')
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean);
+    if (audiences.length === 0) {
       console.warn('[Google Auth] GOOGLE_CLIENT_ID not configured, skipping audience check');
     }
 
     const { payload } = await jwtVerify(idToken, jwks, {
       issuer: ['https://accounts.google.com', 'accounts.google.com'],
-      ...(clientId ? { audience: clientId } : {}),
+      ...(audiences.length > 0 ? { audience: audiences } : {}),
     });
 
     return payload as unknown as GoogleJWTPayload;
