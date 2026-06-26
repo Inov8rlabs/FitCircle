@@ -16,7 +16,13 @@ export interface NutritionData {
   fiber_g?: number;
   sugar_g?: number;
   sodium_mg?: number;
-  [key: string]: number | undefined;
+  /** AI-derived plate health score (0–10). */
+  health_score?: number;
+  /** Per-ingredient AI breakdown (passthrough JSON; clients own the item shape). */
+  items?: Array<Record<string, unknown>>;
+  // Carries the macro summary AND the rich AI breakdown — values beyond the typed
+  // macros above may be objects/arrays, so the index value is `unknown`.
+  [key: string]: unknown;
 }
 
 export interface FoodLogEntry {

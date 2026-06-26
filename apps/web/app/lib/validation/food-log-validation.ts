@@ -5,6 +5,25 @@
 
 import { z } from 'zod';
 
+// `nutrition_data` is a JSONB passthrough that carries the macro summary AND the rich
+// AI breakdown (per-ingredient `items`, `health_score`). iOS/Android round-trip the full
+// object on create AND on the re-analyze PATCH, so accept the known numeric fields plus
+// extra keys (.passthrough). The old `z.record(z.number())` wrongly rejected `items: [...]`,
+// which 400'd any entry that carried an ingredient breakdown.
+const nutritionDataSchema = z
+  .object({
+    calories: z.number().optional(),
+    protein_g: z.number().optional(),
+    carbs_g: z.number().optional(),
+    fat_g: z.number().optional(),
+    fiber_g: z.number().optional(),
+    sugar_g: z.number().optional(),
+    sodium_mg: z.number().optional(),
+    health_score: z.number().optional(),
+    items: z.array(z.record(z.any())).max(100).optional(),
+  })
+  .passthrough();
+
 export const CreateFoodLogEntrySchema = z.object({
   entry_type: z.enum(['food', 'water', 'supplement']),
   logged_at: z.string().datetime().optional(),
@@ -13,7 +32,7 @@ export const CreateFoodLogEntrySchema = z.object({
   title: z.string().max(200).optional(),
   description: z.string().max(1000).optional(),
   notes: z.string().max(2000).optional(),
-  nutrition_data: z.record(z.number()).optional(),
+  nutrition_data: nutritionDataSchema.optional(),
   water_ml: z.number().int().min(1).max(10000).optional(),
   supplement_name: z.string().max(200).optional(),
   supplement_dosage: z.string().max(100).optional(),
@@ -39,7 +58,7 @@ export const UpdateFoodLogEntrySchema = z.object({
   title: z.string().max(200).optional(),
   description: z.string().max(1000).optional(),
   notes: z.string().max(2000).optional(),
-  nutrition_data: z.record(z.number()).optional(),
+  nutrition_data: nutritionDataSchema.optional(),
   water_ml: z.number().int().min(1).max(10000).optional(),
   supplement_name: z.string().max(200).optional(),
   supplement_dosage: z.string().max(100).optional(),

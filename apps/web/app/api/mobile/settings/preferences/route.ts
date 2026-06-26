@@ -31,6 +31,11 @@ const preferencesSchema = z.object({
       units: z.enum(['metric', 'imperial']).optional(),
     })
     .optional(),
+  security: z
+    .object({
+      biometric_auth_enabled: z.boolean().optional(),
+    })
+    .optional(),
 });
 
 /**
@@ -76,6 +81,9 @@ export async function GET(request: NextRequest) {
         theme: preferences.display?.theme || 'dark',
         language: preferences.display?.language || 'en',
         units: preferences.display?.units || 'metric',
+      },
+      security: {
+        biometric_auth_enabled: preferences.security?.biometric_auth_enabled ?? false,
       },
     };
 
@@ -176,6 +184,10 @@ export async function PUT(request: NextRequest) {
       display: {
         ...(currentPreferences.display || {}),
         ...(validatedData.display || {}),
+      },
+      security: {
+        ...(currentPreferences.security || {}),
+        ...(validatedData.security || {}),
       },
     };
 
