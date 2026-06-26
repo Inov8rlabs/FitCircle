@@ -6,15 +6,18 @@
 // before the Sentry project exists.
 import * as Sentry from '@sentry/nextjs';
 
-const dsn = process.env.SENTRY_DSN;
+import { WEB_SENTRY_DSN } from './sentry.dsn';
+
+const dsn = WEB_SENTRY_DSN;
 
 Sentry.init({
   dsn,
-  enabled: Boolean(dsn),
+  // Active on Vercel (preview + production); off in local `next dev` to avoid noise.
+  enabled: Boolean(dsn) && process.env.NODE_ENV !== 'development',
   // Prefer Vercel's per-deployment environment (production/preview/development).
   environment: process.env.VERCEL_ENV || process.env.NODE_ENV,
   // Errors are always captured; sample performance traces lightly in prod.
-  tracesSampleRate: process.env.NODE_ENV === 'production' ? 0.1 : 1.0,
+  tracesSampleRate: process.env.VERCEL_ENV === 'production' ? 0.1 : 1.0,
   // We attach our own userId where useful; don't auto-send IP/cookies/headers.
   sendDefaultPii: false,
 });
