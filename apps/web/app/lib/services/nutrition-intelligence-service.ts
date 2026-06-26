@@ -1,6 +1,7 @@
 import { createHash } from 'crypto';
 
 import { generateText, Output } from 'ai';
+import * as Sentry from '@sentry/nextjs';
 
 import { createAdminSupabase } from '../supabase-admin';
 import type { FoodDTO } from '../types/foods';
@@ -707,6 +708,7 @@ export class NutritionIntelligenceService {
     input: Record<string, unknown>,
     err: unknown
   ): void {
+    const detail = this.describeParseError(err);
     console.error(
       '[nutrition-parse-failure]',
       JSON.stringify({
@@ -715,10 +717,23 @@ export class NutritionIntelligenceService {
         model,
         durationMs,
         input,
-        error: this.describeParseError(err),
+        error: detail,
         at: new Date().toISOString(),
       })
     );
+
+    // Also report to Sentry (no-op until SENTRY_DSN is configured). Tags drive
+    // grouping/filtering by where it failed and our classified failure `kind`.
+    Sentry.captureException(err, {
+      level: 'error',
+      tags: {
+        feature: 'nutrition_parse',
+        parse_source: source,
+        parse_error_kind: String(detail.kind),
+      },
+      extra: { model, durationMs, input, ...detail },
+      user: { id: userId },
+    });
   }
 
   /** Log the call (cap accounting) + cache the result by image hash. Failure-isolated. */

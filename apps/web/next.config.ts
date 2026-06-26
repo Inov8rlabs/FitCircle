@@ -1,4 +1,5 @@
 import type { NextConfig } from 'next';
+import { withSentryConfig } from '@sentry/nextjs';
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
@@ -85,4 +86,14 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default nextConfig;
+// Wrap with Sentry. Without SENTRY_AUTH_TOKEN/ORG/PROJECT the build plugin skips
+// source-map upload (kept off by default so local/preview builds stay clean); set
+// those in CI/Vercel to enable readable stack traces. The runtime SDK stays inert
+// until SENTRY_DSN is set (see sentry.server.config.ts).
+export default withSentryConfig(nextConfig, {
+  org: process.env.SENTRY_ORG,
+  project: process.env.SENTRY_PROJECT,
+  authToken: process.env.SENTRY_AUTH_TOKEN,
+  silent: !process.env.CI,
+  sourcemaps: { disable: !process.env.SENTRY_AUTH_TOKEN },
+});
