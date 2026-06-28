@@ -96,9 +96,10 @@ export default withSentryConfig(nextConfig, {
   authToken: process.env.SENTRY_AUTH_TOKEN,
   silent: !process.env.CI,
   sourcemaps: { disable: !process.env.SENTRY_AUTH_TOKEN },
-  // Route browser events through this app's own domain so ad blockers / privacy
-  // extensions can't drop them before they reach Sentry.
-  tunnelRoute: '/monitoring',
+  // NOTE: tunnelRoute is intentionally NOT used. This app's middleware matches
+  // any extensionless path (incl. a tunnel route) and redirects/404s it, so the
+  // tunnel endpoint never resolves and would silently drop ALL browser events.
+  // Browser events therefore go directly to ingest.sentry.io (the default).
   // Strip the Sentry SDK's own noisy logger from the production bundle.
   disableLogger: true,
   // Upload a wider set of client bundles for complete source maps (token only).
