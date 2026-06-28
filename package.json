@@ -13,6 +13,7 @@
     "lint": "cd apps/web && npm run lint",
     "format": "prettier --write \"**/*.{ts,tsx,md,json}\"",
     "typecheck": "cd apps/web && npm run type-check",
+    "postinstall": "node scripts/patch-amplitude-diagnostics.cjs",
     "clean": "rm -rf node_modules apps/*/node_modules packages/*/node_modules"
   },
   "devDependencies": {
