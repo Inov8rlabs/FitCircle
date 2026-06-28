@@ -12,5 +12,10 @@ Sentry.init({
   enabled: Boolean(dsn) && process.env.NODE_ENV !== 'development',
   environment: process.env.VERCEL_ENV || process.env.NODE_ENV,
   tracesSampleRate: process.env.VERCEL_ENV === 'production' ? 0.1 : 1.0,
+  // Forward edge logs to Sentry's Logs product (see sentry.server.config.ts).
+  enableLogs: true,
+  integrations: [
+    Sentry.consoleLoggingIntegration({ levels: ['info', 'warn', 'error'] }),
+  ],
   sendDefaultPii: false,
 });

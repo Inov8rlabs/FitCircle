@@ -86,14 +86,21 @@ const nextConfig: NextConfig = {
   },
 };
 
-// Wrap with Sentry. Without SENTRY_AUTH_TOKEN/ORG/PROJECT the build plugin skips
-// source-map upload (kept off by default so local/preview builds stay clean); set
-// those in CI/Vercel to enable readable stack traces. The runtime SDK stays inert
-// until SENTRY_DSN is set (see sentry.server.config.ts).
+// Wrap with Sentry. org/project default to the real Sentry project so release
+// creation works as soon as SENTRY_AUTH_TOKEN is set in Vercel; without the token
+// the build plugin skips source-map upload (keeping local/preview builds clean).
+// The runtime SDK stays inert until a DSN is set (see sentry.server.config.ts).
 export default withSentryConfig(nextConfig, {
-  org: process.env.SENTRY_ORG,
-  project: process.env.SENTRY_PROJECT,
+  org: process.env.SENTRY_ORG || 'inov8r-labs-inc',
+  project: process.env.SENTRY_PROJECT || 'fitcircle-web-backend',
   authToken: process.env.SENTRY_AUTH_TOKEN,
   silent: !process.env.CI,
   sourcemaps: { disable: !process.env.SENTRY_AUTH_TOKEN },
+  // Route browser events through this app's own domain so ad blockers / privacy
+  // extensions can't drop them before they reach Sentry.
+  tunnelRoute: '/monitoring',
+  // Strip the Sentry SDK's own noisy logger from the production bundle.
+  disableLogger: true,
+  // Upload a wider set of client bundles for complete source maps (token only).
+  widenClientFileUpload: true,
 });

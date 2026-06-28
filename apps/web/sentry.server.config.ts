@@ -18,6 +18,13 @@ Sentry.init({
   environment: process.env.VERCEL_ENV || process.env.NODE_ENV,
   // Errors are always captured; sample performance traces lightly in prod.
   tracesSampleRate: process.env.VERCEL_ENV === 'production' ? 0.1 : 1.0,
+  // Pipe structured logs to Sentry (Logs product). The console integration
+  // forwards existing console.* calls so the heavy service-layer logging shows
+  // up in Sentry without a rewrite. Narrow `levels` if volume/cost is a concern.
+  enableLogs: true,
+  integrations: [
+    Sentry.consoleLoggingIntegration({ levels: ['info', 'warn', 'error'] }),
+  ],
   // We attach our own userId where useful; don't auto-send IP/cookies/headers.
   sendDefaultPii: false,
 });
