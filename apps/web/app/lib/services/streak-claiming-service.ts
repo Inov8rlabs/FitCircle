@@ -304,24 +304,43 @@ export class StreakClaimingService {
 
     const claimedDates = new Set(claims?.map((c) => c.claim_date) || []);
 
-    // Check each of the last 7 days
-    for (let i = 0; i <= 7; i++) {
-      const checkDate = new Date(today);
-      checkDate.setDate(checkDate.getDate() - i);
-      const dateStr = formatDateYYYYMMDD(checkDate);
+    // Check each of the last 7 days. Run the per-day work CONCURRENTLY rather than
+    // sequentially: the old loop did ~24 serial Supabase round-trips, which under any
+    // latency could exceed the function timeout (or exhaust connections) and surface to
+    // the client as a 500. Each day is also isolated — a transient failure on one day
+    // degrades that day to "not claimable" instead of failing the whole request.
+    const dayResults = await Promise.all(
+      Array.from({ length: 8 }, (_, i) => i).map(async (i): Promise<ClaimableDay> => {
+        const checkDate = new Date(today);
+        checkDate.setDate(checkDate.getDate() - i);
+        const dateStr = formatDateYYYYMMDD(checkDate);
+        const claimed = claimedDates.has(dateStr);
 
-      const claimed = claimedDates.has(dateStr);
-      const healthCheck = await this.checkHealthData(userId, dateStr);
-      const canClaimResult = await this.canClaimStreak(userId, checkDate, timezone);
-
-      days.push({
-        date: dateStr,
-        claimed,
-        hasHealthData: healthCheck.hasAnyData,
-        canClaim: canClaimResult.canClaim && !claimed,
-        reason: canClaimResult.reason,
-      });
-    }
+        try {
+          const [healthCheck, canClaimResult] = await Promise.all([
+            this.checkHealthData(userId, dateStr),
+            this.canClaimStreak(userId, checkDate, timezone),
+          ]);
+          return {
+            date: dateStr,
+            claimed,
+            hasHealthData: healthCheck.hasAnyData,
+            canClaim: canClaimResult.canClaim && !claimed,
+            reason: canClaimResult.reason,
+          };
+        } catch (error) {
+          console.error(`[getClaimableDays] Failed to evaluate ${dateStr}:`, error);
+          return {
+            date: dateStr,
+            claimed,
+            hasHealthData: false,
+            canClaim: false,
+            reason: 'Could not determine claim status',
+          };
+        }
+      })
+    );
+    days.push(...dayResults);
 
     return days.sort((a, b) => b.date.localeCompare(a.date));
   }

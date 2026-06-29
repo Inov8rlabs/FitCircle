@@ -41,9 +41,22 @@ import { FoodsService } from './foods-service';
 // back for Sonnet's portion nuance, set this to 'anthropic/claude-sonnet-4.6'.
 const VISION_MODEL = 'anthropic/claude-haiku-4.5';
 
-// Voice / single-item parsing is text-only (no image), already fast — kept on
-// Sonnet 4.6 for slightly better free-text parsing. p95 target < 1.2s (§7.6).
+// Voice parsing is text-only (no image) — kept on Sonnet 4.6 for slightly better
+// free-text parsing. p95 target < 1.2s (§7.6).
 const VOICE_MODEL = 'anthropic/claude-sonnet-4.6';
+
+// Single-item re-estimate ("tap to fix"). This was on Sonnet 4.6 with a 25s abort and
+// was timing out in production ("AbortError: Delay was aborted" — the model overran the
+// budget and the retry backoff got killed), so the re-estimate silently failed. Like the
+// photo path, the result is DB-grounded and user-reviewed, so Haiku 4.5 — materially
+// faster — gives the accuracy we need with far better reliability.
+const ITEM_MODEL = 'anthropic/claude-haiku-4.5';
+
+// Hard ceilings for the AI parse calls. Kept well under the routes' maxDuration (60s) so a
+// slow model response fails over cleanly with time to spare for grounding + the HTTP response,
+// rather than overrunning the function. The single-item/voice text parses were on 25s, which
+// the model occasionally overran; give them the same headroom the photo path already has.
+const TEXT_PARSE_TIMEOUT_MS = 45_000;
 
 const SYSTEM_PROMPT = [
   'You are a careful nutrition estimation assistant. Given a photo of a meal, identify every distinct',
@@ -198,7 +211,7 @@ export class NutritionIntelligenceService {
         output: Output.object({ schema: photoParseResultSchema }),
         system: VOICE_SYSTEM_PROMPT,
         maxRetries: 1,
-        abortSignal: AbortSignal.timeout(25_000), // text parse is fast; fail over quickly
+        abortSignal: AbortSignal.timeout(TEXT_PARSE_TIMEOUT_MS),
         messages: [
           {
             role: 'user',
@@ -258,11 +271,11 @@ export class NutritionIntelligenceService {
     const startedAt = Date.now();
     try {
       const { output } = await generateText({
-        model: VOICE_MODEL,
+        model: ITEM_MODEL,
         output: Output.object({ schema: parsedFoodItemSchema }),
         system: ITEM_SYSTEM_PROMPT,
         maxRetries: 1,
-        abortSignal: AbortSignal.timeout(25_000), // single-item estimate is fast
+        abortSignal: AbortSignal.timeout(TEXT_PARSE_TIMEOUT_MS),
         messages: [
           {
             role: 'user',
@@ -277,7 +290,7 @@ export class NutritionIntelligenceService {
       });
       llm = output;
     } catch (err) {
-      this.logParseFailure('item', userId, VOICE_MODEL, Date.now() - startedAt, {
+      this.logParseFailure('item', userId, ITEM_MODEL, Date.now() - startedAt, {
         name: name.trim(),
         portion,
       }, err);

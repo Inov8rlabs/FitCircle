@@ -1,7 +1,12 @@
 import { type NextRequest, NextResponse } from 'next/server';
+import * as Sentry from '@sentry/nextjs';
 
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { StreakClaimingService } from '@/lib/services/streak-claiming-service';
+
+// Evaluates the last 7 days against the streak rules (several DB lookups); give it
+// room so a brief spell of DB latency fails over cleanly instead of timing out.
+export const maxDuration = 30;
 
 /**
  * GET /api/streaks/claimable-days
@@ -57,6 +62,26 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ days });
   } catch (error: any) {
     console.error('[GET /api/streaks/claimable-days] Error:', error);
+
+    // An expired/invalid token must surface as 401 so the client can refresh and retry,
+    // not as a 500 (which the app can't recover from and which pollutes error tracking).
+    if (error?.message === 'Unauthorized') {
+      return NextResponse.json(
+        {
+          success: false,
+          error: { code: 'UNAUTHORIZED', message: 'Invalid or expired token' },
+        },
+        { status: 401 }
+      );
+    }
+
+    // Unlike a parse failure, this is an unexpected server error — capture it with
+    // enough context to root-cause the next occurrence (the trace ID ties it back to
+    // the client-side HTTPClientError that the mobile app reports).
+    Sentry.captureException(error, {
+      level: 'error',
+      tags: { feature: 'streaks', route: 'claimable-days' },
+    });
 
     return NextResponse.json(
       {
