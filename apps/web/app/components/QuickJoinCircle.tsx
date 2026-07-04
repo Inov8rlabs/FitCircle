@@ -76,33 +76,16 @@ export default function QuickJoinCircle({ isOpen, onClose, initialCode = '' }: Q
     setError('');
 
     try {
-      // Check if the challenge exists
-      const { data: challenge, error: challengeError } = await supabase
-        .from('fitcircles')
-        .select(`
-          id,
-          name,
-          description,
-          type,
-          status,
-          start_date,
-          end_date,
-          participant_count,
-          max_participants,
-          creator_id,
-          profiles:creator_id (
-            display_name,
-            avatar_url
-          )
-        `)
-        .eq('invite_code', codeToValidate)
-        .single();
+      // Check if the challenge exists via service-role route (never exposes invite code).
+      const response = await fetch(`/api/fitcircles/validate?code=${encodeURIComponent(codeToValidate)}`);
 
-      if (challengeError || !challenge) {
+      if (!response.ok) {
         setError('Invalid invite code. Please check and try again.');
         setIsValidating(false);
         return;
       }
+
+      const challenge = await response.json();
 
       // Check if user is already a member
       if (user) {

@@ -72,45 +72,19 @@ export default function JoinCirclePage() {
     try {
       console.log('Validating invite code:', inviteCode);
 
-      // Fetch circle details using invite code (works for both authenticated and anonymous users)
-      const { data: circleData, error: circleError } = await supabase
-        .from('fitcircles')
-        .select(`
-          id,
-          name,
-          description,
-          type,
-          status,
-          start_date,
-          end_date,
-          max_participants,
-          creator_id,
-          invite_code,
-          profiles:creator_id (
-            display_name,
-            avatar_url
-          )
-        `)
-        .eq('invite_code', inviteCode.toUpperCase())
-        .single();
+      // Fetch circle preview via service-role route (works for both
+      // authenticated and anonymous users, and never exposes the invite code).
+      const response = await fetch(`/api/fitcircles/validate?code=${encodeURIComponent(inviteCode.toUpperCase())}`);
 
-      console.log('Circle query result:', { data: circleData, error: circleError });
-
-      if (circleError || !circleData) {
+      if (!response.ok) {
         setJoinError('Invalid or expired invite code');
         setCanJoin(false);
         setIsLoading(false);
         return;
       }
 
-      const circleInfo = circleData as any;
+      const circleInfo = await response.json();
 
-      // Get actual participant count from challenge_participants table
-      const { count: participantCount } = await supabase
-        .from('fitcircle_members')
-        .select('*', { count: 'exact', head: true })
-        .eq('fitcircle_id', circleInfo.id)
-        .eq('status', 'active');
       const circle: CircleDetails = {
         id: circleInfo.id,
         name: circleInfo.name,
@@ -119,11 +93,11 @@ export default function JoinCirclePage() {
         status: circleInfo.status,
         start_date: circleInfo.start_date,
         end_date: circleInfo.end_date,
-        participant_count: participantCount || 0,
+        participant_count: circleInfo.participant_count || 0,
         max_participants: circleInfo.max_participants,
         creator: {
-          display_name: circleInfo.profiles?.display_name || 'Circle Creator',
-          avatar_url: circleInfo.profiles?.avatar_url,
+          display_name: circleInfo.creator?.display_name || 'Circle Creator',
+          avatar_url: circleInfo.creator?.avatar_url,
         },
       };
 

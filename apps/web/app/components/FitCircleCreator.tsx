@@ -199,34 +199,27 @@ export default function FitCircleCreator() {
 
   const fetchParticipants = async (challengeId: string) => {
     try {
-      const { data, error } = await supabase
-        .from('fitcircle_members')
-        .select(`
-          *,
-          profiles:user_id (
-            username,
-            display_name,
-            avatar_url
-          )
-        `)
-        .eq('fitcircle_id', challengeId)
-        .eq('status', 'active')
-        .order('total_points', { ascending: false })
-        .limit(10);
+      // Other members' fitcircle_members rows + profile info are cross-user
+      // data: migration 069 makes fitcircle_members own-row-only for the
+      // browser client, so this now goes through the service-role
+      // participants route instead of a direct table+profile join.
+      const response = await fetch(`/api/fitcircles/${challengeId}/participants`);
+      if (!response.ok) {
+        throw new Error('Failed to fetch participants');
+      }
+      const { participants: data } = await response.json();
 
-      if (error) throw error;
-
-      const formattedParticipants = data?.map((p: any) => ({
+      const formattedParticipants = (data || []).map((p: any) => ({
         id: p.id,
         user_id: p.user_id,
-        username: p.profiles?.username || 'Unknown',
-        display_name: p.profiles?.display_name || 'User',
-        avatar_url: p.profiles?.avatar_url,
+        username: p.username || 'Unknown',
+        display_name: p.display_name || 'User',
+        avatar_url: p.avatar_url,
         rank: p.rank || 0,
         total_points: p.total_points || 0,
         progress_percentage: p.progress_percentage || 0,
         last_check_in_at: p.last_check_in_at,
-      })) || [];
+      }));
 
       setParticipants(formattedParticipants);
     } catch (error) {

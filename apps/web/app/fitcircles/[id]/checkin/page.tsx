@@ -48,18 +48,19 @@ export default function CheckInPage() {
 
   const fetchFitCircle = async () => {
     try {
-      const { data, error } = await supabase
-        .from('fitcircles')
-        .select('*')
-        .eq('id', circleId)
-        .single();
+      // Private circle rows are no longer readable by the browser anon-key
+      // client (migration 069). The service-role /api/fitcircles/[id] route
+      // returns the single circle (authorized: public, or creator/member for
+      // private).
+      const response = await fetch(`/api/fitcircles/${circleId}`);
 
-      if (error) {
-        console.error('Error fetching FitCircle:', error);
+      if (!response.ok) {
+        console.error('Error fetching FitCircle:', response.status, response.statusText);
         return;
       }
 
-      setFitCircle(data);
+      const data = await response.json();
+      setFitCircle(data.circle || null);
     } catch (err) {
       console.error('Error fetching FitCircle:', err);
     } finally {

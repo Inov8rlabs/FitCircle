@@ -61,7 +61,6 @@ import { Progress } from '@/components/ui/progress';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useUnitPreference } from '@/hooks/useUnitPreference';
 import { nutritionClient, type PrivacyTier } from '@/lib/api/nutrition-client';
-import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/stores/auth-store';
 
 
@@ -170,37 +169,41 @@ export default function FitCirclePage() {
 
   const fetchFitCircle = async () => {
     try {
-      const { data, error } = await supabase
-        .from('fitcircles')
-        .select('*')
-        .eq('id', circleId)
-        .single();
+      // Cross-user / private circle rows are no longer readable by the browser
+      // anon-key client (migration 069). The service-role /api/fitcircles/[id]
+      // route returns the single circle (public preview, or private if the caller
+      // is the creator/an active member) with an authorization gate.
+      const response = await fetch(`/api/fitcircles/${circleId}`);
 
-      if (error) {
+      if (!response.ok) {
         setError('FitCircle not found');
         return;
       }
 
-      if (data) {
-        // Type assertion to help TypeScript understand the data structure
-        const challengeData = data as any;
-        setFitCircle({
-          id: challengeData.id,
-          name: challengeData.name,
-          description: challengeData.description || '',
-          type: challengeData.type,
-          start_date: challengeData.start_date,
-          end_date: challengeData.end_date,
-          creator_id: challengeData.creator_id,
-          invite_code: challengeData.invite_code || '',
-          visibility: challengeData.visibility || 'public',
-          max_participants: challengeData.max_participants || 0,
-          created_at: challengeData.created_at || '',
-          participant_count: 0, // Will be updated by participants fetch
-          is_creator: challengeData.creator_id === user?.id,
-          is_participant: false, // Will be determined from participants
-        });
+      const data = await response.json();
+      const challengeData = data.circle;
+
+      if (!challengeData) {
+        setError('FitCircle not found');
+        return;
       }
+
+      setFitCircle({
+        id: challengeData.id,
+        name: challengeData.name,
+        description: challengeData.description || '',
+        type: challengeData.type,
+        start_date: challengeData.start_date,
+        end_date: challengeData.end_date,
+        creator_id: challengeData.creator_id,
+        invite_code: challengeData.invite_code || '',
+        visibility: challengeData.visibility || 'public',
+        max_participants: challengeData.max_participants || 0,
+        created_at: challengeData.created_at || '',
+        participant_count: challengeData.participant_count || 0, // May be refined by participants fetch
+        is_creator: challengeData.creator_id === user?.id,
+        is_participant: challengeData.is_participant ?? false, // May be refined by participants fetch
+      });
     } catch (err) {
       console.error('Error fetching FitCircle:', err);
       setError('Failed to load FitCircle');
@@ -272,65 +275,54 @@ export default function FitCirclePage() {
 
   const fetchParticipantsFallback = async () => {
     try {
-      // Fallback: Fetch participants directly without progress data
-      const { data: participantsData, error: participantsError } = await supabase
-        .from('fitcircle_members')
-        .select(`
-          id,
-          user_id,
-          challenge_id,
-          status,
-          joined_at,
-          profiles!challenge_participants_user_id_fkey (
-            display_name,
-            avatar_url
-          )
-        `)
-        .eq('fitcircle_id', circleId)
-        .eq('status', 'active');
+      // Fallback: the member list is served by the service-role participants
+      // route (migration 069: browser anon-key can no longer read other
+      // members' fitcircle_members rows directly).
+      const response = await fetch(`/api/fitcircles/${circleId}/participants`);
 
-      if (participantsError) {
-        console.error('Fallback query also failed:', participantsError);
+      if (!response.ok) {
+        console.error('Fallback participants API failed:', response.status, response.statusText);
         setParticipants([]);
         return;
       }
 
-      if (participantsData) {
-        // Create basic participant objects without progress data
-        const basicParticipants = participantsData.map((participant: any) => {
-          const isCurrentUser = participant.user_id === user?.id;
-          return {
-            ...participant,
-            display_name: participant.profiles?.display_name || participant.profiles?.[0]?.display_name || 'Unknown User',
-            avatar_url: participant.profiles?.avatar_url || participant.profiles?.[0]?.avatar_url || '',
-            latest_value: 0,
-            latest_date: new Date().toISOString().split('T')[0],
-            total_entries: 0,
-            is_public: false,
-            is_creator: participant.user_id === fitCircle?.creator_id,
-            is_current_user: isCurrentUser,
-            progress: 0,
-            current_value: 0,
-            target_value: 100,
-            progress_percentage: 0,
-            entries: []
-          };
-        });
+      const data = await response.json();
+      const participantsData = data.participants || [];
 
-        console.log('Participants loaded:', basicParticipants);
-        console.log('Current user is participant:', basicParticipants.some((p: any) => p.is_current_user));
+      // Create basic participant objects from the route response
+      const basicParticipants = participantsData.map((participant: any) => {
+        const isCurrentUser = participant.user_id === user?.id;
+        return {
+          ...participant,
+          display_name: participant.display_name || 'Unknown User',
+          avatar_url: participant.avatar_url || '',
+          latest_value: participant.latest_value || 0,
+          latest_date: participant.latest_date || new Date().toISOString().split('T')[0],
+          total_entries: participant.total_entries || 0,
+          is_public: participant.is_public ?? false,
+          is_creator: participant.is_creator ?? (participant.user_id === fitCircle?.creator_id),
+          is_current_user: isCurrentUser,
+          progress: Math.round(participant.progress_percentage || 0),
+          current_value: participant.latest_value || 0,
+          target_value: 100,
+          progress_percentage: participant.progress_percentage || 0,
+          entries: []
+        };
+      });
 
-        setParticipants(basicParticipants);
+      console.log('Participants loaded:', basicParticipants);
+      console.log('Current user is participant:', basicParticipants.some((p: any) => p.is_current_user));
 
-        // Update is_participant flag in fitCircle
-        const userIsParticipant = basicParticipants.some((p: any) => p.is_current_user);
+      setParticipants(basicParticipants);
 
-        setFitCircle(prev => prev ? {
-          ...prev,
-          participant_count: basicParticipants.length,
-          is_participant: userIsParticipant,
-        } : null);
-      }
+      // Update is_participant flag in fitCircle
+      const userIsParticipant = basicParticipants.some((p: any) => p.is_current_user);
+
+      setFitCircle(prev => prev ? {
+        ...prev,
+        participant_count: basicParticipants.length,
+        is_participant: userIsParticipant,
+      } : null);
     } catch (err) {
       console.error('Error in fallback fetch:', err);
       setParticipants([]);

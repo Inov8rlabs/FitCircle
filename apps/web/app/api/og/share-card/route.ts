@@ -29,6 +29,7 @@ export async function GET(request: NextRequest) {
       headers: {
         'Content-Type': 'text/html',
         'Cache-Control': 'public, max-age=86400',
+        'Content-Security-Policy': "default-src 'none'; img-src data:; style-src 'unsafe-inline'",
       },
     });
   } catch (error) {
@@ -143,13 +144,13 @@ function getCardContent(cardType: string, data: Record<string, unknown>): string
     case 'milestone':
       return `
         <div>
-          <div class="badge">${data.badgeEmoji || '🏆'}</div>
+          <div class="badge">${safeEmoji(data.badgeEmoji, '🏆')}</div>
           <div class="title">${escapeHtml(String(data.milestoneName || 'Milestone'))}</div>
           <div class="subtitle">Momentum milestone achieved</div>
         </div>
         <div>
-          <div class="stat">${data.dayCount || 0} days</div>
-          <div class="stat-label">Current streak: ${data.currentStreak || 0} days</div>
+          <div class="stat">${safeNumber(data.dayCount)} days</div>
+          <div class="stat-label">Current streak: ${safeNumber(data.currentStreak)} days</div>
         </div>
       `;
 
@@ -161,8 +162,8 @@ function getCardContent(cardType: string, data: Record<string, unknown>): string
           <div class="subtitle">${escapeHtml(String(data.challengeName || 'Challenge'))}</div>
         </div>
         <div>
-          <div class="stat">${data.goalAmount || 0} ${escapeHtml(String(data.unit || ''))}</div>
-          <div class="stat-label">Completed in ${data.duration || 0} days</div>
+          <div class="stat">${safeNumber(data.goalAmount)} ${escapeHtml(String(data.unit || ''))}</div>
+          <div class="stat-label">Completed in ${safeNumber(data.duration)} days</div>
         </div>
       `;
 
@@ -184,11 +185,11 @@ function getCardContent(cardType: string, data: Record<string, unknown>): string
         <div>
           <div class="badge">🔥</div>
           <div class="title">On Fire!</div>
-          <div class="subtitle">Momentum Level ${data.flameLevel || 1}</div>
+          <div class="subtitle">Momentum Level ${safeNumber(data.flameLevel, 1)}</div>
         </div>
         <div>
-          <div class="stat">${data.currentMomentum || 0} days</div>
-          <div class="stat-label">Best momentum: ${data.bestMomentum || 0} days</div>
+          <div class="stat">${safeNumber(data.currentMomentum)} days</div>
+          <div class="stat-label">Best momentum: ${safeNumber(data.bestMomentum)} days</div>
         </div>
       `;
 
@@ -200,14 +201,37 @@ function getCardContent(cardType: string, data: Record<string, unknown>): string
           <div class="subtitle">${escapeHtml(String(data.circleName || 'Circle'))}</div>
         </div>
         <div>
-          <div class="stat">${data.multiplier || 1}x</div>
-          <div class="stat-label">${data.checkedInCount || 0} / ${data.totalMembers || 0} members checked in</div>
+          <div class="stat">${safeNumber(data.multiplier, 1)}x</div>
+          <div class="stat-label">${safeNumber(data.checkedInCount)} / ${safeNumber(data.totalMembers)} members checked in</div>
         </div>
       `;
 
     default:
       return `<div class="title">FitCircle</div>`;
   }
+}
+
+/**
+ * Coerces a value to a finite number, falling back to `fallback` (default 0)
+ * for anything else (including NaN/Infinity/objects/arrays/strings that
+ * aren't valid numbers). Prevents injection via numeric-looking fields.
+ */
+function safeNumber(value: unknown, fallback = 0): number {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : fallback;
+}
+
+/**
+ * Allowlists badgeEmoji to a short, safe string: a single grapheme (emoji or
+ * plain character) up to a few code units, with no HTML-significant
+ * characters. Anything else falls back to the default.
+ */
+function safeEmoji(value: unknown, fallback: string): string {
+  if (typeof value !== 'string') return fallback;
+  // Reject anything containing HTML-significant characters or excessive length.
+  if (value.length === 0 || value.length > 8) return fallback;
+  if (/[<>&"'`]/.test(value)) return fallback;
+  return escapeHtml(value);
 }
 
 function escapeHtml(str: string): string {

@@ -1,3 +1,5 @@
+import crypto from 'crypto';
+
 import { createAdminSupabase } from '../supabase-admin';
 import {
   type Circle,
@@ -218,20 +220,24 @@ export class CircleService {
   static async generateInviteCode(): Promise<string> {
     const supabaseAdmin = createAdminSupabase();
     const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // No ambiguous characters
+    const LETTERS_LEN = 24; // first 24 chars are letters
+    const DIGITS_LEN = 9; // last 9 chars are digits
 
     let attempts = 0;
     while (attempts < 10) {
       let code = '';
 
       // Generate ABC123XYZ format (3 letters, 3 numbers, 3 letters)
+      // Use a CSPRNG (crypto.randomInt) instead of Math.random() so invite
+      // codes are unpredictable and cannot be enumerated/brute-forced.
       for (let i = 0; i < 3; i++) {
-        code += chars[Math.floor(Math.random() * 24)]; // Letters only (first 24 chars)
+        code += chars[crypto.randomInt(0, LETTERS_LEN)]; // Letters only (first 24 chars)
       }
       for (let i = 0; i < 3; i++) {
-        code += chars[24 + Math.floor(Math.random() * 9)]; // Numbers only (last 9 chars)
+        code += chars[LETTERS_LEN + crypto.randomInt(0, DIGITS_LEN)]; // Numbers only (last 9 chars)
       }
       for (let i = 0; i < 3; i++) {
-        code += chars[Math.floor(Math.random() * 24)]; // Letters only
+        code += chars[crypto.randomInt(0, LETTERS_LEN)]; // Letters only
       }
 
       // Check uniqueness

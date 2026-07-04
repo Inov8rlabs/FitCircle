@@ -5,6 +5,54 @@ import { createAdminSupabase } from '../supabase-admin';
 import { EngagementStreakService } from './engagement-streak-service';
 import { MetricStreakService } from './metric-streak-service';
 
+// ============================================================================
+// JWT SECRET VALIDATION
+// ============================================================================
+// Known placeholder/default values that must never be used to sign or verify
+// real tokens. If a secret matches one of these (or is missing), the app fails
+// loudly instead of silently running on a guessable default.
+const KNOWN_PLACEHOLDER_SECRETS = new Set([
+  'your-jwt-secret',
+  'your-jwt-secret-key',
+  'your-jwt-refresh-secret',
+  'your-refresh-secret',
+  'your-secret',
+  'jwt-secret',
+  'change-me',
+  'changeme',
+  'secret',
+  'placeholder',
+]);
+
+/**
+ * Assert that a JWT secret is present and is not a known placeholder value.
+ * Narrows the type to `string` so callers can pass it to jwt.sign/verify.
+ */
+function assertSecretUsable(name: string, value: string | undefined): asserts value is string {
+  if (!value || value.trim() === '') {
+    throw new Error(
+      `[MobileAPIService] ${name} is not configured. Set a strong, unique secret in the environment.`
+    );
+  }
+  if (KNOWN_PLACEHOLDER_SECRETS.has(value.trim().toLowerCase())) {
+    throw new Error(
+      `[MobileAPIService] ${name} is set to a known placeholder value. Rotate it to a strong, unique secret before running.`
+    );
+  }
+}
+
+// Startup guard: fail loudly at import time rather than silently running on a
+// missing or default/placeholder JWT secret. Skipped during the Next.js build
+// phase (env secrets may be intentionally absent) and under test, but enforced
+// in dev/production runtime.
+if (
+  process.env.NODE_ENV !== 'test' &&
+  process.env.NEXT_PHASE !== 'phase-production-build'
+) {
+  assertSecretUsable('JWT_SECRET', process.env.JWT_SECRET);
+  assertSecretUsable('JWT_REFRESH_SECRET', process.env.JWT_REFRESH_SECRET);
+}
+
 // Types for JWT tokens
 export interface JWTPayload {
   userId: string;
@@ -45,9 +93,8 @@ export class MobileAPIService {
     const jwtSecret = process.env.JWT_SECRET;
     const jwtRefreshSecret = process.env.JWT_REFRESH_SECRET;
 
-    if (!jwtSecret || !jwtRefreshSecret) {
-      throw new Error('JWT secrets not configured');
-    }
+    assertSecretUsable('JWT_SECRET', jwtSecret);
+    assertSecretUsable('JWT_REFRESH_SECRET', jwtRefreshSecret);
 
     // Access token (1 hour by default, configurable via env)
     const accessTokenExpiry: string = process.env.JWT_ACCESS_TOKEN_EXPIRY || '1h';
@@ -107,12 +154,12 @@ export class MobileAPIService {
   static async verifyAccessToken(token: string): Promise<JWTPayload | null> {
     const jwtSecret = process.env.JWT_SECRET;
 
-    if (!jwtSecret) {
-      throw new Error('JWT secret not configured');
-    }
+    assertSecretUsable('JWT_SECRET', jwtSecret);
 
     try {
-      const decoded = jwt.verify(token, jwtSecret) as JWTPayload;
+      // Pin the algorithm so a token forged with 'none' or an asymmetric alg
+      // (algorithm-confusion attack) can never validate against our HMAC secret.
+      const decoded = jwt.verify(token, jwtSecret, { algorithms: ['HS256'] }) as JWTPayload;
 
       if (decoded.type !== 'access') {
         return null;
@@ -209,12 +256,11 @@ export class MobileAPIService {
   static async verifyRefreshToken(token: string): Promise<JWTPayload | null> {
     const jwtRefreshSecret = process.env.JWT_REFRESH_SECRET;
 
-    if (!jwtRefreshSecret) {
-      throw new Error('JWT refresh secret not configured');
-    }
+    assertSecretUsable('JWT_REFRESH_SECRET', jwtRefreshSecret);
 
     try {
-      const decoded = jwt.verify(token, jwtRefreshSecret) as JWTPayload;
+      // Pin the algorithm to prevent algorithm-confusion / 'none' attacks.
+      const decoded = jwt.verify(token, jwtRefreshSecret, { algorithms: ['HS256'] }) as JWTPayload;
 
       if (decoded.type !== 'refresh') {
         return null;

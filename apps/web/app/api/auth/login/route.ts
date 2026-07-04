@@ -2,6 +2,8 @@ import { createClient } from '@supabase/supabase-js';
 import { type NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 
+import { authRateLimiter, getIdentifier, applyRateLimit } from '@/lib/middleware/rate-limit';
+
 // Validation schema
 const loginSchema = z.object({
   email: z.string().email('Invalid email address'),
@@ -10,6 +12,12 @@ const loginSchema = z.object({
 
 export async function POST(request: NextRequest) {
   try {
+    // Apply rate limiting (5 attempts per 15 minutes per IP) to slow credential
+    // stuffing / brute-force against the web login endpoint.
+    const identifier = getIdentifier(request);
+    const rateLimitResponse = await applyRateLimit(request, authRateLimiter, identifier);
+    if (rateLimitResponse) return rateLimitResponse;
+
     // Parse and validate request body
     const body = await request.json();
     const validatedData = loginSchema.parse(body);

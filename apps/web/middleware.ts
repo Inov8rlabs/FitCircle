@@ -1,6 +1,28 @@
 import { createServerClient } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
 
+// Build the CORS origin allowlist from NEXT_PUBLIC_APP_URL (+ localhost in dev).
+// Replaces the previous wildcard `Access-Control-Allow-Origin: *`, which exposed
+// the Bearer-token API surface to any website.
+function getAllowedOrigins(): string[] {
+  const origins: string[] = [];
+
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL;
+  if (appUrl) {
+    try {
+      origins.push(new URL(appUrl).origin);
+    } catch {
+      // Ignore a malformed NEXT_PUBLIC_APP_URL rather than crashing the request.
+    }
+  }
+
+  if (process.env.NODE_ENV !== 'production') {
+    origins.push('http://localhost:3000', 'http://127.0.0.1:3000');
+  }
+
+  return origins;
+}
+
 export async function middleware(request: NextRequest) {
   let response = NextResponse.next({
     request: {
@@ -49,12 +71,21 @@ export async function middleware(request: NextRequest) {
 
   const { pathname } = request.nextUrl;
 
-  // CORS for API routes
+  // CORS for API routes — scoped to an allowlist (never '*'). Native mobile
+  // clients send no Origin header and aren't subject to CORS, so this does not
+  // affect /api/mobile/* consumers; it only constrains browser cross-origin use.
   if (pathname.startsWith('/api/')) {
-    response.headers.set('Access-Control-Allow-Origin', '*');
-    response.headers.set('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
-    response.headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-    response.headers.set('Access-Control-Max-Age', '86400');
+    const origin = request.headers.get('origin');
+    const allowedOrigins = getAllowedOrigins();
+
+    if (origin && allowedOrigins.includes(origin)) {
+      response.headers.set('Access-Control-Allow-Origin', origin);
+      response.headers.set('Access-Control-Allow-Credentials', 'true');
+      response.headers.set('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
+      response.headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+      response.headers.set('Access-Control-Max-Age', '86400');
+      response.headers.append('Vary', 'Origin');
+    }
 
     // Handle preflight requests
     if (request.method === 'OPTIONS') {

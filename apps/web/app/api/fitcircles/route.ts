@@ -1,22 +1,28 @@
 import { type NextRequest, NextResponse } from 'next/server';
 
 import { createServerSupabase } from '@/lib/supabase-server';
+import { createAdminSupabase } from '@/lib/supabase-admin';
 
 export async function GET(request: NextRequest) {
   try {
+    // Authorize the caller with the RLS-bound (cookie) client...
     const supabase = await createServerSupabase();
-
-    // Get authenticated user
     const { data: { user }, error: authError } = await supabase.auth.getUser();
 
     if (authError || !user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    console.log('Fetching circles for user:', user.id);
+    // ...then read data with the service-role client. Under migration 069 the
+    // browser/anon RLS on fitcircles is "public OR creator" and fitcircle_members
+    // is own-row, so cross-user reads (participant counts, private joined circles)
+    // MUST run service-role. All reads below are still scoped to THIS user's
+    // circles (creator_id = user.id, or member user_id = user.id), so the admin
+    // client does not widen what the caller can see.
+    const db = createAdminSupabase();
 
-    // Get challenges where user is creator
-    const { data: creatorChallenges, error: creatorError } = await supabase
+    // Circles where the user is the creator
+    const { data: creatorChallenges, error: creatorError } = await db
       .from('fitcircles')
       .select(`
         id,
@@ -33,9 +39,8 @@ export async function GET(request: NextRequest) {
       `)
       .eq('creator_id', user.id);
 
-    // Get challenges where user is a participant
-    // We need to query from challenge_participants and join to challenges
-    const { data: participantData, error: participantError } = await supabase
+    // Circles where the user is an active member (incl. private circles they joined)
+    const { data: participantData, error: participantError } = await db
       .from('fitcircle_members')
       .select(`
         fitcircle_id,
@@ -66,38 +71,29 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Failed to fetch participant challenges' }, { status: 500 });
     }
 
-    // Extract the challenges from the participant data
     const participantChallenges = participantData?.map((p: any) => p.fitcircles).filter(Boolean) || [];
 
-    console.log('Found challenges:', {
-      creator: creatorChallenges?.length || 0,
-      participant: participantChallenges.length || 0
-    });
-
-    // Combine and deduplicate challenges
     const allChallenges = [
       ...(creatorChallenges || []),
-      ...(participantChallenges || [])
+      ...(participantChallenges || []),
     ];
 
-    // Remove duplicates (challenges where user is both creator and participant)
+    // Deduplicate (creator + participant of the same circle)
     const uniqueChallenges = allChallenges.filter((challenge, index, self) =>
-      index === self.findIndex(c => c.id === challenge.id)
+      index === self.findIndex((c) => c.id === challenge.id)
     );
 
-    // Get participant counts and user progress for each challenge
+    // Participant counts + this user's progress per circle (service-role reads)
     const circlesWithProgress = await Promise.all(
       uniqueChallenges.map(async (challenge) => {
         try {
-          // Get participant count
-          const { count: participantCount } = await supabase
+          const { count: participantCount } = await db
             .from('fitcircle_members')
             .select('*', { count: 'exact', head: true })
             .eq('fitcircle_id', challenge.id)
             .eq('status', 'active');
 
-          // Get user's latest progress for this challenge
-          const { data: userProgress } = await supabase
+          const { data: userProgress } = await db
             .from('progress_entries')
             .select('value')
             .eq('challenge_id', challenge.id)
@@ -106,8 +102,7 @@ export async function GET(request: NextRequest) {
             .limit(1)
             .single();
 
-          // Get user's total entries for this challenge
-          const { count: totalEntries } = await supabase
+          const { count: totalEntries } = await db
             .from('progress_entries')
             .select('*', { count: 'exact', head: true })
             .eq('challenge_id', challenge.id)
@@ -117,7 +112,7 @@ export async function GET(request: NextRequest) {
             ...challenge,
             participant_count: participantCount || 0,
             is_creator: challenge.creator_id === user.id,
-            is_participant: true, // Since we filtered by this
+            is_participant: true,
             latest_progress: userProgress?.value || 0,
             total_entries: totalEntries || 0,
           };
@@ -135,9 +130,7 @@ export async function GET(request: NextRequest) {
       })
     );
 
-    console.log('Returning circles:', circlesWithProgress.length);
     return NextResponse.json({ circles: circlesWithProgress });
-
   } catch (error) {
     console.error('Error in fitcircles API:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });

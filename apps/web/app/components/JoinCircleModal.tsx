@@ -74,36 +74,19 @@ export default function JoinCircleModal({ isOpen, onClose, onSuccess }: JoinCirc
 
     setIsSearching(true);
     try {
-      const { data, error } = (await supabase
-        .from('fitcircles')
-        .select(`
-          id,
-          name,
-          description,
-          type,
-          status,
-          start_date,
-          end_date,
-          participant_count,
-          max_participants,
-          creator_id,
-          profiles:creator_id (
-            display_name,
-            avatar_url
-          )
-        `)
-        .eq('invite_code', code)
-        .single()) as { data: any; error: any };
+      // Fetch circle preview via service-role route (never exposes invite code).
+      const response = await fetch(`/api/fitcircles/validate?code=${encodeURIComponent(code)}`);
 
-      if (error) {
-        if (error.code === 'PGRST116') {
+      if (!response.ok) {
+        if (response.status === 404) {
           toast.error('Invalid invite code');
           setCirclePreview(null);
-        } else {
-          throw error;
+          return;
         }
-        return;
+        throw new Error('Failed to find FitCircle');
       }
+
+      const data = await response.json();
 
       // Check if already a member
       const { data: existingMember } = await supabase

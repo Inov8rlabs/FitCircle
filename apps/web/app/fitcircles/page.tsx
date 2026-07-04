@@ -11,7 +11,6 @@ import QuickJoinCircle from '@/components/QuickJoinCircle';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/stores/auth-store';
 
 // import { fitCircleService } from '@/lib/services/fitcircle-service'; // Temporarily disabled due to RLS issues
@@ -61,64 +60,15 @@ export default function CirclesPage() {
         return;
       }
 
+      // Note: no direct-query fallback here. Migration 067 makes the browser
+      // (anon-key) client own-row-only on `fitcircles`/`fitcircle_members`, so a
+      // client-side fallback query can no longer see private circles the user
+      // belongs to but didn't create. GET /api/fitcircles is the source of truth.
       console.error('API call failed:', response.status, response.statusText);
       const errorData = await response.json().catch(() => ({}));
       console.error('Error response:', errorData);
-
-      // Fallback: Direct query approach
-      let userCircles: any[] = [];
-
-      const { data: allChallenges, error: allError } = await supabase
-        .from('fitcircles')
-        .select('*')
-        .order('created_at', { ascending: false });
-
-      if (!allError && allChallenges) {
-        console.log('Successfully fetched all challenges:', allChallenges.length);
-
-        // Type assertion to help TypeScript understand the data structure
-        const challenges = allChallenges as any[];
-
-        // Filter for user's challenges (created or participated)
-        const createdByUser = challenges.filter(c => c.creator_id === user.id);
-        userCircles = [...createdByUser];
-
-        // Try to get participations
-        const { data: participations } = await supabase
-          .from('fitcircle_members')
-          .select('challenge_id')
-          .eq('user_id', user.id);
-
-        if (participations) {
-          // Type assertion to help TypeScript understand the data structure
-          const participationData = participations as any[];
-          const participantChallengeIds = participationData.map(p => p.challenge_id);
-          const participatedChallenges = challenges.filter(
-            c => participantChallengeIds.includes(c.id) && c.creator_id !== user.id
-          );
-          userCircles = [...userCircles, ...participatedChallenges];
-        }
-
-        console.log('User has', userCircles.length, 'circles total');
-        setMyCircles(userCircles);
-      } else {
-        // Fallback: Just get user's created challenges
-        console.warn('Could not fetch all challenges, trying created only:', allError?.message);
-
-        const { data: createdChallenges, error: createdError } = await supabase
-          .from('fitcircles')
-          .select('*')
-          .eq('creator_id', user.id);
-
-        if (!createdError && createdChallenges) {
-          console.log('Found', createdChallenges.length, 'created challenges');
-          setMyCircles(createdChallenges);
-        } else {
-          console.error('Failed to fetch even created challenges:', createdError?.message);
-          console.log('Full error object:', JSON.stringify(createdError));
-          setMyCircles([]);
-        }
-      }
+      setMyCircles([]);
+      setHasError(true);
     } catch (error: any) {
       console.error('Exception in fetchMyCircles:', error);
       setMyCircles([]);

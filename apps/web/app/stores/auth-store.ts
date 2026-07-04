@@ -459,6 +459,10 @@ export const useAuthStore = create<AuthState>()(
     {
       name: 'auth-storage',
       storage: createJSONStorage(() => localStorage),
+      // Do NOT persist the raw Supabase access token to localStorage — it is
+      // readable by any XSS and localStorage has no httpOnly protection.
+      // The token is rehydrated in-memory on app load via checkAuth(),
+      // which reads the real session from Supabase's own storage.
       partialize: (state) => ({
         user: state.user,
         isAuthenticated: state.isAuthenticated,

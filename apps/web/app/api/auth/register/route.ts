@@ -3,6 +3,7 @@ import { type NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 
 import { sendWelcomeEmail } from '@/lib/email/email-service';
+import { registerRateLimiter, getIdentifier, applyRateLimit } from '@/lib/middleware/rate-limit';
 
 // Validation schema
 const registerSchema = z.object({
@@ -19,6 +20,12 @@ const registerSchema = z.object({
 
 export async function POST(request: NextRequest) {
   try {
+    // Apply rate limiting (3 registrations per day per IP) to curb automated
+    // account creation / signup abuse.
+    const identifier = getIdentifier(request);
+    const rateLimitResponse = await applyRateLimit(request, registerRateLimiter, identifier);
+    if (rateLimitResponse) return rateLimitResponse;
+
     // Parse and validate request body
     const body = await request.json();
     const validatedData = registerSchema.parse(body);

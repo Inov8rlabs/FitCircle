@@ -7,7 +7,6 @@ const corsHeaders = {
 };
 
 interface InsightRequest {
-  userId: string;
   challengeId?: string;
   period?: 'week' | 'month' | 'challenge';
   includeRecommendations?: boolean;
@@ -36,14 +35,28 @@ serve(async (req) => {
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY')!;
     const openAiKey = Deno.env.get('OPENAI_API_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    const { userId, challengeId, period = 'week', includeRecommendations = true }: InsightRequest = await req.json();
-
-    if (!userId) {
-      throw new Error('userId is required');
+    // Derive the acting user from the caller's JWT (never trust a body-supplied userId).
+    const authHeader = req.headers.get('Authorization') ?? '';
+    const authClient = createClient(supabaseUrl, supabaseAnonKey, {
+      global: { headers: { Authorization: authHeader } },
+    });
+    const { data: { user } } = await authClient.auth.getUser();
+    if (!user) {
+      return new Response(
+        JSON.stringify({ success: false, error: 'Unauthorized' }),
+        {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          status: 401,
+        }
+      );
     }
+    const userId = user.id;
+
+    const { challengeId, period = 'week', includeRecommendations = true }: InsightRequest = await req.json();
 
     // Calculate date range
     const endDate = new Date();

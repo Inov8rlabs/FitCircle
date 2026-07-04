@@ -8,7 +8,6 @@ const corsHeaders = {
 };
 
 interface PhotoProcessRequest {
-  userId: string;
   checkInId: string;
   photoBase64: string;
   photoType: 'progress' | 'meal' | 'workout' | 'achievement';
@@ -42,12 +41,30 @@ serve(async (req) => {
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
+
+    // Derive the acting user from the caller's JWT (never trust a body-supplied userId).
+    const authHeader = req.headers.get('Authorization') ?? '';
+    const authClient = createClient(supabaseUrl, supabaseAnonKey, {
+      global: { headers: { Authorization: authHeader } },
+    });
+    const { data: { user } } = await authClient.auth.getUser();
+    if (!user) {
+      return new Response(
+        JSON.stringify({ success: false, error: 'Unauthorized' }),
+        {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          status: 401,
+        }
+      );
+    }
+    const userId = user.id;
 
     const request: PhotoProcessRequest = await req.json();
 
-    if (!request.userId || !request.checkInId || !request.photoBase64) {
-      throw new Error('userId, checkInId, and photoBase64 are required');
+    if (!request.checkInId || !request.photoBase64) {
+      throw new Error('checkInId and photoBase64 are required');
     }
 
     // Decode base64 image
@@ -63,7 +80,7 @@ serve(async (req) => {
 
     // Generate unique filename
     const timestamp = Date.now();
-    const filename = `${request.userId}/${request.checkInId}/${timestamp}`;
+    const filename = `${userId}/${request.checkInId}/${timestamp}`;
 
     // Process image into multiple sizes
     const processedImages = await processImage(photoBuffer, imageMetadata);
@@ -98,7 +115,7 @@ serve(async (req) => {
       .from('check_ins')
       .select('photo_urls')
       .eq('id', request.checkInId)
-      .eq('user_id', request.userId)
+      .eq('user_id', userId)
       .single();
 
     if (checkInError || !checkIn) {
@@ -115,7 +132,7 @@ serve(async (req) => {
         updated_at: new Date().toISOString(),
       })
       .eq('id', request.checkInId)
-      .eq('user_id', request.userId);
+      .eq('user_id', userId);
 
     if (updateError) {
       throw new Error(`Failed to update check-in: ${updateError.message}`);
@@ -125,7 +142,7 @@ serve(async (req) => {
     const { error: photoError } = await supabase
       .from('photos')
       .insert({
-        user_id: request.userId,
+        user_id: userId,
         check_in_id: request.checkInId,
         challenge_id: request.metadata?.challengeId,
         team_id: request.metadata?.teamId,
@@ -144,7 +161,7 @@ serve(async (req) => {
     // If this is a progress photo, perform AI analysis
     if (request.photoType === 'progress') {
       await analyzeProgressPhoto({
-        userId: request.userId,
+        userId: userId,
         checkInId: request.checkInId,
         photoUrl: urls.large,
         supabase,
@@ -153,7 +170,7 @@ serve(async (req) => {
 
     // Award points for photo upload
     await awardPhotoPoints({
-      userId: request.userId,
+      userId: userId,
       checkInId: request.checkInId,
       challengeId: request.metadata?.challengeId,
       supabase,

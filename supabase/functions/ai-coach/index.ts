@@ -7,7 +7,6 @@ const corsHeaders = {
 };
 
 interface CoachRequest {
-  userId: string;
   message: string;
   context?: {
     challengeId?: string;
@@ -39,17 +38,35 @@ serve(async (req) => {
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY')!;
     const openAiKey = Deno.env.get('OPENAI_API_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
+    // Derive the acting user from the caller's JWT (never trust a body-supplied userId).
+    const authHeader = req.headers.get('Authorization') ?? '';
+    const authClient = createClient(supabaseUrl, supabaseAnonKey, {
+      global: { headers: { Authorization: authHeader } },
+    });
+    const { data: { user } } = await authClient.auth.getUser();
+    if (!user) {
+      return new Response(
+        JSON.stringify({ success: false, error: 'Unauthorized' }),
+        {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          status: 401,
+        }
+      );
+    }
+    const userId = user.id;
+
     const request: CoachRequest = await req.json();
 
-    if (!request.userId || !request.message) {
-      throw new Error('userId and message are required');
+    if (!request.message) {
+      throw new Error('message is required');
     }
 
     // Get user context for personalized coaching
-    const userContext = await getUserContext(supabase, request.userId, request.context?.challengeId);
+    const userContext = await getUserContext(supabase, userId, request.context?.challengeId);
 
     // Get conversation history if conversationId provided
     let conversationHistory: any[] = [];
@@ -58,7 +75,7 @@ serve(async (req) => {
         .from('ai_conversations')
         .select('role, content')
         .eq('conversation_id', request.context.conversationId)
-        .eq('user_id', request.userId)
+        .eq('user_id', userId)
         .order('created_at', { ascending: true })
         .limit(10);
 
@@ -94,7 +111,7 @@ serve(async (req) => {
       const conversationId = request.context?.conversationId || crypto.randomUUID();
       await storeConversation(supabase, {
         conversationId,
-        userId: request.userId,
+        userId,
         userMessage: request.message,
         aiResponse: response,
         context: request.context,
@@ -103,7 +120,7 @@ serve(async (req) => {
       // Check for actionable items in response
       const actions = extractActions(response);
       if (actions.length > 0) {
-        await processActions(supabase, request.userId, actions);
+        await processActions(supabase, userId, actions);
       }
 
       return new Response(

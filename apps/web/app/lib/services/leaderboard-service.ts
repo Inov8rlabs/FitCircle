@@ -1,7 +1,5 @@
 import { type SupabaseClient } from '@supabase/supabase-js';
 
-import { createServerSupabase } from '@/lib/supabase-server';
-
 interface LeaderboardEntry {
   user_id: string;
   display_name: string;
@@ -33,125 +31,41 @@ export class LeaderboardService {
    */
   static async getLeaderboard(
     challengeId: string,
-    supabase?: SupabaseClient
+    _supabase?: SupabaseClient
   ): Promise<LeaderboardEntry[]> {
-    const client = supabase || (await createServerSupabase());
+    // Cross-user leaderboard data (other members' goals / tracking) is no longer
+    // readable by the browser anon-key client (migration 069). It is served by
+    // the service-role /api/fitcircles/[id]/leaderboard route, which authorizes
+    // the caller and reads via the admin client. The `_supabase` param is kept
+    // for signature stability but is no longer used.
+    try {
+      const response = await fetch(`/api/fitcircles/${challengeId}/leaderboard`);
 
-    // Get challenge details
-    const { data: challenge, error: challengeError } = await client
-      .from('fitcircles')
-      .select('*')
-      .eq('id', challengeId)
-      .single();
+      if (!response.ok) {
+        console.error('Error fetching leaderboard:', response.status, response.statusText);
+        return [];
+      }
 
-    if (challengeError || !challenge) {
-      console.error('Error fetching challenge:', challengeError);
+      const data = await response.json();
+      const entries = (data.leaderboard || []) as any[];
+
+      return entries.map((entry, index): LeaderboardEntry => ({
+        user_id: entry.user_id,
+        display_name: entry.display_name || 'Unknown User',
+        avatar_url: entry.avatar_url ?? null,
+        current_value: entry.current_value ?? 0,
+        starting_value: entry.starting_value ?? 0,
+        target_value: entry.target_value ?? 0,
+        progress_percentage: entry.progress_percentage ?? 0,
+        latest_entry_date: entry.latest_entry_date ?? entry.last_check_in_at ?? null,
+        total_entries: entry.total_entries ?? 0,
+        is_creator: entry.is_creator ?? false,
+        rank: entry.rank ?? index + 1,
+      }));
+    } catch (err) {
+      console.error('Error fetching leaderboard:', err);
       return [];
     }
-
-    // Get all active participants with their profile goals
-    const { data: participants, error: participantsError } = await client
-      .from('fitcircle_members')
-      .select(`
-        user_id,
-        status,
-        goal_start_value,
-        goal_target_value,
-        goal_type,
-        goal_unit,
-        current_value,
-        profiles!challenge_participants_user_id_fkey (
-          display_name,
-          avatar_url,
-          goals
-        )
-      `)
-      .eq('fitcircle_id', challengeId)
-      .eq('status', 'active');
-
-    if (participantsError || !participants) {
-      console.error('Error fetching participants:', participantsError);
-      return [];
-    }
-
-    // Get the relevant tracking data for each participant
-    const leaderboardData = await Promise.all(
-      participants.map(async (participant: any) => {
-        const trackingData = await this.getParticipantProgress(
-          participant.user_id,
-          challenge,
-          client
-        );
-
-        // Get goal from profile if not set in participant record
-        let goalValue = participant.goal_target_value;
-        let startingValue = participant.goal_start_value;
-
-        if (!goalValue && participant.profiles?.goals) {
-          const profileGoals = Array.isArray(participant.profiles.goals)
-            ? participant.profiles.goals
-            : participant.profiles?.[0]?.goals || [];
-
-          const weightGoal = profileGoals.find((g: any) => g.type === 'weight');
-          if (weightGoal) {
-            goalValue = weightGoal.target_weight_kg;
-            startingValue = startingValue || weightGoal.starting_weight_kg;
-          }
-        }
-
-        // Use tracking data for starting value if we have it
-        const finalStartingValue = trackingData.starting_value || startingValue || trackingData.current_value || 0;
-        const finalGoalValue = goalValue || 0;
-
-        // Use participant.current_value as fallback when no tracking data exists
-        const finalCurrentValue = trackingData.current_value > 0
-          ? trackingData.current_value
-          : (participant.current_value || 0);
-
-        console.log('Leaderboard entry for user:', participant.user_id, {
-          trackingDataStarting: trackingData.starting_value,
-          trackingDataCurrent: trackingData.current_value,
-          participantStarting: participant.goal_start_value,
-          participantGoal: participant.goal_target_value,
-          participantCurrent: participant.current_value,
-          profileGoal: goalValue,
-          finalStarting: finalStartingValue,
-          finalCurrent: finalCurrentValue,
-          finalGoal: finalGoalValue,
-          totalEntries: trackingData.total_entries
-        });
-
-        return {
-          user_id: participant.user_id,
-          display_name: participant.profiles?.display_name || participant.profiles?.[0]?.display_name || 'Unknown User',
-          avatar_url: participant.profiles?.avatar_url || participant.profiles?.[0]?.avatar_url || null,
-          current_value: finalCurrentValue,
-          starting_value: finalStartingValue,
-          target_value: finalGoalValue,
-          progress_percentage: this.calculateProgress(
-            finalStartingValue,
-            finalCurrentValue,
-            finalGoalValue,
-            challenge.type
-          ),
-          latest_entry_date: trackingData.latest_date,
-          total_entries: trackingData.total_entries,
-          is_creator: participant.user_id === challenge.creator_id,
-          rank: 0, // Will be calculated after sorting
-        };
-      })
-    );
-
-    // Sort by progress (descending) and assign ranks
-    const sorted = leaderboardData.sort(
-      (a, b) => b.progress_percentage - a.progress_percentage
-    );
-
-    sorted.forEach((entry, index) => {
-      entry.rank = index + 1;
-    });
-
-    return sorted;
   }
 
   /**

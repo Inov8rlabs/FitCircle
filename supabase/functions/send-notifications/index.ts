@@ -3,7 +3,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.0';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-internal-secret',
 };
 
 interface NotificationRequest {
@@ -40,6 +40,23 @@ serve(async (req) => {
   // Handle CORS preflight
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
+  }
+
+  // This function chooses recipients + content, so it must NOT be callable by
+  // client-origin (anon) callers. Require a shared internal secret that only
+  // trusted server-side callers (API routes / cron) know.
+  // TODO(needs_user): set INTERNAL_FUNCTION_SECRET in Supabase function config
+  // and have every internal caller send it as the `x-internal-secret` header.
+  const internalSecret = Deno.env.get('INTERNAL_FUNCTION_SECRET');
+  const providedSecret = req.headers.get('x-internal-secret');
+  if (!internalSecret || !providedSecret || providedSecret !== internalSecret) {
+    return new Response(
+      JSON.stringify({ success: false, error: 'Unauthorized' }),
+      {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 401,
+      }
+    );
   }
 
   try {

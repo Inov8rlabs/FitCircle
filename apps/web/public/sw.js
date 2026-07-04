@@ -56,22 +56,15 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Handle API calls - network first, cache fallback
+  // Handle API calls - network only, never cached.
+  // /api/* responses can contain authenticated, user-specific data (profile,
+  // progress, circle membership, etc). Caching them in the shared
+  // DYNAMIC_CACHE would let that data be read back (via the Cache Storage
+  // API or a subsequent offline load) by anyone with access to the device/
+  // browser profile, including after logout or by another user. Always hit
+  // the network for API calls and do not persist the response.
   if (url.pathname.startsWith('/api/')) {
-    event.respondWith(
-      fetch(request)
-        .then((response) => {
-          // Clone the response before caching
-          const responseToCache = response.clone();
-          caches.open(DYNAMIC_CACHE).then((cache) => {
-            cache.put(request, responseToCache);
-          });
-          return response;
-        })
-        .catch(() => {
-          return caches.match(request);
-        })
-    );
+    event.respondWith(fetch(request));
     return;
   }
 
