@@ -100,9 +100,16 @@ REVOKE SELECT ON fitcircles FROM anon;
 --   client SELECT policy + revoked SELECT = no direct browser access.
 --   (If any browser code reads this table directly, route it — verify on staging.)
 -- ----------------------------------------------------------------------------
-ALTER TABLE progress_milestones ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "progress_milestones_select" ON progress_milestones;
-REVOKE SELECT, INSERT, UPDATE, DELETE ON progress_milestones FROM authenticated;
+-- Guarded: this table is not present in every environment (the migration that
+-- created it was never applied to some databases). Only harden it if it exists.
+DO $$
+BEGIN
+  IF to_regclass('public.progress_milestones') IS NOT NULL THEN
+    EXECUTE 'ALTER TABLE public.progress_milestones ENABLE ROW LEVEL SECURITY';
+    EXECUTE 'DROP POLICY IF EXISTS "progress_milestones_select" ON public.progress_milestones';
+    EXECUTE 'REVOKE SELECT, INSERT, UPDATE, DELETE ON public.progress_milestones FROM authenticated';
+  END IF;
+END $$;
 
 -- ============================================================================
 -- END 069_security_rls_hardening_crossuser
