@@ -1,4 +1,5 @@
 import { type NextRequest, NextResponse } from 'next/server';
+import * as Sentry from '@sentry/nextjs';
 
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { StreakClaimingService } from '@/lib/services/streak-claiming-service';
@@ -28,6 +29,21 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(shields);
   } catch (error: any) {
     console.error('[GET /api/streaks/shields] Error:', error);
+
+    if (error?.message === 'Unauthorized') {
+      return NextResponse.json(
+        {
+          success: false,
+          error: { code: 'UNAUTHORIZED', message: 'Invalid or expired token' },
+        },
+        { status: 401 }
+      );
+    }
+
+    Sentry.captureException(error, {
+      level: 'error',
+      tags: { feature: 'streaks', route: 'shields' },
+    });
 
     return NextResponse.json(
       {
