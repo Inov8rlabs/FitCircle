@@ -15,6 +15,8 @@ const updateTrackingSchema = z.object({
   notes: z.string().optional(),
   timezone: z.string().optional(), // For automatic streak claiming
   autoClaimStreak: z.boolean().optional().default(true), // Auto-claim by default
+  // Privacy flag: true = visible to circle members, false = private (owner only)
+  isPublic: z.boolean().optional(),
 });
 
 /**
@@ -136,6 +138,7 @@ export async function PUT(
       notes: validatedData.notes,
       is_override: !isAutoSync, // Only manual entries are overrides
       skip_streak_tracking: isAutoSync, // Auto-synced data must NOT count toward streaks
+      is_public: validatedData.isPublic, // Only changes when explicitly provided
     });
 
     // Automatically claim streak if data was manually entered

@@ -19,6 +19,8 @@ const trackingSchema = z.object({
   isOverride: z.boolean().optional(),
   // When false, this is auto-synced data that should NOT count toward streaks
   autoClaimStreak: z.boolean().optional().default(true),
+  // Privacy flag: true = visible to circle members, false = private (owner only)
+  isPublic: z.boolean().optional(),
 });
 
 /**
@@ -184,6 +186,7 @@ export async function POST(request: NextRequest) {
         steps_synced_at: validatedData.stepsSyncedAt,
         is_override: validatedData.isOverride,
         skip_streak_tracking: isAutoSync,
+        is_public: validatedData.isPublic,
       }
     );
 

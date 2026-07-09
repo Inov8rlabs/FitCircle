@@ -519,6 +519,7 @@ export class MobileAPIService {
       steps_synced_at?: string;
       is_override?: boolean;
       skip_streak_tracking?: boolean;
+      is_public?: boolean;
     }
   ): Promise<any> {
     const supabaseAdmin = createAdminSupabase();
@@ -614,6 +615,8 @@ export class MobileAPIService {
       if (data.mood_score !== undefined) updatePayload.mood_score = data.mood_score;
       if (data.energy_level !== undefined) updatePayload.energy_level = data.energy_level;
       if (data.notes !== undefined) updatePayload.notes = sanitizedNotes;
+      // Privacy flag: only change when explicitly provided (otherwise keep existing)
+      if (data.is_public !== undefined) updatePayload.is_public = data.is_public;
 
       // Update steps-related fields if steps data is provided
       if (data.steps !== undefined) {
@@ -647,6 +650,8 @@ export class MobileAPIService {
           steps_source: finalStepsSource,
           steps_synced_at: finalStepsSyncedAt,
           is_override: finalIsOverride,
+          // Only set when provided so the column default (true) applies otherwise
+          ...(data.is_public !== undefined ? { is_public: data.is_public } : {}),
         })
         .select()
         .single();
@@ -907,6 +912,10 @@ export class MobileAPIService {
       username?: string;
       avatar_url?: string;
       bio?: string;
+      height_cm?: number;
+      weight_kg?: number;
+      date_of_birth?: string;
+      fitness_level?: string;
     }
   ): Promise<any> {
     const supabaseAdmin = createAdminSupabase();
@@ -930,6 +939,19 @@ export class MobileAPIService {
     if (updates.avatar_url !== undefined) {
       // URLs should be validated elsewhere, but sanitize just in case
       sanitizedUpdates.avatar_url = updates.avatar_url;
+    }
+    // Physical profile fields (validated in the route layer)
+    if (updates.height_cm !== undefined) {
+      sanitizedUpdates.height_cm = updates.height_cm;
+    }
+    if (updates.weight_kg !== undefined) {
+      sanitizedUpdates.weight_kg = updates.weight_kg;
+    }
+    if (updates.date_of_birth !== undefined) {
+      sanitizedUpdates.date_of_birth = updates.date_of_birth;
+    }
+    if (updates.fitness_level !== undefined) {
+      sanitizedUpdates.fitness_level = updates.fitness_level;
     }
 
     const { data, error } = await supabaseAdmin

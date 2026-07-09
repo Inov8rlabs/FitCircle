@@ -15,6 +15,20 @@ const updateProfileSchema = z.object({
     .optional(),
   avatarUrl: z.string().url().optional(),
   bio: z.string().max(500).optional(),
+  // Physical profile / onboarding fields sent by iOS + Android
+  heightCm: z.number().positive().max(300, 'Height must be less than 300 cm').optional(),
+  weightKg: z.number().positive().max(1000, 'Weight must be less than 1000 kg').optional(),
+  dateOfBirth: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, 'Invalid date format (YYYY-MM-DD)')
+    .refine((val) => {
+      const dob = new Date(`${val}T00:00:00Z`);
+      return !Number.isNaN(dob.getTime()) && dob.getTime() <= Date.now();
+    }, 'Date of birth cannot be in the future')
+    .optional(),
+  fitnessLevel: z
+    .enum(['beginner', 'intermediate', 'advanced', 'expert', 'athlete'])
+    .optional(),
 });
 
 /**
@@ -119,6 +133,23 @@ export async function PUT(request: NextRequest) {
 
     if (validatedData.bio !== undefined) {
       updates.bio = validatedData.bio;
+    }
+
+    if (validatedData.heightCm !== undefined) {
+      // height_cm is an INTEGER column; round to avoid decimal insert failures
+      updates.height_cm = Math.round(validatedData.heightCm);
+    }
+
+    if (validatedData.weightKg !== undefined) {
+      updates.weight_kg = validatedData.weightKg;
+    }
+
+    if (validatedData.dateOfBirth !== undefined) {
+      updates.date_of_birth = validatedData.dateOfBirth;
+    }
+
+    if (validatedData.fitnessLevel !== undefined) {
+      updates.fitness_level = validatedData.fitnessLevel;
     }
 
     // Update profile
