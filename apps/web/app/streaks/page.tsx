@@ -15,13 +15,13 @@
 
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  Flame, Sparkles, Trophy, Shield, Check, X, RefreshCcw, AlertTriangle,
-  Trophy as TrophyIcon, Star, Crown, Medal,
+  Flame, Sparkles, Shield, Check, X, RefreshCcw, AlertTriangle,
 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 
 import Celebration from '@/components/Celebration';
+import { MilestoneBadge } from '@/components/streaks/MilestoneBadge';
 import { Navbar } from '@/components/layout/navbar';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -443,15 +443,12 @@ function MilestoneGrid({ milestones, currentStreak }: { milestones: Milestone[];
           {milestones.map(m => {
             const achieved = currentStreak >= m.days;
             return (
-              <div
-                key={m.days}
-                className={`rounded-xl p-3 text-center bg-card-foreground/5 ${achieved ? '' : 'opacity-40'}`}
-              >
-                <div className={`mx-auto h-12 w-12 rounded-full flex items-center justify-center text-2xl ${achieved ? 'bg-gradient-to-br from-orange-500 to-orange-400 shadow-lg' : 'bg-zinc-800'}`}>
-                  {m.badge}
+              <div key={m.days} className="rounded-xl p-3 text-center bg-card-foreground/5">
+                <div className={`flex justify-center ${achieved ? '' : 'opacity-70'}`}>
+                  <MilestoneBadge days={m.days} achieved={achieved} size={52} />
                 </div>
-                <p className="mt-2 text-xs font-semibold">{m.days} days</p>
-                <p className="text-[10px] text-muted-foreground line-clamp-2">{m.title}</p>
+                <p className={`mt-2 text-xs font-semibold ${achieved ? '' : 'text-muted-foreground'}`}>{m.days} days</p>
+                <p className="text-[10px] text-muted-foreground line-clamp-2 min-h-[30px]">{m.title}</p>
               </div>
             );
           })}
@@ -505,7 +502,9 @@ function MilestoneCelebration({
         transition={{ type: 'spring', damping: 12 }}
         onClick={e => e.stopPropagation()}
       >
-        <div className="text-7xl">{milestone.badge}</div>
+        <div className="flex justify-center">
+          <MilestoneBadge days={milestone.days} achieved size={120} />
+        </div>
         <h2 className="text-3xl font-bold">{milestone.title}</h2>
         <p className="text-4xl font-extrabold text-orange-500">{currentStreak} days</p>
         <p className="text-muted-foreground">{milestone.message}</p>
