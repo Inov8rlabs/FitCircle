@@ -48,6 +48,8 @@ export interface CircleMessageRow {
   system_event_ref: string | null;
   system_payload: Record<string, unknown> | null;
   priority: MessagePriority;
+  edited_at: string | null; // set on sender edit (migration 070)
+  deleted_at: string | null; // set on sender soft-delete / tombstone (migration 070)
   created_at: string;
   updated_at: string;
 }
@@ -112,6 +114,8 @@ export interface ChatMessageDTO {
   reactions: MessageReactionSummary[];
   clientId: string | null;
   createdAt: string;
+  editedAt: string | null; // ISO — set when the sender edited the message
+  deletedAt: string | null; // ISO — set = tombstone (body/photoUrl are always null)
 }
 
 // ============================================================================
@@ -140,6 +144,11 @@ export const MESSAGE_PAGE_DEFAULT_LIMIT = 30;
 export const MESSAGE_PAGE_MAX_LIMIT = 100;
 export const MESSAGE_BODY_MAX_LENGTH = 4000;
 
+// Edit contract (cross-platform; mirrored by both mobile apps):
+// PATCH body is trimmed, 1..2000 chars, only within 15 min of created_at.
+export const MESSAGE_EDIT_BODY_MAX_LENGTH = 2000;
+export const MESSAGE_EDIT_WINDOW_MS = 15 * 60 * 1000;
+
 // ============================================================================
 // CircleChatService API surface (FROZEN signatures)
 // ----------------------------------------------------------------------------
@@ -163,6 +172,12 @@ export const MESSAGE_BODY_MAX_LENGTH = 4000;
 //     // POST /circles/:id/messages  (member message; validates kind/body/photo + client_id dedupe)
 //     static async sendMessage(circleId: string, userId: string, input: SendMessageInput): Promise<ChatMessageDTO>
 //
+//     // PATCH /messages/:id   { body }   (sender edit; user_text only, 15-min window)
+//     static async editMessage(userId: string, messageId: string, body: string): Promise<ChatMessageDTO>
+//
+//     // DELETE /messages/:id   (sender soft-delete -> tombstone; idempotent)
+//     static async deleteMessage(userId: string, messageId: string): Promise<ChatMessageDTO>
+//
 //     // POST /messages/:id/reactions   { reaction }
 //     static async addReaction(messageId: string, userId: string, reaction: ReactionKind): Promise<MessageReactionSummary[]>
 //
@@ -185,8 +200,12 @@ export const MESSAGE_BODY_MAX_LENGTH = 4000;
 //
 // Error contract (service throws plain Error with these messages; routes map them):
 //   'Unauthorized' -> 401   (from requireMobileAuth)
-//   'Forbidden'    -> 403   (not an active member)
-//   'NotFound'     -> 404   (message/circle missing)
+//   'Forbidden'    -> 403   (not an active member; for edit/delete: not the sender)
+//   'NotFound'     -> 404   (message/circle missing; edit/delete also hides
+//                            messages from non-members behind a 404)
+//   'EditWindowExpired'  -> 409   (edit attempted after the 15-minute window)
+//   'MessageDeleted'     -> 409   (edit/react attempted on a tombstone)
+//   'InvalidMessageKind' -> 409   (edit non-user_text / delete system_event)
 //   ZodError       -> 400   (route-level input validation)
 //   else           -> 500
 // ============================================================================

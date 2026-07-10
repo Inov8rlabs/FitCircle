@@ -102,6 +102,23 @@ export async function POST(
       );
     }
 
+    if (error.message === 'MessageDeleted') {
+      return NextResponse.json(
+        {
+          success: false,
+          data: null,
+          error: {
+            code: 'MESSAGE_DELETED',
+            message: 'You cannot react to a deleted message',
+            details: {},
+            timestamp: new Date().toISOString(),
+          },
+          meta: null,
+        },
+        { status: 409 }
+      );
+    }
+
     if (error instanceof z.ZodError) {
       return NextResponse.json(
         {

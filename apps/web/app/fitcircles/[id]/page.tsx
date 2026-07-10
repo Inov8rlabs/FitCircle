@@ -31,7 +31,7 @@ import {
   Salad,
 } from 'lucide-react';
 import { useParams, useRouter } from 'next/navigation';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { toast } from 'sonner';
 
 import CircleChallengesSection from '@/components/challenges/CircleChallengesSection';
@@ -61,6 +61,7 @@ import { Progress } from '@/components/ui/progress';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useUnitPreference } from '@/hooks/useUnitPreference';
 import { nutritionClient, type PrivacyTier } from '@/lib/api/nutrition-client';
+import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/stores/auth-store';
 
 
@@ -154,6 +155,13 @@ export default function FitCirclePage() {
   const [editedEntryValue, setEditedEntryValue] = useState('');
   const [isSavingEntry, setIsSavingEntry] = useState(false);
 
+  // Chat tab: unread badge (messages newer than the viewer's read cursor).
+  // CircleChat marks read when the tab opens, so opening the tab clears it.
+  const [activeTab, setActiveTab] = useState('overview');
+  const [chatUnread, setChatUnread] = useState(0);
+  const activeTabRef = useRef(activeTab);
+  activeTabRef.current = activeTab;
+
   const circleId = params.id as string;
 
   useEffect(() => {
@@ -165,6 +173,75 @@ export default function FitCirclePage() {
         .then((p) => setFoodPrivacyTier(p.tier))
         .catch(() => setFoodPrivacyTier(null));
     }
+  }, [circleId, user]);
+
+  // Initial unread-chat count: messages newer than circle_chat_state.last_read_at,
+  // excluding the viewer's own. Best-effort — RLS scopes both reads to members.
+  useEffect(() => {
+    if (!circleId || !user) return;
+    let cancelled = false;
+
+    const loadUnread = async () => {
+      try {
+        const { data: chatState } = await supabase
+          .from('circle_chat_state')
+          .select('last_read_at')
+          .eq('fitcircle_id', circleId)
+          .eq('user_id', user.id)
+          .maybeSingle<{ last_read_at: string | null }>();
+
+        let query = supabase
+          .from('circle_messages')
+          .select('id', { count: 'exact', head: true })
+          .eq('fitcircle_id', circleId)
+          .or(`sender_id.neq.${user.id},sender_id.is.null`);
+
+        if (chatState?.last_read_at) {
+          query = query.gt('created_at', chatState.last_read_at);
+        }
+
+        const { count } = await query;
+        if (!cancelled && activeTabRef.current !== 'chat') {
+          setChatUnread(count ?? 0);
+        }
+      } catch (err) {
+        console.warn('[fitcircle] unread chat count failed', err);
+      }
+    };
+
+    void loadUnread();
+    return () => {
+      cancelled = true;
+    };
+  }, [circleId, user]);
+
+  // Live unread updates: bump the badge on new messages while the chat tab is
+  // closed (CircleChat handles its own realtime while the tab is open).
+  useEffect(() => {
+    if (!circleId || !user) return;
+
+    const channel = supabase
+      .channel(`circle-chat-unread:${circleId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'circle_messages',
+          filter: `fitcircle_id=eq.${circleId}`,
+        },
+        (payload) => {
+          const row = payload.new as Record<string, any>;
+          if (row?.sender_id === user.id) return; // own messages never count
+          if (activeTabRef.current === 'chat') return; // being read live
+          setChatUnread((prev) => prev + 1);
+        }
+      )
+      .subscribe();
+
+    return () => {
+      void supabase.removeChannel(channel);
+    };
   }, [circleId, user]);
 
   const fetchFitCircle = async () => {
@@ -1019,7 +1096,15 @@ export default function FitCirclePage() {
           </div>
 
           {/* Sectioned content: Overview vs Chat */}
-          <Tabs defaultValue="overview" className="w-full">
+          <Tabs
+            value={activeTab}
+            onValueChange={(tab) => {
+              setActiveTab(tab);
+              // Opening the chat tab reads the timeline (CircleChat marks read).
+              if (tab === 'chat') setChatUnread(0);
+            }}
+            className="w-full"
+          >
             <TabsList className="mb-4 grid w-full max-w-md grid-cols-3 bg-slate-900/50 border border-slate-800/50 backdrop-blur-xl">
               <TabsTrigger value="overview" className="gap-1.5 data-[state=active]:bg-slate-800 data-[state=active]:text-white">
                 <LayoutGrid className="h-4 w-4" />
@@ -1028,6 +1113,11 @@ export default function FitCirclePage() {
               <TabsTrigger value="chat" className="gap-1.5 data-[state=active]:bg-slate-800 data-[state=active]:text-white">
                 <MessageCircle className="h-4 w-4" />
                 Chat
+                {chatUnread > 0 && (
+                  <span className="ml-1 inline-flex h-4 min-w-[16px] items-center justify-center rounded-full bg-indigo-500 px-1 text-[10px] font-semibold leading-none text-white">
+                    {chatUnread > 99 ? '99+' : chatUnread}
+                  </span>
+                )}
               </TabsTrigger>
               <TabsTrigger value="nutrition" className="gap-1.5 data-[state=active]:bg-slate-800 data-[state=active]:text-white">
                 <Salad className="h-4 w-4" />

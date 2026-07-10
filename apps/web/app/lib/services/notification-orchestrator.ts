@@ -45,6 +45,12 @@ export interface NotificationData {
   // Circle Chat
   preview?: string;
   body?: string;
+  senderName?: string;
+
+  // Entity ids forwarded into the push data payload (as strings) when present
+  circleId?: string;
+  challengeId?: string;
+  messageId?: string;
 
   // Deep link
   deepLink?: string;
@@ -310,6 +316,17 @@ const SUPPRESSION_CHAINS: Array<{ blocker: NotificationType; blocked: Notificati
 // Frequency cap
 const MAX_NOTIFICATIONS_PER_DAY = 5;
 
+// Chat notifications are real-time conversation traffic: they are exempt from
+// the daily frequency cap AND excluded from its count (so a busy chat never
+// starves other notification types). Quiet hours + category preferences still
+// apply. They also ride the chat wire shape (data-only on Android, alert +
+// thread-id on iOS) — see PushService.
+const CHAT_NOTIFICATION_TYPES: NotificationType[] = [
+  'chat_message',
+  'chat_mention',
+  'chat_rally',
+];
+
 // ============================================================================
 // SERVICE
 // ============================================================================
@@ -338,11 +355,14 @@ export class NotificationOrchestrator {
       return { sent: false, reason: 'category_disabled' };
     }
 
-    // 2. Check frequency cap
-    const capResult = await this.checkFrequencyCap(userId);
-    if (!capResult.allowed) {
-      await this.logNotification(userId, type, content, data, true, 'frequency_cap');
-      return { sent: false, reason: 'frequency_cap' };
+    // 2. Check frequency cap (chat types are exempt — see CHAT_NOTIFICATION_TYPES)
+    const isChatType = CHAT_NOTIFICATION_TYPES.includes(type);
+    if (!isChatType) {
+      const capResult = await this.checkFrequencyCap(userId);
+      if (!capResult.allowed) {
+        await this.logNotification(userId, type, content, data, true, 'frequency_cap');
+        return { sent: false, reason: 'frequency_cap' };
+      }
     }
 
     // 3. Check quiet hours
@@ -366,15 +386,34 @@ export class NotificationOrchestrator {
       return { sent: false, reason: `suppressed_by_${suppressionResult.blockerType}` };
     }
 
-    // 5. Send the push notification
+    // 5. Send the push notification.
+    // All data values must be strings (FCM v1 requirement); absent keys are omitted.
+    const pushData: Record<string, string> = {
+      type,
+      category: content.category,
+    };
+    if (data.circleId) pushData.circleId = String(data.circleId);
+    if (data.challengeId) pushData.challengeId = String(data.challengeId);
+    if (data.messageId) pushData.messageId = String(data.messageId);
+    if (data.deepLink) pushData.deepLink = data.deepLink;
+
+    if (isChatType) {
+      // Chat wire contract: circleName + preview always; senderName except rallies.
+      if (data.circleName) pushData.circleName = String(data.circleName);
+      const senderName = data.senderName ?? data.friendName;
+      if (senderName && type !== 'chat_rally') pushData.senderName = String(senderName);
+      const preview = data.preview ?? data.body;
+      if (preview) pushData.preview = String(preview);
+    }
+
     const pushNotification: PushNotification = {
       title: content.title,
       body: content.body,
-      data: {
-        type,
-        category: content.category,
-        ...(data.deepLink ? { deepLink: data.deepLink } : {}),
-      },
+      data: pushData,
+      // Chat pushes ride the data-only Android / alert+thread-id iOS shape.
+      ...(isChatType
+        ? { chat: { threadId: data.circleId ? String(data.circleId) : '' } }
+        : {}),
     };
 
     const sentCount = await PushService.sendPush(userId, pushNotification);
@@ -391,6 +430,8 @@ export class NotificationOrchestrator {
 
   /**
    * Check if user has exceeded the daily frequency cap.
+   * Chat notifications don't count toward the cap (a busy chat would otherwise
+   * starve every other notification type for the rest of the day).
    */
   static async checkFrequencyCap(
     userId: string
@@ -405,6 +446,7 @@ export class NotificationOrchestrator {
       .select('id', { count: 'exact', head: true })
       .eq('user_id', userId)
       .eq('suppressed', false)
+      .not('notification_type', 'in', `(${CHAT_NOTIFICATION_TYPES.join(',')})`)
       .gte('sent_at', startOfDay.toISOString());
 
     if (error) {

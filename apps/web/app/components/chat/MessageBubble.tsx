@@ -23,7 +23,13 @@ interface MessageBubbleProps {
   groupedWithPrevious: boolean;
   onReactionsChange: (messageId: string, reactions: MessageReactionSummary[]) => void;
   onReport?: (messageId: string) => void;
+  onEdit?: (messageId: string) => void;
+  onDelete?: (messageId: string) => void;
 }
+
+// Edit grace window (mirrors the server-enforced 15-minute contract; the
+// affordance is hidden after it, but the API is the source of truth).
+const EDIT_WINDOW_MS = 15 * 60 * 1000;
 
 function formatTime(iso: string): string {
   return new Date(iso).toLocaleTimeString('en-US', {
@@ -43,10 +49,35 @@ export function MessageBubble({
   groupedWithPrevious,
   onReactionsChange,
   onReport,
+  onEdit,
+  onDelete,
 }: MessageBubbleProps) {
   if (message.kind === 'system_event') {
     return <SystemPost message={message} onReactionsChange={onReactionsChange} />;
   }
+
+  // Tombstone: an italic placeholder — no reaction bar, no edit/delete menu.
+  if (message.deletedAt) {
+    return (
+      <div className={cn('flex w-full gap-2', isMine ? 'flex-row-reverse' : 'flex-row')}>
+        <div className="w-8 flex-shrink-0" />
+        <div className={cn('flex max-w-[78%] flex-col', isMine ? 'items-end' : 'items-start')}>
+          <div className="rounded-2xl border border-slate-800/60 bg-slate-900/40 px-3.5 py-2 text-sm italic text-gray-500">
+            Message deleted
+          </div>
+          <time className="mt-1 px-1 text-[10px] text-gray-500">
+            {formatTime(message.createdAt)}
+          </time>
+        </div>
+      </div>
+    );
+  }
+
+  const canEdit =
+    isMine &&
+    !!onEdit &&
+    message.kind === 'user_text' &&
+    Date.now() - new Date(message.createdAt).getTime() < EDIT_WINDOW_MS;
 
   return (
     <div className={cn('flex w-full gap-2', isMine ? 'flex-row-reverse' : 'flex-row')}>
@@ -97,6 +128,27 @@ export function MessageBubble({
             onChange={(reactions) => onReactionsChange(message.id, reactions)}
           />
           <time className="mt-1 text-[10px] text-gray-500">{formatTime(message.createdAt)}</time>
+          {message.editedAt && (
+            <span className="mt-1 text-[10px] text-gray-600">(edited)</span>
+          )}
+          {canEdit && (
+            <button
+              type="button"
+              onClick={() => onEdit?.(message.id)}
+              className="mt-1 text-[10px] text-gray-600 transition-colors hover:text-gray-400"
+            >
+              Edit
+            </button>
+          )}
+          {isMine && onDelete && (
+            <button
+              type="button"
+              onClick={() => onDelete(message.id)}
+              className="mt-1 text-[10px] text-gray-600 transition-colors hover:text-gray-400"
+            >
+              Delete
+            </button>
+          )}
           {!isMine && onReport && (
             <button
               type="button"

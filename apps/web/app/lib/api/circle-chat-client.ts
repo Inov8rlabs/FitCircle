@@ -53,6 +53,8 @@ export interface ChatMessage {
   reactions: MessageReactionSummary[];
   clientId: string | null;
   createdAt: string;
+  editedAt: string | null; // ISO — set when the sender edited the message
+  deletedAt: string | null; // ISO — set = tombstone (body/photoUrl always null)
 }
 
 export interface ListMessagesResult {
@@ -111,6 +113,17 @@ export const chatClient = {
     authedFetch<ChatMessage>(`/api/mobile/circles/${circleId}/messages`, {
       method: 'POST',
       body: JSON.stringify(input),
+    }),
+
+  editMessage: (messageId: string, body: string) =>
+    authedFetch<{ message: ChatMessage }>(`/api/mobile/messages/${messageId}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ body }),
+    }),
+
+  deleteMessage: (messageId: string) =>
+    authedFetch<{ message: ChatMessage }>(`/api/mobile/messages/${messageId}`, {
+      method: 'DELETE',
     }),
 
   addReaction: (messageId: string, reaction: ReactionKind) =>

@@ -15,6 +15,8 @@ import {
   type SendMessageInput,
   type SystemEventType,
   MESSAGE_BODY_MAX_LENGTH,
+  MESSAGE_EDIT_BODY_MAX_LENGTH,
+  MESSAGE_EDIT_WINDOW_MS,
   MESSAGE_PAGE_DEFAULT_LIMIT,
   MESSAGE_PAGE_MAX_LIMIT,
 } from '../types/circle-chat';
@@ -24,7 +26,7 @@ import { ChatSafetyService } from './chat-safety-service';
 
 // Columns selected for circle_messages rows mapped to ChatMessageDTO.
 const MESSAGE_COLUMNS =
-  'id, fitcircle_id, sender_id, kind, body, photo_url, client_id, system_event_type, system_event_ref, system_payload, priority, created_at, updated_at';
+  'id, fitcircle_id, sender_id, kind, body, photo_url, client_id, system_event_type, system_event_ref, system_payload, priority, edited_at, deleted_at, created_at, updated_at';
 
 export class CircleChatService {
   // ============================================================================
@@ -230,6 +232,115 @@ export class CircleChatService {
   }
 
   /**
+   * PATCH /messages/:id — sender edits their own user_text message.
+   * Allowed only within MESSAGE_EDIT_WINDOW_MS of created_at and never on a
+   * tombstone. Sets edited_at and returns the re-mapped DTO.
+   */
+  static async editMessage(
+    userId: string,
+    messageId: string,
+    body: string
+  ): Promise<ChatMessageDTO> {
+    const row = await this.getMessageRowForOwnerAction(messageId, userId);
+
+    if (row.sender_id !== userId) throw new Error('Forbidden');
+    if (row.deleted_at) throw new Error('MessageDeleted');
+    if (row.kind !== 'user_text') throw new Error('InvalidMessageKind');
+
+    const createdAtMs = new Date(row.created_at).getTime();
+    if (Date.now() - createdAtMs > MESSAGE_EDIT_WINDOW_MS) {
+      throw new Error('EditWindowExpired');
+    }
+
+    const trimmed = (body ?? '').trim();
+    if (trimmed.length === 0) {
+      throw new Error('Message body is required');
+    }
+    if (trimmed.length > MESSAGE_EDIT_BODY_MAX_LENGTH) {
+      throw new Error(`Message body exceeds ${MESSAGE_EDIT_BODY_MAX_LENGTH} characters`);
+    }
+
+    const supabaseAdmin = createAdminSupabase();
+
+    const { data: updated, error } = await supabaseAdmin
+      .from('circle_messages')
+      .update({ body: trimmed, edited_at: new Date().toISOString() })
+      .eq('id', messageId)
+      .select(MESSAGE_COLUMNS)
+      .single();
+
+    if (error) throw error;
+
+    const [dto] = await this.mapRowsToDTOs([updated as CircleMessageRow], userId);
+    return dto;
+  }
+
+  /**
+   * DELETE /messages/:id — sender soft-deletes their own message.
+   * Tombstone semantics: deleted_at set, body cleared, photo_url nulled.
+   * Idempotent — deleting an already-deleted message returns the tombstone.
+   */
+  static async deleteMessage(userId: string, messageId: string): Promise<ChatMessageDTO> {
+    const row = await this.getMessageRowForOwnerAction(messageId, userId);
+
+    if (row.sender_id !== userId) throw new Error('Forbidden');
+    if (row.kind === 'system_event') throw new Error('InvalidMessageKind');
+
+    if (row.deleted_at) {
+      const [existing] = await this.mapRowsToDTOs([row], userId);
+      return existing;
+    }
+
+    const supabaseAdmin = createAdminSupabase();
+
+    const { data: updated, error } = await supabaseAdmin
+      .from('circle_messages')
+      .update({ deleted_at: new Date().toISOString(), body: null, photo_url: null })
+      .eq('id', messageId)
+      .select(MESSAGE_COLUMNS)
+      .single();
+
+    if (error) throw error;
+
+    const [dto] = await this.mapRowsToDTOs([updated as CircleMessageRow], userId);
+    return dto;
+  }
+
+  /**
+   * Fetch a full message row for an owner edit/delete. Non-members get
+   * Error('NotFound') (not 'Forbidden') so message existence is never leaked
+   * outside the circle.
+   */
+  private static async getMessageRowForOwnerAction(
+    messageId: string,
+    userId: string
+  ): Promise<CircleMessageRow> {
+    const supabaseAdmin = createAdminSupabase();
+
+    const { data, error } = await supabaseAdmin
+      .from('circle_messages')
+      .select(MESSAGE_COLUMNS)
+      .eq('id', messageId)
+      .maybeSingle();
+
+    if (error) throw error;
+    if (!data) throw new Error('NotFound');
+
+    const row = data as CircleMessageRow;
+
+    try {
+      await this.assertActiveMember(row.fitcircle_id, userId);
+    } catch (err) {
+      if (err instanceof Error && err.message === 'Forbidden') {
+        throw new Error('NotFound');
+      }
+      throw err;
+    }
+
+    return row;
+  }
+
+  /**
    * Used by the system-post engine (NOT exposed via a member route). Writes a
    * kind='system_event' row (sender_id=null) and returns the mapped DTO.
    * actorUserIds + renderHint are folded into system_payload as
@@ -293,6 +404,16 @@ export class CircleChatService {
 
     const supabaseAdmin = createAdminSupabase();
 
+    // Tombstones cannot collect new reactions.
+    const { data: messageRow, error: messageError } = await supabaseAdmin
+      .from('circle_messages')
+      .select('deleted_at')
+      .eq('id', messageId)
+      .maybeSingle();
+
+    if (messageError) throw messageError;
+    if (messageRow?.deleted_at) throw new Error('MessageDeleted');
+
     const { error } = await supabaseAdmin
       .from('circle_message_reactions')
       .upsert(
@@ -301,6 +422,26 @@ export class CircleChatService {
       );
 
     if (error) throw error;
+
+    // Re-check after the write: a concurrent delete may have tombstoned the
+    // message between the check above and the upsert. Roll the reaction back
+    // so no stale rows land on tombstones.
+    const { data: recheckRow, error: recheckError } = await supabaseAdmin
+      .from('circle_messages')
+      .select('deleted_at')
+      .eq('id', messageId)
+      .maybeSingle();
+
+    if (recheckError) throw recheckError;
+    if (recheckRow?.deleted_at) {
+      await supabaseAdmin
+        .from('circle_message_reactions')
+        .delete()
+        .eq('message_id', messageId)
+        .eq('user_id', userId)
+        .eq('reaction', reaction);
+      throw new Error('MessageDeleted');
+    }
 
     const summaries = await this.buildReactionSummaries([messageId], userId);
     return summaries.get(messageId) ?? [];
@@ -486,18 +627,23 @@ export class CircleChatService {
     return rows.map((row) => {
       const sender = row.sender_id ? senderById.get(row.sender_id) ?? null : null;
       const system = row.kind === 'system_event' ? this.buildSystemBlock(row) : null;
+      // Deleted rows always serialize as tombstones (no body, no photo),
+      // regardless of what the stored row still holds.
+      const isDeleted = !!row.deleted_at;
 
       return {
         id: row.id,
         circleId: row.fitcircle_id,
         kind: row.kind,
         sender,
-        body: row.body,
-        photoUrl: row.photo_url,
+        body: isDeleted ? null : row.body,
+        photoUrl: isDeleted ? null : row.photo_url,
         system,
         reactions: reactionsByMessage.get(row.id) ?? [],
         clientId: row.client_id,
         createdAt: row.created_at,
+        editedAt: row.edited_at ?? null,
+        deletedAt: row.deleted_at ?? null,
       };
     });
   }

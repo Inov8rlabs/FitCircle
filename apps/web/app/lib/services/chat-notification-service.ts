@@ -61,9 +61,12 @@ export class ChatNotificationService {
         const type = isMentioned ? 'chat_mention' : 'chat_message';
 
         // Fire-and-forget per member; a single failure never affects others.
+        // friendName feeds the notification templates; senderName is the
+        // cross-platform push-data key (the orchestrator puts it on the wire).
         void NotificationOrchestrator.send(member.userId, type, {
           circleName,
           friendName: senderName,
+          senderName,
           preview: truncatedPreview,
           deepLink,
           messageId,

@@ -152,8 +152,39 @@ export function CircleChat({ circleId }: CircleChatProps) {
             .then((result) => {
               for (const m of [...result.messages].reverse()) upsertMessage(m);
               scrollToBottom('smooth');
+              // The message was read live in the open timeline — advance the
+              // persisted cursor so the unread badge stays accurate on reload.
+              void chatClient.markRead(circleId).catch(() => {});
             })
             .catch((err) => console.warn('[chat] realtime refetch failed', err));
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'circle_messages',
+          filter: `fitcircle_id=eq.${circleId}`,
+        },
+        (payload) => {
+          const row = payload.new as Record<string, any>;
+          if (!row?.id) return;
+          // Edits/tombstones patch the timeline in place — the UPDATE row is a
+          // full snake_case snapshot (REPLICA IDENTITY FULL), so no refetch.
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.id === row.id
+                ? {
+                    ...m,
+                    body: row.deleted_at ? null : (row.body ?? null),
+                    photoUrl: row.deleted_at ? null : (row.photo_url ?? null),
+                    editedAt: row.edited_at ?? null,
+                    deletedAt: row.deleted_at ?? null,
+                  }
+                : m
+            )
+          );
         }
       )
       .on(
@@ -219,6 +250,39 @@ export function CircleChat({ circleId }: CircleChatProps) {
     []
   );
 
+  const handleEdit = useCallback(
+    async (messageId: string) => {
+      const current = messages.find((m) => m.id === messageId);
+      if (!current || current.kind !== 'user_text') return;
+      const next = window.prompt('Edit message:', current.body ?? '');
+      if (next === null) return; // cancelled
+      const trimmed = next.trim();
+      if (!trimmed || trimmed === current.body) return;
+      try {
+        const { message } = await chatClient.editMessage(messageId, trimmed);
+        upsertMessage(message);
+      } catch (err) {
+        console.warn('[chat] edit failed', err);
+        setError('Could not edit that message.');
+      }
+    },
+    [messages, upsertMessage]
+  );
+
+  const handleDelete = useCallback(
+    async (messageId: string) => {
+      if (!window.confirm('Delete this message? This cannot be undone.')) return;
+      try {
+        const { message } = await chatClient.deleteMessage(messageId);
+        upsertMessage(message); // server tombstone (body/photo cleared)
+      } catch (err) {
+        console.warn('[chat] delete failed', err);
+        setError('Could not delete that message.');
+      }
+    },
+    [upsertMessage]
+  );
+
   const handleReport = useCallback(async (messageId: string) => {
     const reason = window.prompt('Report this message — optional reason:');
     if (reason === null) return; // cancelled
@@ -248,6 +312,8 @@ export function CircleChat({ circleId }: CircleChatProps) {
       reactions: [],
       clientId,
       createdAt: new Date().toISOString(),
+      editedAt: null,
+      deletedAt: null,
     };
 
     setDraft('');
@@ -319,6 +385,9 @@ export function CircleChat({ circleId }: CircleChatProps) {
                 prev.kind !== 'system_event' &&
                 m.kind !== 'system_event' &&
                 prev.sender?.id === m.sender?.id;
+              // Optimistic rows have a synthetic id the server doesn't know —
+              // no edit/delete until the real message replaces them.
+              const isPending = m.id.startsWith('optimistic-');
               return (
                 <MessageBubble
                   key={m.id}
@@ -327,6 +396,8 @@ export function CircleChat({ circleId }: CircleChatProps) {
                   groupedWithPrevious={groupedWithPrevious}
                   onReactionsChange={handleReactionsChange}
                   onReport={handleReport}
+                  onEdit={isPending ? undefined : handleEdit}
+                  onDelete={isPending ? undefined : handleDelete}
                 />
               );
             })}

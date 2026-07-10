@@ -12,6 +12,12 @@ export interface PushNotification {
   data?: Record<string, string>;
   badge?: number;
   sound?: string;
+  /**
+   * Chat wire shape (set by NotificationOrchestrator for chat types only):
+   * data-only on Android (no top-level notification block, HIGH priority) and
+   * alert + apns-priority 10 + thread-id (= circleId, groups per circle) on iOS.
+   */
+  chat?: { threadId: string };
 }
 
 export interface PushToken {
@@ -28,21 +34,26 @@ export interface PushToken {
 interface FCMMessage {
   message: {
     token: string;
-    notification: {
+    // Omitted for chat messages (data-only on Android; iOS alert lives in apns).
+    notification?: {
       title: string;
       body: string;
     };
     data?: Record<string, string>;
     apns?: {
+      headers?: Record<string, string>;
       payload: {
         aps: {
+          alert?: { title: string; body: string };
           badge?: number;
           sound?: string;
+          'thread-id'?: string;
         };
       };
     };
     android?: {
-      notification: {
+      priority?: 'NORMAL' | 'HIGH';
+      notification?: {
         sound?: string;
       };
     };
@@ -304,29 +315,58 @@ export class PushService {
     try {
       const accessToken = await getFCMAccessToken();
 
-      const message: FCMMessage = {
-        message: {
-          token: tokenRecord.token,
-          notification: {
-            title: notification.title,
-            body: notification.body,
-          },
-          data: notification.data,
-          apns: {
-            payload: {
-              aps: {
-                badge: notification.badge,
-                sound: notification.sound || 'default',
+      const message: FCMMessage = notification.chat
+        ? {
+            // Chat wire shape: data-only for Android (the app renders/suppresses
+            // its own notification), while iOS still gets an alert via apns —
+            // required for apns-priority 10 — grouped per circle by thread-id.
+            message: {
+              token: tokenRecord.token,
+              data: notification.data,
+              android: {
+                priority: 'HIGH',
+              },
+              apns: {
+                headers: { 'apns-priority': '10' },
+                payload: {
+                  aps: {
+                    alert: {
+                      title: notification.title,
+                      body: notification.body,
+                    },
+                    sound: notification.sound || 'default',
+                    ...(notification.chat.threadId
+                      ? { 'thread-id': notification.chat.threadId }
+                      : {}),
+                  },
+                },
               },
             },
-          },
-          android: {
-            notification: {
-              sound: notification.sound || 'default',
+          }
+        : {
+            // Legacy shape for all non-chat notifications (unchanged).
+            message: {
+              token: tokenRecord.token,
+              notification: {
+                title: notification.title,
+                body: notification.body,
+              },
+              data: notification.data,
+              apns: {
+                payload: {
+                  aps: {
+                    badge: notification.badge,
+                    sound: notification.sound || 'default',
+                  },
+                },
+              },
+              android: {
+                notification: {
+                  sound: notification.sound || 'default',
+                },
+              },
             },
-          },
-        },
-      };
+          };
 
       const response = await fetch(
         `https://fcm.googleapis.com/v1/projects/${projectId}/messages:send`,
