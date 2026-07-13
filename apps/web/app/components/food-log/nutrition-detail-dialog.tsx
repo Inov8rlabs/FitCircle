@@ -1,7 +1,10 @@
 'use client';
 
 import { format } from 'date-fns';
+import { Camera, Loader2 } from 'lucide-react';
 import Image from 'next/image';
+import { useRouter } from 'next/navigation';
+import { useRef, useState } from 'react';
 
 import {
   Dialog,
@@ -10,7 +13,35 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog';
+import { mergeDrafts, nutritionClient, type NutritionDraft, type NutritionDraftItem } from '@/lib/api/nutrition-client';
 import { cn } from '@/lib/utils';
+
+import { NutritionConfirm } from '../nutrition/NutritionConfirm';
+
+type MealType = 'breakfast' | 'lunch' | 'dinner' | 'snack' | 'other';
+
+/** Rebuild an editable draft item from a persisted (snake_case) saved item. */
+function toDraftItem(it: Record<string, any>): NutritionDraftItem {
+  const quantity = typeof it.quantity === 'number' ? it.quantity : 1;
+  const grams = typeof it.grams === 'number' ? it.grams : undefined;
+  return {
+    name: it.name ?? '',
+    quantity,
+    quantityRange: null,
+    servingUnit: it.serving_unit ?? 'serving',
+    grams,
+    gramsPerUnit: grams != null && quantity > 0 ? grams / quantity : undefined,
+    calories: it.calories ?? 0,
+    proteinG: it.protein_g ?? 0,
+    carbsG: it.carbs_g ?? 0,
+    fatG: it.fat_g ?? 0,
+    fiberG: it.fiber_g ?? undefined,
+    sugarG: it.sugar_g ?? undefined,
+    sodiumMg: it.sodium_mg ?? undefined,
+    confidence: 1,
+    matchedFoodId: it.matched_food_id ?? null,
+  };
+}
 
 const round = (v: unknown) => (typeof v === 'number' ? Math.round(v) : 0);
 const numFmt = (v: unknown) => {
@@ -33,16 +64,118 @@ interface SavedItem {
  * persisted `nutrition_data`. Use the row content as the trigger.
  */
 export function NutritionDetailDialog({ entry, children }: { entry: any; children: React.ReactNode }) {
+  const router = useRouter();
   const nd = entry?.nutrition_data ?? {};
   const items: SavedItem[] = Array.isArray(nd.items) ? nd.items : [];
   const hasSecondary = (nd.fiber_g || 0) > 0 || (nd.sugar_g || 0) > 0 || (nd.sodium_mg || 0) > 0;
   const score: number | null = typeof nd.health_score === 'number' ? nd.health_score : null;
   const img: string | undefined = entry?.images?.[0]?.url || entry?.images?.[0]?.thumbnail_url;
 
+  const [open, setOpen] = useState(false);
+  // When set, we're reviewing new photo(s) appended to this meal.
+  const [seedDraft, setSeedDraft] = useState<NutritionDraft | null>(null);
+  const [addFiles, setAddFiles] = useState<File[]>([]);
+  const [adding, setAdding] = useState(false);
+  const [addError, setAddError] = useState<string | null>(null);
+  const addRef = useRef<HTMLInputElement>(null);
+
+  // Only meals/snacks carry AI nutrition; don't offer it on water/supplement.
+  const canAddPhoto = entry?.id && entry?.entry_type !== 'water' && entry?.entry_type !== 'supplement';
+
+  const resetAdd = () => {
+    setSeedDraft(null);
+    setAddFiles([]);
+    setAddError(null);
+  };
+
+  const onAddPhotos = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files ?? []);
+    e.target.value = '';
+    if (files.length === 0) return;
+    setAdding(true);
+    setAddError(null);
+    try {
+      const drafts: NutritionDraft[] = [await nutritionClient.photoParse(files[0])];
+      for (const f of files.slice(1)) {
+        try {
+          drafts.push(await nutritionClient.photoParse(f));
+        } catch {
+          /* skip a failed extra photo */
+        }
+      }
+      const merged = mergeDrafts(drafts);
+      const newItems = merged.items.filter((i) => i.name.trim());
+      if (newItems.length === 0) {
+        setAddError('We could not find any food in that photo.');
+        return;
+      }
+      // Existing meal items (or a synthesized summary line when the entry has
+      // aggregate macros but no per-item breakdown), then the new photo's items.
+      let existing: NutritionDraftItem[] = items.map((it) => toDraftItem(it as Record<string, any>));
+      if (existing.length === 0 && round(nd.calories) > 0) {
+        existing = [
+          toDraftItem({
+            name: entry?.title || 'Logged meal',
+            quantity: 1,
+            serving_unit: 'serving',
+            calories: nd.calories,
+            protein_g: nd.protein_g,
+            carbs_g: nd.carbs_g,
+            fat_g: nd.fat_g,
+            fiber_g: nd.fiber_g,
+            sugar_g: nd.sugar_g,
+            sodium_mg: nd.sodium_mg,
+          }),
+        ];
+      }
+      setSeedDraft({
+        items: [...existing, ...newItems],
+        overallConfidence: 1,
+        notes: null,
+        inputMethod: 'photo',
+        nutritionSource: 'llm_vision',
+        model: '',
+        cached: false,
+        totals: { calories: 0, proteinG: 0, carbsG: 0, fatG: 0 },
+        healthScore: score ?? merged.healthScore ?? null,
+      });
+      setAddFiles(files);
+    } catch (err) {
+      setAddError(err instanceof Error ? err.message : 'Could not analyze that photo.');
+    } finally {
+      setAdding(false);
+    }
+  };
+
   return (
-    <Dialog>
+    <Dialog
+      open={open}
+      onOpenChange={(o) => {
+        setOpen(o);
+        if (!o) resetAdd();
+      }}
+    >
       <DialogTrigger asChild>{children}</DialogTrigger>
       <DialogContent className="max-h-[85vh] max-w-md overflow-y-auto">
+        {seedDraft ? (
+          <>
+            <DialogHeader>
+              <DialogTitle className="pr-6">Add to {entry?.title || 'this meal'}</DialogTitle>
+            </DialogHeader>
+            <NutritionConfirm
+              draft={seedDraft}
+              initialImages={addFiles}
+              editEntry={{ id: entry.id, mealType: entry?.meal_type as MealType | undefined }}
+              onCommitted={() => {
+                resetAdd();
+                setOpen(false);
+                router.refresh();
+              }}
+              onCancel={resetAdd}
+            />
+          </>
+        ) : (
+          <>
         <DialogHeader>
           <DialogTitle className="pr-6">{entry?.title || 'Meal'}</DialogTitle>
           {entry?.logged_at && (
@@ -120,6 +253,27 @@ export function NutritionDetailDialog({ entry, children }: { entry: any; childre
 
         {items.length === 0 && round(nd.calories) === 0 && (
           <p className="text-sm text-muted-foreground">No nutrition details saved for this entry.</p>
+        )}
+
+        {canAddPhoto && (
+          <>
+            <input ref={addRef} type="file" accept="image/*" multiple className="hidden" onChange={onAddPhotos} />
+            <button
+              type="button"
+              onClick={() => addRef.current?.click()}
+              disabled={adding}
+              className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-indigo-600 to-indigo-700 px-4 py-2.5 text-sm font-semibold text-white hover:from-indigo-700 hover:to-indigo-800 disabled:opacity-50"
+            >
+              {adding ? <Loader2 className="h-4 w-4 animate-spin" /> : <Camera className="h-4 w-4" />}
+              {adding ? 'Analyzing…' : 'Add to this meal'}
+            </button>
+            <p className="-mt-1 text-center text-[11px] text-muted-foreground">
+              Snap a later course or dessert — we&apos;ll add its calories to this meal.
+            </p>
+            {addError && <p className="text-center text-xs text-red-400">{addError}</p>}
+          </>
+        )}
+          </>
         )}
       </DialogContent>
     </Dialog>

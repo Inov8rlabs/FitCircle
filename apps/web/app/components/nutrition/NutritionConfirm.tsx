@@ -1,10 +1,11 @@
 'use client';
 
-import { Check, ChevronDown, Loader2, Minus, Plus, Sparkles, Trash2, X } from 'lucide-react';
-import { useState } from 'react';
+import { Camera, Check, ChevronDown, Loader2, Minus, Plus, Sparkles, Trash2, X } from 'lucide-react';
+import { useRef, useState } from 'react';
 
 import {
   LOW_CONFIDENCE_THRESHOLD,
+  mergeDrafts,
   nutritionClient,
   type NutritionDraft,
   type NutritionDraftItem,
@@ -35,6 +36,13 @@ interface NutritionConfirmProps {
   onCancel?: () => void;
   /** When provided, shows a "Fix Issue" control that re-runs the AI analysis. */
   onReanalyze?: () => void;
+  /** Photos to attach to the entry on commit (from the initial capture). */
+  initialImages?: File[];
+  /**
+   * When set, commit PATCHes this existing entry (append a photo to a logged
+   * meal) instead of creating a new one. `mealType` seeds the meal-type pills.
+   */
+  editEntry?: { id: string; mealType?: MealType };
 }
 
 function emptyItem(): NutritionDraftItem {
@@ -154,18 +162,32 @@ const numFmt = (v: number) => {
  * list whose editor offers measurement pills + live macro recompute. Confirm
  * commits the full breakdown via the food-log create endpoint.
  */
-export function NutritionConfirm({ draft, onCommitted, onCancel, onReanalyze }: NutritionConfirmProps) {
+export function NutritionConfirm({
+  draft,
+  onCommitted,
+  onCancel,
+  onReanalyze,
+  initialImages,
+  editEntry,
+}: NutritionConfirmProps) {
   const lowConfidence = !draft || draft.overallConfidence < LOW_CONFIDENCE_THRESHOLD;
 
   const [items, setItems] = useState<NutritionDraftItem[]>(() =>
     draft && draft.items.length > 0 ? draft.items.map((i) => ({ ...i })) : [emptyItem()]
   );
   const [servings, setServings] = useState(1);
-  const [mealType, setMealType] = useState<MealType>(() => defaultMealTypeForHour(new Date().getHours()));
+  const [mealType, setMealType] = useState<MealType>(
+    () => editEntry?.mealType ?? defaultMealTypeForHour(new Date().getHours())
+  );
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [openIdx, setOpenIdx] = useState<number | null>(null);
   const [reanalyzingIdx, setReanalyzingIdx] = useState<number | null>(null);
+  // Photos to attach to the entry on commit; grows via "Add another photo".
+  const [images, setImages] = useState<File[]>(() => initialImages ?? []);
+  const [healthScore, setHealthScore] = useState<number | null>(draft?.healthScore ?? null);
+  const [addingPhoto, setAddingPhoto] = useState(false);
+  const addPhotoRef = useRef<HTMLInputElement>(null);
 
   const base = items.reduce(
     (a, it) => ({
@@ -181,7 +203,47 @@ export function NutritionConfirm({ draft, onCommitted, onCancel, onReanalyze }: 
   );
   const sc = (v: number) => Math.round(v * servings);
   const hasSecondary = base.fiber > 0 || base.sugar > 0 || base.sodium > 0;
-  const healthScore = draft?.healthScore ?? null;
+
+  /** Analyze added photo(s) and append their foods to this meal. */
+  const onAddPhotos = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files ?? []);
+    e.target.value = '';
+    if (files.length === 0) return;
+    setAddingPhoto(true);
+    setError(null);
+    try {
+      // First photo's error surfaces; extras are best-effort.
+      const drafts: NutritionDraft[] = [await nutritionClient.photoParse(files[0])];
+      for (const file of files.slice(1)) {
+        try {
+          drafts.push(await nutritionClient.photoParse(file));
+        } catch {
+          /* skip a failed extra photo */
+        }
+      }
+      const merged = mergeDrafts(drafts);
+      const newItems = merged.items.filter((i) => i.name.trim());
+      if (newItems.length === 0) {
+        setError('We could not find any food in that photo.');
+        return;
+      }
+      const existingCal = items.reduce((a, it) => a + (it.calories || 0), 0);
+      const addedCal = newItems.reduce((a, it) => a + (it.calories || 0), 0);
+      setItems((prev) => [...prev, ...newItems.map((i) => ({ ...i }))]);
+      setImages((prev) => [...prev, ...files]);
+      // Blend the health score weighted by calories.
+      setHealthScore((prev) => {
+        if (prev == null) return merged.healthScore ?? null;
+        if (merged.healthScore == null) return prev;
+        const w = existingCal + addedCal;
+        return w > 0 ? Math.round(((prev * existingCal + merged.healthScore * addedCal) / w) * 10) / 10 : prev;
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not analyze that photo.');
+    } finally {
+      setAddingPhoto(false);
+    }
+  };
 
   const patchItem = (idx: number, patch: Partial<NutritionDraftItem>) =>
     setItems((prev) => prev.map((it, i) => (i === idx ? { ...it, ...patch } : it)));
@@ -265,34 +327,44 @@ export function NutritionConfirm({ draft, onCommitted, onCancel, onReanalyze }: 
         }),
         { calories: 0, protein_g: 0, carbs_g: 0, fat_g: 0, fiber_g: 0, sugar_g: 0, sodium_mg: 0 }
       );
-      await nutritionClient.createFoodLog({
-        entry_type: 'food',
-        meal_type: mealType,
-        title,
-        nutrition_data: {
-          calories: Math.round(totals.calories),
-          protein_g: Math.round(totals.protein_g),
-          carbs_g: Math.round(totals.carbs_g),
-          fat_g: Math.round(totals.fat_g),
-          fiber_g: Math.round(totals.fiber_g),
-          sugar_g: Math.round(totals.sugar_g),
-          sodium_mg: Math.round(totals.sodium_mg),
-          health_score: healthScore,
-          items: named.map((it) => ({
-            name: it.name.trim(),
-            quantity: it.quantity,
-            serving_unit: it.servingUnit,
-            grams: it.grams ?? null,
-            calories: it.calories,
-            protein_g: it.proteinG,
-            carbs_g: it.carbsG,
-            fat_g: it.fatG,
-            fiber_g: it.fiberG ?? null,
-            sugar_g: it.sugarG ?? null,
-            sodium_mg: it.sodiumMg ?? null,
-          })),
-        },
-      });
+      const nutrition_data = {
+        calories: Math.round(totals.calories),
+        protein_g: Math.round(totals.protein_g),
+        carbs_g: Math.round(totals.carbs_g),
+        fat_g: Math.round(totals.fat_g),
+        fiber_g: Math.round(totals.fiber_g),
+        sugar_g: Math.round(totals.sugar_g),
+        sodium_mg: Math.round(totals.sodium_mg),
+        health_score: healthScore,
+        items: named.map((it) => ({
+          name: it.name.trim(),
+          quantity: it.quantity,
+          serving_unit: it.servingUnit,
+          grams: it.grams ?? null,
+          calories: it.calories,
+          protein_g: it.proteinG,
+          carbs_g: it.carbsG,
+          fat_g: it.fatG,
+          fiber_g: it.fiberG ?? null,
+          sugar_g: it.sugarG ?? null,
+          sodium_mg: it.sodiumMg ?? null,
+        })),
+      };
+
+      // Editing an existing meal (a photo was added to a logged meal) → PATCH
+      // its merged nutrition and attach the new photos. Otherwise create anew.
+      const entryId = editEntry
+        ? (await nutritionClient.updateFoodLog(editEntry.id, { meal_type: mealType, title, nutrition_data }), editEntry.id)
+        : (await nutritionClient.createFoodLog({ entry_type: 'food', meal_type: mealType, title, nutrition_data })).id;
+
+      if (images.length > 0) {
+        // Best-effort — the entry's nutrition is authoritative even if a photo fails.
+        try {
+          await nutritionClient.uploadFoodLogImages(entryId, images);
+        } catch {
+          /* photo upload is non-fatal */
+        }
+      }
       onCommitted?.();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to save');
@@ -304,7 +376,7 @@ export function NutritionConfirm({ draft, onCommitted, onCancel, onReanalyze }: 
   return (
     <div className="rounded-xl border border-slate-800/60 bg-slate-900/60 p-4 backdrop-blur-xl">
       <div className="mb-3 flex items-center justify-between">
-        <h3 className="text-base font-semibold text-white">Review your meal</h3>
+        <h3 className="text-base font-semibold text-white">{editEntry ? 'Add to this meal' : 'Review your meal'}</h3>
         <div className="flex items-center gap-2">
           {onReanalyze && (
             <button
@@ -519,6 +591,23 @@ export function NutritionConfirm({ draft, onCommitted, onCancel, onReanalyze }: 
         ))}
       </div>
 
+      {/* Add another photo — snap a later course / dessert; its food is added here. */}
+      <input ref={addPhotoRef} type="file" accept="image/*" multiple className="hidden" onChange={onAddPhotos} />
+      <button
+        type="button"
+        onClick={() => addPhotoRef.current?.click()}
+        disabled={addingPhoto}
+        className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-lg border border-indigo-500/40 bg-indigo-500/10 px-4 py-2.5 text-sm font-medium text-indigo-200 hover:bg-indigo-500/20 disabled:opacity-50"
+      >
+        {addingPhoto ? <Loader2 className="h-4 w-4 animate-spin" /> : <Camera className="h-4 w-4" />}
+        {addingPhoto ? 'Analyzing photo…' : 'Add another photo'}
+      </button>
+      {images.length > 0 && (
+        <p className="mt-1 text-center text-[11px] text-gray-500">
+          {images.length} {images.length === 1 ? 'photo' : 'photos'} will be attached to this meal
+        </p>
+      )}
+
       {/* Meal type */}
       <div className="mt-3 flex flex-wrap gap-1.5">
         {MEAL_TYPES.map((m) => (
@@ -548,7 +637,7 @@ export function NutritionConfirm({ draft, onCommitted, onCancel, onReanalyze }: 
           className="inline-flex flex-1 items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-green-600 to-green-700 px-4 py-2 text-sm font-semibold text-white hover:from-green-700 hover:to-green-800 disabled:opacity-50"
         >
           {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
-          Confirm &amp; log
+          {editEntry ? 'Save changes' : 'Confirm & log'}
         </button>
         <button
           type="button"

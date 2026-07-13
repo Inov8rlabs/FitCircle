@@ -645,4 +645,69 @@ export const nutritionClient = {
       method: 'POST',
       body: JSON.stringify(input),
     }),
+
+  /**
+   * Overwrite an existing entry's fields — used when a photo is added to an
+   * already-logged meal: the merged nutrition_data (existing + new items,
+   * re-summed totals) is PATCHed onto the entry.
+   */
+  updateFoodLog: (id: string, input: Partial<CreateFoodLogEntry>) =>
+    authedFetch<{ id: string }>(`/api/mobile/food-log/${encodeURIComponent(id)}`, {
+      method: 'PATCH',
+      body: JSON.stringify(input),
+    }),
+
+  /**
+   * Attach photos to an existing entry (append after its existing images).
+   * Best-effort — the entry's nutrition is authoritative even if a photo fails.
+   */
+  uploadFoodLogImages: (id: string, images: File[]) => {
+    const form = new FormData();
+    for (const img of images) form.append('images', img);
+    return authedFetchForm<{ uploaded: unknown[]; failed: unknown[] }>(
+      `/api/mobile/food-log/${encodeURIComponent(id)}/images/batch`,
+      form
+    );
+  },
 };
+
+/**
+ * Merge several photo parses into one draft using APPEND semantics: every item
+ * is concatenated (each photo contributes its own foods), totals sum, and the
+ * health score is blended weighted by each draft's calories. Mirrors the iOS
+ * `NutritionDraft.merged`.
+ */
+export function mergeDrafts(drafts: NutritionDraft[]): NutritionDraft {
+  const base = drafts[0];
+  if (drafts.length <= 1) return base;
+  const items = drafts.flatMap((d) => d.items);
+  const draftCal = (d: NutritionDraft) => d.items.reduce((a, it) => a + (it.calories || 0), 0);
+  let scoreNum = 0;
+  let scoreDen = 0;
+  for (const d of drafts) {
+    if (d.healthScore == null) continue;
+    const w = Math.max(draftCal(d), 1);
+    scoreNum += d.healthScore * w;
+    scoreDen += w;
+  }
+  const sum = (f: (it: NutritionDraftItem) => number | undefined) => {
+    const vals = items.map(f).filter((v): v is number => v != null);
+    return vals.length ? vals.reduce((a, b) => a + b, 0) : 0;
+  };
+  return {
+    ...base,
+    items,
+    overallConfidence: Math.min(...drafts.map((d) => d.overallConfidence)),
+    cached: false,
+    totals: {
+      calories: sum((it) => it.calories),
+      proteinG: sum((it) => it.proteinG),
+      carbsG: sum((it) => it.carbsG),
+      fatG: sum((it) => it.fatG),
+      fiberG: sum((it) => it.fiberG),
+      sugarG: sum((it) => it.sugarG),
+      sodiumMg: sum((it) => it.sodiumMg),
+    },
+    healthScore: scoreDen > 0 ? Math.round((scoreNum / scoreDen) * 10) / 10 : null,
+  };
+}
