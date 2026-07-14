@@ -1,7 +1,8 @@
-import { type NextRequest, NextResponse } from 'next/server';
+import { after, type NextRequest, NextResponse } from 'next/server';
 
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { NutritionIntelligenceService } from '@/lib/services/nutrition-intelligence-service';
+import { PHOTO_PARSE_MAX_IMAGES, PHOTO_PARSE_MAX_NOTE_CHARS } from '@/lib/types/nutrition';
 
 // The vision parse routinely takes 20-40s. Without this, the function is killed at
 // the platform default (~10s) and the request appears to "time out". 60s is the max
@@ -12,15 +13,19 @@ export const maxDuration = 60;
  * POST /api/mobile/food/photo-parse
  * PRD v4 §6.1 / §7.6 — multimodal photo → structured nutrition DRAFT.
  *
- * Multipart form-data, field `image` (jpeg/png/webp/heic). Returns a draft the client shows
- * on a "tap to fix" card; it does NOT create a food log entry. The user confirms, then the
- * existing POST /api/mobile/food-log (or PATCH) commits the entry with the draft's values.
+ * Multipart form-data: 1–5 `image` fields (jpeg/png/webp/heic) — multiple photos of the SAME
+ * meal are analyzed together in one vision call — plus an optional `note` the user typed about
+ * the meal, which is fed to the model as context (and preserved if the parse fails). Returns a
+ * draft the client shows on a "tap to fix" card; it does NOT create a food log entry. The user
+ * confirms, then the existing POST /api/mobile/food-log (or PATCH) commits the entry.
  *
  * Thin route: all nutrition logic lives in NutritionIntelligenceService (§7.2.1).
  */
 
 const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif'];
-const MAX_BYTES = 12 * 1024 * 1024; // 12MB
+const MAX_BYTES = 12 * 1024 * 1024; // 12MB per image
+const MAX_IMAGES = PHOTO_PARSE_MAX_IMAGES;
+const MAX_NOTE_CHARS = PHOTO_PARSE_MAX_NOTE_CHARS;
 
 export async function POST(request: NextRequest) {
   const startTime = Date.now();
@@ -29,11 +34,14 @@ export async function POST(request: NextRequest) {
     const user = await requireMobileAuth(request);
 
     const formData = await request.formData();
-    const file = formData.get('image') as File | null;
-    // Optional caption the user typed about the food — preserved if the parse fails.
-    const note = (formData.get('note') as string | null)?.trim() || null;
+    const files = formData.getAll('image').filter((f): f is File => typeof f !== 'string');
+    // Optional caption the user typed about the food — fed to the vision model as context,
+    // and preserved on the fallback entry if the parse fails. A note sent as a file part
+    // (non-string) is ignored rather than crashing the request.
+    const rawNote = formData.get('note');
+    const note = typeof rawNote === 'string' ? rawNote.trim().slice(0, MAX_NOTE_CHARS) || null : null;
 
-    if (!file) {
+    if (files.length === 0) {
       return NextResponse.json(
         {
           success: false,
@@ -45,14 +53,32 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (!ALLOWED_TYPES.includes(file.type)) {
+    if (files.length > MAX_IMAGES) {
+      return NextResponse.json(
+        {
+          success: false,
+          data: null,
+          error: {
+            code: 'VALIDATION_ERROR',
+            message: `Too many images: send at most ${MAX_IMAGES} per meal`,
+            details: { maxImages: MAX_IMAGES },
+            timestamp: new Date().toISOString(),
+          },
+          meta: null,
+        },
+        { status: 400 }
+      );
+    }
+
+    const badType = files.find((f) => !ALLOWED_TYPES.includes(f.type));
+    if (badType) {
       return NextResponse.json(
         {
           success: false,
           data: null,
           error: {
             code: 'UNSUPPORTED_MEDIA_TYPE',
-            message: `Unsupported image type: ${file.type}`,
+            message: `Unsupported image type: ${badType.type}`,
             details: { allowed: ALLOWED_TYPES },
             timestamp: new Date().toISOString(),
           },
@@ -62,7 +88,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (file.size > MAX_BYTES) {
+    if (files.some((f) => f.size > MAX_BYTES)) {
       return NextResponse.json(
         {
           success: false,
@@ -74,10 +100,12 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const imageBytes = Buffer.from(await file.arrayBuffer());
+    const images = await Promise.all(
+      files.map(async (f) => ({ bytes: Buffer.from(await f.arrayBuffer()), mimeType: f.type }))
+    );
 
     try {
-      const draft = await NutritionIntelligenceService.parsePhoto(user.id, imageBytes, file.type);
+      const draft = await NutritionIntelligenceService.parsePhoto(user.id, images, note);
 
       return NextResponse.json({
         success: true,
@@ -94,9 +122,15 @@ export async function POST(request: NextRequest) {
         throw parseError; // Unauthorized / unexpected → outer catch
       }
 
-      let saved: { entryId: string; imageUrls: string[] } | null = null;
+      let saved: { entryId: string } | null = null;
       try {
-        saved = await NutritionIntelligenceService.saveUnparsedPhoto(user.id, file, note);
+        saved = await NutritionIntelligenceService.saveUnparsedPhoto(user.id, note);
+        // Attach the photos AFTER responding: a failed parse has already burned up to
+        // ~50s of the 60s budget, and image processing/upload for up to 5 photos would
+        // blow past maxDuration mid-loop. The entry (with savedEntryId) is what the
+        // client needs now; the images land moments later.
+        const entryId = saved.entryId;
+        after(() => NutritionIntelligenceService.attachFallbackImages(entryId, user.id, files));
       } catch (saveError) {
         console.error('[Mobile API] Photo parse fallback save failed:', saveError);
       }
@@ -112,8 +146,9 @@ export async function POST(request: NextRequest) {
             source: 'photo',
             userId: user.id,
             code: 'PARSE_FAILED',
-            mimeType: file.type,
-            fileBytes: file.size,
+            imageCount: files.length,
+            mimeType: files[0].type,
+            fileBytes: files.reduce((a, f) => a + f.size, 0),
             hasNote: !!note,
             requestMs: Date.now() - startTime,
             fallbackSaved: !!saved,
@@ -131,7 +166,7 @@ export async function POST(request: NextRequest) {
             message: isRate
               ? "You've reached today's photo-estimate limit — we saved your photo so you can add the details."
               : "Couldn't auto-detect the food — we saved your photo so you can add the details.",
-            details: saved ? { savedEntryId: saved.entryId, imageUrls: saved.imageUrls } : {},
+            details: saved ? { savedEntryId: saved.entryId, imageUrls: [] } : {},
             timestamp: new Date().toISOString(),
           },
           meta: { requestTime: Date.now() - startTime },
