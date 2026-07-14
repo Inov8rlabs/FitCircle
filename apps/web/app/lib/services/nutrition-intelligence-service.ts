@@ -122,22 +122,53 @@ const VOICE_SYSTEM_PROMPT = [
   '- Be body- and food-neutral: never judge the food, never comment on the eater. Just identify and estimate.',
 ].join(' ');
 
+export interface ParsePhotoImage {
+  bytes: Buffer;
+  mimeType: string;
+}
+
 export class NutritionIntelligenceService {
   /**
-   * Parse a meal photo into a structured nutrition draft.
+   * Parse one meal — photographed in 1..N images (angles / extra dishes of the SAME meal) —
+   * into a structured nutrition draft, in a single vision call. `note` is an optional caption
+   * the user typed about the meal; it is fed to the model as trusted context (identification,
+   * preparation, portion hints).
    * @throws Error('RateLimited') when the per-user daily soft cap is exceeded
    * @throws Error('ParseFailed') when the model output cannot be validated
    */
-  static async parsePhoto(userId: string, imageBytes: Buffer, mimeType: string): Promise<NutritionDraftDTO> {
-    // 1. Cost guard — perceptual/content hash cache so an identical photo never re-bills (§7.6).
-    const imageHash = createHash('sha256').update(imageBytes).digest('hex');
+  static async parsePhoto(
+    userId: string,
+    images: ParsePhotoImage[],
+    note?: string | null,
+  ): Promise<NutritionDraftDTO> {
+    if (images.length === 0) throw new Error('ParseFailed');
+    const hint = note?.trim() || null;
+
+    // 1. Cost guard — content hash cache so an identical request never re-bills (§7.6).
+    //    The key covers every image plus the note (a different note must not hit a stale
+    //    result); a single image with no note hashes exactly as before, preserving the
+    //    existing cache rows.
+    // Multi-image/note keys hash per-image DIGESTS plus a count and a tagged note —
+    // fixed-width blocks with domain separation, so image partitions ([A,B] vs the single
+    // file A||B) and image-vs-note boundaries can never collide. The single-image no-note
+    // key stays the raw byte hash for backward compatibility with existing cache rows.
+    const hasher = createHash('sha256');
+    if (images.length === 1 && !hint) {
+      hasher.update(images[0].bytes);
+    } else {
+      hasher.update(`v2:${images.length}:`);
+      for (const img of images) hasher.update(createHash('sha256').update(img.bytes).digest());
+      if (hint) hasher.update(`note:${hint}`);
+    }
+    const imageHash = hasher.digest('hex');
     const cached = await this.getCachedResult(imageHash);
     if (cached) {
       return await this.toDraft(userId, cached, VISION_MODEL, true, 'photo', 'llm_vision');
     }
 
     // 2. Per-user daily soft cap on premium vision calls (§9.2). Caching is checked first so
-    //    repeat/identical photos don't count against the cap.
+    //    repeat/identical photos don't count against the cap. A multi-image request is ONE
+    //    model call and counts as one parse.
     const usedToday = await this.countTodayParses(userId);
     if (usedToday >= PHOTO_PARSE_DAILY_SOFT_CAP) {
       throw new Error('RateLimited');
@@ -145,6 +176,24 @@ export class NutritionIntelligenceService {
 
     // 3. Structured vision call via the AI Gateway. generateText + Output.object validates
     //    the result against the Zod schema (retries internally on malformed output).
+    const promptBits = [
+      images.length > 1
+        ? `These ${images.length} photos are ONE logging session: they may show the same plate from ` +
+          'different angles, OR separate dishes/servings of the same meal. Count each PHYSICAL plate or ' +
+          'dish once: when two photos show the same physical plate (identical arrangement, background, ' +
+          'plate position — i.e. re-takes or angles), count its food once; when photos show distinct ' +
+          'servings or dishes — even of identical-looking food, such as two separate plates of the same ' +
+          'item — count each serving separately. Estimate quantities and macros for the total.'
+        : 'Identify the foods on this plate and estimate quantities and macros.',
+    ];
+    if (hint) {
+      promptBits.push(
+        `The user added this note about the meal: "${hint}". Treat it as reliable context: use it to ` +
+          'identify foods correctly (e.g. paneer vs tofu), capture preparation details that change macros ' +
+          '(e.g. cooked in ghee), calibrate portions, and include foods it explicitly mentions even if they ' +
+          'are partially hidden in the photos.',
+      );
+    }
     let result: PhotoParseResult;
     const startedAt = Date.now();
     try {
@@ -162,8 +211,8 @@ export class NutritionIntelligenceService {
           {
             role: 'user',
             content: [
-              { type: 'text', text: 'Identify the foods on this plate and estimate quantities and macros.' },
-              { type: 'image', image: imageBytes, mediaType: mimeType },
+              { type: 'text', text: promptBits.join('\n\n') },
+              ...images.map((img) => ({ type: 'image' as const, image: img.bytes, mediaType: img.mimeType })),
             ],
           },
         ],
@@ -171,8 +220,10 @@ export class NutritionIntelligenceService {
       result = output;
     } catch (err) {
       this.logParseFailure('photo', userId, VISION_MODEL, Date.now() - startedAt, {
-        mimeType,
-        imageBytes: imageBytes.length,
+        imageCount: images.length,
+        mimeType: images[0].mimeType,
+        imageBytes: images.reduce((a, img) => a + img.bytes.length, 0),
+        hasNote: !!hint,
         imageHash: imageHash.slice(0, 12),
       }, err);
       throw new Error('ParseFailed');
@@ -344,9 +395,8 @@ export class NutritionIntelligenceService {
    */
   static async saveUnparsedPhoto(
     userId: string,
-    file: File,
     note: string | null,
-  ): Promise<{ entryId: string; imageUrls: string[] }> {
+  ): Promise<{ entryId: string }> {
     const supabase = createAdminSupabase();
     const { data: entry, error } = await FoodLogService.createEntry(
       userId,
@@ -361,18 +411,27 @@ export class NutritionIntelligenceService {
     if (error || !entry) {
       throw new Error(`FallbackSaveFailed: ${error?.message ?? 'no entry returned'}`);
     }
+    return { entryId: entry.id };
+  }
 
-    const imageUrls: string[] = [];
+  /**
+   * Attach the photos of a failed parse to its fallback entry. Runs AFTER the route has
+   * responded (via `after()`): a failed parse has already spent most of the function
+   * budget, and processing/uploading up to 5 images must not push the response past
+   * maxDuration. Best-effort — uploadImages records per-file failures.
+   */
+  static async attachFallbackImages(entryId: string, userId: string, files: File[]): Promise<void> {
+    if (files.length === 0) return;
     try {
-      const res = await FoodLogImageService.uploadImage(entry.id, userId, file, 0, supabase);
-      const url = res.image?.url ?? res.image?.original_url ?? res.image?.thumbnail_url;
-      if (url) imageUrls.push(url);
+      const supabase = createAdminSupabase();
+      const { failed } = await FoodLogImageService.uploadImages(entryId, userId, files, supabase);
+      if (failed.length > 0) {
+        console.error('[NutritionIntelligenceService.attachFallbackImages] some uploads failed:', failed);
+      }
     } catch (err) {
-      // Non-fatal: the entry + text are saved; a failed image upload must not lose them.
-      console.error('[NutritionIntelligenceService.saveUnparsedPhoto] image upload failed:', err);
+      // Non-fatal: the entry + text are already saved; a failed image upload must not lose them.
+      console.error('[NutritionIntelligenceService.attachFallbackImages] upload failed:', err);
     }
-
-    return { entryId: entry.id, imageUrls };
   }
 
   /**

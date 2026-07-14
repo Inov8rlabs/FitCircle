@@ -113,6 +113,11 @@ export const LOW_CONFIDENCE_THRESHOLD = 0.6;
 // the endpoint returns a soft-fail asking the user to use search/manual instead.
 export const PHOTO_PARSE_DAILY_SOFT_CAP = 25;
 
+// Per-request caps for photo-parse, shared by the route and every web client surface so
+// they cannot drift. (Native clients mirror these values — keep them in sync.)
+export const PHOTO_PARSE_MAX_IMAGES = 5;
+export const PHOTO_PARSE_MAX_NOTE_CHARS = 500;
+
 // ============================================================================
 // nutrition-intelligence-service API surface (FROZEN signatures)
 // ----------------------------------------------------------------------------

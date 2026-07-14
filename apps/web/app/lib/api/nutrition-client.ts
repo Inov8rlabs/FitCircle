@@ -1,4 +1,9 @@
+import { PHOTO_PARSE_MAX_IMAGES, PHOTO_PARSE_MAX_NOTE_CHARS } from '@/lib/types/nutrition';
 import { useAuthStore } from '@/stores/auth-store';
+
+// Shared per-request caps for photo-parse (defined once in types/nutrition.ts and
+// re-exported here for UI surfaces).
+export { PHOTO_PARSE_MAX_IMAGES, PHOTO_PARSE_MAX_NOTE_CHARS };
 
 // ---------------------------------------------------------------------------
 // Nutrition client — typed wrappers over the frozen mobile nutrition routes.
@@ -465,10 +470,16 @@ async function authedFetchForm<T>(path: string, form: FormData): Promise<T> {
 // --- client ----------------------------------------------------------------
 
 export const nutritionClient = {
-  // Photo / voice → draft (confirm-then-commit; do NOT create a log)
-  photoParse: (image: File) => {
+  // Photo / voice → draft (confirm-then-commit; do NOT create a log).
+  // Multiple images of one meal go in one request → one vision call, one merged draft.
+  // `note` is an optional user-typed hint fed to the model (e.g. "the curry is paneer").
+  // Caps are enforced here (the shared boundary) so no call site can send a request the
+  // server would reject: images beyond the cap are dropped, the note is truncated.
+  photoParse: (images: File[], note?: string) => {
     const form = new FormData();
-    form.append('image', image);
+    for (const img of images.slice(0, PHOTO_PARSE_MAX_IMAGES)) form.append('image', img);
+    const hint = note?.trim().slice(0, PHOTO_PARSE_MAX_NOTE_CHARS);
+    if (hint) form.append('note', hint);
     return authedFetchForm<NutritionDraft>('/api/mobile/food/photo-parse', form);
   },
 
@@ -671,43 +682,5 @@ export const nutritionClient = {
   },
 };
 
-/**
- * Merge several photo parses into one draft using APPEND semantics: every item
- * is concatenated (each photo contributes its own foods), totals sum, and the
- * health score is blended weighted by each draft's calories. Mirrors the iOS
- * `NutritionDraft.merged`.
- */
-export function mergeDrafts(drafts: NutritionDraft[]): NutritionDraft {
-  const base = drafts[0];
-  if (drafts.length <= 1) return base;
-  const items = drafts.flatMap((d) => d.items);
-  const draftCal = (d: NutritionDraft) => d.items.reduce((a, it) => a + (it.calories || 0), 0);
-  let scoreNum = 0;
-  let scoreDen = 0;
-  for (const d of drafts) {
-    if (d.healthScore == null) continue;
-    const w = Math.max(draftCal(d), 1);
-    scoreNum += d.healthScore * w;
-    scoreDen += w;
-  }
-  const sum = (f: (it: NutritionDraftItem) => number | undefined) => {
-    const vals = items.map(f).filter((v): v is number => v != null);
-    return vals.length ? vals.reduce((a, b) => a + b, 0) : 0;
-  };
-  return {
-    ...base,
-    items,
-    overallConfidence: Math.min(...drafts.map((d) => d.overallConfidence)),
-    cached: false,
-    totals: {
-      calories: sum((it) => it.calories),
-      proteinG: sum((it) => it.proteinG),
-      carbsG: sum((it) => it.carbsG),
-      fatG: sum((it) => it.fatG),
-      fiberG: sum((it) => it.fiberG),
-      sugarG: sum((it) => it.sugarG),
-      sodiumMg: sum((it) => it.sodiumMg),
-    },
-    healthScore: scoreDen > 0 ? Math.round((scoreNum / scoreDen) * 10) / 10 : null,
-  };
-}
+// Client-side draft merging was removed with the multi-image photo-parse contract:
+// the server analyzes all photos of a meal in one vision call and owns merge semantics.

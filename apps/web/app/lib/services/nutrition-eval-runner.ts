@@ -54,7 +54,7 @@ export class NutritionEvalRunner {
 
     let draft;
     try {
-      draft = await NutritionIntelligenceService.parsePhoto(EVAL_USER_ID, img.bytes, img.mime);
+      draft = await NutritionIntelligenceService.parsePhoto(EVAL_USER_ID, [{ bytes: img.bytes, mimeType: img.mime }]);
     } catch (err: any) {
       console.warn(`[eval-runner] skipped ${g.id}: parsePhoto failed (${err?.message})`);
       return null;

@@ -5,13 +5,14 @@ import { useRef, useState } from 'react';
 
 import {
   LOW_CONFIDENCE_THRESHOLD,
-  mergeDrafts,
+  PHOTO_PARSE_MAX_IMAGES,
   nutritionClient,
   type NutritionDraft,
   type NutritionDraftItem,
   type UnitOption,
 } from '@/lib/api/nutrition-client';
 import { cn } from '@/lib/utils';
+import { compressImagesForUpload } from '@/lib/utils/image-compression';
 
 type MealType = 'breakfast' | 'lunch' | 'dinner' | 'snack' | 'other';
 const MEAL_TYPES: MealType[] = ['breakfast', 'lunch', 'dinner', 'snack', 'other'];
@@ -206,23 +207,22 @@ export function NutritionConfirm({
 
   /** Analyze added photo(s) and append their foods to this meal. */
   const onAddPhotos = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files ?? []);
+    const picked = Array.from(e.target.files ?? []);
     e.target.value = '';
-    if (files.length === 0) return;
+    if (picked.length === 0) return;
+    // The parse endpoint takes at most PHOTO_PARSE_MAX_IMAGES per request; analyze the
+    // first batch and tell the user about anything dropped rather than failing the lot.
+    const files = await compressImagesForUpload(picked.slice(0, PHOTO_PARSE_MAX_IMAGES));
+    const dropped = picked.length - files.length;
     setAddingPhoto(true);
     setError(null);
     try {
-      // First photo's error surfaces; extras are best-effort.
-      const drafts: NutritionDraft[] = [await nutritionClient.photoParse(files[0])];
-      for (const file of files.slice(1)) {
-        try {
-          drafts.push(await nutritionClient.photoParse(file));
-        } catch {
-          /* skip a failed extra photo */
-        }
-      }
-      const merged = mergeDrafts(drafts);
+      // One request, one vision call — the server analyzes all photos together.
+      const merged = await nutritionClient.photoParse(files);
       const newItems = merged.items.filter((i) => i.name.trim());
+      if (dropped > 0) {
+        setError(`Only ${PHOTO_PARSE_MAX_IMAGES} photos can be analyzed at once — ${dropped} ${dropped === 1 ? 'photo was' : 'photos were'} skipped.`);
+      }
       if (newItems.length === 0) {
         setError('We could not find any food in that photo.');
         return;
