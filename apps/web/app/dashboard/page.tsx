@@ -34,6 +34,7 @@ import { toast } from 'sonner';
 
 import { AutoSyncSubmissionCard } from '@/components/AutoSyncSubmissionCard';
 import { BackfillDataDialog } from '@/components/BackfillDataDialog';
+import { BodyCompDashboardCard } from '@/components/body-composition/dashboard-card';
 import { CheckInCard, CheckInDetailModal, CheckInDetailSheet } from '@/components/check-ins';
 import { DailyProgressMeter } from '@/components/DailyProgressMeter';
 import { EngagementStreakCard } from '@/components/EngagementStreakCard';
@@ -787,6 +788,9 @@ export default function DashboardPage() {
                 </Card>
               </motion.div>
             </div>
+
+            {/* Body Composition — latest BF% + trend state, links to the journal */}
+            <BodyCompDashboardCard />
           </div>
 
           {/* Main Content Tabs */}
@@ -808,11 +812,23 @@ export default function DashboardPage() {
             <TabsContent value="weight">
               <Card className="bg-slate-900/50 border-slate-800 backdrop-blur-xl shadow-2xl">
                 <CardHeader className="p-4 sm:p-6">
-                  <CardTitle className="flex items-center gap-2 text-white text-base sm:text-lg">
-                    <BathroomScale className="h-4 w-4 sm:h-5 sm:w-5" size={20} />
-                    Weight Progress ({getWeightUnit(unitSystem)})
-                  </CardTitle>
-                  <CardDescription className="text-gray-400 text-xs sm:text-sm">Last 14 days</CardDescription>
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <CardTitle className="flex items-center gap-2 text-white text-base sm:text-lg">
+                        <BathroomScale className="h-4 w-4 sm:h-5 sm:w-5" size={20} />
+                        Weight Progress ({getWeightUnit(unitSystem)})
+                      </CardTitle>
+                      <CardDescription className="text-gray-400 text-xs sm:text-sm">Last 14 days</CardDescription>
+                    </div>
+                    {/* Second journal entry point (BODY_COMP_BUILD_CONTRACT §3):
+                        body-composition from the existing tracking/history area */}
+                    <Link
+                      href="/body-composition"
+                      className="text-xs sm:text-sm text-purple-400 hover:text-purple-300 whitespace-nowrap transition-colors"
+                    >
+                      Body composition →
+                    </Link>
+                  </div>
                 </CardHeader>
                 <CardContent className="h-64 sm:h-80 p-3 sm:p-6">
                   {chartData.filter(d => d.weight).length === 0 ? (

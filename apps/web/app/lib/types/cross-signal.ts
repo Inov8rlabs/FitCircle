@@ -19,7 +19,11 @@
 // ============================================================================
 export type NutritionSignal = 'protein' | 'calories';
 export type OutcomeSignal = 'mood' | 'energy' | 'caffeine' | 'steps';
-export type Signal = NutritionSignal | OutcomeSignal;
+// Body-comp descriptive insights (recomposition, scan cadence) ride the same InsightDTO
+// shape with 'bodyComp' on both signal slots and correlation 0 — additive union widening
+// only; the frozen getInsights signature and every existing pairing are unchanged.
+export type BodyCompSignal = 'bodyComp';
+export type Signal = NutritionSignal | OutcomeSignal | BodyCompSignal;
 
 export type Confidence = 'low' | 'medium';
 
@@ -33,11 +37,11 @@ export interface InsightDTO {
   headline: string;
   /** One supporting sentence with the same framing rules. */
   detail: string;
-  signalA: NutritionSignal;
-  signalB: OutcomeSignal;
-  /** Pearson r over paired days, range [-1, 1]. Rounded to 2dp. */
+  signalA: NutritionSignal | BodyCompSignal;
+  signalB: OutcomeSignal | BodyCompSignal;
+  /** Pearson r over paired days, range [-1, 1]. Rounded to 2dp. 0 for descriptive (bodyComp) insights. */
   correlation: number;
-  /** Number of days where BOTH signals had a value (the n behind the r). */
+  /** Number of days where BOTH signals had a value (the n behind the r); scan count for bodyComp insights. */
   sampleDays: number;
   confidence: Confidence;
 }

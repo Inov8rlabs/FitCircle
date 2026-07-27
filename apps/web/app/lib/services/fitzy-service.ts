@@ -1,9 +1,12 @@
 import { generateText } from 'ai';
 
 import { createAdminSupabase } from '../supabase-admin';
+import type { BodyCompDelta } from '../types/body-composition';
 import type { FitzyChatResponse, FitzyMessage, IFitzyService } from '../types/fitzy';
 
+import { BodyCompTrendsService, extractBodyFatGoal } from './body-comp-trends-service';
 import { DietaryPreferencesService } from './dietary-preferences-service';
+import { EntitlementService } from './entitlement-service';
 
 /**
  * FitzyService — "Fitzy", the FitCircle AI coach (full fitness + nutrition).
@@ -74,6 +77,19 @@ const SYSTEM_PROMPT = [
   '- NEVER comment negatively on anyone\'s body, weight, or shape; stay body-neutral.',
   '- NEVER shame, scold, or use fear/guilt to motivate.',
   '- NEVER give specific rehab/medical guidance for pain, injury, or a diagnosed condition.',
+  '',
+  'BODY COMPOSITION (when the grounding context includes body-composition data — these rules are',
+  'absolute):',
+  '- Treat multi-week TRENDS as the signal, never any single scan: individual readings are noisy',
+  '  (device, hydration, time of day), so never draw conclusions from one measurement.',
+  '- NEVER celebrate, praise, or encourage the SPEED of weight or fat change — no "fast",',
+  '  "rapid", or "impressive" loss framing, ever.',
+  '- NEVER advise on segmental (left/right, arm/leg/trunk) differences or call them an',
+  '  imbalance or asymmetry; segmental numbers are display-only vendor constructs.',
+  '- NEVER use disease names, clinical thresholds, or words like "abnormal"/"unhealthy" about',
+  '  body-composition values — the numbers are information, not diagnoses.',
+  '- This data is PRIVATE to the user: never reference it in relation to circles, friends,',
+  '  challenges, comparisons, or anything shareable.',
   '',
   'MEDICAL / INJURY / CLINICAL: If the question is medical, clinical, about a diagnosed condition,',
   'medications, an injury or pain, supplements for a condition, or an eating disorder, do NOT answer',
@@ -162,6 +178,14 @@ export class FitzyService implements IFitzyService {
     /\bsinful\b/i,
     /\blos(?:e|ing)\s+(?:up\s+to\s+)?\d+(?:\.\d+)?\s*(?:pounds?|lbs?|kgs?|kilograms?|kilos?)\b/i,
     /\blos(?:e|ing)\s+weight\s+(?:in|within|by|over)\s+\d+/i,
+    // Body-comp guardrails (BODY_COMP_BUILD_CONTRACT §2): clinical/disease framing,
+    // loss-speed celebration, and segmental-asymmetry advice. Conservative by design —
+    // a false positive only costs a generic-but-safe fallback.
+    /\babnormal\b/i,
+    /\b(?:obese|obesity|overweight|underweight|sarcopeni\w*|osteopor\w*)\b/i,
+    /\b(?:rapid|fast|quick|speedy|dramatic|impressive)\s+(?:weight|fat)\s+loss\b/i,
+    /\blos(?:e|ing|t)\s+(?:weight|fat)\s+(?:so|really|very|that|incredibly)\s+(?:fast|quickly|rapidly)\b/i,
+    /\b(?:muscle|muscular|limb|segmental|left[-\s/]?right)\s+(?:imbalances?|asymmetr(?:y|ies|ical))\b/i,
   ];
 
   // ---- grounding context -----------------------------------------------------
@@ -303,6 +327,91 @@ export class FitzyService implements IFitzyService {
       }
     }
 
+    // (g) Body composition — AGGREGATE-ONLY grounding (latest scan, trend state, noise-
+    // flagged deltas, goal), gated on the server-driven body_comp_coach entitlement
+    // (BODY_COMP_BUILD_CONTRACT §2 "Coach grounding"). This data is private to the user
+    // and must never surface socially; the guardrail sentence travels WITH the data so
+    // the model always sees the rules next to the numbers.
+    try {
+      if (await EntitlementService.isFeatureAllowed(userId, 'body_comp_coach')) {
+        const { data: latest } = await supabase
+          .from('body_composition_logs')
+          .select('measured_at, source, weight_kg, body_fat_pct, skeletal_muscle_mass_kg, fat_mass_kg')
+          .eq('user_id', userId)
+          .order('measured_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        if (latest) {
+          const row = latest as {
+            measured_at: string;
+            source: string;
+            weight_kg: number | null;
+            body_fat_pct: number | null;
+            skeletal_muscle_mass_kg: number | null;
+            fat_mass_kg: number | null;
+          };
+          const vals: string[] = [];
+          if (row.weight_kg != null) vals.push(`weight ${row.weight_kg} kg`);
+          if (row.body_fat_pct != null) vals.push(`body fat ${row.body_fat_pct}%`);
+          if (row.fat_mass_kg != null) vals.push(`fat mass ${row.fat_mass_kg} kg`);
+          if (row.skeletal_muscle_mass_kg != null) vals.push(`skeletal muscle ${row.skeletal_muscle_mass_kg} kg`);
+
+          const bits: string[] = [
+            `Latest body-composition entry (${row.measured_at.slice(0, 10)}, ${row.source.replace(/_/g, ' ')}): ${vals.join(', ') || 'no metric values'}.`,
+          ];
+
+          // Trend state + deltas from the server trend engine (failure-isolated: a
+          // trends error just omits these bits and keeps the latest-scan grounding).
+          try {
+            const trends = await BodyCompTrendsService.getTrends(userId);
+            if (trends.state !== 'insufficient_data') {
+              bits.push(`Multi-week trend state: ${trends.state.replace(/_/g, ' ')}.`);
+            }
+            if (trends.latestVsPrevious.length > 0) {
+              bits.push(
+                `Change since the previous entry: ${trends.latestVsPrevious.map(describeBodyCompDelta).join('; ')}.`
+              );
+            }
+          } catch (err) {
+            console.error('[FitzyService.buildContext] body-comp trends bit non-fatal:', err);
+          }
+
+          try {
+            const { data: profile } = await supabase.from('profiles').select('goals').eq('id', userId).maybeSingle();
+            const goal = extractBodyFatGoal((profile as { goals?: unknown } | null)?.goals);
+            if (goal != null) bits.push(`Their stated body-fat goal is ${goal}%.`);
+          } catch (err) {
+            console.error('[FitzyService.buildContext] body-comp goal bit non-fatal:', err);
+          }
+
+          bits.push(
+            'RULES FOR THIS DATA: treat the multi-week trend as the signal, never a single scan; ' +
+              'changes flagged "within measurement noise" are not real changes — say so if asked; ' +
+              'never celebrate the speed of any change; never advise on left/right or segmental ' +
+              'differences; never use disease names, clinical thresholds, or the word "abnormal"; ' +
+              'never set body-composition targets or rates; and never mention this data in any ' +
+              'circle, challenge, or social context — it is private.'
+          );
+          parts.push(bits.join(' '));
+        }
+      }
+    } catch (err) {
+      console.error('[FitzyService.buildContext] body-comp block non-fatal:', err);
+    }
+
     return parts.length > 0 ? parts.join('\n') : null;
   }
+}
+
+/** Human phrasing for one trend-engine delta, keeping the noise flag attached. */
+function describeBodyCompDelta(d: BodyCompDelta): string {
+  const labels: Record<string, string> = {
+    weightKg: 'weight',
+    bodyFatPct: 'body fat',
+    fatMassKg: 'fat mass',
+    skeletalMuscleMassKg: 'skeletal muscle',
+  };
+  const unit = d.metric === 'bodyFatPct' ? ' percentage points' : ' kg';
+  const sign = d.delta > 0 ? '+' : '';
+  return `${labels[d.metric] ?? d.metric} ${sign}${d.delta}${unit}${d.withinNoise ? ' (within measurement noise)' : ''}`;
 }

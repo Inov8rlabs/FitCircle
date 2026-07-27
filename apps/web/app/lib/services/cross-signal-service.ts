@@ -12,6 +12,9 @@ import {
   MIN_SAMPLE_DAYS,
 } from '../types/cross-signal';
 
+import { BodyCompTrendsService } from './body-comp-trends-service';
+import { EntitlementService } from './entitlement-service';
+
 /**
  * CrossSignalService — gentle, correlational cross-signal insights (PRD v4 §6.10).
  *
@@ -130,7 +133,106 @@ export class CrossSignalService {
 
     // Strongest association first; clients can take the top N.
     insights.sort((x, y) => Math.abs(y.correlation) - Math.abs(x.correlation));
+
+    // Body-comp descriptive insights (BODY_COMP_BUILD_CONTRACT §2) are appended AFTER
+    // the correlation sort: they carry correlation 0 and belong behind any real
+    // correlational finding. Failure-isolated — an error just omits them.
+    insights.push(...(await this.bodyCompInsights(userId)));
+
     return insights;
+  }
+
+  // ---- body-composition signals (§ BODY_COMP_BUILD_CONTRACT) -----------------
+
+  /** Scans in the last 90 days feed these insights — body-comp data is sparse
+   *  (weekly/monthly scans), so the default 30-day correlation window would almost
+   *  never see the ≥3 scans the copy is grounded in. */
+  private static readonly BODY_COMP_LOOKBACK_DAYS = 90;
+  /** Scan count at which a body-comp descriptive insight reads as 'medium' confidence. */
+  private static readonly BODY_COMP_MEDIUM_CONFIDENCE_SCANS = 5;
+  /** A cadence only counts as a rhythm when scans average one per ~6 weeks or better. */
+  private static readonly BODY_COMP_CADENCE_MAX_AVG_GAP_DAYS = 45;
+
+  /**
+   * Descriptive, body-neutral body-comp insights: recomposition (from the server trend
+   * engine) and scan cadence. Same InsightDTO shape with signalA/signalB 'bodyComp' and
+   * correlation 0. PRIVATE-ONLY data — the insights endpoint is per-user (own-auth),
+   * never a social surface. Gated on the server-driven body_comp_trends entitlement so
+   * flipping that gate silently removes these too (nothing hardcoded). Failure-isolated:
+   * any error returns [] and the classic correlational insights still ship.
+   */
+  private static async bodyCompInsights(userId: string): Promise<InsightDTO[]> {
+    try {
+      if (!(await EntitlementService.isFeatureAllowed(userId, 'body_comp_trends'))) return [];
+
+      const supabase = createAdminSupabase();
+      const sinceISO = new Date(Date.now() - this.BODY_COMP_LOOKBACK_DAYS * 86_400_000).toISOString();
+      const { data } = await supabase
+        .from('body_composition_logs')
+        .select('measured_at, body_fat_pct, fat_mass_kg, skeletal_muscle_mass_kg')
+        .eq('user_id', userId)
+        .gte('measured_at', sinceISO)
+        .order('measured_at', { ascending: true });
+
+      // A "scan" is a log carrying composition data (BF% / fat mass / SMM) — the same
+      // definition the trend engine's sufficiency rule uses.
+      const scans = ((data ?? []) as Array<{
+        measured_at: string;
+        body_fat_pct: number | null;
+        fat_mass_kg: number | null;
+        skeletal_muscle_mass_kg: number | null;
+      }>).filter((r) => r.body_fat_pct != null || r.fat_mass_kg != null || r.skeletal_muscle_mass_kg != null);
+      if (scans.length < 3) return [];
+
+      const out: InsightDTO[] = [];
+      const confidence: Confidence =
+        scans.length >= this.BODY_COMP_MEDIUM_CONFIDENCE_SCANS ? 'medium' : 'low';
+
+      // (1) Recomposition — only the trend engine may make this call (its state already
+      // requires ≥14-day fat & SMM spans beyond the noise floors).
+      try {
+        const trends = await BodyCompTrendsService.getTrends(userId, this.BODY_COMP_LOOKBACK_DAYS);
+        if (trends.state === 'recomposition') {
+          out.push({
+            id: 'bodyComp__recomposition',
+            headline: 'Your composition is shifting, not just your weight',
+            detail:
+              'Across your recent scans, fat mass tends to be moving down while skeletal muscle holds steady or rises. A weight-only view can miss this — the multi-week trend is the signal, and single scans will bounce around it.',
+            signalA: 'bodyComp',
+            signalB: 'bodyComp',
+            correlation: 0,
+            sampleDays: scans.length,
+            confidence,
+          });
+        }
+      } catch (err) {
+        console.error('[CrossSignalService.bodyCompInsights] trends non-fatal:', err);
+      }
+
+      // (2) Scan cadence — celebrate an established rhythm; never pressure to scan more.
+      const spanDays = Math.round(
+        (Date.parse(scans[scans.length - 1].measured_at) - Date.parse(scans[0].measured_at)) / 86_400_000
+      );
+      const avgGapDays = spanDays / (scans.length - 1);
+      if (spanDays >= 14 && avgGapDays <= this.BODY_COMP_CADENCE_MAX_AVG_GAP_DAYS) {
+        out.push({
+          id: 'bodyComp__scan_cadence',
+          headline: 'A steady scan rhythm is building a clear picture',
+          detail: `You've logged ${scans.length} body-composition scans over the last ${Math.max(1, Math.round(spanDays / 7))} weeks. A regular rhythm like this makes trends far more meaningful than any single reading — no need to scan more often than feels natural.`,
+          signalA: 'bodyComp',
+          signalB: 'bodyComp',
+          correlation: 0,
+          sampleDays: scans.length,
+          confidence,
+        });
+      }
+
+      return out;
+    } catch (err) {
+      // Non-blocking: body-comp insights are additive; never fail the endpoint for them.
+      console.error('[CrossSignalService.bodyCompInsights] non-fatal:', err);
+      return [];
+    }
   }
 }
 
