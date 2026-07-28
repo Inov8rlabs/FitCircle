@@ -83,10 +83,18 @@ function unitLabels(item: NutritionDraftItem): string[] {
 
 function gramsPerUnitFor(label: string, item: NutritionDraftItem): number {
   const l = label.toLowerCase();
-  if (l === 'g' || l === 'gram' || l === 'grams') return 1;
-  if (l === 'oz' || l === 'ounce' || l === 'ounces') return 28.3495;
   const opt = resolvedUnitOptions(item).find((o) => o.label.toLowerCase() === l);
   if (opt) return opt.gramsPerUnit;
+  if (l === 'g' || l === 'gram' || l === 'grams') return 1;
+  if (l === 'oz' || l === 'ounce' || l === 'ounces') return 28.3495;
+  if (l === 'kg') return 1000;
+  if (l === 'mg') return 0.001;
+  if (['lb', 'lbs', 'pound', 'pounds'].includes(l)) return 453.592;
+  if (['ml', 'milliliter', 'millilitre'].includes(l)) return 1;
+  if (['l', 'liter', 'litre'].includes(l)) return 1000;
+  if (l === 'cup' || l === 'cups') return 240;
+  if (['tbsp', 'tablespoon', 'tablespoons'].includes(l)) return 15;
+  if (['tsp', 'teaspoon', 'teaspoons'].includes(l)) return 5;
   return item.gramsPerUnit && item.gramsPerUnit > 0 ? item.gramsPerUnit : 1;
 }
 

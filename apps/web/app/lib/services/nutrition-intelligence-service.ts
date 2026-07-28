@@ -1,7 +1,7 @@
 import { createHash } from 'crypto';
 
-import { generateText, Output } from 'ai';
 import * as Sentry from '@sentry/nextjs';
+import { generateText, Output } from 'ai';
 
 import { createAdminSupabase } from '../supabase-admin';
 import type { FoodDTO } from '../types/foods';
@@ -40,6 +40,7 @@ import { FoodsService } from './foods-service';
 // to identify foods + estimate portions, which Haiku handles well. To trade speed
 // back for Sonnet's portion nuance, set this to 'anthropic/claude-sonnet-4.6'.
 const VISION_MODEL = 'anthropic/claude-haiku-4.5';
+const FAST_FALLBACK_MODEL = 'google/gemini-3-flash';
 
 // Voice parsing is text-only (no image) — kept on Sonnet 4.6 for slightly better
 // free-text parsing. p95 target < 1.2s (§7.6).
@@ -52,11 +53,13 @@ const VOICE_MODEL = 'anthropic/claude-sonnet-4.6';
 // faster — gives the accuracy we need with far better reliability.
 const ITEM_MODEL = 'anthropic/claude-haiku-4.5';
 
-// Hard ceilings for the AI parse calls. Kept well under the routes' maxDuration (60s) so a
-// slow model response fails over cleanly with time to spare for grounding + the HTTP response,
-// rather than overrunning the function. The single-item/voice text parses were on 25s, which
-// the model occasionally overran; give them the same headroom the photo path already has.
-const TEXT_PARSE_TIMEOUT_MS = 45_000;
+// Use short, bounded attempts rather than one 45-50s call with an SDK retry. In production the
+// SDK retry backoff consumed the whole abort budget ("Delay was aborted"), so tapping Retry just
+// repeated the same failure. A second provider/model now gets a real chance inside the 60s route.
+const PHOTO_PRIMARY_TIMEOUT_MS = 28_000;
+const PHOTO_FALLBACK_TIMEOUT_MS = 22_000;
+const TEXT_PRIMARY_TIMEOUT_MS = 15_000;
+const TEXT_FALLBACK_TIMEOUT_MS = 20_000;
 
 const SYSTEM_PROMPT = [
   'You are a careful nutrition estimation assistant. Given a photo of a meal, identify every distinct',
@@ -175,7 +178,7 @@ export class NutritionIntelligenceService {
     }
 
     // 3. Structured vision call via the AI Gateway. generateText + Output.object validates
-    //    the result against the Zod schema (retries internally on malformed output).
+    //    the result against the Zod schema; explicit failover below handles a failed attempt.
     const promptBits = [
       images.length > 1
         ? `These ${images.length} photos are ONE logging session: they may show the same plate from ` +
@@ -195,44 +198,44 @@ export class NutritionIntelligenceService {
       );
     }
     let result: PhotoParseResult;
+    let model = VISION_MODEL;
     const startedAt = Date.now();
     try {
-      const { output } = await generateText({
-        model: VISION_MODEL,
-        output: Output.object({ schema: photoParseResultSchema }),
-        system: SYSTEM_PROMPT,
-        // Bound latency: one extra try at most (default is 2 retries → up to 3×
-        // a ~20-40s vision call, which blows the function/client timeout), and a
-        // hard 50s ceiling so a hung gateway call fails fast into the Option-B
-        // "we saved your photo" fallback instead of hanging until the client gives up.
-        maxRetries: 1,
-        abortSignal: AbortSignal.timeout(50_000),
-        messages: [
-          {
-            role: 'user',
-            content: [
-              { type: 'text', text: promptBits.join('\n\n') },
-              ...images.map((img) => ({ type: 'image' as const, image: img.bytes, mediaType: img.mimeType })),
-            ],
-          },
-        ],
-      });
-      result = output;
-    } catch (err) {
-      this.logParseFailure('photo', userId, VISION_MODEL, Date.now() - startedAt, {
-        imageCount: images.length,
-        mimeType: images[0].mimeType,
-        imageBytes: images.reduce((a, img) => a + img.bytes.length, 0),
-        hasNote: !!hint,
-        imageHash: imageHash.slice(0, 12),
-      }, err);
-      throw new Error('ParseFailed');
+      result = await this.callPhotoModel(
+        VISION_MODEL,
+        userId,
+        promptBits.join('\n\n'),
+        images,
+        PHOTO_PRIMARY_TIMEOUT_MS,
+      );
+    } catch (primaryError) {
+      model = FAST_FALLBACK_MODEL;
+      try {
+        result = await this.callPhotoModel(
+          FAST_FALLBACK_MODEL,
+          userId,
+          promptBits.join('\n\n'),
+          images,
+          PHOTO_FALLBACK_TIMEOUT_MS,
+        );
+      } catch (fallbackError) {
+        this.logParseFailure('photo', userId, FAST_FALLBACK_MODEL, Date.now() - startedAt, {
+          imageCount: images.length,
+          mimeType: images[0].mimeType,
+          imageBytes: images.reduce((a, img) => a + img.bytes.length, 0),
+          hasNote: !!hint,
+          imageHash: imageHash.slice(0, 12),
+          primaryModel: VISION_MODEL,
+          primaryError: this.describeParseError(primaryError),
+        }, fallbackError);
+        throw new Error('ParseFailed');
+      }
     }
 
     // 4. Record the call (for the daily cap) and cache the result by image hash.
     await this.recordParse(userId, imageHash, result);
 
-    return await this.toDraft(userId, result, VISION_MODEL, false, 'photo', 'llm_vision');
+    return await this.toDraft(userId, result, model, false, 'photo', 'llm_vision');
   }
 
   /**
@@ -255,32 +258,27 @@ export class NutritionIntelligenceService {
     }
 
     let result: PhotoParseResult;
+    let model = VOICE_MODEL;
     const startedAt = Date.now();
     try {
-      const { output } = await generateText({
-        model: VOICE_MODEL,
-        output: Output.object({ schema: photoParseResultSchema }),
-        system: VOICE_SYSTEM_PROMPT,
-        maxRetries: 1,
-        abortSignal: AbortSignal.timeout(TEXT_PARSE_TIMEOUT_MS),
-        messages: [
-          {
-            role: 'user',
-            content: [
-              {
-                type: 'text',
-                text: `Parse this spoken food description into items with estimated quantities and macros:\n\n"${transcript}"`,
-              },
-            ],
-          },
-        ],
-      });
-      result = output;
-    } catch (err) {
-      this.logParseFailure('voice', userId, VOICE_MODEL, Date.now() - startedAt, {
-        transcriptLength: transcript.length,
-      }, err);
-      throw new Error('ParseFailed');
+      result = await this.callVoiceModel(VOICE_MODEL, userId, transcript, TEXT_PRIMARY_TIMEOUT_MS);
+    } catch (primaryError) {
+      model = FAST_FALLBACK_MODEL;
+      try {
+        result = await this.callVoiceModel(
+          FAST_FALLBACK_MODEL,
+          userId,
+          transcript,
+          TEXT_FALLBACK_TIMEOUT_MS,
+        );
+      } catch (fallbackError) {
+        this.logParseFailure('voice', userId, FAST_FALLBACK_MODEL, Date.now() - startedAt, {
+          transcriptLength: transcript.length,
+          primaryModel: VOICE_MODEL,
+          primaryError: this.describeParseError(primaryError),
+        }, fallbackError);
+        throw new Error('ParseFailed');
+      }
     }
 
     // Cap accounting (no cache). The hash is over the transcript so the log row matches
@@ -288,7 +286,7 @@ export class NutritionIntelligenceService {
     const transcriptHash = createHash('sha256').update(transcript).digest('hex');
     await this.recordParseLog(userId, transcriptHash);
 
-    return await this.toDraft(userId, result, VOICE_MODEL, false, 'voice', 'llm_voice');
+    return await this.toDraft(userId, result, model, false, 'voice', 'llm_voice');
   }
 
   /**
@@ -300,6 +298,61 @@ export class NutritionIntelligenceService {
    * @throws Error('RateLimited') when the per-user daily soft cap is exceeded
    * @throws Error('ParseFailed') when the model output cannot be validated
    */
+  static resolveItemPortion(
+    grams?: number,
+    quantity?: number,
+    servingUnit?: string,
+  ): { grams?: number; quantity?: number; servingUnit?: string } {
+    const positive = (n: number | undefined): number | undefined =>
+      n != null && Number.isFinite(n) && n > 0 ? n : undefined;
+    let resolvedGrams = positive(grams);
+    const resolvedQuantity = positive(quantity);
+    const unit = servingUnit?.trim() || undefined;
+    const gramsPerUnit: Record<string, number> = {
+      g: 1,
+      gram: 1,
+      grams: 1,
+      oz: 28.3495,
+      ounce: 28.3495,
+      ounces: 28.3495,
+      kg: 1000,
+      mg: 0.001,
+      lb: 453.592,
+      lbs: 453.592,
+      pound: 453.592,
+      pounds: 453.592,
+      ml: 1,
+      milliliter: 1,
+      millilitre: 1,
+      l: 1000,
+      liter: 1000,
+      litre: 1000,
+      cup: 240,
+      cups: 240,
+      tbsp: 15,
+      tablespoon: 15,
+      tablespoons: 15,
+      tsp: 5,
+      teaspoon: 5,
+      teaspoons: 5,
+    };
+
+    const multiplier = unit ? gramsPerUnit[unit.toLowerCase()] : undefined;
+    if (resolvedQuantity && multiplier) {
+      const expectedGrams = resolvedQuantity * multiplier;
+      const ratio = resolvedGrams ? resolvedGrams / expectedGrams : 0;
+      // Allow food-density differences, but reject impossible payloads such as
+      // "2 cups, 2 g total" produced by the old iOS unit fallback.
+      if (!resolvedGrams || ratio < 0.2 || ratio > 5) resolvedGrams = expectedGrams;
+    }
+
+    return {
+      grams: resolvedGrams,
+      quantity: resolvedQuantity,
+      servingUnit: unit,
+    };
+  }
+
   static async estimateItem(
     userId: string,
     name: string,
@@ -307,81 +360,61 @@ export class NutritionIntelligenceService {
     quantity?: number,
     servingUnit?: string,
   ): Promise<NutritionDraftItem> {
+    const cleanName = name.trim();
+    const resolved = this.resolveItemPortion(grams, quantity, servingUnit);
+    const portionBits: string[] = [];
+    if (resolved.quantity) {
+      portionBits.push(`${resolved.quantity} ${resolved.servingUnit || 'serving'}`);
+    }
+    if (resolved.grams) portionBits.push(`${Math.round(resolved.grams)} g total`);
+    const portion = portionBits.length ? portionBits.join(', ') : 'one typical serving';
+    const itemHash = createHash('sha256')
+      .update(`item:v2:${JSON.stringify({ name: cleanName.toLowerCase(), ...resolved })}`)
+      .digest('hex');
+
+    // A successful re-estimate is deterministic for the same food/portion. Check the cache
+    // before the daily cap so a user retry is instant and never incurs another model call.
+    const cached = await this.getCachedResult(itemHash);
+    if (cached?.items[0]) {
+      return await this.finalizeEstimatedItem(userId, cleanName, resolved, cached.items[0]);
+    }
+
     // Per-user daily soft cap. PHOTO_PARSE_DAILY_SOFT_CAP is the COMBINED cap shared across all
     // paid parses (photo/voice/item) — every recorded parse counts toward the same daily budget.
     if ((await this.countTodayParses(userId)) >= PHOTO_PARSE_DAILY_SOFT_CAP) {
       throw new Error('RateLimited');
     }
 
-    const portionBits: string[] = [];
-    if (quantity && quantity > 0) portionBits.push(`${quantity} ${servingUnit?.trim() || 'serving'}`);
-    if (grams && grams > 0) portionBits.push(`${Math.round(grams)} g total`);
-    const portion = portionBits.length ? portionBits.join(', ') : 'one typical serving';
-
     let llm: ParsedFoodItem;
     const startedAt = Date.now();
     try {
-      const { output } = await generateText({
-        model: ITEM_MODEL,
-        output: Output.object({ schema: parsedFoodItemSchema }),
-        system: ITEM_SYSTEM_PROMPT,
-        maxRetries: 1,
-        abortSignal: AbortSignal.timeout(TEXT_PARSE_TIMEOUT_MS),
-        messages: [
-          {
-            role: 'user',
-            content: [
-              {
-                type: 'text',
-                text: `Estimate the nutrition for: "${name.trim()}". Portion: ${portion}.`,
-              },
-            ],
-          },
-        ],
-      });
-      llm = output;
-    } catch (err) {
-      this.logParseFailure('item', userId, ITEM_MODEL, Date.now() - startedAt, {
-        name: name.trim(),
-        portion,
-      }, err);
-      throw new Error('ParseFailed');
+      llm = await this.callItemModel(ITEM_MODEL, userId, cleanName, portion, TEXT_PRIMARY_TIMEOUT_MS);
+    } catch (primaryError) {
+      try {
+        llm = await this.callItemModel(
+          FAST_FALLBACK_MODEL,
+          userId,
+          cleanName,
+          portion,
+          TEXT_FALLBACK_TIMEOUT_MS,
+        );
+      } catch (fallbackError) {
+        this.logParseFailure('item', userId, FAST_FALLBACK_MODEL, Date.now() - startedAt, {
+          name: cleanName,
+          portion,
+          primaryModel: ITEM_MODEL,
+          primaryError: this.describeParseError(primaryError),
+        }, fallbackError);
+        throw new Error('ParseFailed');
+      }
     }
 
-    // Honour the user's explicit portion as the source of truth: when they gave grams (or a
-    // quantity we can map to grams), pin the item to it and scale the model's macros onto that
-    // weight, so the returned numbers match exactly the portion shown on the card.
-    const targetGrams = grams && grams > 0 ? grams : this.effectiveGrams(llm);
-    const item: ParsedFoodItem = {
-      ...llm,
-      name: name.trim() || llm.name,
-      quantity: quantity && quantity > 0 ? quantity : llm.quantity,
-      servingUnit: servingUnit?.trim() || llm.servingUnit,
-      grams: targetGrams,
-      gramsPerUnit:
-        quantity && quantity > 0 && targetGrams > 0 ? targetGrams / quantity : llm.gramsPerUnit,
-    };
-    if (llm.grams > 0 && targetGrams > 0 && Math.abs(targetGrams - llm.grams) > 0.5) {
-      const f = targetGrams / llm.grams;
-      const r = (n: number) => Math.round(n * f * 10) / 10;
-      item.calories = r(llm.calories);
-      item.proteinG = r(llm.proteinG);
-      item.carbsG = r(llm.carbsG);
-      item.fatG = r(llm.fatG);
-      item.fiberG = r(llm.fiberG);
-      item.sugarG = r(llm.sugarG);
-      item.sodiumMg = r(llm.sodiumMg);
-    }
-
-    // Ground against the foods DB exactly like the photo flow (DB density wins on a confident match).
-    const [grounded] = await this.groundItems(userId, [item]);
-
-    // Count this paid LLM call toward the shared daily cap (accounting only; failure-isolated).
-    // Without this, the cap check above would never advance and item re-estimates would be uncapped.
-    const itemHash = createHash('sha256').update(`item:${name.trim()}:${targetGrams}`).digest('hex');
-    await this.recordParseLog(userId, itemHash);
-
-    return grounded;
+    await this.recordParse(userId, itemHash, {
+      items: [llm],
+      overallConfidence: llm.confidence,
+      notes: null,
+    });
+    return await this.finalizeEstimatedItem(userId, cleanName, resolved, llm);
   }
 
   /**
@@ -470,6 +503,148 @@ export class NutritionIntelligenceService {
     if (h >= 11 && h < 15) return 'lunch';
     if (h >= 17 && h < 22) return 'dinner';
     return 'snack';
+  }
+
+  private static gatewayOptions(
+    userId: string,
+    source: 'photo' | 'voice' | 'item',
+  ): { sort: 'ttft'; user: string; tags: string[] } {
+    return {
+      sort: 'ttft',
+      user: userId,
+      tags: ['nutrition', `source:${source}`],
+    };
+  }
+
+  private static async callPhotoModel(
+    model: string,
+    userId: string,
+    prompt: string,
+    images: ParsePhotoImage[],
+    timeoutMs: number,
+  ): Promise<PhotoParseResult> {
+    const { output } = await generateText({
+      model,
+      output: Output.object({ schema: photoParseResultSchema }),
+      system: SYSTEM_PROMPT,
+      maxRetries: 0,
+      timeout: timeoutMs,
+      maxOutputTokens: 2_000,
+      providerOptions: {
+        gateway: this.gatewayOptions(userId, 'photo'),
+      },
+      messages: [
+        {
+          role: 'user',
+          content: [
+            { type: 'text', text: prompt },
+            ...images.map((img) => ({
+              type: 'image' as const,
+              image: img.bytes,
+              mediaType: img.mimeType,
+            })),
+          ],
+        },
+      ],
+    });
+    return output;
+  }
+
+  private static async callVoiceModel(
+    model: string,
+    userId: string,
+    transcript: string,
+    timeoutMs: number,
+  ): Promise<PhotoParseResult> {
+    const { output } = await generateText({
+      model,
+      output: Output.object({ schema: photoParseResultSchema }),
+      system: VOICE_SYSTEM_PROMPT,
+      maxRetries: 0,
+      timeout: timeoutMs,
+      maxOutputTokens: 2_000,
+      providerOptions: {
+        gateway: this.gatewayOptions(userId, 'voice'),
+      },
+      messages: [
+        {
+          role: 'user',
+          content: [
+            {
+              type: 'text',
+              text: `Parse this spoken food description into items with estimated quantities and macros:\n\n"${transcript}"`,
+            },
+          ],
+        },
+      ],
+    });
+    return output;
+  }
+
+  private static async callItemModel(
+    model: string,
+    userId: string,
+    name: string,
+    portion: string,
+    timeoutMs: number,
+  ): Promise<ParsedFoodItem> {
+    const { output } = await generateText({
+      model,
+      output: Output.object({ schema: parsedFoodItemSchema }),
+      system: ITEM_SYSTEM_PROMPT,
+      maxRetries: 0,
+      timeout: timeoutMs,
+      maxOutputTokens: 800,
+      providerOptions: {
+        gateway: this.gatewayOptions(userId, 'item'),
+      },
+      messages: [
+        {
+          role: 'user',
+          content: [
+            {
+              type: 'text',
+              text: `Estimate the nutrition for: "${name}". Portion: ${portion}.`,
+            },
+          ],
+        },
+      ],
+    });
+    return output;
+  }
+
+  private static async finalizeEstimatedItem(
+    userId: string,
+    name: string,
+    portion: { grams?: number; quantity?: number; servingUnit?: string },
+    llm: ParsedFoodItem,
+  ): Promise<NutritionDraftItem> {
+    // Honour the normalized explicit portion as the source of truth and scale the
+    // generated nutrients to it before DB grounding.
+    const targetGrams = portion.grams ?? this.effectiveGrams(llm);
+    const item: ParsedFoodItem = {
+      ...llm,
+      name: name || llm.name,
+      quantity: portion.quantity ?? llm.quantity,
+      servingUnit: portion.servingUnit ?? llm.servingUnit,
+      grams: targetGrams,
+      gramsPerUnit:
+        portion.quantity && targetGrams > 0 ? targetGrams / portion.quantity : llm.gramsPerUnit,
+    };
+    if (llm.grams > 0 && targetGrams > 0 && Math.abs(targetGrams - llm.grams) > 0.5) {
+      const factor = targetGrams / llm.grams;
+      const scale = (n: number) => Math.round(n * factor * 10) / 10;
+      item.calories = scale(llm.calories);
+      item.proteinG = scale(llm.proteinG);
+      item.carbsG = scale(llm.carbsG);
+      item.fatG = scale(llm.fatG);
+      item.fiberG = scale(llm.fiberG);
+      item.sugarG = scale(llm.sugarG);
+      item.sodiumMg = scale(llm.sodiumMg);
+    }
+
+    const [grounded] = await this.groundItems(userId, [item]);
+    return grounded;
   }
 
   private static async toDraft(
