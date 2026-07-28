@@ -31,6 +31,7 @@ import {
   massUnit,
   toLocalDateTimeInputValue,
 } from './format';
+import { SegmentalBodyMap } from './segmental-body-map';
 
 // ---------------------------------------------------------------------------
 // Scan flow (BODY_COMP_BUILD_CONTRACT §3): pick 1–3 photos of an InBody/DEXA
@@ -325,7 +326,12 @@ export function BodyCompScan({ unitSystem, onLowConfidence, onSaved }: BodyCompS
         </div>
 
         {draft.segmental && (
-          <p className="text-xs text-gray-400">Segmental data detected — it will be saved with this entry.</p>
+          <div className="space-y-1.5">
+            <p className="text-xs text-gray-400">
+              Segmental data detected — saved with this entry as-is.
+            </p>
+            <SegmentalBodyMap segmental={draft.segmental} unitSystem={unitSystem} idPrefix="scan-seg" />
+          </div>
         )}
 
         {error && <p className="text-sm text-amber-300">{error}</p>}
