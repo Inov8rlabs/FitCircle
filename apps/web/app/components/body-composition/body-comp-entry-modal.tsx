@@ -36,7 +36,15 @@ import {
   massUnit,
   toLocalDateTimeInputValue,
 } from './format';
-import { SegmentalGrid } from './segmental-grid';
+import {
+  EMPTY_SEGMENT_INPUTS,
+  SEGMENT_KEYS,
+  SEGMENT_LABELS,
+  SegmentalBodyMapEditor,
+  type SegmentInputs,
+  type SegmentInputValue,
+  type SegmentKey,
+} from './segmental-body-map';
 
 // ---------------------------------------------------------------------------
 // Manual entry modal — the heart of the journal (BODY_COMP_BUILD_CONTRACT §3).
@@ -268,6 +276,99 @@ function defaultValues(
   };
 }
 
+// --- segmental plumbing -----------------------------------------------------
+// Kept as local state rather than react-hook-form fields: it is a 5x2 matrix,
+// which flattens into ten unrelated string fields and a schema nobody can
+// read. Validation below mirrors the API's `segmentalSegmentSchema`.
+
+const SEGMENT_LEAN_MIN_KG = 0.1;
+const SEGMENT_LEAN_MAX_KG = 200;
+const SEGMENT_PCT_MIN = 1;
+const SEGMENT_PCT_MAX = 500;
+
+function segmentalToInputs(
+  segmental: SegmentalData | null | undefined,
+  unitSystem: UnitSystem
+): SegmentInputs {
+  const inputs: SegmentInputs = { ...EMPTY_SEGMENT_INPUTS };
+  if (!segmental) return inputs;
+  for (const key of SEGMENT_KEYS) {
+    const seg = segmental[key];
+    if (!seg) continue;
+    inputs[key] = {
+      lean: String(massKgToDisplay(seg.leanKg, unitSystem)),
+      pct: seg.pctOfIdeal != null ? String(seg.pctOfIdeal) : '',
+    };
+  }
+  return inputs;
+}
+
+/** Per-segment validation. Lean mass is what makes a segment exist; the
+ *  "% of ideal" is optional but meaningless without one. */
+function validateSegments(
+  inputs: SegmentInputs,
+  unitSystem: UnitSystem
+): Partial<Record<SegmentKey, string>> {
+  const errors: Partial<Record<SegmentKey, string>> = {};
+  const unit = massUnit(unitSystem);
+  const leanMin = massKgToDisplay(SEGMENT_LEAN_MIN_KG, unitSystem);
+  const leanMax = massKgToDisplay(SEGMENT_LEAN_MAX_KG, unitSystem);
+
+  for (const key of SEGMENT_KEYS) {
+    const { lean, pct } = inputs[key];
+    const leanRaw = lean.trim();
+    const pctRaw = pct.trim();
+
+    if (leanRaw !== '') {
+      const num = Number(leanRaw);
+      if (Number.isNaN(num)) {
+        errors[key] = `${SEGMENT_LABELS[key]}: enter a valid number`;
+        continue;
+      }
+      const kg = displayMassToKg(num, unitSystem);
+      if (kg < SEGMENT_LEAN_MIN_KG || kg > SEGMENT_LEAN_MAX_KG) {
+        errors[key] = `${SEGMENT_LABELS[key]}: must be ${leanMin}–${leanMax} ${unit}`;
+        continue;
+      }
+    }
+
+    if (pctRaw !== '') {
+      if (leanRaw === '') {
+        errors[key] = `${SEGMENT_LABELS[key]}: add lean mass to save a %`;
+        continue;
+      }
+      const num = Number(pctRaw);
+      if (Number.isNaN(num)) {
+        errors[key] = `${SEGMENT_LABELS[key]}: enter a valid number`;
+      } else if (num < SEGMENT_PCT_MIN || num > SEGMENT_PCT_MAX) {
+        errors[key] = `${SEGMENT_LABELS[key]}: % of ideal must be ${SEGMENT_PCT_MIN}–${SEGMENT_PCT_MAX}`;
+      }
+    }
+  }
+  return errors;
+}
+
+/** Inputs → wire payload. `null` when no segment carries a lean mass, which
+ *  on update is an explicit "clear it". */
+function inputsToSegmental(
+  inputs: SegmentInputs,
+  unitSystem: UnitSystem
+): SegmentalData | null {
+  const out: SegmentalData = {};
+  for (const key of SEGMENT_KEYS) {
+    const { lean, pct } = inputs[key];
+    if (lean.trim() === '') continue;
+    const leanNum = Number(lean.trim());
+    if (Number.isNaN(leanNum)) continue;
+    const pctNum = pct.trim() === '' ? undefined : Number(pct.trim());
+    out[key] = {
+      leanKg: displayMassToKg(leanNum, unitSystem),
+      ...(pctNum != null && !Number.isNaN(pctNum) ? { pctOfIdeal: pctNum } : {}),
+    };
+  }
+  return Object.keys(out).length > 0 ? out : null;
+}
+
 export function BodyCompEntryModal({
   open,
   onOpenChange,
@@ -279,7 +380,21 @@ export function BodyCompEntryModal({
 }: BodyCompEntryModalProps) {
   const { unitSystem, setUnitSystem, isLoading: isLoadingUnits } = useUnitPreference();
   const [showMore, setShowMore] = useState(false);
+  const [showSegmental, setShowSegmental] = useState(false);
+  const [segmentInputs, setSegmentInputs] = useState<SegmentInputs>(EMPTY_SEGMENT_INPUTS);
+  const [segmentalTouched, setSegmentalTouched] = useState(false);
   const [prevUnitSystem, setPrevUnitSystem] = useState(unitSystem);
+
+  const segmentalErrors = useMemo(
+    () => validateSegments(segmentInputs, unitSystem),
+    [segmentInputs, unitSystem]
+  );
+  const firstSegmentalError = SEGMENT_KEYS.map((k) => segmentalErrors[k]).find(Boolean);
+
+  const setSegment = (key: SegmentKey, field: keyof SegmentInputValue, value: string) => {
+    setSegmentalTouched(true);
+    setSegmentInputs((prev) => ({ ...prev, [key]: { ...prev[key], [field]: value } }));
+  };
 
   const schema = useMemo(() => buildSchema(unitSystem), [unitSystem]);
 
@@ -300,6 +415,10 @@ export function BodyCompEntryModal({
   useEffect(() => {
     if (open) {
       reset(defaultValues(unitSystem, log, prefill, latestWeightKg));
+      const seededSegments = segmentalToInputs(log?.segmental ?? prefill?.segmental, unitSystem);
+      setSegmentInputs(seededSegments);
+      setSegmentalTouched(false);
+      setShowSegmental(SEGMENT_KEYS.some((k) => seededSegments[k].lean !== ''));
       setShowMore(
         Boolean(
           log?.fatMassKg && !log.derived.fatMassKg
@@ -331,6 +450,20 @@ export function BodyCompEntryModal({
       const converted = toLb ? num * 2.20462 : num / 2.20462;
       setValue(field, converted.toFixed(1), { shouldValidate: false });
     }
+    setSegmentInputs((prev) => {
+      const next = { ...prev };
+      for (const key of SEGMENT_KEYS) {
+        const raw = prev[key].lean.trim();
+        if (raw === '') continue;
+        const num = Number(raw);
+        if (Number.isNaN(num)) continue;
+        next[key] = {
+          ...prev[key],
+          lean: (toLb ? num * 2.20462 : num / 2.20462).toFixed(1),
+        };
+      }
+      return next;
+    });
     setPrevUnitSystem(unitSystem);
   }, [unitSystem, prevUnitSystem, getValues, setValue]);
 
@@ -348,8 +481,18 @@ export function BodyCompEntryModal({
   }, [watchedWeight, watchedBf, watchedFatMass, unitSystem]);
 
   const onSubmit = async (v: FormValues) => {
+    if (firstSegmentalError) {
+      setShowSegmental(true);
+      toast.error(firstSegmentalError);
+      return;
+    }
     const measuredAtISO = new Date(v.measuredAt).toISOString();
     const metric = (field: MetricField) => inputToMetric(v[field], field, unitSystem);
+    // The form owns segmental once the map is editable, so an update always
+    // sends it: untouched values round-trip unchanged, and clearing every
+    // segment actually clears the stored value. A gated user never reaches
+    // this (the section is hidden) and the server drops the key anyway.
+    const segmental = segmentalAllowed ? inputsToSegmental(segmentInputs, unitSystem) : null;
     try {
       let saved: BodyCompLog;
       if (log) {
@@ -366,6 +509,7 @@ export function BodyCompEntryModal({
           boneMassKg: metric('boneMass') ?? null,
           visceralFatLevel: metric('visceralFatLevel') ?? null,
           bmrKcal: metric('bmrKcal') ?? null,
+          ...(segmentalAllowed ? { segmental } : {}),
           notes: v.notes.trim() === '' ? null : v.notes.trim(),
         };
         saved = await bodyCompClient.update(log.id, patch);
@@ -385,7 +529,7 @@ export function BodyCompEntryModal({
           boneMassKg: metric('boneMass'),
           visceralFatLevel: metric('visceralFatLevel'),
           bmrKcal: metric('bmrKcal'),
-          ...(prefill?.segmental ? { segmental: prefill.segmental } : {}),
+          ...(segmental ? { segmental } : {}),
           ...(v.notes.trim() ? { notes: v.notes.trim() } : {}),
         };
         saved = await bodyCompClient.create(input);
@@ -401,6 +545,8 @@ export function BodyCompEntryModal({
       toast.error(message);
     }
   };
+
+  const filledSegmentCount = SEGMENT_KEYS.filter((k) => segmentInputs[k].lean.trim() !== '').length;
 
   const fieldError = (field: keyof FormValues) => errors[field]?.message;
 
@@ -526,11 +672,44 @@ export function BodyCompEntryModal({
             {fieldError('notes') && <p className="text-xs text-red-400">{fieldError('notes')}</p>}
           </div>
 
-          {/* Segmental (display-only, edit mode) */}
-          {segmentalAllowed && log?.segmental && (
-            <div className="space-y-1.5">
-              <Label className="text-gray-300">Segmental</Label>
-              <SegmentalGrid segmental={log.segmental} unitSystem={unitSystem} />
+          {/* Segmental lean mass — editable body map */}
+          {segmentalAllowed && (
+            <div className="space-y-3">
+              <button
+                type="button"
+                onClick={() => setShowSegmental((s) => !s)}
+                className="flex w-full items-center justify-between rounded-lg border border-slate-800 bg-slate-800/40 px-3 py-2 text-sm text-gray-300 hover:bg-slate-800/70 transition-colors"
+              >
+                <span className="flex items-center gap-2">
+                  Segmental lean mass
+                  {filledSegmentCount > 0 && (
+                    <span className="rounded-full bg-indigo-500/20 px-2 py-0.5 text-[10px] font-bold text-indigo-300">
+                      {filledSegmentCount}/5
+                    </span>
+                  )}
+                </span>
+                <ChevronDown
+                  className={cn('h-4 w-4 transition-transform', showSegmental && 'rotate-180')}
+                  aria-hidden="true"
+                />
+              </button>
+              {showSegmental && (
+                <div className="space-y-2">
+                  <p className="text-xs text-gray-500">
+                    Type each segment straight off your InBody or DEXA sheet. The second line is
+                    optional — it&apos;s the sheet&apos;s &ldquo;% of ideal&rdquo; for that segment.
+                  </p>
+                  <SegmentalBodyMapEditor
+                    values={segmentInputs}
+                    onChange={setSegment}
+                    unitSystem={unitSystem}
+                    errors={segmentalTouched ? segmentalErrors : undefined}
+                  />
+                  {segmentalTouched && firstSegmentalError && (
+                    <p className="text-xs text-red-400">{firstSegmentalError}</p>
+                  )}
+                </div>
+              )}
             </div>
           )}
 
