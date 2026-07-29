@@ -3,6 +3,11 @@ import { z } from 'zod';
 
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { ExerciseService } from '@/lib/services/exercise-service';
+import type { ExerciseLogCreateInput } from '@/lib/types/exercise';
+import {
+  exercisesArraySchema,
+  mapExercisesToInput,
+} from '@/lib/validators/exercise-nested';
 import { createAdminSupabase } from '@/lib/supabase-admin';
 
 const updateExerciseSchema = z.object({
@@ -16,8 +21,10 @@ const updateExerciseSchema = z.object({
   locationType: z.enum(['home', 'gym', 'outdoor', 'studio']).nullable().optional(),
   workoutCompanion: z.enum(['solo', 'group', 'trainer', 'virtual_class']).nullable().optional(),
   isIndoor: z.boolean().nullable().optional(),
-  notes: z.string().max(500).nullable().optional(),
+  notes: z.string().max(2000).nullable().optional(),
   startedAt: z.string().datetime().nullable().optional(),
+  // NEW: full desired state of the structured exercise log (replace semantics).
+  exercises: exercisesArraySchema.optional(),
 });
 
 /**
@@ -75,21 +82,22 @@ export async function PUT(
 
     const supabaseAdmin = createAdminSupabase();
 
-    const updateData: Record<string, unknown> = {};
-    if (validated.exerciseType !== undefined) updateData.exercise_type = validated.exerciseType;
-    if (validated.category !== undefined) updateData.category = validated.category;
-    if (validated.durationMinutes !== undefined) updateData.duration_minutes = validated.durationMinutes;
-    if (validated.caloriesBurned !== undefined) updateData.calories_burned = validated.caloriesBurned;
-    if (validated.distanceMeters !== undefined) updateData.distance_meters = validated.distanceMeters;
-    if (validated.avgHeartRate !== undefined) updateData.avg_heart_rate = validated.avgHeartRate;
-    if (validated.effortLevel !== undefined) updateData.effort_level = validated.effortLevel;
-    if (validated.locationType !== undefined) updateData.location_type = validated.locationType;
-    if (validated.workoutCompanion !== undefined) updateData.workout_companion = validated.workoutCompanion;
-    if (validated.isIndoor !== undefined) updateData.is_indoor = validated.isIndoor;
-    if (validated.notes !== undefined) updateData.notes = validated.notes;
-    if (validated.startedAt !== undefined) updateData.started_at = validated.startedAt;
+    const updateInput: Partial<ExerciseLogCreateInput> = {};
+    if (validated.exerciseType !== undefined) updateInput.exercise_type = validated.exerciseType;
+    if (validated.category !== undefined) updateInput.category = validated.category;
+    if (validated.durationMinutes !== undefined) updateInput.duration_minutes = validated.durationMinutes;
+    if (validated.caloriesBurned !== undefined) updateInput.calories_burned = validated.caloriesBurned;
+    if (validated.distanceMeters !== undefined) updateInput.distance_meters = validated.distanceMeters;
+    if (validated.avgHeartRate !== undefined) updateInput.avg_heart_rate = validated.avgHeartRate;
+    if (validated.effortLevel !== undefined) updateInput.effort_level = validated.effortLevel;
+    if (validated.locationType !== undefined) updateInput.location_type = validated.locationType ?? undefined;
+    if (validated.workoutCompanion !== undefined) updateInput.workout_companion = validated.workoutCompanion ?? undefined;
+    if (validated.isIndoor !== undefined) updateInput.is_indoor = validated.isIndoor ?? undefined;
+    if (validated.notes !== undefined) updateInput.notes = validated.notes ?? undefined;
+    if (validated.startedAt !== undefined) updateInput.started_at = validated.startedAt ?? undefined;
+    if (validated.exercises !== undefined) updateInput.exercises = mapExercisesToInput(validated.exercises);
 
-    const result = await ExerciseService.updateExercise(id, user.id, updateData, supabaseAdmin);
+    const result = await ExerciseService.updateExercise(id, user.id, updateInput, supabaseAdmin);
 
     if (result.error) {
       const status = result.error.message === 'Not authorized' ? 403 : 400;
@@ -99,7 +107,12 @@ export async function PUT(
       );
     }
 
-    return NextResponse.json({ success: true, data: result.data, error: null });
+    return NextResponse.json({
+      success: true,
+      data: result.data,
+      newPersonalRecords: result.newPersonalRecords || [],
+      error: null,
+    });
   } catch (error: unknown) {
     if (error instanceof Error && error.message === 'Unauthorized') {
       return NextResponse.json(

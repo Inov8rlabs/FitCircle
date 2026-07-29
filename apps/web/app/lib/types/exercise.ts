@@ -21,6 +21,137 @@ export type WorkoutCompanion = 'solo' | 'group' | 'trainer' | 'virtual_class';
 export type ExerciseSource = 'manual' | 'healthkit';
 
 /**
+ * How an exercise's sets are tracked (drives which set fields are relevant)
+ */
+export type ExerciseTrackingType = 'weight_reps' | 'reps_only' | 'duration' | 'distance_duration';
+
+/**
+ * Type of a single set
+ */
+export type ExerciseSetType = 'normal' | 'warmup' | 'drop' | 'failure' | 'amrap';
+
+/**
+ * A catalog exercise (global library row or a user's custom exercise)
+ */
+export interface ExerciseCatalogItem {
+  id: string;
+  name: string;
+  slug: string | null;
+  aliases: string[];
+  primary_muscle: string | null;
+  secondary_muscles: string[];
+  equipment: string | null;
+  movement: string | null;
+  tracking_type: ExerciseTrackingType;
+  is_custom: boolean;
+  created_by: string | null;
+  is_public: boolean;
+}
+
+/**
+ * Compact catalog projection used in search results and nested reads.
+ */
+export interface ExerciseCatalogSummary {
+  id: string;
+  name: string;
+  primary_muscle: string | null;
+  equipment: string | null;
+  tracking_type: ExerciseTrackingType;
+  is_custom: boolean;
+}
+
+/**
+ * Input for a single set (service-layer, snake_case). Weight is canonical kilograms.
+ */
+export interface ExerciseSetInput {
+  set_number: number;
+  set_type?: ExerciseSetType;
+  weight_kg?: number | null;
+  reps?: number | null;
+  duration_seconds?: number | null;
+  distance_meters?: number | null;
+  rpe?: number | null;
+  is_completed?: boolean;
+}
+
+/**
+ * Input for one movement within a workout (service-layer, snake_case).
+ * Either exercise_id (existing catalog entry) OR custom_name (create-on-save) is required.
+ */
+export interface WorkoutExerciseInput {
+  exercise_id?: string | null;
+  custom_name?: string | null;
+  primary_muscle?: string | null;
+  equipment?: string | null;
+  tracking_type?: ExerciseTrackingType | null;
+  position: number;
+  notes?: string | null;
+  rest_seconds?: number | null;
+  sets: ExerciseSetInput[];
+}
+
+/**
+ * A single set as returned by reads (snake_case).
+ */
+export interface ExerciseSetRead {
+  id: string;
+  set_number: number;
+  set_type: ExerciseSetType;
+  weight_kg: number | null;
+  reps: number | null;
+  duration_seconds: number | null;
+  distance_meters: number | null;
+  rpe: number | null;
+  is_completed: boolean;
+}
+
+/**
+ * A movement within a workout as returned by reads (snake_case).
+ */
+export interface WorkoutExerciseRead {
+  id: string;
+  exercise_id: string;
+  position: number;
+  notes: string | null;
+  rest_seconds: number | null;
+  exercise: ExerciseCatalogSummary | null;
+  sets: ExerciseSetRead[];
+}
+
+/**
+ * Input for creating a custom exercise (service-layer, snake_case).
+ */
+export interface CustomExerciseInput {
+  name: string;
+  primary_muscle?: string | null;
+  equipment?: string | null;
+  tracking_type?: ExerciseTrackingType;
+}
+
+/**
+ * Per-exercise history response (Previous column + future insights).
+ */
+export interface ExerciseHistorySession {
+  exercise_log_id: string;
+  workout_exercise_id: string;
+  exercise_date: string;
+  sets: ExerciseSetRead[];
+  volume_kg: number;
+  best_set: ExerciseSetRead | null;
+  best_e1rm_kg: number | null;
+}
+
+export interface ExerciseHistoryResponse {
+  exercise: ExerciseCatalogSummary;
+  last_session: ExerciseHistorySession | null;
+  best_set: ExerciseSetRead | null;
+  best_e1rm_kg: number | null;
+  e1rm_series: { date: string; e1rm_kg: number }[];
+  volume_series: { date: string; volume_kg: number }[];
+  session_count: number;
+}
+
+/**
  * Full exercise log record from database
  */
 export interface ExerciseLog {
@@ -55,6 +186,15 @@ export interface ExerciseLog {
   is_public: boolean;
   is_deleted: boolean;
 
+  // Structured exercise log rollups (recomputed on nested writes)
+  exercise_count: number | null;
+  total_sets: number | null;
+  total_volume_kg: number | null;
+  has_exercise_log: boolean;
+
+  // Nested structured exercise log (only populated on single-record reads)
+  exercises?: WorkoutExerciseRead[];
+
   // Timestamps
   created_at: string;
   updated_at: string;
@@ -81,6 +221,7 @@ export interface ExerciseLogCreateInput {
   healthkit_workout_id?: string;
   source_device_name?: string;
   auto_claim_streak?: boolean; // defaults to true for manual, false for healthkit
+  exercises?: WorkoutExerciseInput[]; // NEW: optional structured exercise log (nested write)
 }
 
 /**

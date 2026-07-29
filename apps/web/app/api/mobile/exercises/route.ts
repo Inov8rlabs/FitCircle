@@ -3,6 +3,10 @@ import { z } from 'zod';
 
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { ExerciseService } from '@/lib/services/exercise-service';
+import {
+  exercisesArraySchema,
+  mapExercisesToInput,
+} from '@/lib/validators/exercise-nested';
 import { createAdminSupabase } from '@/lib/supabase-admin';
 
 const createExerciseSchema = z.object({
@@ -16,13 +20,14 @@ const createExerciseSchema = z.object({
   locationType: z.enum(['home', 'gym', 'outdoor', 'studio']).optional(),
   workoutCompanion: z.enum(['solo', 'group', 'trainer', 'virtual_class']).optional(),
   isIndoor: z.boolean().optional(),
-  notes: z.string().max(500).optional(),
+  notes: z.string().max(2000).optional(),
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   startedAt: z.string().datetime().optional(),
   healthkitWorkoutId: z.string().max(100).optional(),
   sourceDeviceName: z.string().max(100).optional(),
   source: z.enum(['manual', 'healthkit']).optional().default('manual'),
   autoClaimStreak: z.boolean().optional(),
+  exercises: exercisesArraySchema.optional(),
 });
 
 /**
@@ -59,6 +64,7 @@ export async function POST(request: NextRequest) {
         source_device_name: validated.sourceDeviceName,
         source: validated.source,
         auto_claim_streak: validated.autoClaimStreak,
+        exercises: validated.exercises ? mapExercisesToInput(validated.exercises) : undefined,
       },
       supabaseAdmin
     );

@@ -24,6 +24,14 @@ import type {
   DetectedMilestone,
   DetectedPR,
   ExerciseCreateResponse,
+  WorkoutExerciseInput,
+  WorkoutExerciseRead,
+  ExerciseSetRead,
+  ExerciseCatalogSummary,
+  CustomExerciseInput,
+  ExerciseHistoryResponse,
+  ExerciseHistorySession,
+  ExerciseTrackingType,
 } from '../types/exercise';
 
 // MET values for calorie estimation (MET × weight_kg × duration_hours)
@@ -199,6 +207,40 @@ export class ExerciseService {
         return { data: null, error: new Error(error.message) };
       }
 
+      // Persist the optional nested structured exercise log (workout_exercises + exercise_sets),
+      // then recompute the exercise_logs rollups. Ownership is guaranteed here because we just
+      // created this parent row for `userId`.
+      let strengthPRs: DetectedPR[] = [];
+      if (data.exercises && data.exercises.length > 0) {
+        const { error: persistError } = await this.persistExerciseLog(
+          exercise.id,
+          userId,
+          data.exercises,
+          supabase,
+          { replace: false }
+        );
+        if (persistError) {
+          // Data-loss guard: the client submitted a non-empty `exercises` array, so silently
+          // succeeding would drop their sets. Fail the request instead (route turns this into a
+          // non-2xx, matching the PUT path). Since the parent log only exists because of this
+          // failed create, clean it up so the caller isn't left with a phantom empty workout and
+          // can safely retry (there are no transactions here — CLAUDE.md forbids stored procs).
+          console.error('[ExerciseService] Nested exercise persist failed:', persistError);
+          await supabase.from('workout_exercises').delete().eq('exercise_log_id', exercise.id);
+          await supabase.from('exercise_logs').delete().eq('id', exercise.id);
+          return { data: null, error: persistError };
+        } else {
+          // Refresh the parent row so the response carries the recomputed rollups.
+          const { data: refreshed } = await supabase
+            .from('exercise_logs')
+            .select('*')
+            .eq('id', exercise.id)
+            .single();
+          if (refreshed) Object.assign(exercise, refreshed);
+          strengthPRs = await this.detectStrengthPRs(userId, exercise.id, supabase);
+        }
+      }
+
       // Streak claiming: manual entries claim streaks, HealthKit does not
       const shouldClaimStreak = source === 'manual' && data.auto_claim_streak !== false;
       if (shouldClaimStreak) {
@@ -242,7 +284,7 @@ export class ExerciseService {
         ChatActivityHooks.onWorkoutCompleted(userId, exercise.id).catch(() => {});
       }
 
-      // Detect milestones and PRs
+      // Detect milestones and PRs (workout-level PRs + strength/set-level PRs)
       const milestones = await this.detectMilestones(userId, supabase);
       const personalRecords = await this.detectPRs(userId, exercise, supabase);
 
@@ -250,7 +292,7 @@ export class ExerciseService {
         data: {
           exercise,
           new_milestones: milestones,
-          new_personal_records: personalRecords,
+          new_personal_records: [...personalRecords, ...strengthPRs],
         },
         error: null,
       };
@@ -532,6 +574,10 @@ export class ExerciseService {
         return { data: null, error: new Error(error.message) };
       }
 
+      // Attach the nested structured exercise log (owner already verified above).
+      const exercises = await this.loadWorkoutExercises(exerciseId, supabase);
+      (data as ExerciseLog).exercises = exercises;
+
       return { data, error: null };
     } catch (err) {
       return { data: null, error: err instanceof Error ? err : new Error('Failed to get exercise') };
@@ -539,19 +585,84 @@ export class ExerciseService {
   }
 
   /**
-   * Update an exercise log (add notes, effort, location, etc.)
+   * Load the nested workout_exercises (+ catalog + sets) for a workout, ordered by position.
+   */
+  private static async loadWorkoutExercises(
+    exerciseLogId: string,
+    supabase: SupabaseClient
+  ): Promise<WorkoutExerciseRead[]> {
+    const { data: rows, error } = await supabase
+      .from('workout_exercises')
+      .select(
+        `id, exercise_id, position, notes, rest_seconds,
+         exercise:exercises ( id, name, primary_muscle, equipment, tracking_type, is_custom ),
+         sets:exercise_sets ( id, set_number, set_type, weight_kg, reps, duration_seconds, distance_meters, rpe, is_completed )`
+      )
+      .eq('exercise_log_id', exerciseLogId)
+      .order('position', { ascending: true });
+
+    if (error || !rows) return [];
+
+    return rows.map((row: Record<string, unknown>): WorkoutExerciseRead => {
+      const cat = row.exercise as Record<string, unknown> | null;
+      const rawSets = (row.sets as Record<string, unknown>[] | null) || [];
+      const sets: ExerciseSetRead[] = rawSets
+        .map((s) => ({
+          id: s.id as string,
+          set_number: s.set_number as number,
+          set_type: s.set_type as ExerciseSetRead['set_type'],
+          weight_kg: s.weight_kg == null ? null : Number(s.weight_kg),
+          reps: s.reps == null ? null : Number(s.reps),
+          duration_seconds: s.duration_seconds == null ? null : Number(s.duration_seconds),
+          distance_meters: s.distance_meters == null ? null : Number(s.distance_meters),
+          rpe: s.rpe == null ? null : Number(s.rpe),
+          is_completed: s.is_completed as boolean,
+        }))
+        .sort((a, b) => a.set_number - b.set_number);
+
+      return {
+        id: row.id as string,
+        exercise_id: row.exercise_id as string,
+        position: row.position as number,
+        notes: (row.notes as string | null) ?? null,
+        rest_seconds: (row.rest_seconds as number | null) ?? null,
+        exercise: cat
+          ? {
+              id: cat.id as string,
+              name: cat.name as string,
+              primary_muscle: (cat.primary_muscle as string | null) ?? null,
+              equipment: (cat.equipment as string | null) ?? null,
+              tracking_type: cat.tracking_type as ExerciseTrackingType,
+              is_custom: cat.is_custom as boolean,
+            }
+          : null,
+        sets,
+      };
+    });
+  }
+
+  /**
+   * Update an exercise log (add notes, effort, location, and/or a structured exercise log).
+   *
+   * When `data.exercises` is provided it is treated as the FULL desired state of the log
+   * (replace semantics): existing workout_exercises/sets are cleared and re-created, and the
+   * exercise_logs rollups are recomputed. Strength PRs are re-run afterward.
+   *
+   * HealthKit protection: when the workout `source === 'healthkit'`, HealthKit-owned scalar
+   * fields (type/duration/calories/distance/heart-rate/started_at) are never overwritten —
+   * only the enrichment layer (notes, effort, location, companion, is_indoor, exercises) applies.
    */
   static async updateExercise(
     exerciseId: string,
     userId: string,
     data: Partial<ExerciseLogCreateInput>,
     supabase: SupabaseClient
-  ): Promise<{ data: ExerciseLog | null; error: Error | null }> {
+  ): Promise<{ data: ExerciseLog | null; error: Error | null; newPersonalRecords?: DetectedPR[] }> {
     try {
-      // Verify ownership
+      // Verify ownership + fetch source for HealthKit protection
       const { data: existing } = await supabase
         .from('exercise_logs')
-        .select('user_id')
+        .select('user_id, source')
         .eq('id', exerciseId)
         .eq('is_deleted', false)
         .single();
@@ -560,36 +671,618 @@ export class ExerciseService {
         return { data: null, error: new Error('Not authorized') };
       }
 
-      // Build update object with only provided fields
+      const isHealthKit = existing.source === 'healthkit';
+
+      // Build update object with only provided fields.
       const updateData: Record<string, unknown> = {};
-      if (data.exercise_type !== undefined) updateData.exercise_type = data.exercise_type;
-      if (data.category !== undefined) updateData.category = data.category;
-      if (data.duration_minutes !== undefined) updateData.duration_minutes = data.duration_minutes;
-      if (data.calories_burned !== undefined) updateData.calories_burned = data.calories_burned;
-      if (data.distance_meters !== undefined) updateData.distance_meters = data.distance_meters;
-      if (data.avg_heart_rate !== undefined) updateData.avg_heart_rate = data.avg_heart_rate;
+      // Enrichment fields — always editable, even for HealthKit workouts.
       if (data.effort_level !== undefined) updateData.effort_level = data.effort_level;
       if (data.location_type !== undefined) updateData.location_type = data.location_type;
       if (data.workout_companion !== undefined) updateData.workout_companion = data.workout_companion;
       if (data.is_indoor !== undefined) updateData.is_indoor = data.is_indoor;
       if (data.notes !== undefined) updateData.notes = data.notes;
-      if (data.started_at !== undefined) updateData.started_at = data.started_at;
+
+      // HealthKit-owned fields — only editable for manual entries.
+      if (!isHealthKit) {
+        if (data.exercise_type !== undefined) updateData.exercise_type = data.exercise_type;
+        if (data.category !== undefined) updateData.category = data.category;
+        if (data.duration_minutes !== undefined) updateData.duration_minutes = data.duration_minutes;
+        if (data.calories_burned !== undefined) updateData.calories_burned = data.calories_burned;
+        if (data.distance_meters !== undefined) updateData.distance_meters = data.distance_meters;
+        if (data.avg_heart_rate !== undefined) updateData.avg_heart_rate = data.avg_heart_rate;
+        if (data.started_at !== undefined) updateData.started_at = data.started_at;
+      }
+
+      if (Object.keys(updateData).length > 0) {
+        const { error: updErr } = await supabase
+          .from('exercise_logs')
+          .update(updateData)
+          .eq('id', exerciseId);
+        if (updErr) {
+          return { data: null, error: new Error(updErr.message) };
+        }
+      }
+
+      // Replace-semantics nested exercise log write (if provided).
+      let newPersonalRecords: DetectedPR[] = [];
+      if (data.exercises !== undefined) {
+        const { error: persistError } = await this.persistExerciseLog(
+          exerciseId,
+          userId,
+          data.exercises,
+          supabase,
+          { replace: true }
+        );
+        if (persistError) {
+          return { data: null, error: persistError };
+        }
+        newPersonalRecords = await this.detectStrengthPRs(userId, exerciseId, supabase);
+      }
 
       const { data: updated, error } = await supabase
         .from('exercise_logs')
-        .update(updateData)
+        .select('*')
         .eq('id', exerciseId)
-        .select()
         .single();
 
       if (error) {
         return { data: null, error: new Error(error.message) };
       }
 
-      return { data: updated, error: null };
+      // Attach the (possibly newly-written) nested exercise log to the response.
+      (updated as ExerciseLog).exercises = await this.loadWorkoutExercises(exerciseId, supabase);
+
+      return { data: updated, error: null, newPersonalRecords };
     } catch (err) {
       return { data: null, error: err instanceof Error ? err : new Error('Failed to update exercise') };
     }
+  }
+
+  // ============================================================
+  // Structured exercise log — persistence, rollups, catalog, PRs
+  // ============================================================
+
+  /**
+   * Persist a workout's structured exercise log: resolves/creates catalog entries, writes
+   * workout_exercises + exercise_sets, then recomputes the exercise_logs rollups.
+   *
+   * NOTE: the repo forbids stored procedures/RPCs (see CLAUDE.md), so a true single DB
+   * transaction is not available. We approximate the spec's "single transaction" with ordered
+   * service-role writes: on `replace`, the old rows are deleted first (cascade removes sets),
+   * and any insert failure aborts and returns an error so the caller can react. The parent
+   * workout row is never mutated here beyond the rollups.
+   */
+  private static async persistExerciseLog(
+    exerciseLogId: string,
+    userId: string,
+    exercises: WorkoutExerciseInput[],
+    supabase: SupabaseClient,
+    options: { replace: boolean }
+  ): Promise<{ error: Error | null }> {
+    try {
+      // Replace semantics: clear existing workout_exercises (sets cascade-delete).
+      if (options.replace) {
+        const { error: delError } = await supabase
+          .from('workout_exercises')
+          .delete()
+          .eq('exercise_log_id', exerciseLogId);
+        if (delError) return { error: new Error(delError.message) };
+      }
+
+      for (let i = 0; i < exercises.length; i++) {
+        const ex = exercises[i];
+
+        // Resolve the catalog exercise id (create-on-save for custom_name).
+        const resolvedId = await this.resolveCatalogExerciseId(userId, ex, supabase);
+        if (!resolvedId) {
+          return { error: new Error('Could not resolve exercise (missing exerciseId/customName)') };
+        }
+
+        const { data: we, error: weError } = await supabase
+          .from('workout_exercises')
+          .insert({
+            exercise_log_id: exerciseLogId,
+            exercise_id: resolvedId,
+            position: ex.position ?? i,
+            notes: ex.notes ?? null,
+            rest_seconds: ex.rest_seconds ?? null,
+          })
+          .select('id')
+          .single();
+
+        if (weError || !we) {
+          return { error: new Error(weError?.message || 'Failed to insert workout exercise') };
+        }
+
+        if (ex.sets && ex.sets.length > 0) {
+          const setRows = ex.sets.map((s, idx) => ({
+            workout_exercise_id: we.id,
+            set_number: s.set_number ?? idx + 1,
+            set_type: s.set_type ?? 'normal',
+            reps: s.reps ?? null,
+            weight_kg: s.weight_kg ?? null,
+            duration_seconds: s.duration_seconds ?? null,
+            distance_meters: s.distance_meters ?? null,
+            rpe: s.rpe ?? null,
+            is_completed: s.is_completed ?? true,
+          }));
+
+          const { error: setError } = await supabase.from('exercise_sets').insert(setRows);
+          if (setError) {
+            return { error: new Error(setError.message) };
+          }
+        }
+      }
+
+      await this.recomputeRollups(exerciseLogId, supabase);
+      return { error: null };
+    } catch (err) {
+      return { error: err instanceof Error ? err : new Error('Failed to persist exercise log') };
+    }
+  }
+
+  /**
+   * Resolve a WorkoutExerciseInput to a catalog exercise id.
+   * - exercise_id present → use it, but ONLY after verifying it is visible to this user
+   *   (global/public OR owned by the user) and not soft-deleted. Because writes run under the
+   *   service-role client (RLS bypassed), this TS gate is the only thing preventing a caller
+   *   from attaching another user's private custom exercise — or an arbitrary UUID — to their
+   *   own workout (which would then leak that private exercise's name/muscle/equipment back
+   *   via loadWorkoutExercises). A non-visible/nonexistent id throws a validation-style error
+   *   (surfaced as a 400 by the route), consistent with other persist failures.
+   * - custom_name present → find-or-create a private custom exercise for this user.
+   */
+  private static async resolveCatalogExerciseId(
+    userId: string,
+    ex: WorkoutExerciseInput,
+    supabase: SupabaseClient
+  ): Promise<string | null> {
+    if (ex.exercise_id) {
+      const { data: cat } = await supabase
+        .from('exercises')
+        .select('id, is_public, created_by, is_deleted')
+        .eq('id', ex.exercise_id)
+        .maybeSingle();
+
+      const visible =
+        cat && cat.is_deleted !== true && (cat.is_public === true || cat.created_by === userId);
+      if (!visible) {
+        throw new Error('Exercise not found or not accessible');
+      }
+      return cat.id as string;
+    }
+    if (ex.custom_name && ex.custom_name.trim().length > 0) {
+      const created = await this.findOrCreateCustomExercise(
+        userId,
+        {
+          name: ex.custom_name.trim(),
+          primary_muscle: ex.primary_muscle ?? null,
+          equipment: ex.equipment ?? null,
+          tracking_type: ex.tracking_type ?? 'weight_reps',
+        },
+        supabase
+      );
+      return created?.id ?? null;
+    }
+    return null;
+  }
+
+  /**
+   * Recompute and persist the denormalized rollups on exercise_logs.
+   * total_volume_kg = Σ(reps × weight_kg) over COMPLETED, NON-warmup sets.
+   */
+  private static async recomputeRollups(
+    exerciseLogId: string,
+    supabase: SupabaseClient
+  ): Promise<void> {
+    const { data: weRows } = await supabase
+      .from('workout_exercises')
+      .select('id')
+      .eq('exercise_log_id', exerciseLogId);
+
+    const exerciseCount = weRows?.length || 0;
+    let totalSets = 0;
+    let totalVolume = 0;
+
+    if (exerciseCount > 0) {
+      const weIds = weRows!.map((r) => r.id);
+      const { data: sets } = await supabase
+        .from('exercise_sets')
+        .select('reps, weight_kg, set_type, is_completed, workout_exercise_id')
+        .in('workout_exercise_id', weIds);
+
+      for (const s of sets || []) {
+        totalSets++;
+        const isWorking = s.set_type !== 'warmup' && s.is_completed !== false;
+        if (isWorking && s.reps != null && s.weight_kg != null) {
+          totalVolume += Number(s.reps) * Number(s.weight_kg);
+        }
+      }
+    }
+
+    await supabase
+      .from('exercise_logs')
+      .update({
+        exercise_count: exerciseCount,
+        total_sets: totalSets,
+        total_volume_kg: Math.round(totalVolume * 100) / 100,
+        has_exercise_log: exerciseCount > 0,
+      })
+      .eq('id', exerciseLogId);
+  }
+
+  /**
+   * Search the exercise catalog (global library + the user's custom exercises).
+   */
+  static async searchCatalog(
+    userId: string,
+    options: { search?: string; muscle?: string; equipment?: string; limit?: number },
+    supabase: SupabaseClient
+  ): Promise<{ data: ExerciseCatalogSummary[]; error: Error | null }> {
+    try {
+      const limit = Math.min(options.limit || 50, 200);
+
+      let query = supabase
+        .from('exercises')
+        .select('id, name, primary_muscle, equipment, tracking_type, is_custom')
+        .eq('is_deleted', false)
+        .or(`is_public.eq.true,created_by.eq.${userId}`);
+
+      if (options.search && options.search.trim().length > 0) {
+        query = query.ilike('name', `%${options.search.trim()}%`);
+      }
+      if (options.muscle) {
+        query = query.eq('primary_muscle', options.muscle);
+      }
+      if (options.equipment) {
+        query = query.eq('equipment', options.equipment);
+      }
+
+      const { data, error } = await query.order('name', { ascending: true }).limit(limit);
+
+      if (error) {
+        return { data: [], error: new Error(error.message) };
+      }
+
+      return { data: (data as ExerciseCatalogSummary[]) || [], error: null };
+    } catch (err) {
+      return { data: [], error: err instanceof Error ? err : new Error('Failed to search catalog') };
+    }
+  }
+
+  /**
+   * Create (or return an existing) custom exercise owned by the user.
+   */
+  static async createCustomExercise(
+    userId: string,
+    input: CustomExerciseInput,
+    supabase: SupabaseClient
+  ): Promise<{ data: ExerciseCatalogSummary | null; error: Error | null }> {
+    try {
+      const row = await this.findOrCreateCustomExercise(
+        userId,
+        {
+          name: input.name.trim(),
+          primary_muscle: input.primary_muscle ?? null,
+          equipment: input.equipment ?? null,
+          tracking_type: input.tracking_type ?? 'weight_reps',
+        },
+        supabase
+      );
+      if (!row) {
+        return { data: null, error: new Error('Failed to create custom exercise') };
+      }
+      return {
+        data: {
+          id: row.id,
+          name: row.name,
+          primary_muscle: row.primary_muscle,
+          equipment: row.equipment,
+          tracking_type: row.tracking_type,
+          is_custom: true,
+        },
+        error: null,
+      };
+    } catch (err) {
+      return { data: null, error: err instanceof Error ? err : new Error('Failed to create custom exercise') };
+    }
+  }
+
+  private static async findOrCreateCustomExercise(
+    userId: string,
+    input: { name: string; primary_muscle: string | null; equipment: string | null; tracking_type: ExerciseTrackingType },
+    supabase: SupabaseClient
+  ): Promise<{
+    id: string;
+    name: string;
+    primary_muscle: string | null;
+    equipment: string | null;
+    tracking_type: ExerciseTrackingType;
+  } | null> {
+    const slug = this.slugify(input.name);
+
+    // Dedup: reuse an existing custom exercise with the same slug for this user.
+    const { data: existing } = await supabase
+      .from('exercises')
+      .select('id, name, primary_muscle, equipment, tracking_type')
+      .eq('created_by', userId)
+      .eq('is_custom', true)
+      .eq('is_deleted', false)
+      .eq('slug', slug)
+      .maybeSingle();
+
+    if (existing) {
+      return existing as {
+        id: string;
+        name: string;
+        primary_muscle: string | null;
+        equipment: string | null;
+        tracking_type: ExerciseTrackingType;
+      };
+    }
+
+    const { data: created, error } = await supabase
+      .from('exercises')
+      .insert({
+        name: input.name,
+        slug,
+        primary_muscle: input.primary_muscle,
+        equipment: input.equipment,
+        tracking_type: input.tracking_type,
+        is_custom: true,
+        is_public: false,
+        created_by: userId,
+      })
+      .select('id, name, primary_muscle, equipment, tracking_type')
+      .single();
+
+    if (error || !created) return null;
+    return created as {
+      id: string;
+      name: string;
+      primary_muscle: string | null;
+      equipment: string | null;
+      tracking_type: ExerciseTrackingType;
+    };
+  }
+
+  private static slugify(name: string): string {
+    return name
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '');
+  }
+
+  /**
+   * Per-exercise history for the "Previous" column + insights (last session's sets, best set,
+   * e1RM series, volume series). Only the requesting user's own logs are considered.
+   */
+  static async getExerciseHistory(
+    userId: string,
+    exerciseId: string,
+    supabase: SupabaseClient
+  ): Promise<{ data: ExerciseHistoryResponse | null; error: Error | null }> {
+    try {
+      // Verify the exercise is visible to this user (global or their own custom).
+      const { data: cat } = await supabase
+        .from('exercises')
+        .select('id, name, primary_muscle, equipment, tracking_type, is_custom, is_public, created_by')
+        .eq('id', exerciseId)
+        .maybeSingle();
+
+      if (!cat || (!cat.is_public && cat.created_by !== userId)) {
+        return { data: null, error: new Error('Exercise not found') };
+      }
+
+      // All of the user's performances of this movement, with the parent log's date.
+      const { data: rows, error } = await supabase
+        .from('workout_exercises')
+        .select(
+          `id, exercise_log_id,
+           log:exercise_logs!inner ( exercise_date, user_id, is_deleted ),
+           sets:exercise_sets ( id, set_number, set_type, weight_kg, reps, duration_seconds, distance_meters, rpe, is_completed )`
+        )
+        .eq('exercise_id', exerciseId)
+        .eq('log.user_id', userId)
+        .eq('log.is_deleted', false);
+
+      if (error) {
+        return { data: null, error: new Error(error.message) };
+      }
+
+      const catalog: ExerciseCatalogSummary = {
+        id: cat.id,
+        name: cat.name,
+        primary_muscle: cat.primary_muscle,
+        equipment: cat.equipment,
+        tracking_type: cat.tracking_type,
+        is_custom: cat.is_custom,
+      };
+
+      const sessions: ExerciseHistorySession[] = (rows || []).map((row: Record<string, unknown>) => {
+        const log = row.log as Record<string, unknown>;
+        const rawSets = (row.sets as Record<string, unknown>[] | null) || [];
+        const sets: ExerciseSetRead[] = rawSets
+          .map((s) => ({
+            id: s.id as string,
+            set_number: s.set_number as number,
+            set_type: s.set_type as ExerciseSetRead['set_type'],
+            weight_kg: s.weight_kg == null ? null : Number(s.weight_kg),
+            reps: s.reps == null ? null : Number(s.reps),
+            duration_seconds: s.duration_seconds == null ? null : Number(s.duration_seconds),
+            distance_meters: s.distance_meters == null ? null : Number(s.distance_meters),
+            rpe: s.rpe == null ? null : Number(s.rpe),
+            is_completed: s.is_completed as boolean,
+          }))
+          .sort((a, b) => a.set_number - b.set_number);
+
+        const working = sets.filter(
+          (s) => s.set_type !== 'warmup' && s.is_completed !== false
+        );
+        let volume = 0;
+        let bestSet: ExerciseSetRead | null = null;
+        let bestSetWeight = -1;
+        let bestE1rm: number | null = null;
+        for (const s of working) {
+          if (s.reps != null && s.weight_kg != null) {
+            volume += s.reps * s.weight_kg;
+            if (s.weight_kg > bestSetWeight) {
+              bestSetWeight = s.weight_kg;
+              bestSet = s;
+            }
+            const e1rm = s.weight_kg * (1 + s.reps / 30); // Epley
+            if (bestE1rm == null || e1rm > bestE1rm) bestE1rm = e1rm;
+          }
+        }
+
+        return {
+          exercise_log_id: row.exercise_log_id as string,
+          workout_exercise_id: row.id as string,
+          exercise_date: log.exercise_date as string,
+          sets,
+          volume_kg: Math.round(volume * 100) / 100,
+          best_set: bestSet,
+          best_e1rm_kg: bestE1rm == null ? null : Math.round(bestE1rm * 100) / 100,
+        };
+      });
+
+      // Sort sessions by date ascending for the series; last_session = most recent.
+      sessions.sort((a, b) => a.exercise_date.localeCompare(b.exercise_date));
+      const lastSession = sessions.length > 0 ? sessions[sessions.length - 1] : null;
+
+      // Best set + best e1RM across all sessions.
+      let overallBestSet: ExerciseSetRead | null = null;
+      let overallBestWeight = -1;
+      let overallBestE1rm: number | null = null;
+      for (const s of sessions) {
+        if (s.best_set && s.best_set.weight_kg != null && s.best_set.weight_kg > overallBestWeight) {
+          overallBestWeight = s.best_set.weight_kg;
+          overallBestSet = s.best_set;
+        }
+        if (s.best_e1rm_kg != null && (overallBestE1rm == null || s.best_e1rm_kg > overallBestE1rm)) {
+          overallBestE1rm = s.best_e1rm_kg;
+        }
+      }
+
+      const e1rmSeries = sessions
+        .filter((s) => s.best_e1rm_kg != null)
+        .map((s) => ({ date: s.exercise_date, e1rm_kg: s.best_e1rm_kg as number }));
+      const volumeSeries = sessions.map((s) => ({ date: s.exercise_date, volume_kg: s.volume_kg }));
+
+      return {
+        data: {
+          exercise: catalog,
+          last_session: lastSession,
+          best_set: overallBestSet,
+          best_e1rm_kg: overallBestE1rm,
+          e1rm_series: e1rmSeries,
+          volume_series: volumeSeries,
+          session_count: sessions.length,
+        },
+        error: null,
+      };
+    } catch (err) {
+      return { data: null, error: err instanceof Error ? err : new Error('Failed to get exercise history') };
+    }
+  }
+
+  /**
+   * Detect strength PRs (heaviest weight, best estimated 1RM) produced by the sets just saved
+   * to a workout, compared against the user's prior history for each movement.
+   * Reuses the DetectedPR / newPersonalRecords surface. Warmups are excluded.
+   */
+  private static async detectStrengthPRs(
+    userId: string,
+    exerciseLogId: string,
+    supabase: SupabaseClient
+  ): Promise<DetectedPR[]> {
+    const prs: DetectedPR[] = [];
+    try {
+      // This workout's exercises + their sets + catalog name.
+      const { data: weRows } = await supabase
+        .from('workout_exercises')
+        .select(
+          `id, exercise_id,
+           exercise:exercises ( name ),
+           sets:exercise_sets ( set_type, weight_kg, reps, is_completed )`
+        )
+        .eq('exercise_log_id', exerciseLogId);
+
+      for (const we of (weRows || []) as unknown as Record<string, unknown>[]) {
+        // PostgREST may type a to-one embed as an array; normalize to a single object.
+        const catRel = we.exercise as Record<string, unknown> | Record<string, unknown>[] | null;
+        const cat = Array.isArray(catRel) ? catRel[0] : catRel;
+        const catName = (cat?.name as string) || 'Exercise';
+        const rawSets = (we.sets as Record<string, unknown>[] | null) || [];
+
+        // Current best for this movement in THIS workout.
+        let curWeight = -1;
+        let curE1rm = -1;
+        for (const s of rawSets) {
+          if (s.set_type === 'warmup' || s.is_completed === false) continue;
+          const w = s.weight_kg == null ? null : Number(s.weight_kg);
+          const r = s.reps == null ? null : Number(s.reps);
+          if (w != null && w > curWeight) curWeight = w;
+          if (w != null && r != null) {
+            const e1rm = w * (1 + r / 30);
+            if (e1rm > curE1rm) curE1rm = e1rm;
+          }
+        }
+        if (curWeight <= 0 && curE1rm <= 0) continue;
+
+        // Prior history for this movement (all the user's OTHER logs).
+        const { data: priorWe } = await supabase
+          .from('workout_exercises')
+          .select(
+            `id, exercise_log_id,
+             log:exercise_logs!inner ( user_id, is_deleted ),
+             sets:exercise_sets ( set_type, weight_kg, reps, is_completed )`
+          )
+          .eq('exercise_id', we.exercise_id as string)
+          .eq('log.user_id', userId)
+          .eq('log.is_deleted', false)
+          .neq('exercise_log_id', exerciseLogId);
+
+        let prevWeight = -1;
+        let prevE1rm = -1;
+        for (const pw of priorWe || []) {
+          const psets = (pw.sets as Record<string, unknown>[] | null) || [];
+          for (const s of psets) {
+            if (s.set_type === 'warmup' || s.is_completed === false) continue;
+            const w = s.weight_kg == null ? null : Number(s.weight_kg);
+            const r = s.reps == null ? null : Number(s.reps);
+            if (w != null && w > prevWeight) prevWeight = w;
+            if (w != null && r != null) {
+              const e1rm = w * (1 + r / 30);
+              if (e1rm > prevE1rm) prevE1rm = e1rm;
+            }
+          }
+        }
+
+        // Only celebrate when there IS prior history and we beat it (mirrors existing PR behavior).
+        if (prevWeight >= 0 && curWeight > prevWeight) {
+          prs.push({
+            type: 'heaviest_weight',
+            exercise_type: catName,
+            value: Math.round(curWeight * 100) / 100,
+            previous_value: Math.round(prevWeight * 100) / 100,
+            unit: 'kg',
+          });
+        }
+        if (prevE1rm >= 0 && curE1rm > prevE1rm) {
+          prs.push({
+            type: 'best_e1rm',
+            exercise_type: catName,
+            value: Math.round(curE1rm * 100) / 100,
+            previous_value: Math.round(prevE1rm * 100) / 100,
+            unit: 'kg',
+          });
+        }
+      }
+    } catch (err) {
+      console.error('[ExerciseService] Strength PR detection failed:', err);
+    }
+    return prs;
   }
 
   /**
