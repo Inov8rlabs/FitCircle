@@ -52,9 +52,11 @@ CREATE TABLE exercises (
   updated_at        TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- Full-text search over name + aliases (name || ' ' || aliases joined).
+-- Full-text search over name. NOTE: array_to_string() is STABLE (not IMMUTABLE) so it cannot
+-- appear in an index expression; aliases are searched via ILIKE + the trigram index below, and
+-- the current catalog search uses ILIKE on name, so a name-only tsvector index is sufficient.
 CREATE INDEX idx_exercises_search
-  ON exercises USING gin (to_tsvector('english', name || ' ' || array_to_string(aliases, ' ')));
+  ON exercises USING gin (to_tsvector('english', name));
 
 -- Trigram index for fast fuzzy / prefix "instant search" over name (pg_trgm enabled in 055).
 CREATE INDEX idx_exercises_name_trgm ON exercises USING gin (name gin_trgm_ops);
