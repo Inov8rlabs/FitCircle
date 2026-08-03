@@ -12,6 +12,7 @@ import { createAdminSupabase } from '@/lib/supabase-admin';
 // Validation schema
 const checkInSchema = z.object({
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  timezone: z.string().max(100).optional(),
   previousDaySentiment: z.enum(['great', 'ok', 'could_be_better']).optional(),
   mood: z.number().min(1).max(5),
   energy: z.number().min(1).max(5),
@@ -57,8 +58,16 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const validatedData = checkInSchema.parse(body);
 
+    // Honour the device's local timezone (body wins over header).
+    const timezone =
+      validatedData.timezone || request.headers.get('x-client-timezone') || undefined;
+
     // Perform check-in
-    const result = await performDailyCheckIn(user.id, validatedData as DailyCheckInRequest, supabaseAdmin);
+    const result = await performDailyCheckIn(
+      user.id,
+      { ...validatedData, timezone } as DailyCheckInRequest,
+      supabaseAdmin
+    );
 
     const response = NextResponse.json({
       success: true,

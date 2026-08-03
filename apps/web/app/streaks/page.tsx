@@ -32,17 +32,17 @@ import {
   type EngagementHistoryEntry,
   streakClient,
 } from '@/lib/api/streak-client';
+import { MILESTONES as CANONICAL_MILESTONES } from '@/lib/streaks/streak-config';
 import { useAuthStore } from '@/stores/auth-store';
 
-// ─── Milestone metadata (matches iOS / Android) ─────────────────────────────
+// ─── Milestone metadata (single source: lib/streaks/streak-config) ──────────
 
-const MILESTONES = [
-  { days: 7,   title: '7-Day Warrior',      badge: '🔥', message: 'One week strong!' },
-  { days: 30,  title: 'Monthly Master',     badge: '💪', message: '30 days of excellence!' },
-  { days: 60,  title: '60-Day Champion',    badge: '🏆', message: 'Two months of dedication!' },
-  { days: 100, title: 'Centurion',          badge: '👑', message: '100 days of commitment!' },
-  { days: 365, title: 'Year of Excellence', badge: '🌟', message: 'A full year!' },
-] as const;
+const MILESTONES = CANONICAL_MILESTONES.map(m => ({
+  days: m.days,
+  title: m.name,
+  badge: m.badge,
+  message: m.description,
+}));
 
 type Milestone = (typeof MILESTONES)[number];
 
@@ -106,7 +106,7 @@ export default function StreaksPage() {
     try {
       const result = await streakClient.claimStreak(null, timezone);
       if (result.milestone) {
-        const m = MILESTONES.find(m => m.days === result.milestone!.days) ?? null;
+        const m = MILESTONES.find(m => m.days === result.milestone!.milestone) ?? null;
         setMilestone(m);
       }
       toast.success('Streak claimed! 🔥');
@@ -229,6 +229,7 @@ export default function StreaksPage() {
         {shieldDialogDate && shield && (
           <ShieldDialog
             available={shield.available}
+            unlimited={shield.unlimited}
             date={shieldDialogDate}
             onConfirm={() => activateShield(shieldDialogDate)}
             onCancel={() => setShieldDialogDate(null)}
@@ -425,10 +426,14 @@ function ShieldWidget({ shield }: { shield: ShieldStatus; onUseShield: () => voi
         <div className="flex-1">
           <p className="font-semibold">Streak shields</p>
           <p className="text-sm text-muted-foreground">
-            {shield.available} / {shield.max} available — protect missed days
+            {shield.unlimited
+              ? 'Unlimited with Pro — your streak is always protected'
+              : `${shield.available} / ${shield.max} available — protect missed days`}
           </p>
         </div>
-        <div className="text-2xl font-bold text-indigo-400">{shield.available}</div>
+        <div className="text-2xl font-bold text-indigo-400">
+          {shield.unlimited ? '∞' : shield.available}
+        </div>
       </CardContent>
     </Card>
   );
@@ -515,8 +520,9 @@ function MilestoneCelebration({
 }
 
 function ShieldDialog({
-  available, date, onConfirm, onCancel,
-}: { available: number; date: string; onConfirm: () => void; onCancel: () => void }) {
+  available, unlimited, date, onConfirm, onCancel,
+}: { available: number; unlimited: boolean; date: string; onConfirm: () => void; onCancel: () => void }) {
+  const canUse = unlimited || available > 0;
   return (
     <motion.div
       className="fixed inset-0 z-[60] bg-background/95 backdrop-blur-sm flex items-center justify-center p-4"
@@ -533,18 +539,25 @@ function ShieldDialog({
           <h2 className="text-xl font-bold">Streak Shield</h2>
         </div>
         <p className="text-sm text-muted-foreground">
-          {available > 0
-            ? `You have ${available} shield${available === 1 ? '' : 's'} available. Use one to reclaim ${formatDay(date)}?`
-            : `No shields available. Earn one by hitting your next milestone!`}
+          {unlimited
+            ? `Pro includes unlimited shields. Use one to reclaim ${formatDay(date)}?`
+            : available > 0
+              ? `You have ${available} shield${available === 1 ? '' : 's'} available. Use one to reclaim ${formatDay(date)}?`
+              : 'You’re out of shields. Earn one per week of streak (bonus each month) — or get FitCircle Pro for unlimited shields, so your streak is always protected.'}
         </p>
         <div className="flex gap-2">
-          {available > 0 ? (
+          {canUse ? (
             <>
               <Button variant="ghost" className="flex-1" onClick={onCancel}>Cancel</Button>
               <Button className="flex-1 bg-indigo-500 hover:bg-indigo-600" onClick={onConfirm}>Use Shield</Button>
             </>
           ) : (
-            <Button className="w-full" onClick={onCancel}>Got it</Button>
+            <>
+              <Button variant="ghost" className="flex-1" onClick={onCancel}>Maybe later</Button>
+              <Button asChild className="flex-1 bg-gradient-to-r from-purple-500 to-indigo-500 hover:from-purple-600 hover:to-indigo-600">
+                <a href="/upgrade?source=streak_shield">Get Pro</a>
+              </Button>
+            </>
           )}
         </div>
       </motion.div>

@@ -73,6 +73,8 @@ export interface CanClaimResult {
   alreadyClaimed: boolean;
   reason?: string;
   hasHealthData?: boolean;
+  /** Full health-data breakdown, so callers don't re-query daily_tracking. */
+  healthCheck?: HealthDataCheck;
   gracePeriodActive?: boolean;
 }
 
@@ -89,7 +91,13 @@ export interface ShieldStatus {
   milestone_shields: number;
   purchased: number;
   total: number;
+  /** Pro users have unlimited shields; clients should render ∞ and ignore total. */
+  unlimited: boolean;
+  /** Max shields a free user can bank. */
+  cap: number;
+  /** @deprecated weekly freeze resets no longer exist; always null. */
   last_freeze_reset: string | null;
+  /** @deprecated weekly freeze resets no longer exist; always null. */
   next_freeze_reset: string | null;
 }
 
@@ -170,18 +178,11 @@ export interface RecoveryOption {
 // CONSTANTS
 // ============================================================================
 
+// Shield economy constants (earn intervals, caps) live in
+// lib/streaks/streak-config — the single source of truth.
 export const CLAIMING_CONSTANTS = {
   RETROACTIVE_WINDOW_DAYS: 7,
   GRACE_PERIOD_HOURS: 3,
-  MILESTONE_SHIELDS: {
-    30: 1,
-    60: 1,
-    100: 2,
-    365: 3,
-  },
-  WEEKLY_FREE_FREEZE: 1,
-  MAX_TOTAL_SHIELDS: 5,
-  FREEZE_RESET_DAY: 1, // Monday (0=Sunday, 1=Monday, etc.)
   WEEKEND_WARRIOR_ACTIONS: 2,
   WEEKEND_WARRIOR_WINDOW_HOURS: 24,
   PURCHASED_RESURRECTION_PRICE: 2.99,
@@ -217,85 +218,7 @@ export const CLAIM_ERROR_CODES = {
   INSUFFICIENT_ACTIONS: 'INSUFFICIENT_ACTIONS',
 } as const;
 
-// ============================================================================
-// UTILITY FUNCTIONS
-// ============================================================================
-
-/**
- * Check if a date is within the retroactive claiming window
- */
-export function isWithinRetroactiveWindow(
-  targetDate: Date,
-  currentDate: Date
-): boolean {
-  const daysDiff = Math.floor(
-    (currentDate.getTime() - targetDate.getTime()) / (24 * 60 * 60 * 1000)
-  );
-  return daysDiff >= 0 && daysDiff <= CLAIMING_CONSTANTS.RETROACTIVE_WINDOW_DAYS;
-}
-
-/**
- * Check if current time is within grace period for claiming yesterday
- */
-export function isWithinGracePeriod(timezone: string): boolean {
-  try {
-    const now = new Date();
-    const localHour = parseInt(
-      now.toLocaleString('en-US', {
-        timeZone: timezone,
-        hour: 'numeric',
-        hour12: false,
-      })
-    );
-    return localHour < CLAIMING_CONSTANTS.GRACE_PERIOD_HOURS;
-  } catch (error) {
-    console.error('[isWithinGracePeriod] Error:', error);
-    return false;
-  }
-}
-
-/**
- * Get next Monday (freeze reset day)
- */
-export function getNextFreezeReset(from: Date = new Date()): Date {
-  const next = new Date(from);
-  next.setHours(0, 0, 0, 0);
-  const daysUntilMonday = (8 - next.getDay()) % 7 || 7;
-  next.setDate(next.getDate() + daysUntilMonday);
-  return next;
-}
-
-/**
- * Format date as YYYY-MM-DD
- */
-export function formatDateYYYYMMDD(date: Date): string {
-  return date.toISOString().split('T')[0];
-}
-
-/**
- * Check if user earned milestone shields
- */
-export function getMilestoneShields(streakCount: number): number {
-  if (streakCount in CLAIMING_CONSTANTS.MILESTONE_SHIELDS) {
-    return CLAIMING_CONSTANTS.MILESTONE_SHIELDS[
-      streakCount as keyof typeof CLAIMING_CONSTANTS.MILESTONE_SHIELDS
-    ];
-  }
-  return 0;
-}
-
-/**
- * Check if milestone achievement was unlocked
- */
-export function getMilestoneInfo(streakCount: number): MilestoneInfo | undefined {
-  const shieldsGranted = getMilestoneShields(streakCount);
-  if (shieldsGranted > 0) {
-    return {
-      milestone: streakCount,
-      type: 'shield_earned',
-      reward: `${shieldsGranted} streak shield(s) earned!`,
-      shieldsGranted,
-    };
-  }
-  return undefined;
-}
+// Date/timezone utilities (localToday, addDays, isWithinRetroactiveWindow,
+// isWithinGracePeriod, calculateStreak) live in lib/streaks/streak-calculator.
+// Milestone helpers (milestoneCrossed, nextMilestone, shieldsEarnedBetween)
+// live in lib/streaks/streak-config.

@@ -1,503 +1,316 @@
 /**
- * Unit tests for StreakClaimingService
+ * Unit tests for StreakClaimingService (claims-derived streak engine).
+ * Uses the in-memory FakeSupabase so behavior — not mock call order — is
+ * what's asserted.
  */
 
-import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { StreakClaimingService } from '@/lib/services/streak-claiming-service';
-import { StreakClaimError, CLAIM_ERROR_CODES } from '@/lib/types/streak-claiming';
+import { StreakClaimError } from '@/lib/types/streak-claiming';
+import { addDays } from '@/lib/streaks/streak-calculator';
 import { createAdminSupabase } from '@/lib/supabase-admin';
+import { makeStreakDb, type FakeSupabase } from '../../helpers/fake-supabase';
 
-// Mock Supabase
 vi.mock('@/lib/supabase-admin');
-vi.mock('@/lib/services/engagement-streak-service');
+vi.mock('@/lib/services/momentum-service', () => ({
+  MomentumService: { checkIn: vi.fn().mockResolvedValue(undefined) },
+}));
 
-const mockSupabase = {
-  from: vi.fn(),
-  rpc: vi.fn(),
-};
+const USER = 'user-1';
+const TZ = 'UTC';
+// Fixed clock: 2026-08-03T12:00:00Z (noon — outside the 3am grace window)
+const NOW = new Date('2026-08-03T12:00:00Z');
+const TODAY = '2026-08-03';
 
-describe('StreakClaimingService', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    (createAdminSupabase as any).mockReturnValue(mockSupabase);
+let db: FakeSupabase;
+
+function seedUser(opts: { tier?: string; shields?: number; claims?: string[] } = {}) {
+  db.seed('profiles', [{ id: USER, subscription_tier: opts.tier ?? 'free' }]);
+  db.seed('streak_shields', [
+    { user_id: USER, shield_type: 'freeze', available_count: opts.shields ?? 0 },
+    { user_id: USER, shield_type: 'milestone_shield', available_count: 0 },
+    { user_id: USER, shield_type: 'purchased', available_count: 0 },
+  ]);
+  db.seed('engagement_streaks', [
+    { user_id: USER, current_streak: 0, longest_streak: 0, streak_freezes_available: 0, total_claims: 0, paused: false },
+  ]);
+  for (const day of opts.claims ?? []) {
+    db.seed('streak_claims', [
+      { user_id: USER, claim_date: day, claim_method: 'explicit', timezone: TZ, metadata: {} },
+    ]);
+  }
+}
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  vi.useFakeTimers();
+  vi.setSystemTime(NOW);
+  db = makeStreakDb();
+  (createAdminSupabase as any).mockReturnValue(db);
+});
+
+afterEach(() => {
+  vi.useRealTimers();
+});
+
+describe('claimStreak', () => {
+  it('claims today and returns the new streak count', async () => {
+    seedUser({ claims: [addDays(TODAY, -2), addDays(TODAY, -1)] });
+
+    const result = await StreakClaimingService.claimStreak(USER, TODAY, TZ, 'explicit');
+
+    expect(result.success).toBe(true);
+    expect(result.streakCount).toBe(3);
+    const record = db.getRows('engagement_streaks')[0];
+    expect(record.current_streak).toBe(3);
+    expect(record.longest_streak).toBe(3);
+    expect(record.total_claims).toBe(1);
   });
 
-  afterEach(() => {
-    vi.restoreAllMocks();
+  it('rejects an already-claimed day', async () => {
+    seedUser({ claims: [TODAY] });
+    await expect(
+      StreakClaimingService.claimStreak(USER, TODAY, TZ, 'explicit')
+    ).rejects.toMatchObject({ code: 'ALREADY_CLAIMED' });
   });
 
-  describe('claimStreak', () => {
-    it('should successfully claim a streak for today', async () => {
-      const userId = 'test-user-id';
-      const today = new Date();
-      const timezone = 'America/Los_Angeles';
-
-      // Mock health data check
-      mockSupabase.from.mockReturnValueOnce({
-        select: vi.fn().mockReturnValue({
-          eq: vi.fn().mockReturnValue({
-            eq: vi.fn().mockReturnValue({
-              single: vi.fn().mockResolvedValue({
-                data: { weight_kg: 70, steps: 8000, mood: 'good', energy: 8 },
-                error: null,
-              }),
-            }),
-          }),
-        }),
-      });
-
-      // Mock existing claim check
-      mockSupabase.from.mockReturnValueOnce({
-        select: vi.fn().mockReturnValue({
-          eq: vi.fn().mockReturnValue({
-            eq: vi.fn().mockReturnValue({
-              single: vi.fn().mockResolvedValue({
-                data: null,
-                error: { code: 'PGRST116' },
-              }),
-            }),
-          }),
-        }),
-      });
-
-      // Mock claim insert
-      mockSupabase.from.mockReturnValueOnce({
-        insert: vi.fn().mockReturnValue({
-          select: vi.fn().mockReturnValue({
-            single: vi.fn().mockResolvedValue({
-              data: {
-                id: 'claim-id',
-                user_id: userId,
-                claim_date: today.toISOString().split('T')[0],
-                claim_method: 'explicit',
-              },
-              error: null,
-            }),
-          }),
-        }),
-      });
-
-      // Mock engagement streak update
-      mockSupabase.from.mockReturnValueOnce({
-        update: vi.fn().mockReturnValue({
-          eq: vi.fn().mockResolvedValue({
-            data: null,
-            error: null,
-          }),
-        }),
-      });
-
-      // Since we can't easily test the full flow with mocks,
-      // we'll test the canClaimStreak logic separately
-      expect(true).toBe(true); // Placeholder
-    });
-
-    it('should throw error if trying to claim future date', async () => {
-      const userId = 'test-user-id';
-      const futureDate = new Date();
-      futureDate.setDate(futureDate.getDate() + 1);
-      const timezone = 'America/Los_Angeles';
-
-      const result = await StreakClaimingService.canClaimStreak(userId, futureDate, timezone);
-
-      expect(result.canClaim).toBe(false);
-      expect(result.reason).toContain('future');
-    });
-
-    it('should throw error if date is too old (>7 days)', async () => {
-      const userId = 'test-user-id';
-      const oldDate = new Date();
-      oldDate.setHours(0, 0, 0, 0);
-      oldDate.setDate(oldDate.getDate() - 8);
-      const timezone = 'America/Los_Angeles';
-
-      const result = await StreakClaimingService.canClaimStreak(userId, oldDate, timezone);
-
-      expect(result.canClaim).toBe(false);
-      expect(result.reason).toContain('7-day');
-    });
+  it("rejects the user's local tomorrow, honouring their timezone", async () => {
+    seedUser();
+    // Server time is Aug 3 noon UTC; in Tokyo it is already Aug 3 21:00,
+    // so Aug 4 is still the future there.
+    await expect(
+      StreakClaimingService.claimStreak(USER, '2026-08-04', 'Asia/Tokyo', 'explicit')
+    ).rejects.toMatchObject({ code: 'FUTURE_DATE' });
   });
 
-  describe('canClaimStreak', () => {
-    it('should return true if date is today and not already claimed', async () => {
-      const userId = 'test-user-id';
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      const timezone = 'America/Los_Angeles';
-
-      // Mock no existing claim
-      mockSupabase.from.mockReturnValueOnce({
-        select: vi.fn().mockReturnValue({
-          eq: vi.fn().mockReturnValue({
-            eq: vi.fn().mockReturnValue({
-              single: vi.fn().mockResolvedValue({
-                data: null,
-                error: { code: 'PGRST116' },
-              }),
-            }),
-          }),
-        }),
-      });
-
-      // Mock health data exists
-      mockSupabase.from.mockReturnValueOnce({
-        select: vi.fn().mockReturnValue({
-          eq: vi.fn().mockReturnValue({
-            eq: vi.fn().mockReturnValue({
-              single: vi.fn().mockResolvedValue({
-                data: { weight_kg: 70, steps: 8000 },
-                error: null,
-              }),
-            }),
-          }),
-        }),
-      });
-
-      const result = await StreakClaimingService.canClaimStreak(userId, today, timezone);
-
-      expect(result.canClaim).toBe(true);
-      expect(result.alreadyClaimed).toBe(false);
-      expect(result.hasHealthData).toBe(true);
-    });
-
-    it('should return false if already claimed', async () => {
-      const userId = 'test-user-id';
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      const timezone = 'America/Los_Angeles';
-
-      // Mock existing claim
-      mockSupabase.from.mockReturnValueOnce({
-        select: vi.fn().mockReturnValue({
-          eq: vi.fn().mockReturnValue({
-            eq: vi.fn().mockReturnValue({
-              single: vi.fn().mockResolvedValue({
-                data: { id: 'claim-id' },
-                error: null,
-              }),
-            }),
-          }),
-        }),
-      });
-
-      const result = await StreakClaimingService.canClaimStreak(userId, today, timezone);
-
-      expect(result.canClaim).toBe(false);
-      expect(result.alreadyClaimed).toBe(true);
-    });
-
-    it('should return true (allow claim) if no health data', async () => {
-      const userId = 'test-user-id';
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      const timezone = 'America/Los_Angeles';
-
-      // Mock no existing claim
-      mockSupabase.from.mockReturnValueOnce({
-        select: vi.fn().mockReturnValue({
-          eq: vi.fn().mockReturnValue({
-            eq: vi.fn().mockReturnValue({
-              single: vi.fn().mockResolvedValue({
-                data: null,
-                error: { code: 'PGRST116' },
-              }),
-            }),
-          }),
-        }),
-      });
-
-      // Mock no health data
-      mockSupabase.from.mockReturnValueOnce({
-        select: vi.fn().mockReturnValue({
-          eq: vi.fn().mockReturnValue({
-            eq: vi.fn().mockReturnValue({
-              single: vi.fn().mockResolvedValue({
-                data: null,
-                error: { code: 'PGRST116' },
-              }),
-            }),
-          }),
-        }),
-      });
-
-      const result = await StreakClaimingService.canClaimStreak(userId, today, timezone);
-
-      // Should allow claim even without health data
-      expect(result.canClaim).toBe(true);
-      expect(result.hasHealthData).toBe(false);
-    });
+  it("allows claiming the user's local today even when UTC lags behind", async () => {
+    seedUser();
+    // At Aug 3 20:00 UTC it is already Aug 4 in Tokyo → claimable there.
+    vi.setSystemTime(new Date('2026-08-03T20:00:00Z'));
+    const result = await StreakClaimingService.claimStreak(USER, '2026-08-04', 'Asia/Tokyo', 'explicit');
+    expect(result.success).toBe(true);
   });
 
-  describe('getClaimableDays', () => {
-    it('should return list of last 7 days with claim status', async () => {
-      const userId = 'test-user-id';
-      const timezone = 'America/Los_Angeles';
-
-      // Mock claims query
-      mockSupabase.from.mockReturnValueOnce({
-        select: vi.fn().mockReturnValue({
-          eq: vi.fn().mockReturnValue({
-            gte: vi.fn().mockResolvedValue({
-              data: [
-                { claim_date: '2025-10-29' },
-                { claim_date: '2025-10-28' },
-              ],
-              error: null,
-            }),
-          }),
-        }),
-      });
-
-      // Mock health data checks (will be called multiple times)
-      for (let i = 0; i <= 7; i++) {
-        // Mock health data check called by getClaimableDays
-        mockSupabase.from.mockReturnValueOnce({
-          select: vi.fn().mockReturnValue({
-            eq: vi.fn().mockReturnValue({
-              eq: vi.fn().mockReturnValue({
-                single: vi.fn().mockResolvedValue({
-                  data: i < 3 ? { weight_kg: 70, steps: 8000 } : null,
-                  error: i < 3 ? null : { code: 'PGRST116' },
-                }),
-              }),
-            }),
-          }),
-        });
-
-        // Mock existing claim checks (called by canClaimStreak)
-        mockSupabase.from.mockReturnValueOnce({
-          select: vi.fn().mockReturnValue({
-            eq: vi.fn().mockReturnValue({
-              eq: vi.fn().mockReturnValue({
-                single: vi.fn().mockResolvedValue({
-                  data: null,
-                  error: { code: 'PGRST116' },
-                }),
-              }),
-            }),
-          }),
-        });
-
-        // Mock health data check (called by canClaimStreak) - ADDED THIS
-        mockSupabase.from.mockReturnValueOnce({
-          select: vi.fn().mockReturnValue({
-            eq: vi.fn().mockReturnValue({
-              eq: vi.fn().mockReturnValue({
-                single: vi.fn().mockResolvedValue({
-                  data: i < 3 ? { weight_kg: 70, steps: 8000 } : null,
-                  error: i < 3 ? null : { code: 'PGRST116' },
-                }),
-              }),
-            }),
-          }),
-        });
-      }
-
-      const days = await StreakClaimingService.getClaimableDays(userId, timezone);
-
-      expect(days).toHaveLength(8);
-
-      const today = new Date();
-      const year = today.getFullYear();
-      const month = String(today.getMonth() + 1).padStart(2, '0');
-      const day = String(today.getDate()).padStart(2, '0');
-      const expectedDate = `${year}-${month}-${day}`;
-
-      expect(days[0].date).toBe(expectedDate);
-    });
+  it('rejects days outside the retroactive window', async () => {
+    seedUser();
+    await expect(
+      StreakClaimingService.claimStreak(USER, addDays(TODAY, -8), TZ, 'retroactive')
+    ).rejects.toMatchObject({ code: 'TOO_OLD' });
   });
 
-  describe('getAvailableShields', () => {
-    it('should return shield counts by type', async () => {
-      const userId = 'test-user-id';
+  it('a retroactive claim bridging a gap restores the full streak', async () => {
+    // Claimed: -4, -3, [gap at -2], -1, today unclaimed
+    seedUser({ claims: [addDays(TODAY, -4), addDays(TODAY, -3), addDays(TODAY, -1)] });
 
-      mockSupabase.from.mockReturnValueOnce({
-        select: vi.fn().mockReturnValue({
-          eq: vi.fn().mockResolvedValue({
-            data: [
-              { shield_type: 'freeze', available_count: 1, last_reset_at: '2025-10-21T00:00:00Z' },
-              { shield_type: 'milestone_shield', available_count: 2, last_reset_at: null },
-              { shield_type: 'purchased', available_count: 0, last_reset_at: null },
-            ],
-            error: null,
-          }),
-        }),
-      });
-
-      const shields = await StreakClaimingService.getAvailableShields(userId);
-
-      expect(shields.freezes).toBe(1);
-      expect(shields.milestone_shields).toBe(2);
-      expect(shields.purchased).toBe(0);
-      expect(shields.total).toBe(3);
-      expect(shields.last_freeze_reset).toBe('2025-10-21T00:00:00Z');
-    });
+    const result = await StreakClaimingService.claimStreak(USER, addDays(TODAY, -2), TZ, 'retroactive');
+    expect(result.streakCount).toBe(4);
   });
 
-  describe('activateFreeze', () => {
-    it('should throw error if no shields available', async () => {
-      const userId = 'test-user-id';
-      const date = new Date();
+  it('awards a milestone and earned shields when crossing day 7', async () => {
+    const claims = Array.from({ length: 6 }, (_, i) => addDays(TODAY, -(i + 1)));
+    seedUser({ claims });
 
-      mockSupabase.from.mockReturnValueOnce({
-        select: vi.fn().mockReturnValue({
-          eq: vi.fn().mockResolvedValue({
-            data: [
-              { shield_type: 'freeze', available_count: 0, last_reset_at: null },
-              { shield_type: 'milestone_shield', available_count: 0, last_reset_at: null },
-              { shield_type: 'purchased', available_count: 0, last_reset_at: null },
-            ],
-            error: null,
-          }),
-        }),
-      });
+    const result = await StreakClaimingService.claimStreak(USER, TODAY, TZ, 'explicit');
 
-      await expect(StreakClaimingService.activateFreeze(userId, date)).rejects.toThrow(
-        StreakClaimError
-      );
-    });
+    expect(result.streakCount).toBe(7);
+    expect(result.milestone?.milestone).toBe(7);
+    expect(result.milestone?.shieldsGranted).toBe(1);
+    const milestoneRow = db
+      .getRows('streak_shields')
+      .find(r => r.shield_type === 'milestone_shield');
+    expect(milestoneRow!.available_count).toBe(1);
   });
 
-  describe('startRecovery', () => {
-    it('should create weekend warrior recovery with 2 actions required', async () => {
-      const userId = 'test-user-id';
-      const brokenDate = new Date();
-      brokenDate.setDate(brokenDate.getDate() - 1);
+  it('does not award shields between milestones', async () => {
+    seedUser({ claims: [addDays(TODAY, -1)] });
+    const result = await StreakClaimingService.claimStreak(USER, TODAY, TZ, 'explicit');
+    expect(result.streakCount).toBe(2);
+    expect(result.milestone).toBeUndefined();
+  });
+});
 
-      // Mock no existing recovery
-      mockSupabase.from.mockReturnValueOnce({
-        select: vi.fn().mockReturnValue({
-          eq: vi.fn().mockReturnValue({
-            eq: vi.fn().mockReturnValue({
-              single: vi.fn().mockResolvedValue({
-                data: null,
-                error: { code: 'PGRST116' },
-              }),
-            }),
-          }),
-        }),
-      });
+describe('activateFreeze', () => {
+  it('consumes a shield and protects the day, restoring the streak', async () => {
+    seedUser({ shields: 1, claims: [addDays(TODAY, -3), addDays(TODAY, -2), TODAY] });
 
-      // Mock recovery insert
-      mockSupabase.from.mockReturnValueOnce({
-        insert: vi.fn().mockReturnValue({
-          select: vi.fn().mockReturnValue({
-            single: vi.fn().mockResolvedValue({
-              data: {
-                id: 'recovery-id',
-                user_id: userId,
-                broken_date: brokenDate.toISOString().split('T')[0],
-                recovery_type: 'weekend_warrior',
-                recovery_status: 'pending',
-                actions_required: 2,
-                actions_completed: 0,
-              },
-              error: null,
-            }),
-          }),
-        }),
-      });
+    const result = await StreakClaimingService.activateFreeze(USER, addDays(TODAY, -1), TZ);
 
-      const recovery = await StreakClaimingService.startRecovery(userId, brokenDate, 'weekend_warrior');
-
-      expect(recovery.recovery.recovery_type).toBe('weekend_warrior');
-      expect(recovery.recovery.actions_required).toBe(2);
-      expect(recovery.actionsRemaining).toBe(2);
-    });
-
-    it('should immediately complete purchased recovery', async () => {
-      const userId = 'test-user-id';
-      const brokenDate = new Date();
-      brokenDate.setDate(brokenDate.getDate() - 1);
-
-      // Mock no existing recovery
-      mockSupabase.from.mockReturnValueOnce({
-        select: vi.fn().mockReturnValue({
-          eq: vi.fn().mockReturnValue({
-            eq: vi.fn().mockReturnValue({
-              single: vi.fn().mockResolvedValue({
-                data: null,
-                error: { code: 'PGRST116' },
-              }),
-            }),
-          }),
-        }),
-      });
-
-      // Mock recovery insert
-      mockSupabase.from.mockReturnValueOnce({
-        insert: vi.fn().mockReturnValue({
-          select: vi.fn().mockReturnValue({
-            single: vi.fn().mockResolvedValue({
-              data: {
-                id: 'recovery-id',
-                user_id: userId,
-                broken_date: brokenDate.toISOString().split('T')[0],
-                recovery_type: 'purchased',
-                recovery_status: 'completed',
-                actions_required: null,
-                actions_completed: 0,
-              },
-              error: null,
-            }),
-          }),
-        }),
-      });
-
-      const recovery = await StreakClaimingService.startRecovery(userId, brokenDate, 'purchased');
-
-      expect(recovery.recovery.recovery_type).toBe('purchased');
-      expect(recovery.recovery.recovery_status).toBe('completed');
-    });
+    expect(result.shieldType).toBe('freeze');
+    expect(result.remaining).toBe(0);
+    const claim = db
+      .getRows('streak_claims')
+      .find(c => c.claim_date === addDays(TODAY, -1));
+    expect(claim?.claim_method).toBe('freeze');
+    expect(db.getRows('engagement_streaks')[0].current_streak).toBe(4);
   });
 
-  describe('checkHealthData', () => {
-    it('should return true if any health data exists', async () => {
-      const userId = 'test-user-id';
-      const date = '2025-10-29';
+  it('throws NO_SHIELDS_AVAILABLE for a free user with no shields', async () => {
+    seedUser({ shields: 0, claims: [addDays(TODAY, -2)] });
+    await expect(
+      StreakClaimingService.activateFreeze(USER, addDays(TODAY, -1), TZ)
+    ).rejects.toMatchObject({ code: 'NO_SHIELDS_AVAILABLE' });
+  });
 
-      mockSupabase.from.mockReturnValueOnce({
-        select: vi.fn().mockReturnValue({
-          eq: vi.fn().mockReturnValue({
-            eq: vi.fn().mockReturnValue({
-              single: vi.fn().mockResolvedValue({
-                data: { weight_kg: 70, steps: null, mood: null, energy: null },
-                error: null,
-              }),
-            }),
-          }),
-        }),
-      });
+  it('Pro users protect days without consuming anything', async () => {
+    seedUser({ tier: 'premium', shields: 0, claims: [addDays(TODAY, -2)] });
 
-      const result = await StreakClaimingService.checkHealthData(userId, date);
+    const result = await StreakClaimingService.activateFreeze(USER, addDays(TODAY, -1), TZ);
+    expect(result.unlimited).toBe(true);
+    expect(result.shieldType).toBe('pro_unlimited');
+  });
 
-      expect(result.hasAnyData).toBe(true);
-      expect(result.hasWeight).toBe(true);
-      expect(result.hasSteps).toBe(false);
+  it('refuses to shield an already-claimed day (no shield burned)', async () => {
+    seedUser({ shields: 1, claims: [addDays(TODAY, -1)] });
+    await expect(
+      StreakClaimingService.activateFreeze(USER, addDays(TODAY, -1), TZ)
+    ).rejects.toMatchObject({ code: 'ALREADY_CLAIMED' });
+    const freeze = db.getRows('streak_shields').find(r => r.shield_type === 'freeze');
+    expect(freeze!.available_count).toBe(1);
+  });
+
+  it('refuses to shield today or the future', async () => {
+    seedUser({ shields: 1 });
+    await expect(StreakClaimingService.activateFreeze(USER, TODAY, TZ)).rejects.toMatchObject({
+      code: 'FUTURE_DATE',
     });
+  });
+});
 
-    it('should return false if no health data exists', async () => {
-      const userId = 'test-user-id';
-      const date = '2025-10-29';
+describe('checkAndBreakStreak', () => {
+  it('does nothing when yesterday is claimed', async () => {
+    seedUser({ claims: [addDays(TODAY, -1)] });
+    const result = await StreakClaimingService.checkAndBreakStreak(USER);
+    expect(result).toEqual({ broken: false, shieldApplied: false, paywallEligible: false });
+  });
 
-      mockSupabase.from.mockReturnValueOnce({
-        select: vi.fn().mockReturnValue({
-          eq: vi.fn().mockReturnValue({
-            eq: vi.fn().mockReturnValue({
-              single: vi.fn().mockResolvedValue({
-                data: null,
-                error: { code: 'PGRST116' },
-              }),
-            }),
-          }),
-        }),
-      });
+  it('auto-applies a shield for a missed yesterday', async () => {
+    seedUser({ shields: 1, claims: [addDays(TODAY, -3), addDays(TODAY, -2)] });
 
-      const result = await StreakClaimingService.checkHealthData(userId, date);
+    const result = await StreakClaimingService.checkAndBreakStreak(USER);
 
-      expect(result.hasAnyData).toBe(false);
-      expect(result.hasWeight).toBe(false);
-      expect(result.hasSteps).toBe(false);
-    });
+    expect(result.shieldApplied).toBe(true);
+    expect(result.broken).toBe(false);
+    const claim = db.getRows('streak_claims').find(c => c.claim_date === addDays(TODAY, -1));
+    expect(claim?.metadata?.auto_applied).toBe(true);
+  });
+
+  it('breaks the streak and flags paywall eligibility when out of shields', async () => {
+    seedUser({ shields: 0, claims: [addDays(TODAY, -3), addDays(TODAY, -2)] });
+
+    const result = await StreakClaimingService.checkAndBreakStreak(USER);
+
+    expect(result.broken).toBe(true);
+    expect(result.paywallEligible).toBe(true);
+    expect(db.getRows('engagement_streaks')[0].current_streak).toBe(0);
+  });
+
+  it('Pro users are auto-protected without shields but never flagged for paywall', async () => {
+    seedUser({ tier: 'premium', shields: 0, claims: [addDays(TODAY, -3), addDays(TODAY, -2)] });
+
+    const result = await StreakClaimingService.checkAndBreakStreak(USER);
+    expect(result.shieldApplied).toBe(true);
+    expect(result.broken).toBe(false);
+  });
+
+  it('stops auto-protecting after MAX_CONSECUTIVE_AUTO_PROTECTS days (zombie guard)', async () => {
+    // -4 and -3 claimed, then -2 and -1 were BOTH auto-protected already? No:
+    // seed 2 consecutive auto-freeze days (-3, -2) after a real claim at -4;
+    // yesterday (-1) missed → third consecutive auto-protect must be refused
+    // even for Pro, so the streak breaks.
+    db.seed('profiles', [{ id: USER, subscription_tier: 'premium' }]);
+    db.seed('engagement_streaks', [
+      { user_id: USER, current_streak: 3, longest_streak: 3, streak_freezes_available: 0, paused: false },
+    ]);
+    db.seed('streak_claims', [
+      { user_id: USER, claim_date: addDays(TODAY, -4), claim_method: 'explicit', timezone: TZ, metadata: {} },
+      { user_id: USER, claim_date: addDays(TODAY, -3), claim_method: 'freeze', timezone: TZ, metadata: { auto_applied: true } },
+      { user_id: USER, claim_date: addDays(TODAY, -2), claim_method: 'freeze', timezone: TZ, metadata: { auto_applied: true } },
+    ]);
+
+    const result = await StreakClaimingService.checkAndBreakStreak(USER);
+    expect(result.shieldApplied).toBe(false);
+    expect(result.broken).toBe(true);
+    // Pro users are never paywall-flagged — they already pay.
+    expect(result.paywallEligible).toBe(false);
+  });
+
+  it('skips users still inside the 3am grace window', async () => {
+    vi.setSystemTime(new Date('2026-08-03T01:00:00Z')); // 01:00 UTC
+    seedUser({ shields: 1, claims: [addDays(TODAY, -3), addDays(TODAY, -2)] });
+
+    const result = await StreakClaimingService.checkAndBreakStreak(USER);
+    expect(result).toEqual({ broken: false, shieldApplied: false, paywallEligible: false });
+    // No shield burned during grace.
+    const freeze = db.getRows('streak_shields').find(r => r.shield_type === 'freeze');
+    expect(freeze!.available_count).toBe(1);
+  });
+
+  it('does nothing for users with no streak to protect', async () => {
+    seedUser({ shields: 1, claims: [addDays(TODAY, -10)] });
+    const result = await StreakClaimingService.checkAndBreakStreak(USER);
+    expect(result.broken).toBe(false);
+    expect(result.shieldApplied).toBe(false);
+    const freeze = db.getRows('streak_shields').find(r => r.shield_type === 'freeze');
+    expect(freeze!.available_count).toBe(1);
+  });
+});
+
+describe('recovery', () => {
+  it('purchased recovery writes a claim row and restores the streak', async () => {
+    seedUser({ claims: [addDays(TODAY, -3), addDays(TODAY, -2), TODAY] });
+
+    await StreakClaimingService.startRecovery(USER, addDays(TODAY, -1), 'purchased');
+
+    const claim = db.getRows('streak_claims').find(c => c.claim_date === addDays(TODAY, -1));
+    expect(claim).toBeTruthy();
+    expect(db.getRows('engagement_streaks')[0].current_streak).toBe(4);
+  });
+
+  it('weekend warrior restores only after required actions complete', async () => {
+    seedUser({ claims: [addDays(TODAY, -3), addDays(TODAY, -2), TODAY] });
+
+    const info = await StreakClaimingService.startRecovery(USER, addDays(TODAY, -1), 'weekend_warrior');
+    expect(info.actionsRemaining).toBe(2);
+
+    const done1 = await StreakClaimingService.completeRecoveryAction(USER, info.recovery.id);
+    expect(done1).toBe(false);
+    expect(db.getRows('streak_claims').find(c => c.claim_date === addDays(TODAY, -1))).toBeFalsy();
+
+    const done2 = await StreakClaimingService.completeRecoveryAction(USER, info.recovery.id);
+    expect(done2).toBe(true);
+    expect(db.getRows('streak_claims').find(c => c.claim_date === addDays(TODAY, -1))).toBeTruthy();
+  });
+});
+
+describe('getClaimableDays', () => {
+  it('returns 8 entries (today + 7 back) with correct claimable flags', async () => {
+    seedUser({ claims: [addDays(TODAY, -1)] });
+    db.seed('daily_tracking', [
+      { user_id: USER, tracking_date: TODAY, steps: 5000 },
+    ]);
+
+    const days = await StreakClaimingService.getClaimableDays(USER, TZ);
+
+    expect(days.length).toBe(8);
+    const today = days.find(d => d.date === TODAY)!;
+    expect(today.canClaim).toBe(true);
+    expect(today.hasHealthData).toBe(true);
+    const yesterday = days.find(d => d.date === addDays(TODAY, -1))!;
+    expect(yesterday.claimed).toBe(true);
+    expect(yesterday.canClaim).toBe(false);
+    // The 8th entry back is outside the 7-day window → not claimable.
+    const oldest = days[days.length - 1];
+    expect(oldest.date).toBe(addDays(TODAY, -7));
+    expect(oldest.canClaim).toBe(false);
+  });
+});
+
+describe('getAvailableShields', () => {
+  it('reports totals plus the unlimited flag', async () => {
+    seedUser({ tier: 'premium', shields: 2 });
+    const shields = await StreakClaimingService.getAvailableShields(USER);
+    expect(shields.total).toBe(2);
+    expect(shields.unlimited).toBe(true);
+    expect(shields.cap).toBeGreaterThan(0);
   });
 });

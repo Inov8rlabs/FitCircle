@@ -1,21 +1,28 @@
 /**
  * Daily Check-In Service
  *
- * Business logic for daily streak check-ins including:
- * - Check-in validation (once per day for streak)
- * - Streak tracking and increment
- * - XP/Points rewards
- * - Freeze mechanics (auto-apply and manual use)
- * - Milestone detection and rewards
- * - Mood/energy/weight tracking
+ * Business logic for the daily check-in flow (mood/energy/weight + streak):
+ * - Check-in validation (streak counted once per local day)
+ * - Streak derived from `streak_claims` (single source of truth)
+ * - XP/points rewards
+ * - Shield mechanics via StreakShieldService (auto-apply for a 1-day gap,
+ *   Pro unlimited, paywall hint when a free user runs out)
+ * - Milestone detection from lib/streaks/streak-config
  *
  * Part of Daily Streak Check-In Feature
- * Spec: /docs/DAILY-STREAK-CHECKIN-SPEC.md
+ * Spec: /docs/STREAKS-SPEC.md
  */
 
 import { type SupabaseClient } from '@supabase/supabase-js';
 
+import { milestoneCrossed, nextMilestone, streakColor } from '../streaks/streak-config';
+import { localToday, addDays, calculateStreak } from '../streaks/streak-calculator';
+import { StreakClaimError, CLAIM_ERROR_CODES } from '../types/streak-claiming';
+
+import { EngagementStreakService } from './engagement-streak-service';
 import { MomentumService } from './momentum-service';
+import { StreakClaimingService } from './streak-claiming-service';
+import { StreakShieldService } from './streak-shield-service';
 
 // ============================================================================
 // TYPES
@@ -23,6 +30,7 @@ import { MomentumService } from './momentum-service';
 
 export interface DailyCheckInRequest {
   date?: string; // ISO date string (YYYY-MM-DD), defaults to today
+  timezone?: string; // IANA timezone from the client
   previousDaySentiment?: 'great' | 'ok' | 'could_be_better';
   mood: number; // 1-5
   energy: number; // 1-5
@@ -44,6 +52,8 @@ export interface DailyCheckInResponse {
   totalPoints: number;
   freezeApplied?: boolean;
   freezeEarned?: boolean;
+  /** Free user just lost streak protection — a good moment to pitch Pro. */
+  paywallSuggested?: boolean;
   message: string;
 }
 
@@ -53,6 +63,8 @@ export interface StreakStatusResponse {
   lastCheckInDate: string | null;
   hasCheckedInToday: boolean;
   freezesAvailable: number;
+  /** Pro users have unlimited shields; clients should render ∞. */
+  shieldsUnlimited?: boolean;
   nextMilestone: number | null;
   daysUntilNextMilestone: number | null;
   canCheckInAgain: boolean;
@@ -72,166 +84,39 @@ export interface UseFreezeResponse {
 
 const XP_PER_CHECKIN = 10;
 const XP_MILESTONE_BONUS = 5;
-const FREEZE_EARN_INTERVAL = 7; // Days between earning freezes
-const MAX_FREEZES = 5;
 
-export const STREAK_MILESTONES = [
-  { days: 3, name: '3-Day Starter', description: 'Started your journey!', badge: '🔥' },
-  { days: 7, name: '1 Week Warrior', description: 'One week of consistency!', badge: '💪' },
-  { days: 14, name: '2 Week Champion', description: 'Two weeks strong!', badge: '🏆' },
-  { days: 30, name: 'Monthly Master', description: 'A full month!', badge: '🎖️' },
-  { days: 50, name: '50-Day Hero', description: 'Halfway to 100!', badge: '⭐' },
-  { days: 100, name: 'Centurion', description: 'The elite 100-day club!', badge: '👑' },
-  { days: 365, name: 'Year Legend', description: 'A full year of commitment!', badge: '🏅' },
-];
-
-// ============================================================================
-// HELPER FUNCTIONS
-// ============================================================================
-
-/**
- * Get today's date in ISO format (YYYY-MM-DD).
- * Accepts an optional IANA timezone (e.g. "America/Toronto") so the date
- * reflects the user's local "today" rather than the Vercel server's UTC.
- * Falls back to UTC for unknown/missing timezones.
- */
-function getTodayDateString(timezone?: string): string {
-  if (!timezone) return new Date().toISOString().split('T')[0];
-  try {
-    return new Intl.DateTimeFormat('en-CA', {
-      timeZone: timezone,
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-    }).format(new Date());
-  } catch {
-    return new Date().toISOString().split('T')[0];
-  }
-}
-
-/**
- * Get yesterday's date in ISO format (YYYY-MM-DD)
- */
-function getYesterdayDateString(): string {
-  const yesterday = new Date();
-  yesterday.setDate(yesterday.getDate() - 1);
-  return yesterday.toISOString().split('T')[0];
-}
-
-/**
- * Check if date is consecutive with last check-in
- */
-function isConsecutiveDay(lastCheckinDate: string | null, currentDate: string): boolean {
-  if (!lastCheckinDate) {
-    return true; // First check-in
-  }
-
-  const last = new Date(lastCheckinDate);
-  const current = new Date(currentDate);
-
-  // Calculate difference in days
-  const diffTime = current.getTime() - last.getTime();
-  const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
-
-  return diffDays === 1;
-}
-
-/**
- * Check if user missed exactly 1 day
- */
-function missedOneDay(lastCheckinDate: string | null, currentDate: string): boolean {
-  if (!lastCheckinDate) {
-    return false;
-  }
-
-  const last = new Date(lastCheckinDate);
-  const current = new Date(currentDate);
-
-  const diffTime = current.getTime() - last.getTime();
-  const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
-
-  return diffDays === 2;
-}
-
-/**
- * Get next milestone for a given streak
- */
-function getNextMilestone(currentStreak: number): { days: number; name: string } | null {
-  const next = STREAK_MILESTONES.find(m => m.days > currentStreak);
-  return next || null;
-}
-
-/**
- * Get streak color based on current streak
- */
-function getStreakColor(streak: number): string {
-  if (streak >= 100) return 'gold';
-  if (streak >= 50) return 'purple';
-  if (streak >= 30) return 'blue';
-  if (streak >= 14) return 'green';
-  if (streak >= 7) return 'orange';
-  if (streak >= 3) return 'yellow';
-  return 'gray';
-}
-
-/**
- * Check if a milestone was just achieved
- */
-function checkMilestoneAchieved(
-  previousStreak: number,
-  newStreak: number
-): { days: number; name: string; description: string; badge: string } | null {
-  const previousMilestone = STREAK_MILESTONES.filter(m => m.days <= previousStreak).pop();
-  const currentMilestone = STREAK_MILESTONES.filter(m => m.days <= newStreak).pop();
-
-  if (currentMilestone && (!previousMilestone || currentMilestone.days > previousMilestone.days)) {
-    return currentMilestone;
-  }
-
-  return null;
-}
 
 // ============================================================================
 // CORE CHECK-IN LOGIC
 // ============================================================================
 
 /**
- * Perform daily check-in with streak tracking
+ * Perform daily check-in with streak tracking.
+ *
+ * The streak part is claim-based: the first check-in of a local day writes a
+ * streak_claims row and the streak is recomputed from claims. If yesterday
+ * was missed, a shield is auto-applied when possible (Pro: always) so the
+ * user keeps their streak; a free user with no shields sees the streak reset
+ * plus a paywall suggestion.
  */
 export async function performDailyCheckIn(
   userId: string,
   checkInData: DailyCheckInRequest,
   supabase: SupabaseClient
 ): Promise<DailyCheckInResponse> {
-  const checkInDate = checkInData.date || getTodayDateString();
-  const yesterday = getYesterdayDateString();
+  const timezone = checkInData.timezone;
+  const todayStr = localToday(timezone);
+  const checkInDate = checkInData.date || todayStr;
 
-  // Start transaction-like operations
-  // 1. Check if already checked in today (for streak purposes)
-  // Look for ANY engagement activity on this date, not just streak_checkin
-  const { data: existingActivities } = await supabase
-    .from('engagement_activities')
-    .select('*')
-    .eq('user_id', userId)
-    .eq('activity_date', checkInDate)
-    .limit(1);
-
-  const isFirstCheckInToday = !existingActivities || existingActivities.length === 0;
-
-  // 2. Get or create streak record
-  const { data: streak, error: streakError } = await supabase
+  // 1. Get or create streak record (for points + longest)
+  let { data: streak } = await supabase
     .from('engagement_streaks')
     .select('*')
     .eq('user_id', userId)
-    .single();
+    .maybeSingle();
 
-  if (streakError && streakError.code !== 'PGRST116') {
-    throw new Error(`Failed to fetch streak: ${streakError.message}`);
-  }
-
-  // Initialize streak if doesn't exist
   if (!streak) {
-    const { data: newStreak, error: createError } = await supabase
+    const { data: newStreakRecord, error: createError } = await supabase
       .from('engagement_streaks')
       .insert({
         user_id: userId,
@@ -244,79 +129,77 @@ export async function performDailyCheckIn(
       })
       .select()
       .single();
-
-    if (createError) {
-      throw new Error(`Failed to create streak: ${createError.message}`);
-    }
-
-    // Use the new streak record
-    return performDailyCheckIn(userId, checkInData, supabase);
+    if (createError) throw new Error(`Failed to create streak: ${createError.message}`);
+    streak = newStreakRecord;
   }
+
+  // 2. Existing claims decide whether this is the first check-in of the day
+  const { data: claims } = await supabase
+    .from('streak_claims')
+    .select('claim_date')
+    .eq('user_id', userId)
+    .gte('claim_date', addDays(checkInDate, -730));
+
+  const claimDates = new Set((claims || []).map(c => c.claim_date));
+  const isFirstCheckInToday = !claimDates.has(checkInDate);
 
   let newStreak = streak.current_streak;
   let freezeApplied = false;
   let freezeEarned = false;
+  let paywallSuggested = false;
   let pointsEarned = 0;
-  let milestoneAchieved = null;
+  let milestoneAchieved: DailyCheckInResponse['milestoneAchieved'] | undefined;
 
-  // 3. Only process streak logic if this is first check-in today
   if (isFirstCheckInToday) {
-    // Determine streak action
-    if (isConsecutiveDay(streak.last_engagement_date, checkInDate)) {
-      // Consecutive day - increment streak
-      newStreak = streak.current_streak + 1;
-      pointsEarned = XP_PER_CHECKIN;
-    } else if (missedOneDay(streak.last_engagement_date, checkInDate)) {
-      // Missed 1 day - check if freeze available
-      if (streak.streak_freezes_available > 0) {
-        // Auto-apply freeze
-        newStreak = streak.current_streak + 1;
-        pointsEarned = XP_PER_CHECKIN;
-        freezeApplied = true;
+    // 2a. Yesterday missed but the day before claimed? Try to shield the gap
+    //     so the streak survives (relative to checkInDate, not server UTC).
+    //     This runs BEFORE oldStreak is measured: with the gap bridged,
+    //     oldStreak reflects the real prior run, so already-earned
+    //     milestones/shields don't re-fire on a shielded check-in.
+    const gap = await StreakClaimingService.tryAutoProtectYesterday(
+      userId,
+      claimDates,
+      checkInDate,
+      timezone
+    );
+    freezeApplied = gap.applied;
+    paywallSuggested = gap.outOfShields; // out of shields → streak restarts below
 
-        // Record freeze usage
-        await supabase.from('engagement_activities').insert({
-          user_id: userId,
-          activity_date: yesterday,
-          activity_type: 'freeze_used',
-          metadata: { reason: 'auto_applied', missed_date: yesterday },
-        });
+    const oldStreak = calculateStreak(claimDates, checkInDate);
 
-        // Record freeze as a streak_claims entry so claim-based streak calculation
-        // counts the freeze-protected day
-        await supabase.from('streak_claims').upsert(
-          {
-            user_id: userId,
-            claim_date: yesterday,
-            claimed_at: new Date().toISOString(),
-            claim_method: 'freeze',
-            timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-            health_data_synced: false,
-            metadata: { source: 'daily_checkin_auto_freeze', missed_date: yesterday },
-          },
-          { onConflict: 'user_id,claim_date' }
-        );
-      } else {
-        // No freeze - streak broken, reset to 1
-        newStreak = 1;
-        pointsEarned = XP_PER_CHECKIN;
-      }
-    } else if (streak.last_engagement_date === null) {
-      // First ever check-in
-      newStreak = 1;
-      pointsEarned = XP_PER_CHECKIN;
-    } else {
-      // More than 1 day missed - streak broken
-      newStreak = 1;
-      pointsEarned = XP_PER_CHECKIN;
+    // 2b. Record the claim for the check-in day
+    const { error: claimInsertError } = await supabase.from('streak_claims').upsert(
+      {
+        user_id: userId,
+        claim_date: checkInDate,
+        claimed_at: new Date().toISOString(),
+        claim_method: 'explicit',
+        timezone: timezone || 'UTC',
+        health_data_synced: checkInData.weight !== undefined,
+        metadata: { source: 'daily_checkin', mood: checkInData.mood, energy: checkInData.energy },
+      },
+      { onConflict: 'user_id,claim_date' }
+    );
+    if (claimInsertError) {
+      throw new Error(`Failed to record check-in claim: ${claimInsertError.message}`);
     }
+    claimDates.add(checkInDate);
 
-    // Check for milestone
-    milestoneAchieved = checkMilestoneAchieved(streak.current_streak, newStreak);
-    if (milestoneAchieved) {
+    // 2c. Recompute streak from claims
+    newStreak = calculateStreak(claimDates, checkInDate);
+    pointsEarned = XP_PER_CHECKIN;
+
+    // 2d. Milestones + earned shields
+    const crossed = milestoneCrossed(oldStreak, newStreak);
+    if (crossed) {
+      milestoneAchieved = {
+        days: crossed.days,
+        name: crossed.name,
+        description: crossed.description,
+        badge: crossed.badge,
+      };
       pointsEarned += XP_MILESTONE_BONUS;
 
-      // Record milestone achievement
       await supabase.from('engagement_activities').insert({
         user_id: userId,
         activity_date: checkInDate,
@@ -325,137 +208,76 @@ export async function performDailyCheckIn(
       });
     }
 
-    // Check if freeze should be earned (every 7 consecutive days)
-    if (newStreak % FREEZE_EARN_INTERVAL === 0 && newStreak > 0) {
-      const daysSinceLastFreeze = streak.last_freeze_earned_at
-        ? Math.floor(
-            (new Date(checkInDate).getTime() - new Date(streak.last_freeze_earned_at).getTime()) /
-              (1000 * 60 * 60 * 24)
-          )
-        : FREEZE_EARN_INTERVAL;
-
-      if (daysSinceLastFreeze >= FREEZE_EARN_INTERVAL) {
-        const newFreezesAvailable = Math.min(
-          streak.streak_freezes_available + 1,
-          MAX_FREEZES
-        );
-
-        if (newFreezesAvailable > streak.streak_freezes_available) {
-          freezeEarned = true;
-
-          // Update freeze count
-          await supabase
-            .from('engagement_streaks')
-            .update({
-              streak_freezes_available: newFreezesAvailable,
-              last_freeze_earned_at: new Date().toISOString(),
-            })
-            .eq('user_id', userId);
-
-          // Record freeze earned
-          await supabase.from('engagement_activities').insert({
-            user_id: userId,
-            activity_date: checkInDate,
-            activity_type: 'freeze_earned',
-            metadata: { streak_at_earn: newStreak },
-          });
-        }
+    try {
+      const credited = await StreakShieldService.earnForStreakIncrease(userId, oldStreak, newStreak);
+      freezeEarned = credited > 0;
+      if (freezeEarned) {
+        await supabase.from('engagement_activities').insert({
+          user_id: userId,
+          activity_date: checkInDate,
+          activity_type: 'freeze_earned',
+          metadata: { streak_at_earn: newStreak, shields_credited: credited },
+        });
       }
+    } catch (e) {
+      console.error('[performDailyCheckIn] shield earn error (non-blocking):', e);
     }
 
-    // Update streak record
-    const newLongestStreak = Math.max(newStreak, streak.longest_streak);
-    const newTotalPoints = streak.total_points + pointsEarned;
-
-    const updates: any = {
-      current_streak: newStreak,
-      longest_streak: newLongestStreak,
-      last_engagement_date: checkInDate,
-      total_points: newTotalPoints,
-      updated_at: new Date().toISOString(),
-    };
-
-    // Decrement freeze if used
-    if (freezeApplied) {
-      updates.streak_freezes_available = Math.max(streak.streak_freezes_available - 1, 0);
-    }
-
-    await supabase.from('engagement_streaks').update(updates).eq('user_id', userId);
+    // 2e. Persist denormalized streak + points
+    await supabase
+      .from('engagement_streaks')
+      .update({
+        current_streak: newStreak,
+        longest_streak: Math.max(newStreak, streak.longest_streak),
+        last_engagement_date: checkInDate,
+        total_points: streak.total_points + pointsEarned,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('user_id', userId);
   }
 
-  // Record check-in activity (ALWAYS, for timestamp tracking)
-  // Use unique reference_id to allow multiple check-ins per day
+  // 3. Record check-in activity (ALWAYS, for timestamp tracking)
   const checkInTimestamp = new Date().toISOString();
   await supabase.from('engagement_activities').insert({
     user_id: userId,
     activity_date: checkInDate,
     activity_type: 'streak_checkin',
-    reference_id: crypto.randomUUID(), // Unique ID for each check-in
+    reference_id: crypto.randomUUID(),
     metadata: {
       xp_earned: isFirstCheckInToday ? pointsEarned : 0,
       new_streak: isFirstCheckInToday ? newStreak : streak.current_streak,
-      milestone: isFirstCheckInToday ? (milestoneAchieved?.name || null) : null,
+      milestone: isFirstCheckInToday ? milestoneAchieved?.name || null : null,
       checked_in_at: checkInTimestamp,
       is_first_checkin_today: isFirstCheckInToday,
     },
   });
 
-  // Also record a streak_claims entry so claim-based streak calculation
-  // includes days claimed via the daily check-in flow.
-  // Uses upsert to avoid conflicts if a claim already exists for this date.
-  if (isFirstCheckInToday) {
-    await supabase.from('streak_claims').upsert(
-      {
-        user_id: userId,
-        claim_date: checkInDate,
-        claimed_at: checkInTimestamp,
-        claim_method: 'explicit',
-        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-        health_data_synced: checkInData.weight !== undefined,
-        metadata: { source: 'daily_checkin', mood: checkInData.mood, energy: checkInData.energy },
-      },
-      { onConflict: 'user_id,claim_date' }
-    );
-  }
-
   // 4. Update or create daily_tracking entry (always, even for subsequent check-ins)
   const { data: existingTracking } = await supabase
     .from('daily_tracking')
-    .select('*')
+    .select('id')
     .eq('user_id', userId)
     .eq('tracking_date', checkInDate)
-    .single();
+    .maybeSingle();
 
-  const trackingData: any = {
+  const trackingData: Record<string, unknown> = {
     mood_score: checkInData.mood,
     energy_level: checkInData.energy,
   };
-
-  if (checkInData.weight !== undefined) {
-    trackingData.weight_kg = checkInData.weight;
-  }
-
-  if (checkInData.notes !== undefined) {
-    trackingData.notes = checkInData.notes;
-  }
-
+  if (checkInData.weight !== undefined) trackingData.weight_kg = checkInData.weight;
+  if (checkInData.notes !== undefined) trackingData.notes = checkInData.notes;
   if (checkInData.previousDaySentiment !== undefined) {
     trackingData.previous_day_sentiment = checkInData.previousDaySentiment;
   }
-
-  if (isFirstCheckInToday) {
-    trackingData.streak_day = newStreak;
-  }
+  if (isFirstCheckInToday) trackingData.streak_day = newStreak;
 
   if (existingTracking) {
-    // Update existing tracking
     await supabase
       .from('daily_tracking')
       .update(trackingData)
       .eq('user_id', userId)
       .eq('tracking_date', checkInDate);
   } else {
-    // Create new tracking entry
     await supabase.from('daily_tracking').insert({
       user_id: userId,
       tracking_date: checkInDate,
@@ -469,7 +291,7 @@ export async function performDailyCheckIn(
   if (!isFirstCheckInToday) {
     message = 'Check-in data updated. Streak already counted for today.';
   } else if (freezeApplied) {
-    message = `Freeze applied! Streak maintained at ${newStreak} days.`;
+    message = `Shield applied! Streak maintained at ${newStreak} days.`;
   } else if (milestoneAchieved) {
     message = `🎉 Milestone achieved! ${milestoneAchieved.name} - ${newStreak} days!`;
   } else if (newStreak === 1 && streak.current_streak > 1) {
@@ -477,12 +299,10 @@ export async function performDailyCheckIn(
   } else {
     message = `Great! ${newStreak} day streak!`;
   }
-
   if (freezeEarned) {
-    message += ' You earned a freeze!';
+    message += ' You earned a streak shield!';
   }
 
-  // Trigger momentum check-in (idempotent, safe to call on every check-in)
   if (isFirstCheckInToday) {
     try {
       await MomentumService.checkIn(userId);
@@ -495,34 +315,33 @@ export async function performDailyCheckIn(
     success: true,
     newStreak,
     isFirstCheckInToday,
-    milestoneAchieved: milestoneAchieved || undefined,
+    milestoneAchieved,
     pointsEarned,
     totalPoints: streak.total_points + pointsEarned,
     freezeApplied: freezeApplied || undefined,
     freezeEarned: freezeEarned || undefined,
+    paywallSuggested: paywallSuggested || undefined,
     message,
   };
 }
 
 /**
- * Get current streak status
+ * Get current streak status (timezone-aware).
  */
 export async function getStreakStatus(
   userId: string,
   supabase: SupabaseClient,
   timezone?: string
 ): Promise<StreakStatusResponse> {
-  const today = getTodayDateString(timezone);
+  const today = localToday(timezone);
 
-  // Get streak record
   const { data: streak } = await supabase
     .from('engagement_streaks')
     .select('*')
     .eq('user_id', userId)
-    .single();
+    .maybeSingle();
 
   if (!streak) {
-    // Initialize if doesn't exist
     await supabase.from('engagement_streaks').insert({
       user_id: userId,
       current_streak: 0,
@@ -532,60 +351,32 @@ export async function getStreakStatus(
       total_points: 0,
     });
 
+    const first = nextMilestone(0);
     return {
       currentStreak: 0,
       longestStreak: 0,
       lastCheckInDate: null,
       hasCheckedInToday: false,
       freezesAvailable: 1,
-      nextMilestone: STREAK_MILESTONES[0].days,
-      daysUntilNextMilestone: STREAK_MILESTONES[0].days,
+      nextMilestone: first?.days || null,
+      daysUntilNextMilestone: first?.days || null,
       canCheckInAgain: true,
-      streakColor: 'gray',
+      streakColor: streakColor(0),
       totalPoints: 0,
     };
   }
-
-  // Recalculate streak from streak_claims (source of truth)
-  // This prevents stale values from being displayed
-  const ninetyDaysAgo = new Date();
-  ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
-  const ninetyDaysAgoStr = ninetyDaysAgo.toISOString().split('T')[0];
 
   const { data: claims } = await supabase
     .from('streak_claims')
     .select('claim_date')
     .eq('user_id', userId)
-    .gte('claim_date', ninetyDaysAgoStr)
+    .gte('claim_date', addDays(today, -730))
     .order('claim_date', { ascending: false });
 
   const claimDates = new Set((claims || []).map(c => c.claim_date));
   const hasCheckedInToday = claimDates.has(today);
+  const currentStreak = calculateStreak(claimDates, today);
 
-  // Calculate current streak by counting backwards from the user's local
-  // "today" (anchored on the timezone-aware `today` string above). Use UTC
-  // operations on a Date constructed from the date string so day arithmetic
-  // doesn't drift across the server's local timezone or DST.
-  let currentStreak = 0;
-  const todayDate = new Date(`${today}T00:00:00Z`);
-
-  for (let i = 0; i < 90; i++) {
-    const checkDate = new Date(todayDate);
-    checkDate.setUTCDate(checkDate.getUTCDate() - i);
-    const checkDateStr = checkDate.toISOString().split('T')[0];
-
-    if (claimDates.has(checkDateStr)) {
-      currentStreak++;
-    } else if (i === 0) {
-      // Today with no claim doesn't break streak yet (grace period)
-      continue;
-    } else {
-      // Missed a day - streak is broken
-      break;
-    }
-  }
-
-  // Update the stored value if it differs, to keep the DB in sync
   if (currentStreak !== streak.current_streak) {
     await supabase
       .from('engagement_streaks')
@@ -593,78 +384,85 @@ export async function getStreakStatus(
       .eq('user_id', userId);
   }
 
+  // Shield inventory (single source of truth) — fall back to the mirror column.
+  let freezesAvailable = streak.streak_freezes_available || 0;
+  let shieldsUnlimited: boolean | undefined;
+  try {
+    const inventory = await StreakShieldService.getInventory(userId);
+    freezesAvailable = inventory.available;
+    shieldsUnlimited = inventory.unlimited;
+  } catch (e) {
+    console.error('[getStreakStatus] shield inventory error (using mirror):', e);
+  }
+
   const longestStreak = Math.max(currentStreak, streak.longest_streak);
-  const nextMilestone = getNextMilestone(currentStreak);
+  const next = nextMilestone(currentStreak);
 
   return {
     currentStreak,
     longestStreak,
     lastCheckInDate: claims && claims.length > 0 ? claims[0].claim_date : streak.last_engagement_date,
     hasCheckedInToday,
-    freezesAvailable: streak.streak_freezes_available || 0,
-    nextMilestone: nextMilestone?.days || null,
-    daysUntilNextMilestone: nextMilestone ? nextMilestone.days - currentStreak : null,
+    freezesAvailable,
+    shieldsUnlimited,
+    nextMilestone: next?.days || null,
+    daysUntilNextMilestone: next ? next.days - currentStreak : null,
     canCheckInAgain: true, // Can always update mood/energy/weight
-    streakColor: getStreakColor(currentStreak),
+    streakColor: streakColor(currentStreak),
     totalPoints: streak.total_points || 0,
   };
 }
 
 /**
- * Manually use a freeze (for planned absence)
+ * Manually use a shield for a planned absence (protects TODAY).
  */
 export async function useFreeze(
   userId: string,
-  supabase: SupabaseClient
+  supabase: SupabaseClient,
+  timezone?: string
 ): Promise<UseFreezeResponse> {
-  const today = getTodayDateString();
+  const today = localToday(timezone);
 
-  // Get streak record
-  const { data: streak } = await supabase
-    .from('engagement_streaks')
-    .select('*')
+  // Already claimed/protected today? Nothing to do.
+  const { data: existing } = await supabase
+    .from('streak_claims')
+    .select('id')
     .eq('user_id', userId)
-    .single();
+    .eq('claim_date', today)
+    .maybeSingle();
 
-  if (!streak) {
-    throw new Error('Streak record not found');
-  }
-
-  // Check if freeze available
-  if (streak.streak_freezes_available <= 0) {
+  if (existing) {
+    const inventory = await StreakShieldService.getInventory(userId);
     return {
       success: false,
-      freezesRemaining: 0,
-      message: 'No freezes available',
+      freezesRemaining: inventory.available,
+      message: 'Today is already claimed or protected',
     };
   }
 
-  // Check if already used freeze today
-  const { data: existingFreeze } = await supabase
-    .from('engagement_activities')
-    .select('*')
-    .eq('user_id', userId)
-    .eq('activity_date', today)
-    .eq('activity_type', 'freeze_used')
-    .single();
-
-  if (existingFreeze) {
-    return {
-      success: false,
-      freezesRemaining: streak.streak_freezes_available,
-      message: 'Freeze already used for today',
-    };
+  let consumed;
+  try {
+    consumed = await StreakShieldService.consume(userId);
+  } catch (e) {
+    if (e instanceof StreakClaimError && e.code === CLAIM_ERROR_CODES.NO_SHIELDS_AVAILABLE) {
+      return { success: false, freezesRemaining: 0, message: 'No freezes available' };
+    }
+    throw e;
   }
 
-  // Decrement freezes_available
-  const newFreezesAvailable = streak.streak_freezes_available - 1;
+  await supabase.from('streak_claims').upsert(
+    {
+      user_id: userId,
+      claim_date: today,
+      claimed_at: new Date().toISOString(),
+      claim_method: 'freeze',
+      timezone: timezone || 'UTC',
+      health_data_synced: false,
+      metadata: { source: 'manual_freeze', planned: true, shield_type: consumed.consumedType },
+    },
+    { onConflict: 'user_id,claim_date' }
+  );
 
-  await supabase
-    .from('engagement_streaks')
-    .update({ streak_freezes_available: newFreezesAvailable })
-    .eq('user_id', userId);
-
-  // Record freeze usage
   await supabase.from('engagement_activities').insert({
     user_id: userId,
     activity_date: today,
@@ -672,24 +470,20 @@ export async function useFreeze(
     metadata: { reason: 'manual', planned: true },
   });
 
-  // Record freeze as a streak_claims entry so claim-based streak calculation
-  // counts the freeze-protected day
-  await supabase.from('streak_claims').upsert(
-    {
-      user_id: userId,
-      claim_date: today,
-      claimed_at: new Date().toISOString(),
-      claim_method: 'freeze',
-      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-      health_data_synced: false,
-      metadata: { source: 'manual_freeze', planned: true },
-    },
-    { onConflict: 'user_id,claim_date' }
-  );
+  // Refresh the denormalized streak so mirror readers see today protected.
+  try {
+    await EngagementStreakService.updateEngagementStreak(userId, today);
+  } catch (e) {
+    console.error('[useFreeze] streak refresh failed (non-blocking):', e);
+  }
 
+  const remainingText = consumed.unlimited ? 'Unlimited shields (Pro)' : `${consumed.remaining} shields remaining`;
   return {
     success: true,
-    freezesRemaining: newFreezesAvailable,
-    message: `Freeze applied successfully! ${newFreezesAvailable} freezes remaining.`,
+    freezesRemaining: consumed.unlimited ? Number.MAX_SAFE_INTEGER : consumed.remaining,
+    message: `Shield applied for today! ${remainingText}.`,
   };
 }
+
+// Previous-day acknowledgment data lives in streak-service-v2's
+// getPreviousDayData — import from there; no duplicate here.

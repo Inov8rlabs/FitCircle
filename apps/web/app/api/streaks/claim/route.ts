@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { StreakClaimingService } from '@/lib/services/streak-claiming-service';
 import { StreakClaimError, CLAIM_ERROR_CODES } from '@/lib/types/streak-claiming';
+import { localToday } from '@/lib/streaks/streak-calculator';
 
 // Validation schema
 const claimStreakSchema = z.object({
@@ -43,33 +44,17 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { claimDate, timezone } = claimStreakSchema.parse(body);
 
-    // 3. Determine claim date (today if not specified)
-    // IMPORTANT: Parse dates at UTC midnight to avoid timezone issues
-    // The claimDate string from iOS is already in local date format (YYYY-MM-DD)
-    let targetDate: Date;
-    let claimDateString: string;
-    
-    if (claimDate) {
-      // Parse as UTC midnight to preserve the date string
-      targetDate = new Date(claimDate + 'T00:00:00.000Z');
-      claimDateString = claimDate;
-    } else {
-      // Use today's date in UTC
-      targetDate = new Date();
-      targetDate.setUTCHours(0, 0, 0, 0);
-      claimDateString = targetDate.toISOString().split('T')[0];
-    }
+    // 3. Determine claim date — defaults to the USER'S local today, and the
+    //    explicit/retroactive distinction is made against the user's local
+    //    calendar (server UTC would misclassify claims near midnight).
+    const userToday = localToday(timezone);
+    const claimDateString = claimDate || userToday;
+    const method = claimDateString === userToday ? 'explicit' : 'retroactive';
 
-    // 4. Determine claim method
-    const now = new Date();
-    const todayString = now.toISOString().split('T')[0];
-    const isToday = claimDateString === todayString;
-    const method = isToday ? 'explicit' : 'retroactive';
-
-    // 5. Claim the streak
+    // 4. Claim the streak
     const result = await StreakClaimingService.claimStreak(
       user.id,
-      targetDate,
+      claimDateString,
       timezone,
       method
     );

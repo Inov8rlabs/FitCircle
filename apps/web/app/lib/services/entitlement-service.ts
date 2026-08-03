@@ -114,8 +114,9 @@ export class EntitlementService {
 /**
  * profiles.subscription_tier predates this feature (001 allows 'enterprise'); the API
  * contract only speaks free|premium, so any paid-looking tier collapses to 'premium'.
+ * Exported so other services (e.g. StreakShieldService) share the same collapse.
  */
-function normalizeTier(raw: string | null | undefined): SubscriptionTier {
+export function normalizeTier(raw: string | null | undefined): SubscriptionTier {
   return raw === 'premium' || raw === 'enterprise' ? 'premium' : 'free';
 }
 

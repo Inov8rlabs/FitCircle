@@ -26,7 +26,10 @@ export async function POST(request: NextRequest) {
 
     const supabase = createAdminSupabase();
 
-    const { success, error } = await applyFreeze(user.id, supabase);
+    // Honour the device's local timezone so "today" is the user's today.
+    const timezone = request.headers.get('x-client-timezone') || undefined;
+
+    const { success, error } = await applyFreeze(user.id, supabase, timezone);
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 400 });

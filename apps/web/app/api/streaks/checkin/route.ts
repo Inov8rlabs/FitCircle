@@ -9,6 +9,7 @@
 import { type NextRequest, NextResponse } from 'next/server';
 
 import { completeCheckin } from '@/lib/services/streak-service-v2';
+import { localToday } from '@/lib/streaks/streak-calculator';
 import { getAuthenticatedUser, createAdminSupabase } from '@/lib/utils/api-auth';
 
 /**
@@ -26,11 +27,18 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json().catch(() => ({}));
-    const date = body.date || new Date().toISOString().split('T')[0];
+    const timezone =
+      body.timezone || request.headers.get('x-client-timezone') || undefined;
+    const date = body.date || localToday(timezone);
 
     const supabase = createAdminSupabase();
 
-    const { streak, milestoneReached, freezeUsed, error } = await completeCheckin(user.id, date, supabase);
+    const { streak, milestoneReached, freezeUsed, error } = await completeCheckin(
+      user.id,
+      date,
+      supabase,
+      timezone
+    );
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 });

@@ -139,6 +139,7 @@ export async function PUT(
       is_override: !isAutoSync, // Only manual entries are overrides
       skip_streak_tracking: isAutoSync, // Auto-synced data must NOT count toward streaks
       is_public: validatedData.isPublic, // Only changes when explicitly provided
+      timezone: validatedData.timezone || request.headers.get('x-client-timezone') || undefined,
     });
 
     // Automatically claim streak if data was manually entered
@@ -146,10 +147,13 @@ export async function PUT(
     let streakCount: number | undefined;
     if (validatedData.autoClaimStreak !== false) {
       try {
-        const timezone = validatedData.timezone || 'America/Los_Angeles'; // Default to PST
+        const timezone =
+          validatedData.timezone || request.headers.get('x-client-timezone') || 'UTC';
         const targetDate = new Date(date);
 
-        // Check if can claim (not already claimed)
+        // upsertDailyTracking already claims manual-entry days through the
+        // canonical path; this is a fallback for payloads that carried no
+        // trackable metrics, plus the response's claimed/count report.
         const canClaim = await StreakClaimingService.canClaimStreak(user.id, targetDate, timezone);
 
         if (canClaim.canClaim && !canClaim.alreadyClaimed) {
@@ -162,6 +166,9 @@ export async function PUT(
           streakClaimed = true;
           streakCount = claimResult.streakCount;
           console.log(`[PUT /api/mobile/tracking/daily/${date}] Auto-claimed streak for user ${user.id}`);
+        } else if (canClaim.alreadyClaimed) {
+          streakClaimed = true;
+          streakCount = await StreakClaimingService.calculateCurrentStreak(user.id, timezone);
         }
       } catch (error) {
         // Don't fail the entire request if streak claiming fails

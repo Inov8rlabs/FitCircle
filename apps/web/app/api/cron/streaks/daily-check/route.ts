@@ -47,28 +47,44 @@ export async function GET(request: NextRequest) {
 
     let brokenCount = 0;
     let shieldsApplied = 0;
+    let paywallEligibleCount = 0;
     let errors = 0;
 
-    // Check each user
-    for (const user of users || []) {
-      try {
-        const isBroken = await StreakClaimingService.checkAndBreakStreak(user.user_id);
-        if (isBroken) {
-          brokenCount++;
-        } else if (user.current_streak > 0) {
-          // If streak wasn't broken but user had an active streak, a shield was likely applied
-          shieldsApplied++;
-        }
-      } catch (error) {
-        console.error(`[Cron Daily Check] Error checking user ${user.user_id}:`, error);
-        errors++;
-      }
+    // Check users in bounded parallel batches (each check is several DB
+    // round-trips in that user's own timezone — a fully serial loop would
+    // outgrow the function timeout as the user base grows).
+    const BATCH_SIZE = 25;
+    const allUsers = users || [];
+    for (let i = 0; i < allUsers.length; i += BATCH_SIZE) {
+      const batch = allUsers.slice(i, i + BATCH_SIZE);
+      await Promise.all(
+        batch.map(async user => {
+          try {
+            const result = await StreakClaimingService.checkAndBreakStreak(user.user_id);
+            if (result.broken) {
+              brokenCount++;
+              if (result.paywallEligible) {
+                // Free user lost their streak with no shields left — prime
+                // audience for the "Pro = unlimited shields" pitch.
+                // TODO(notifications): send "streak lost — Pro protects it" push.
+                paywallEligibleCount++;
+              }
+            } else if (result.shieldApplied) {
+              shieldsApplied++;
+              // TODO(notifications): send "a shield saved your streak" push.
+            }
+          } catch (error) {
+            console.error(`[Cron Daily Check] Error checking user ${user.user_id}:`, error);
+            errors++;
+          }
+        })
+      );
     }
 
     const duration = Date.now() - startTime;
 
     console.log(
-      `[Cron Daily Check] Completed in ${duration}ms: ${brokenCount} broken, ${shieldsApplied} shields applied, ${errors} errors`
+      `[Cron Daily Check] Completed in ${duration}ms: ${brokenCount} broken (${paywallEligibleCount} paywall-eligible), ${shieldsApplied} shields applied, ${errors} errors`
     );
 
     return NextResponse.json({
@@ -77,6 +93,7 @@ export async function GET(request: NextRequest) {
       stats: {
         total_checked: users?.length || 0,
         streaks_broken: brokenCount,
+        paywall_eligible: paywallEligibleCount,
         shields_applied: shieldsApplied,
         errors,
         duration_ms: duration,

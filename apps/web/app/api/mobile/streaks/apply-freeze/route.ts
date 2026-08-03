@@ -54,8 +54,11 @@ export async function POST(request: NextRequest) {
 
     console.log(`[Apply Freeze] User ${user.id} applying freeze for date: ${missedDate || 'yesterday'}`);
 
+    // Honour the device's local timezone so "yesterday" is the user's yesterday.
+    const timezone = request.headers.get('x-client-timezone') || undefined;
+
     // Apply the freeze
-    const result = await EngagementStreakService.applyFreeze(user.id, missedDate);
+    const result = await EngagementStreakService.applyFreeze(user.id, missedDate, timezone);
 
     return NextResponse.json({
       success: true,
@@ -87,8 +90,10 @@ export async function POST(request: NextRequest) {
           data: null,
           error: {
             code: error.code,
+            // details carries the paywall hint ({upsell: 'pro_unlimited_shields'})
+            // when a free user is out of shields.
             message: error.message,
-            details: {},
+            details: error.details || {},
             timestamp: new Date().toISOString(),
           },
           meta: null,

@@ -17,8 +17,8 @@
       "schedule": "0 0 * * *"
     },
     {
-      "path": "/api/cron/streaks/weekly-reset",
-      "schedule": "0 0 * * 1"
+      "path": "/api/cron/streaks/daily-check",
+      "schedule": "0 4 * * *"
     },
     {
       "path": "/api/cron/streaks/cleanup-recoveries",
@@ -43,10 +43,6 @@
     {
       "path": "/api/cron/leaderboard-refresh",
       "schedule": "*/15 * * * *"
-    },
-    {
-      "path": "/api/cron/validate-streaks",
-      "schedule": "5 0 * * *"
     },
     {
       "path": "/api/cron/cleanup-token-blacklist",

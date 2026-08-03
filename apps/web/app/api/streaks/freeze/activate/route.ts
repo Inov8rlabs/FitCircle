@@ -37,24 +37,27 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { date, timezone } = activateFreezeSchema.parse(body);
 
-    // 3. Activate freeze
-    const targetDate = new Date(date);
-    await StreakClaimingService.activateFreeze(user.id, targetDate);
-
-    // 4. Get updated shield status
-    const shields = await StreakClaimingService.getAvailableShields(user.id);
+    // 3. Activate freeze (timezone-aware)
+    const result = await StreakClaimingService.activateFreeze(user.id, date, timezone);
 
     console.log(`[POST /api/streaks/freeze/activate] User ${user.id} activated freeze for ${date}`);
 
     return NextResponse.json({
       success: true,
-      shieldsRemaining: shields.total,
+      // Old clients decode this as a non-optional number, so unlimited (Pro)
+      // reports a sentinel count; updated clients key off `unlimited`.
+      shieldsRemaining: result.unlimited ? 999 : result.remaining,
+      unlimited: result.unlimited,
       message: `Freeze activated for ${date}`,
     });
   } catch (error: any) {
     console.error('[POST /api/streaks/freeze/activate] Error:', error);
 
     if (error instanceof StreakClaimError) {
+      // Out of shields is the paywall moment for free users — tell the
+      // client explicitly so it can route to the Pro upsell. Stays HTTP 400
+      // so pre-update clients keep their graceful "no shields" handling.
+      const outOfShields = error.code === 'NO_SHIELDS_AVAILABLE';
       return NextResponse.json(
         {
           success: false,
@@ -62,6 +65,7 @@ export async function POST(request: NextRequest) {
             code: error.code,
             message: error.message,
             details: error.details,
+            ...(outOfShields ? { upsell: 'pro_unlimited_shields' } : {}),
           },
         },
         { status: 400 }

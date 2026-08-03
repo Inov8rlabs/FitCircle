@@ -90,6 +90,8 @@ export interface EngagementStreakResponse {
   current_streak: number;
   longest_streak: number;
   freezes_available: number;
+  /** Pro users have unlimited shields; clients should render ∞. */
+  shields_unlimited?: boolean;
   paused: boolean;
   pause_end_date: string | null;
   last_engagement_date: string | null;

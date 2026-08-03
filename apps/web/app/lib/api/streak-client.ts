@@ -74,13 +74,25 @@ export interface ShieldStatus {
   used: number;
   next_free_at: string | null;
   can_activate: boolean;
+  /** Pro users have unlimited shields — render ∞ and ignore `available`. */
+  unlimited: boolean;
 }
 
 export interface ClaimResult {
   success: boolean;
-  current_streak: number;
+  /** New streak length after the claim. */
+  streakCount: number;
   message?: string;
-  milestone?: { days: number; title: string; badge: string; message: string } | null;
+  /**
+   * Server MilestoneInfo: `milestone` is the day count reached;
+   * `shieldsGranted` is how many shields the claim earned.
+   */
+  milestone?: {
+    milestone: number;
+    type: 'shield_earned' | 'achievement_unlocked';
+    reward?: string;
+    shieldsGranted?: number;
+  } | null;
 }
 
 export interface FreezeResult {
@@ -115,8 +127,22 @@ export const streakClient = {
       healthDataSynced: boolean;
     }>('/api/streaks/claim-status', { query: { date, timezone } }),
 
-  getShields: () =>
-    call<ShieldStatus>('/api/streaks/shields'),
+  getShields: async (): Promise<ShieldStatus> => {
+    // Server shape: { freezes, milestone_shields, purchased, total, unlimited, cap, ... }
+    const raw = await call<{
+      total: number;
+      cap: number;
+      unlimited: boolean;
+    }>('/api/streaks/shields');
+    return {
+      available: raw.total ?? 0,
+      max: raw.cap ?? 3,
+      used: 0,
+      next_free_at: null,
+      can_activate: raw.unlimited || (raw.total ?? 0) > 0,
+      unlimited: raw.unlimited === true,
+    };
+  },
 
   claimStreak: (claimDate: string | null, timezone: string) =>
     call<ClaimResult>('/api/streaks/claim', {
@@ -124,11 +150,25 @@ export const streakClient = {
       body: { claimDate, timezone },
     }),
 
-  activateFreeze: (date: string, timezone: string) =>
-    call<FreezeResult>('/api/streaks/freeze', {
+  activateFreeze: async (date: string, timezone: string): Promise<FreezeResult> => {
+    // /api/streaks/freeze protects TODAY (planned absence); shielding a
+    // specific missed day is /api/streaks/freeze/activate.
+    const raw = await call<{
+      success: boolean;
+      shieldsRemaining: number | null;
+      unlimited: boolean;
+      message: string;
+    }>('/api/streaks/freeze/activate', {
       method: 'POST',
       body: { date, timezone },
-    }),
+    });
+    return {
+      success: raw.success,
+      date,
+      freezes_remaining: raw.shieldsRemaining ?? Number.POSITIVE_INFINITY,
+      message: raw.message,
+    };
+  },
 
   getHistory: (days = 30) =>
     call<{ entries: EngagementHistoryEntry[] }>('/api/streaks/engagement', {

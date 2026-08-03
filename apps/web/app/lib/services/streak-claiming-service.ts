@@ -1,113 +1,99 @@
 /**
- * StreakClaimingService
+ * StreakClaimingService — the canonical streak engine.
  *
- * Manages explicit and retroactive streak claiming with the following mechanics:
- * - Explicit "Claim Streak" button/API call
- * - Automatic claim when user manually enters data (weight, mood, energy)
- * - 7-day retroactive claiming window
- * - Timezone-aware with 3am grace period
- * - Freeze system (1 free/week, earn more at milestones, max 5)
- * - Recovery mechanics (Weekend Warrior Pass, Milestone Shields, Purchased Resurrection)
+ * Source of truth for the streak itself is the `streak_claims` table:
+ * one row per user per protected/claimed local day. The streak number is
+ * always derived from claims (calculateStreak), never trusted from a
+ * stored counter; `engagement_streaks` holds a denormalized copy for fast
+ * reads and legacy clients.
+ *
+ * Shield inventory lives exclusively in StreakShieldService.
+ * Milestones and the shield economy live in lib/streaks/streak-config.
+ *
+ * All dates are YYYY-MM-DD strings in the USER'S timezone — see
+ * lib/streaks/streak-calculator for the date-handling rules.
  */
 
 import { createAdminSupabase } from '../supabase-admin';
 import {
   StreakClaim,
-  StreakShield,
-  StreakRecovery,
   type ClaimResult,
   type CanClaimResult,
   type ClaimableDay,
   type ShieldStatus,
   type RecoveryInfo,
-  ClaimStreakInput,
-  ActivateFreezeInput,
-  StartRecoveryInput,
   type HealthDataCheck,
-  StreakBreakCheck,
-  RecoveryOption,
   type MilestoneInfo,
   StreakClaimError,
   CLAIM_ERROR_CODES,
   CLAIMING_CONSTANTS,
-  isWithinRetroactiveWindow,
-  isWithinGracePeriod,
-  getNextFreezeReset,
-  formatDateYYYYMMDD,
-  getMilestoneInfo,
 } from '../types/streak-claiming';
+import { SHIELD_RULES, milestoneCrossed } from '../streaks/streak-config';
+import {
+  localToday,
+  addDays,
+  isWithinGracePeriod,
+  isWithinRetroactiveWindow,
+  calculateStreak,
+} from '../streaks/streak-calculator';
+import { StreakShieldService } from './streak-shield-service';
+import { MomentumService } from './momentum-service';
 
-import { EngagementStreakService } from './engagement-streak-service';
+/** Normalize route inputs (Date at UTC midnight, or YYYY-MM-DD string). */
+function toDayStr(date: Date | string): string {
+  if (typeof date === 'string') return date.slice(0, 10);
+  return date.toISOString().split('T')[0];
+}
 
 export class StreakClaimingService {
-  // ============================================================================
-  // CORE CLAIMING LOGIC
-  // ============================================================================
+  // ==========================================================================
+  // CORE CLAIMING
+  // ==========================================================================
 
   /**
-   * Claim a streak for a specific date (today or retroactive)
+   * Claim a streak day (today or retroactive within the window).
+   * Awards milestone celebrations and earned shields atomically with the
+   * streak recompute.
    */
   static async claimStreak(
     userId: string,
-    claimDate: Date,
+    claimDate: Date | string,
     timezone: string,
     method: 'explicit' | 'manual_entry' | 'retroactive'
   ): Promise<ClaimResult> {
     const supabaseAdmin = createAdminSupabase();
-    const claimDateStr = formatDateYYYYMMDD(claimDate);
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    const claimDateStr = toDayStr(claimDate);
+    const todayStr = localToday(timezone);
 
-    console.log(
-      `[StreakClaimingService.claimStreak] User ${userId} claiming ${claimDateStr} via ${method}`
-    );
-
-    // 1. Validate claim is allowed
-    console.log('[StreakClaimingService.claimStreak] Step 1: Validating claim...');
-    let canClaimResult;
-    try {
-      canClaimResult = await this.canClaimStreak(userId, claimDate, timezone);
-    } catch (e: any) {
-      console.error('[StreakClaimingService.claimStreak] Step 1 FAILED - canClaimStreak error:', e.message);
-      throw e;
-    }
-
-    // 2. Check if already claimed (check this FIRST)
+    // 1. Validate
+    const canClaimResult = await this.canClaimStreak(userId, claimDateStr, timezone);
     if (canClaimResult.alreadyClaimed) {
-      console.log('[StreakClaimingService.claimStreak] Step 1: Already claimed');
-      throw new StreakClaimError(
-        'Streak already claimed for this date',
-        CLAIM_ERROR_CODES.ALREADY_CLAIMED,
-        { date: claimDateStr }
-      );
+      throw new StreakClaimError('Streak already claimed for this date', CLAIM_ERROR_CODES.ALREADY_CLAIMED, {
+        date: claimDateStr,
+      });
     }
-
     if (!canClaimResult.canClaim) {
-      console.log('[StreakClaimingService.claimStreak] Step 1: Cannot claim -', canClaimResult.reason);
-      // Determine correct error code based on reason
-      const errorCode = canClaimResult.hasHealthData === false
-        ? CLAIM_ERROR_CODES.NO_HEALTH_DATA
-        : 'CLAIM_NOT_ALLOWED';
       throw new StreakClaimError(
         canClaimResult.reason || 'Cannot claim streak',
-        errorCode,
+        canClaimResult.reason === 'Cannot claim future dates'
+          ? CLAIM_ERROR_CODES.FUTURE_DATE
+          : canClaimResult.reason?.includes('window')
+            ? CLAIM_ERROR_CODES.TOO_OLD
+            : 'CLAIM_NOT_ALLOWED',
         { date: claimDateStr, reason: canClaimResult.reason }
       );
     }
 
-    // 3. Check for health data
-    console.log('[StreakClaimingService.claimStreak] Step 3: Checking health data...');
-    let healthCheck;
-    try {
-      healthCheck = await this.checkHealthData(userId, claimDateStr);
-      console.log('[StreakClaimingService.claimStreak] Step 3: Health data check passed -', JSON.stringify(healthCheck));
-    } catch (e: any) {
-      console.error('[StreakClaimingService.claimStreak] Step 3 FAILED - checkHealthData error:', e.message);
-      throw e;
-    }
+    // 2. Health data snapshot (informational — claims are allowed without it).
+    //    canClaimStreak already queried it; only re-query if it didn't.
+    const healthCheck =
+      canClaimResult.healthCheck ?? (await this.checkHealthData(userId, claimDateStr));
 
-    // 4. Insert claim record
-    console.log('[StreakClaimingService.claimStreak] Step 4: Inserting claim record...');
+    // 3. Streak BEFORE this claim (needed to detect crossed milestones)
+    const claimDates = await this.getClaimDates(userId);
+    const oldStreak = calculateStreak(claimDates, todayStr);
+
+    // 4. Insert the claim
     const { data: claim, error: claimError } = await supabaseAdmin
       .from('streak_claims')
       .insert({
@@ -130,477 +116,464 @@ export class StreakClaimingService {
       .single();
 
     if (claimError) {
-      console.error('[StreakClaimingService.claimStreak] Step 4 FAILED - Insert claim error:', claimError);
-      // Check for unique constraint violation (already claimed)
       if (claimError.code === '23505') {
-        throw new StreakClaimError(
-          'Streak already claimed for this date',
-          CLAIM_ERROR_CODES.ALREADY_CLAIMED,
-          { date: claimDateStr }
-        );
+        throw new StreakClaimError('Streak already claimed for this date', CLAIM_ERROR_CODES.ALREADY_CLAIMED, {
+          date: claimDateStr,
+        });
       }
-      throw new StreakClaimError(
-        claimError.message || 'Failed to insert claim record',
-        'DATABASE_ERROR',
-        { originalError: claimError.code, date: claimDateStr }
-      );
-    }
-    console.log('[StreakClaimingService.claimStreak] Step 4: Claim record inserted:', claim.id);
-
-    // 5. Record engagement activity (this also updates the streak internally)
-    console.log('[StreakClaimingService.claimStreak] Step 5: Recording engagement activity...');
-    let streakResponse = { current_streak: 1, longest_streak: 1 };
-    try {
-      await EngagementStreakService.recordActivity(
-        userId,
-        'circle_checkin', // Use circle_checkin for claiming streaks
-        claim.id,
-        claimDateStr
-      );
-      console.log('[StreakClaimingService.claimStreak] Step 5: Activity recorded');
-
-      // Fetch updated streak
-      streakResponse = await EngagementStreakService.getEngagementStreak(userId);
-      console.log('[StreakClaimingService.claimStreak] Step 5: Current streak:', streakResponse.current_streak);
-    } catch (e: any) {
-      console.error('[StreakClaimingService.claimStreak] Step 5 FAILED - recordActivity error:', e.message, e.stack);
-      // Don't throw - continue with defaults
+      throw new StreakClaimError(claimError.message || 'Failed to insert claim record', 'DATABASE_ERROR', {
+        originalError: claimError.code,
+        date: claimDateStr,
+      });
     }
 
-    // 6. Update last_claim_date in engagement_streaks
-    console.log('[StreakClaimingService.claimStreak] Step 6: Updating last_claim_date...');
-    try {
-      const { data: currentStreakData } = await supabaseAdmin
-        .from('engagement_streaks')
-        .select('total_claims')
-        .eq('user_id', userId)
-        .single();
+    // 5. Recompute the streak including the new claim
+    claimDates.add(claimDateStr);
+    const newStreak = calculateStreak(claimDates, todayStr);
 
-      await supabaseAdmin
-        .from('engagement_streaks')
-        .update({
-          last_claim_date: claimDateStr,
-          total_claims: (currentStreakData?.total_claims || 0) + 1,
-        })
-        .eq('user_id', userId);
-      console.log('[StreakClaimingService.claimStreak] Step 6: last_claim_date updated');
-    } catch (e: any) {
-      console.error('[StreakClaimingService.claimStreak] Step 6 FAILED - update last_claim_date error:', e.message);
-      // Don't throw - not critical
-    }
+    // 6. Persist to engagement_streaks + activity history (best-effort)
+    await this.syncStreakRecord(userId, newStreak, claimDateStr, claim.id);
 
-    // 7. Check for milestone shields
-    console.log('[StreakClaimingService.claimStreak] Step 7: Checking milestones...');
-    let milestone: MilestoneInfo | undefined = undefined;
+    // 7. Milestones + earned shields
+    let milestone: MilestoneInfo | undefined;
     try {
-      milestone = getMilestoneInfo(streakResponse.current_streak);
-      if (milestone && milestone.shieldsGranted && milestone.shieldsGranted > 0) {
-        console.log('[StreakClaimingService.claimStreak] Step 7: Granting', milestone.shieldsGranted, 'shields');
-        await this.grantMilestoneShields(userId, milestone.shieldsGranted);
+      const shieldsEarned = await StreakShieldService.earnForStreakIncrease(userId, oldStreak, newStreak);
+      const crossed = milestoneCrossed(oldStreak, newStreak);
+      if (crossed) {
+        milestone = {
+          milestone: crossed.days,
+          type: shieldsEarned > 0 ? 'shield_earned' : 'achievement_unlocked',
+          reward: crossed.name,
+          shieldsGranted: shieldsEarned,
+        };
+      } else if (shieldsEarned > 0) {
+        // Weekly shield earn without a celebration milestone (e.g. day 21)
+        milestone = {
+          milestone: newStreak,
+          type: 'shield_earned',
+          reward: `${shieldsEarned} streak shield(s) earned!`,
+          shieldsGranted: shieldsEarned,
+        };
       }
     } catch (e: any) {
-      console.error('[StreakClaimingService.claimStreak] Step 7 FAILED - milestone/shield error:', e.message);
-      // Don't throw - not critical
+      console.error('[StreakClaimingService.claimStreak] milestone/shield error:', e.message);
     }
-
-    console.log(
-      `[StreakClaimingService.claimStreak] Successfully claimed streak for ${claimDateStr}, current streak: ${streakResponse.current_streak}`
-    );
 
     return {
       success: true,
-      streakCount: streakResponse.current_streak,
+      streakCount: newStreak,
       milestone,
-      message: `Streak claimed! Current streak: ${streakResponse.current_streak} days`,
+      message: `Streak claimed! Current streak: ${newStreak} days`,
       claim,
     };
   }
 
-  /**
-   * Check if user can claim a streak for a specific date
-   */
+  /** Can the user claim `date`? All checks are in the user's timezone. */
   static async canClaimStreak(
     userId: string,
-    date: Date,
+    date: Date | string,
     timezone: string
   ): Promise<CanClaimResult> {
     const supabaseAdmin = createAdminSupabase();
-    const dateStr = formatDateYYYYMMDD(date);
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const yesterday = new Date(today);
-    yesterday.setDate(yesterday.getDate() - 1);
+    const dateStr = toDayStr(date);
+    const todayStr = localToday(timezone);
 
-    // 1. Check if date is in the future
-    if (date > today) {
+    // 1. Future dates: the user's local tomorrow is not claimable, even when
+    //    the server's UTC calendar hasn't caught up with the user's clock.
+    if (dateStr > todayStr) {
+      return { canClaim: false, alreadyClaimed: false, reason: 'Cannot claim future dates' };
+    }
+
+    // 2. Retroactive window. The 3am grace period extends the window for
+    //    "yesterday relative to the window edge" by treating early-morning
+    //    claims as belonging to the just-ended day.
+    if (!isWithinRetroactiveWindow(dateStr, todayStr)) {
       return {
         canClaim: false,
         alreadyClaimed: false,
-        reason: 'Cannot claim future dates',
+        reason: `Date is outside ${CLAIMING_CONSTANTS.RETROACTIVE_WINDOW_DAYS}-day retroactive claiming window`,
       };
     }
 
-    // 2. Check if within retroactive window (7 days)
-    if (!isWithinRetroactiveWindow(date, today)) {
-      return {
-        canClaim: false,
-        alreadyClaimed: false,
-        reason: 'Date is outside 7-day retroactive claiming window',
-      };
-    }
-
-    // 3. Check if already claimed
+    // 3. Already claimed?
     const { data: existingClaim } = await supabaseAdmin
       .from('streak_claims')
       .select('id')
       .eq('user_id', userId)
       .eq('claim_date', dateStr)
-      .single();
+      .maybeSingle();
 
     if (existingClaim) {
-      return {
-        canClaim: false,
-        alreadyClaimed: true,
-        reason: 'Already claimed for this date',
-      };
+      return { canClaim: false, alreadyClaimed: true, reason: 'Already claimed for this date' };
     }
 
-    // 4. Check for health data
+    // 4. Health data (informational)
     const healthCheck = await this.checkHealthData(userId, dateStr);
 
-    // We allow claiming even without health data now
-    // The streak will be claimed, but metadata will show no health data
-    if (!healthCheck.hasAnyData) {
-      console.log(`[StreakClaimingService.canClaimStreak] No health data for ${dateStr}, but allowing claim`);
-    }
-
-    // 5. Special handling for yesterday - check grace period
-    const gracePeriodActive = isWithinGracePeriod(timezone);
-    const isYesterday = dateStr === formatDateYYYYMMDD(yesterday);
-
+    const isYesterday = dateStr === addDays(todayStr, -1);
     return {
       canClaim: true,
       alreadyClaimed: false,
       hasHealthData: healthCheck.hasAnyData,
-      gracePeriodActive: isYesterday ? gracePeriodActive : undefined,
+      healthCheck,
+      gracePeriodActive: isYesterday ? isWithinGracePeriod(timezone) : undefined,
     };
   }
 
   /**
-   * Get claimable days for the last 7 days
+   * Shared "shield a 1-day gap" policy used by the check-in flows: if
+   * yesterday (relative to anchorDate) is unclaimed but the day before is
+   * claimed, auto-apply a shield so the streak survives. Mutates claimDates
+   * on success so the caller's recompute sees the protected day.
    */
+  static async tryAutoProtectYesterday(
+    userId: string,
+    claimDates: Set<string>,
+    anchorDate: string,
+    timezone?: string
+  ): Promise<{ applied: boolean; outOfShields: boolean }> {
+    const yesterday = addDays(anchorDate, -1);
+    if (claimDates.has(yesterday) || !claimDates.has(addDays(anchorDate, -2))) {
+      return { applied: false, outOfShields: false };
+    }
+    try {
+      await this.activateFreeze(userId, yesterday, timezone, { auto: true });
+      claimDates.add(yesterday);
+      return { applied: true, outOfShields: false };
+    } catch (e) {
+      if (e instanceof StreakClaimError && e.code === CLAIM_ERROR_CODES.NO_SHIELDS_AVAILABLE) {
+        return { applied: false, outOfShields: true };
+      }
+      if (e instanceof StreakClaimError && e.code === CLAIM_ERROR_CODES.ALREADY_CLAIMED) {
+        claimDates.add(yesterday); // protected concurrently
+        return { applied: false, outOfShields: false };
+      }
+      console.error('[tryAutoProtectYesterday] error (non-blocking):', e);
+      return { applied: false, outOfShields: false };
+    }
+  }
+
+  /** Claimable-day states for the retroactive window (today + past 7 days). */
   static async getClaimableDays(userId: string, timezone: string): Promise<ClaimableDay[]> {
     const supabaseAdmin = createAdminSupabase();
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const days: ClaimableDay[] = [];
+    const todayStr = localToday(timezone);
+    const windowStart = addDays(todayStr, -CLAIMING_CONSTANTS.RETROACTIVE_WINDOW_DAYS);
 
-    // Get claims for last 7 days
-    const { data: claims } = await supabaseAdmin
-      .from('streak_claims')
-      .select('claim_date')
-      .eq('user_id', userId)
-      .gte('claim_date', formatDateYYYYMMDD(new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000)));
+    const [{ data: claims }, { data: tracking }] = await Promise.all([
+      supabaseAdmin
+        .from('streak_claims')
+        .select('claim_date')
+        .eq('user_id', userId)
+        .gte('claim_date', windowStart),
+      supabaseAdmin
+        .from('daily_tracking')
+        .select('tracking_date, weight_kg, steps, mood_score, energy_level')
+        .eq('user_id', userId)
+        .gte('tracking_date', windowStart),
+    ]);
 
-    const claimedDates = new Set(claims?.map((c) => c.claim_date) || []);
-
-    // Check each of the last 7 days. Run the per-day work CONCURRENTLY rather than
-    // sequentially: the old loop did ~24 serial Supabase round-trips, which under any
-    // latency could exceed the function timeout (or exhaust connections) and surface to
-    // the client as a 500. Each day is also isolated — a transient failure on one day
-    // degrades that day to "not claimable" instead of failing the whole request.
-    const dayResults = await Promise.all(
-      Array.from({ length: 8 }, (_, i) => i).map(async (i): Promise<ClaimableDay> => {
-        const checkDate = new Date(today);
-        checkDate.setDate(checkDate.getDate() - i);
-        const dateStr = formatDateYYYYMMDD(checkDate);
-        const claimed = claimedDates.has(dateStr);
-
-        try {
-          const [healthCheck, canClaimResult] = await Promise.all([
-            this.checkHealthData(userId, dateStr),
-            this.canClaimStreak(userId, checkDate, timezone),
-          ]);
-          return {
-            date: dateStr,
-            claimed,
-            hasHealthData: healthCheck.hasAnyData,
-            canClaim: canClaimResult.canClaim && !claimed,
-            reason: canClaimResult.reason,
-          };
-        } catch (error) {
-          console.error(`[getClaimableDays] Failed to evaluate ${dateStr}:`, error);
-          return {
-            date: dateStr,
-            claimed,
-            hasHealthData: false,
-            canClaim: false,
-            reason: 'Could not determine claim status',
-          };
-        }
-      })
+    const claimedDates = new Set(claims?.map(c => c.claim_date) || []);
+    const healthByDate = new Map(
+      (tracking || []).map(t => [
+        t.tracking_date,
+        !!(t.weight_kg || t.steps || t.mood_score || t.energy_level),
+      ])
     );
-    days.push(...dayResults);
 
-    return days.sort((a, b) => b.date.localeCompare(a.date));
+    const days: ClaimableDay[] = [];
+    for (let i = 0; i <= CLAIMING_CONSTANTS.RETROACTIVE_WINDOW_DAYS; i++) {
+      const dateStr = addDays(todayStr, -i);
+      const claimed = claimedDates.has(dateStr);
+      days.push({
+        date: dateStr,
+        claimed,
+        hasHealthData: healthByDate.get(dateStr) || false,
+        canClaim: !claimed && isWithinRetroactiveWindow(dateStr, todayStr),
+        reason: claimed ? 'Already claimed for this date' : undefined,
+      });
+    }
+    return days;
   }
 
-  // ============================================================================
-  // SHIELD MANAGEMENT
-  // ============================================================================
+  // ==========================================================================
+  // SHIELDS
+  // ==========================================================================
 
   /**
-   * Get user's available shields by type
+   * Shield status for API responses. Keeps the legacy ShieldStatus shape and
+   * adds `unlimited`/`cap` so updated clients can render ∞ for Pro.
    */
   static async getAvailableShields(userId: string): Promise<ShieldStatus> {
-    const supabaseAdmin = createAdminSupabase();
+    const inventory = await StreakShieldService.getInventory(userId);
 
-    const { data: shields } = await supabaseAdmin
-      .from('streak_shields')
-      .select('*')
-      .eq('user_id', userId);
-
-    const freezeShield = shields?.find((s) => s.shield_type === 'freeze');
-    const milestoneShield = shields?.find((s) => s.shield_type === 'milestone_shield');
-    const purchasedShield = shields?.find((s) => s.shield_type === 'purchased');
-
-    const freezes = freezeShield?.available_count || 0;
-    const milestones = milestoneShield?.available_count || 0;
-    const purchased = purchasedShield?.available_count || 0;
+    // Weekly freeze resets are gone (shields are milestone-earned now), but
+    // legacy clients may decode next_freeze_reset as a non-optional date —
+    // keep sending a synthetic next-Monday timestamp so their decoders
+    // don't reject the whole payload. Updated clients ignore these fields.
+    const nextMonday = new Date();
+    nextMonday.setUTCHours(0, 0, 0, 0);
+    nextMonday.setUTCDate(nextMonday.getUTCDate() + ((8 - nextMonday.getUTCDay()) % 7 || 7));
 
     return {
-      freezes,
-      milestone_shields: milestones,
-      purchased,
-      total: freezes + milestones + purchased,
-      last_freeze_reset: freezeShield?.last_reset_at || null,
-      next_freeze_reset: freezeShield?.last_reset_at
-        ? getNextFreezeReset(new Date(freezeShield.last_reset_at)).toISOString()
-        : getNextFreezeReset().toISOString(),
+      freezes: inventory.breakdown.freeze,
+      milestone_shields: inventory.breakdown.milestone_shield,
+      purchased: inventory.breakdown.purchased,
+      total: inventory.available,
+      unlimited: inventory.unlimited,
+      cap: inventory.cap,
+      last_freeze_reset: null,
+      next_freeze_reset: nextMonday.toISOString(),
     };
   }
 
   /**
-   * Activate a freeze shield for a specific date
+   * Protect a missed day with a shield (manual or auto).
+   * Pro users never decrement a balance. Throws NO_SHIELDS_AVAILABLE with an
+   * `upsell` detail when a free user is out of shields — routes surface that
+   * so clients can open the paywall.
    */
-  static async activateFreeze(userId: string, date: Date): Promise<boolean> {
+  static async activateFreeze(
+    userId: string,
+    date: Date | string,
+    timezone?: string,
+    options: { auto?: boolean; skipStreakSync?: boolean } = {}
+  ): Promise<{ shieldType: string; remaining: number; unlimited: boolean }> {
     const supabaseAdmin = createAdminSupabase();
-    const dateStr = formatDateYYYYMMDD(date);
+    const dateStr = toDayStr(date);
+    const tz = timezone || (await this.getLastKnownTimezone(userId)) || 'UTC';
+    const todayStr = localToday(tz);
 
-    console.log(`[StreakClaimingService.activateFreeze] User ${userId} activating freeze for ${dateStr}`);
-
-    // Check available shields
-    const shields = await this.getAvailableShields(userId);
-    if (shields.total === 0) {
-      throw new StreakClaimError(
-        'No shields available',
-        CLAIM_ERROR_CODES.NO_SHIELDS_AVAILABLE
-      );
+    // Protecting the future makes no sense; protecting beyond the window is
+    // pointless (the streak already broke past recovery).
+    if (dateStr >= todayStr) {
+      throw new StreakClaimError('Can only shield past days', CLAIM_ERROR_CODES.FUTURE_DATE, { date: dateStr });
+    }
+    if (!isWithinRetroactiveWindow(dateStr, todayStr)) {
+      throw new StreakClaimError('Day is outside the shieldable window', CLAIM_ERROR_CODES.TOO_OLD, {
+        date: dateStr,
+      });
     }
 
-    // Use shields in priority order: freeze > milestone > purchased
-    let shieldType: 'freeze' | 'milestone_shield' | 'purchased';
-    if (shields.freezes > 0) {
-      shieldType = 'freeze';
-    } else if (shields.milestone_shields > 0) {
-      shieldType = 'milestone_shield';
-    } else {
-      shieldType = 'purchased';
-    }
-
-    // Decrement shield count - using direct update instead of RPC
-    // Table structure: one row per user per shield_type with available_count
-    const { data: shieldRow, error: fetchError } = await supabaseAdmin
-      .from('streak_shields')
-      .select('available_count')
+    // Already claimed/protected? Nothing to do — don't burn a shield.
+    const { data: existing } = await supabaseAdmin
+      .from('streak_claims')
+      .select('id')
       .eq('user_id', userId)
-      .eq('shield_type', shieldType)
-      .single();
-
-    if (fetchError) {
-      console.error('[StreakClaimingService.activateFreeze] Error fetching shield:', fetchError);
-      throw fetchError;
+      .eq('claim_date', dateStr)
+      .maybeSingle();
+    if (existing) {
+      throw new StreakClaimError('Day is already claimed or protected', CLAIM_ERROR_CODES.ALREADY_CLAIMED, {
+        date: dateStr,
+      });
     }
 
-    if (shieldRow && shieldRow.available_count > 0) {
-      const { error: updateError } = await supabaseAdmin
-        .from('streak_shields')
-        .update({ available_count: shieldRow.available_count - 1 })
-        .eq('user_id', userId)
-        .eq('shield_type', shieldType);
+    // Consume from the single inventory (no-op decrement for Pro).
+    const consumed = await StreakShieldService.consume(userId);
 
-      if (updateError) {
-        console.error('[StreakClaimingService.activateFreeze] Error decrementing shield:', updateError);
-        throw updateError;
+    // Insert the protecting claim. On a duplicate-key race, refund the shield.
+    const { error: claimInsertError } = await supabaseAdmin.from('streak_claims').insert({
+      user_id: userId,
+      claim_date: dateStr,
+      claimed_at: new Date().toISOString(),
+      claim_method: 'freeze',
+      timezone: tz,
+      health_data_synced: false,
+      metadata: {
+        shield_type: consumed.consumedType,
+        auto_applied: options.auto === true,
+        activated_at: new Date().toISOString(),
+      },
+    });
+
+    let remaining = consumed.remaining;
+    if (claimInsertError) {
+      if (claimInsertError.code === '23505' && !consumed.unlimited) {
+        // The day was claimed/protected concurrently — give the shield back.
+        await StreakShieldService.refund(
+          userId,
+          consumed.consumedType as 'freeze' | 'milestone_shield' | 'purchased'
+        );
+        remaining = consumed.remaining + 1;
+      }
+      if (claimInsertError.code !== '23505') {
+        throw claimInsertError;
       }
     }
 
-    // Insert a streak_claims record for the protected day
-    // This ensures the claim-based streak calculation counts shield-protected days
-    const { error: claimInsertError } = await supabaseAdmin
-      .from('streak_claims')
+    // History + streak recompute (best-effort).
+    await supabaseAdmin
+      .from('engagement_activities')
       .insert({
         user_id: userId,
-        claim_date: dateStr,
-        claimed_at: new Date().toISOString(),
-        claim_method: 'freeze',
-        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-        health_data_synced: false,
-        metadata: {
-          shield_type: shieldType,
-          activated_at: new Date().toISOString(),
-        },
+        activity_date: dateStr,
+        activity_type: 'streak_freeze',
+        reference_id: null,
+      })
+      .then(({ error }) => {
+        if (error && error.code !== '23505') {
+          console.error('[activateFreeze] activity insert error:', error);
+        }
       });
 
-    // Ignore duplicate key errors (already claimed/frozen for this day)
-    if (claimInsertError && claimInsertError.code !== '23505') {
-      console.error('[StreakClaimingService.activateFreeze] Error inserting freeze claim:', claimInsertError);
+    if (!options.skipStreakSync) {
+      const claimDates = await this.getClaimDates(userId);
+      const newStreak = calculateStreak(claimDates, todayStr);
+      await this.syncStreakRecord(userId, newStreak, null, null);
     }
 
-    // Record engagement activity for the protected day (for history display)
-    await EngagementStreakService.recordActivity(
-      userId,
-      'streak_freeze',
-      undefined,
-      dateStr
-    );
-
-    console.log(`[StreakClaimingService.activateFreeze] Successfully activated ${shieldType} for ${dateStr}`);
-
-    return true;
+    return { shieldType: consumed.consumedType, remaining, unlimited: consumed.unlimited };
   }
 
+  // ==========================================================================
+  // DAILY CRON — protect or break
+  // ==========================================================================
+
   /**
-   * Reset weekly free freezes (called by cron job on Mondays)
+   * Nightly check for one user, in that user's timezone.
+   *
+   * If yesterday (user-local) is unclaimed and it interrupted a real streak
+   * (≥2 consecutive claimed days ending the day before — a shield spent on a
+   * 1-day streak saves nothing worth saving):
+   * - auto-apply a shield when the user has one (Pro: always, without
+   *   decrementing), but never more than MAX_CONSECUTIVE_AUTO_PROTECTS in a
+   *   row — a streak kept alive only by shields for days on end is a zombie,
+   *   and users hate discovering their "streak" counted days they never
+   *   showed up (the retro window still lets them claim honestly).
+   * - otherwise the streak breaks: the stored value is set to the true
+   *   derived streak (which may be 1 if today is already claimed, not
+   *   blindly 0). For free users the result carries paywallEligible so
+   *   notification/UI layers can pitch Pro.
+   *
+   * Idempotent: a protected day gets a claim row (unique), and re-writing
+   * the derived streak value is harmless.
    */
-  static async resetWeeklyFreezes(): Promise<void> {
-    const supabaseAdmin = createAdminSupabase();
+  static async checkAndBreakStreak(
+    userId: string
+  ): Promise<{ broken: boolean; shieldApplied: boolean; paywallEligible: boolean }> {
+    const tz = (await this.getLastKnownTimezone(userId)) || 'UTC';
 
-    console.log('[StreakClaimingService.resetWeeklyFreezes] Resetting weekly freezes');
-
-    // Fetch all freeze shields
-    const { data: shields, error: fetchError } = await supabaseAdmin
-      .from('streak_shields')
-      .select('id, available_count')
-      .eq('shield_type', 'freeze');
-
-    if (fetchError) {
-      console.error('[StreakClaimingService.resetWeeklyFreezes] Error fetching shields:', fetchError);
-      throw fetchError;
+    // Still inside the 3am grace window? Let the user finish their "yesterday".
+    if (isWithinGracePeriod(tz)) {
+      return { broken: false, shieldApplied: false, paywallEligible: false };
     }
 
-    // Update each shield: increment by 1, cap at max
-    const updatePromises = (shields || []).map((shield) => {
-      const newCount = Math.min(
-        CLAIMING_CONSTANTS.MAX_TOTAL_SHIELDS,
-        shield.available_count + 1
-      );
+    const todayStr = localToday(tz);
+    const yesterdayStr = addDays(todayStr, -1);
 
-      return supabaseAdmin
-        .from('streak_shields')
-        .update({
-          available_count: newCount,
-          last_reset_at: new Date().toISOString(),
-        })
-        .eq('id', shield.id);
-    });
-
-    const results = await Promise.all(updatePromises);
-    const errors = results.filter((r) => r.error);
-
-    if (errors.length > 0) {
-      console.error('[StreakClaimingService.resetWeeklyFreezes] Errors updating shields:', errors);
-      throw new Error(`Failed to update ${errors.length} shields`);
+    const claimDates = await this.getClaimDates(userId);
+    if (claimDates.has(yesterdayStr)) {
+      return { broken: false, shieldApplied: false, paywallEligible: false };
     }
 
-    console.log(`[StreakClaimingService.resetWeeklyFreezes] Successfully reset ${shields?.length || 0} freeze shields`);
+    // Only a real streak is worth a shield: ≥2 consecutive claimed days
+    // ending the day before the gap.
+    const interruptedRun = this.runLengthEndingAt(claimDates, addDays(todayStr, -2));
+    if (interruptedRun < 2) {
+      await this.syncStreakRecord(userId, calculateStreak(claimDates, todayStr), null, null);
+      return { broken: false, shieldApplied: false, paywallEligible: false };
+    }
+
+    // Count consecutive auto-protected days immediately before yesterday.
+    const consecutiveAutoProtects = await this.countTrailingAutoProtects(userId, yesterdayStr);
+    const canAutoProtect = consecutiveAutoProtects < SHIELD_RULES.MAX_CONSECUTIVE_AUTO_PROTECTS;
+
+    let outOfShields = false;
+    if (canAutoProtect) {
+      try {
+        await this.activateFreeze(userId, yesterdayStr, tz, { auto: true, skipStreakSync: true });
+        claimDates.add(yesterdayStr);
+        await this.syncStreakRecord(userId, calculateStreak(claimDates, todayStr), null, null);
+        return { broken: false, shieldApplied: true, paywallEligible: false };
+      } catch (e: any) {
+        if (e instanceof StreakClaimError && e.code === CLAIM_ERROR_CODES.ALREADY_CLAIMED) {
+          // Protected concurrently (e.g. by a check-in) — not broken.
+          return { broken: false, shieldApplied: false, paywallEligible: false };
+        }
+        if (!(e instanceof StreakClaimError && e.code === CLAIM_ERROR_CODES.NO_SHIELDS_AVAILABLE)) {
+          throw e;
+        }
+        outOfShields = true; // definitionally a free user — fall through to break
+      }
+    }
+
+    // Break: store the TRUE derived streak (today may already be claimed,
+    // in which case the user is on a fresh 1-day run, not 0).
+    await this.syncStreakRecord(userId, calculateStreak(claimDates, todayStr), null, null);
+
+    // A user who just ran out of shields is by definition not Pro; only the
+    // zombie-guard path needs a tier lookup.
+    const paywallEligible = outOfShields
+      ? true
+      : !(await StreakShieldService.hasUnlimitedShields(userId));
+    return { broken: true, shieldApplied: false, paywallEligible };
   }
 
-  /**
-   * Grant milestone shields when user reaches milestone streaks
-   */
-  static async grantMilestoneShields(userId: string, count: number): Promise<void> {
+  /** Length of the consecutive claimed run ending exactly at `day`. */
+  private static runLengthEndingAt(claimDates: ReadonlySet<string>, day: string): number {
+    let length = 0;
+    let cursor = day;
+    while (claimDates.has(cursor)) {
+      length++;
+      cursor = addDays(cursor, -1);
+    }
+    return length;
+  }
+
+  /** Consecutive auto-applied freeze claims ending the day before `dayStr`. */
+  private static async countTrailingAutoProtects(userId: string, dayStr: string): Promise<number> {
     const supabaseAdmin = createAdminSupabase();
-
-    console.log(`[StreakClaimingService.grantMilestoneShields] Granting ${count} shields to user ${userId}`);
-
-    // Get current milestone shields
-    const { data: shield } = await supabaseAdmin
-      .from('streak_shields')
-      .select('available_count')
+    const lookback = SHIELD_RULES.MAX_CONSECUTIVE_AUTO_PROTECTS + 1;
+    const { data: rows } = await supabaseAdmin
+      .from('streak_claims')
+      .select('claim_date, claim_method, metadata')
       .eq('user_id', userId)
-      .eq('shield_type', 'milestone_shield')
-      .single();
+      .gte('claim_date', addDays(dayStr, -lookback))
+      .lt('claim_date', dayStr);
 
-    const currentCount = shield?.available_count || 0;
-    const newCount = Math.min(CLAIMING_CONSTANTS.MAX_TOTAL_SHIELDS, currentCount + count);
-
-    // Update milestone shield count
-    // Use upsert with onConflict to handle both insert and update cases
-    const { error } = await supabaseAdmin
-      .from('streak_shields')
-      .upsert(
-        {
-          user_id: userId,
-          shield_type: 'milestone_shield',
-          available_count: newCount,
-        },
-        { onConflict: 'user_id,shield_type' }
-      );
-
-    if (error) {
-      console.error('[StreakClaimingService.grantMilestoneShields] Error:', error);
-      throw error;
+    const byDate = new Map((rows || []).map(r => [r.claim_date, r]));
+    let count = 0;
+    for (let i = 1; i <= lookback; i++) {
+      const row = byDate.get(addDays(dayStr, -i));
+      if (row && row.claim_method === 'freeze' && row.metadata?.auto_applied === true) {
+        count++;
+      } else {
+        break;
+      }
     }
-
-    console.log(`[StreakClaimingService.grantMilestoneShields] Successfully granted shields`);
+    return count;
   }
 
-  // ============================================================================
-  // RECOVERY SYSTEM
-  // ============================================================================
+  // ==========================================================================
+  // RECOVERY
+  // ==========================================================================
 
-  /**
-   * Start a recovery attempt (Weekend Warrior or Purchased)
-   */
+  /** Start a recovery attempt (Weekend Warrior or Purchased). */
   static async startRecovery(
     userId: string,
-    brokenDate: Date,
+    brokenDate: Date | string,
     type: 'weekend_warrior' | 'purchased'
   ): Promise<RecoveryInfo> {
     const supabaseAdmin = createAdminSupabase();
-    const brokenDateStr = formatDateYYYYMMDD(brokenDate);
+    const brokenDateStr = toDayStr(brokenDate);
 
-    console.log(`[StreakClaimingService.startRecovery] User ${userId} starting ${type} recovery for ${brokenDateStr}`);
-
-    // Check if recovery already exists
     const { data: existing } = await supabaseAdmin
       .from('streak_recoveries')
       .select('*')
       .eq('user_id', userId)
       .eq('broken_date', brokenDateStr)
-      .single();
+      .maybeSingle();
 
-    if (existing) {
-      if (existing.recovery_status === 'pending') {
-        throw new StreakClaimError(
-          'Recovery already in progress',
-          CLAIM_ERROR_CODES.RECOVERY_IN_PROGRESS
-        );
-      }
+    if (existing && existing.recovery_status === 'pending') {
+      throw new StreakClaimError('Recovery already in progress', CLAIM_ERROR_CODES.RECOVERY_IN_PROGRESS);
     }
 
-    // Set up recovery parameters
     let actionsRequired: number | null = null;
     let expiresAt: Date | null = null;
-
     if (type === 'weekend_warrior') {
       actionsRequired = CLAIMING_CONSTANTS.WEEKEND_WARRIOR_ACTIONS;
       expiresAt = new Date(Date.now() + CLAIMING_CONSTANTS.WEEKEND_WARRIOR_WINDOW_HOURS * 60 * 60 * 1000);
     }
-    // For purchased, no actions required - immediate recovery
 
-    // Insert recovery record
     const { data: recovery, error } = await supabaseAdmin
       .from('streak_recoveries')
       .insert({
@@ -612,72 +585,46 @@ export class StreakClaimingService {
         actions_completed: 0,
         expires_at: expiresAt?.toISOString(),
         completed_at: type === 'purchased' ? new Date().toISOString() : null,
-        metadata: {
-          started_at: new Date().toISOString(),
-        },
+        metadata: { started_at: new Date().toISOString() },
       })
       .select()
       .single();
 
-    if (error) {
-      console.error('[StreakClaimingService.startRecovery] Error:', error);
-      throw error;
-    }
+    if (error) throw error;
 
-    // If purchased, restore the streak immediately
     if (type === 'purchased') {
-      await EngagementStreakService.recordActivity(userId, 'weight_log', recovery.id, brokenDateStr);
+      await this.restoreBrokenDay(userId, brokenDateStr, recovery.id, 'purchased_recovery');
     }
-
-    const actionsRemaining = actionsRequired ? actionsRequired - 0 : 0;
-
-    console.log(`[StreakClaimingService.startRecovery] Successfully started ${type} recovery`);
 
     return {
       recovery,
-      actionsRemaining,
+      actionsRemaining: actionsRequired || 0,
       timeRemaining: expiresAt ? expiresAt.toISOString() : undefined,
     };
   }
 
-  /**
-   * Complete a recovery action (for Weekend Warrior Pass)
-   */
+  /** Complete a recovery action (Weekend Warrior). */
   static async completeRecoveryAction(userId: string, recoveryId: string): Promise<boolean> {
     const supabaseAdmin = createAdminSupabase();
 
-    console.log(`[StreakClaimingService.completeRecoveryAction] User ${userId} completing action for ${recoveryId}`);
-
-    // Get recovery record
     const { data: recovery } = await supabaseAdmin
       .from('streak_recoveries')
       .select('*')
       .eq('id', recoveryId)
       .eq('user_id', userId)
-      .single();
+      .maybeSingle();
 
     if (!recovery) {
       throw new StreakClaimError('Recovery not found', CLAIM_ERROR_CODES.RECOVERY_EXPIRED);
     }
-
     if (recovery.recovery_status !== 'pending') {
-      throw new StreakClaimError(
-        'Recovery is not in pending status',
-        CLAIM_ERROR_CODES.RECOVERY_EXPIRED
-      );
+      throw new StreakClaimError('Recovery is not in pending status', CLAIM_ERROR_CODES.RECOVERY_EXPIRED);
     }
-
-    // Check if expired
     if (recovery.expires_at && new Date(recovery.expires_at) < new Date()) {
-      await supabaseAdmin
-        .from('streak_recoveries')
-        .update({ recovery_status: 'expired' })
-        .eq('id', recoveryId);
-
+      await supabaseAdmin.from('streak_recoveries').update({ recovery_status: 'expired' }).eq('id', recoveryId);
       throw new StreakClaimError('Recovery window expired', CLAIM_ERROR_CODES.RECOVERY_EXPIRED);
     }
 
-    // Increment actions completed
     const newActionsCompleted = recovery.actions_completed + 1;
     const isComplete = newActionsCompleted >= (recovery.actions_required || 0);
 
@@ -690,30 +637,55 @@ export class StreakClaimingService {
       })
       .eq('id', recoveryId);
 
-    // If complete, restore the streak
     if (isComplete) {
-      await EngagementStreakService.recordActivity(
-        userId,
-        'weight_log',
-        recoveryId,
-        recovery.broken_date
-      );
+      await this.restoreBrokenDay(userId, recovery.broken_date, recoveryId, 'weekend_warrior_recovery');
     }
-
-    console.log(
-      `[StreakClaimingService.completeRecoveryAction] Action completed (${newActionsCompleted}/${recovery.actions_required})`
-    );
 
     return isComplete;
   }
 
-  // ============================================================================
-  // HEALTH DATA & SYNC INTEGRATION
-  // ============================================================================
-
   /**
-   * Check if health data exists for a specific date
+   * Restoring a broken day must write a streak_claims row — the streak is
+   * derived from claims, so an engagement_activities entry alone (the old
+   * behavior) silently failed to restore anything.
    */
+  private static async restoreBrokenDay(
+    userId: string,
+    brokenDateStr: string,
+    recoveryId: string,
+    source: string
+  ): Promise<void> {
+    const supabaseAdmin = createAdminSupabase();
+    const tz = (await this.getLastKnownTimezone(userId)) || 'UTC';
+
+    await supabaseAdmin.from('streak_claims').upsert(
+      {
+        user_id: userId,
+        claim_date: brokenDateStr,
+        claimed_at: new Date().toISOString(),
+        claim_method: 'retroactive',
+        timezone: tz,
+        health_data_synced: false,
+        metadata: { source, recovery_id: recoveryId },
+      },
+      { onConflict: 'user_id,claim_date' }
+    );
+
+    const claimDates = await this.getClaimDates(userId);
+    await this.syncStreakRecord(userId, calculateStreak(claimDates, localToday(tz)), null, null);
+
+    // Recovery is real engagement — keep the momentum system in the loop.
+    try {
+      await MomentumService.checkIn(userId);
+    } catch (momentumError) {
+      console.error('[restoreBrokenDay] momentum check-in failed (non-blocking):', momentumError);
+    }
+  }
+
+  // ==========================================================================
+  // HEALTH DATA
+  // ==========================================================================
+
   static async checkHealthData(userId: string, date: string): Promise<HealthDataCheck> {
     const supabaseAdmin = createAdminSupabase();
 
@@ -722,10 +694,9 @@ export class StreakClaimingService {
       .select('weight_kg, steps, mood_score, energy_level')
       .eq('user_id', userId)
       .eq('tracking_date', date)
-      .single();
+      .maybeSingle();
 
-    if (error && error.code !== 'PGRST116') {
-      // PGRST116 = no rows found, which is expected for no data
+    if (error) {
       console.error(`[checkHealthData] Error querying daily_tracking for ${date}:`, error);
     }
 
@@ -733,8 +704,6 @@ export class StreakClaimingService {
     const hasSteps = !!data?.steps && data.steps > 0;
     const hasMood = !!data?.mood_score;
     const hasEnergy = !!data?.energy_level;
-
-    console.log(`[checkHealthData] User ${userId}, date ${date}: weight=${hasWeight}, steps=${hasSteps}, mood=${hasMood}, energy=${hasEnergy}`);
 
     return {
       hasWeight,
@@ -745,109 +714,96 @@ export class StreakClaimingService {
     };
   }
 
-  /**
-   * Sync health data without automatically claiming streak
-   * Used by HealthKit/Google Fit auto-sync
-   */
-  static async syncHealthDataWithoutClaim(
-    userId: string,
-    data: Array<{ date: string; steps?: number; weight?: number }>
-  ): Promise<void> {
-    // This method is just a marker - actual sync is handled by existing bulk-sync endpoint
-    // The key is that bulk-sync should NOT call claimStreak() automatically
-    console.log(
-      `[StreakClaimingService.syncHealthDataWithoutClaim] Synced ${data.length} days for user ${userId}`
-    );
+  // ==========================================================================
+  // CALCULATION HELPERS
+  // ==========================================================================
+
+  /** Current streak derived from claims, anchored on the user's timezone. */
+  static async calculateCurrentStreak(userId: string, timezone?: string): Promise<number> {
+    const tz = timezone || (await this.getLastKnownTimezone(userId)) || 'UTC';
+    const claimDates = await this.getClaimDates(userId);
+    return calculateStreak(claimDates, localToday(tz));
   }
 
-  // ============================================================================
-  // STREAK CALCULATION & CHECKING
-  // ============================================================================
-
-  /**
-   * Calculate user's current streak based on claims
-   */
-  static async calculateCurrentStreak(userId: string): Promise<number> {
+  /** All claim dates for the last two years as a Set of YYYY-MM-DD. */
+  private static async getClaimDates(userId: string): Promise<Set<string>> {
     const supabaseAdmin = createAdminSupabase();
-
-    // Get all claims ordered by date descending
     const { data: claims } = await supabaseAdmin
       .from('streak_claims')
       .select('claim_date')
       .eq('user_id', userId)
+      .gte('claim_date', addDays(localToday('UTC'), -730))
       .order('claim_date', { ascending: false })
-      .limit(365); // Only check last year
+      .limit(732); // one row per day max — hard bound on the payload
+    return new Set((claims || []).map(c => c.claim_date));
+  }
 
-    if (!claims || claims.length === 0) {
-      return 0;
-    }
-
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    let streak = 0;
-    let currentDate = today;
-
-    for (const claim of claims) {
-      const claimDate = new Date(claim.claim_date);
-      claimDate.setHours(0, 0, 0, 0);
-
-      const daysDiff = Math.floor(
-        (currentDate.getTime() - claimDate.getTime()) / (24 * 60 * 60 * 1000)
-      );
-
-      if (daysDiff === 0 || daysDiff === 1) {
-        streak++;
-        currentDate = claimDate;
-      } else {
-        break; // Streak is broken
-      }
-    }
-
-    return streak;
+  /** Timezone of the most recent claim — best available signal for crons. */
+  private static async getLastKnownTimezone(userId: string): Promise<string | null> {
+    const supabaseAdmin = createAdminSupabase();
+    const { data } = await supabaseAdmin
+      .from('streak_claims')
+      .select('timezone')
+      .eq('user_id', userId)
+      .order('claim_date', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    return data?.timezone || null;
   }
 
   /**
-   * Check if streak is broken and handle auto-shields
-   * Called by daily cron job
+   * Denormalize the derived streak into engagement_streaks (fast reads,
+   * legacy clients) and append the history row + momentum ping for real
+   * claims. Never throws — the claim itself already succeeded.
    */
-  static async checkAndBreakStreak(userId: string): Promise<boolean> {
+  private static async syncStreakRecord(
+    userId: string,
+    currentStreak: number,
+    claimDateStr: string | null,
+    claimId: string | null
+  ): Promise<void> {
     const supabaseAdmin = createAdminSupabase();
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const yesterday = new Date(today);
-    yesterday.setDate(yesterday.getDate() - 1);
-    const yesterdayStr = formatDateYYYYMMDD(yesterday);
+    try {
+      const { data: record } = await supabaseAdmin
+        .from('engagement_streaks')
+        .select('longest_streak, total_claims, paused, current_streak')
+        .eq('user_id', userId)
+        .maybeSingle();
 
-    // Check if user claimed yesterday
-    const { data: yesterdayClaim } = await supabaseAdmin
-      .from('streak_claims')
-      .select('id')
-      .eq('user_id', userId)
-      .eq('claim_date', yesterdayStr)
-      .single();
+      const updates: Record<string, unknown> = {
+        user_id: userId,
+        // Paused streaks keep their stored value — the paused gap has no
+        // claims, so a recompute would wrongly collapse the number that
+        // resumeStreak's bridge is going to preserve.
+        current_streak: record?.paused ? record.current_streak : currentStreak,
+        longest_streak: Math.max(currentStreak, record?.longest_streak || 0),
+      };
+      if (claimDateStr) {
+        updates.last_engagement_date = claimDateStr;
+        updates.last_claim_date = claimDateStr;
+        updates.total_claims = (record?.total_claims || 0) + 1;
+      }
 
-    if (yesterdayClaim) {
-      return false; // Streak not broken
+      await supabaseAdmin.from('engagement_streaks').upsert(updates, { onConflict: 'user_id' });
+
+      if (claimDateStr) {
+        const { error: activityError } = await supabaseAdmin.from('engagement_activities').insert({
+          user_id: userId,
+          activity_date: claimDateStr,
+          activity_type: 'circle_checkin',
+          reference_id: claimId,
+        });
+        if (activityError && activityError.code !== '23505') {
+          console.error('[syncStreakRecord] activity insert error:', activityError);
+        }
+        try {
+          await MomentumService.checkIn(userId);
+        } catch (momentumError) {
+          console.error('[syncStreakRecord] momentum check-in failed (non-blocking):', momentumError);
+        }
+      }
+    } catch (e: any) {
+      console.error('[syncStreakRecord] error:', e.message);
     }
-
-    // Check if user has available shields
-    const shields = await this.getAvailableShields(userId);
-    if (shields.total > 0) {
-      // Auto-apply shield
-      await this.activateFreeze(userId, yesterday);
-      console.log(`[StreakClaimingService.checkAndBreakStreak] Auto-applied shield for user ${userId}`);
-      return false;
-    }
-
-    // Streak is broken - reset
-    await supabaseAdmin
-      .from('engagement_streaks')
-      .update({
-        current_streak: 0,
-      })
-      .eq('user_id', userId);
-
-    console.log(`[StreakClaimingService.checkAndBreakStreak] Streak broken for user ${userId}`);
-    return true;
   }
 }

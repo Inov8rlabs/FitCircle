@@ -26,8 +26,11 @@ export async function POST(request: NextRequest) {
     const user = await requireMobileAuth(request);
     const supabaseAdmin = createAdminSupabase();
 
+    // Honour the device's local timezone so "today" is the user's today.
+    const timezone = request.headers.get('x-client-timezone') || undefined;
+
     // Use a freeze
-    const result = await applyFreeze(user.id, supabaseAdmin);
+    const result = await applyFreeze(user.id, supabaseAdmin, timezone);
 
     const statusCode = result.success ? 200 : 400;
 

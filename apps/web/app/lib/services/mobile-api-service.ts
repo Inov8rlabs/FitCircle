@@ -3,6 +3,7 @@ import jwt from 'jsonwebtoken';
 import { createAdminSupabase } from '../supabase-admin';
 
 import { EngagementStreakService } from './engagement-streak-service';
+import { StreakClaimingService } from './streak-claiming-service';
 import { MetricStreakService } from './metric-streak-service';
 
 // ============================================================================
@@ -520,6 +521,7 @@ export class MobileAPIService {
       is_override?: boolean;
       skip_streak_tracking?: boolean;
       is_public?: boolean;
+      timezone?: string;
     }
   ): Promise<any> {
     const supabaseAdmin = createAdminSupabase();
@@ -751,32 +753,27 @@ export class MobileAPIService {
         );
       }
 
-      // Also create a streak_claims record for manual data entry.
-      // This ensures claim-based streak calculation includes days where
-      // users submitted data through upsertDailyTracking (e.g., web app, mobile manual entry).
-      // Uses upsert to be idempotent - if claimStreak was already called, this is a no-op.
+      // Claim the streak day for manual data entry through the CANONICAL
+      // claim path so milestones and earned shields are awarded. (The old
+      // raw streak_claims upsert here silently skipped both — and made the
+      // route-level claimStreak call a no-op because the day looked
+      // "already claimed".)
       if (successCount > 0) {
         try {
-          await supabaseAdmin.from('streak_claims').upsert(
-            {
-              user_id: userId,
-              claim_date: trackingDate,
-              claimed_at: new Date().toISOString(),
-              claim_method: 'manual_entry' as const,
-              timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-              health_data_synced: data.weight_kg !== undefined || data.steps !== undefined,
-              metadata: {
-                source: 'upsert_daily_tracking',
-                has_weight: data.weight_kg !== undefined,
-                has_steps: data.steps !== undefined,
-                has_mood: data.mood_score !== undefined,
-              },
-            },
-            { onConflict: 'user_id,claim_date' }
+          await StreakClaimingService.claimStreak(
+            userId,
+            trackingDate,
+            data.timezone || 'UTC',
+            'manual_entry'
           );
-        } catch (claimError) {
-          console.error('[upsertDailyTracking] Error creating streak_claims record:', claimError);
-          // Non-blocking - tracking data was saved
+        } catch (claimError: any) {
+          // Expected, non-blocking cases: already claimed, or a backfill
+          // outside the retroactive window (old edits shouldn't claim
+          // streaks — that's the window policy, not an error).
+          const expected = ['ALREADY_CLAIMED', 'TOO_OLD', 'FUTURE_DATE', 'CLAIM_NOT_ALLOWED'];
+          if (!expected.includes(claimError?.code)) {
+            console.error('[upsertDailyTracking] Error claiming streak:', claimError);
+          }
         }
       }
     } catch (streakError) {
