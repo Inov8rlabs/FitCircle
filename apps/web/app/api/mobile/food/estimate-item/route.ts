@@ -3,6 +3,7 @@ import { z } from 'zod';
 
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { NutritionIntelligenceService } from '@/lib/services/nutrition-intelligence-service';
+import { UpgradeRequiredError } from '@/lib/services/usage-service';
 
 // LLM parse can exceed the platform default function timeout; give it room.
 export const maxDuration = 60;
@@ -83,6 +84,27 @@ export async function POST(request: NextRequest) {
         error: null,
       });
     } catch (estimateError: any) {
+      // Free-tier quota hit (gate live) → 429 UPGRADE_REQUIRED, the contextual paywall trigger.
+      if (estimateError instanceof UpgradeRequiredError) {
+        return NextResponse.json(
+          {
+            success: false,
+            data: null,
+            error: {
+              code: 'UPGRADE_REQUIRED',
+              message: `You've used your ${estimateError.limit} free AI estimates today — go Pro for unlimited.`,
+              details: {
+                feature: estimateError.feature,
+                used: estimateError.used,
+                limit: estimateError.limit,
+              },
+              timestamp: new Date().toISOString(),
+            },
+            meta: { requestTime: Date.now() - startTime },
+          },
+          { status: 429 }
+        );
+      }
       // Per-user daily soft cap hit on paid parses (§9.2) → 429 with a friendly message.
       if (estimateError?.message === 'RateLimited') {
         return NextResponse.json(

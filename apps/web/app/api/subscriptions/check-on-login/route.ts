@@ -31,10 +31,12 @@ export async function POST() {
       });
     }
 
-    // Determine if user has active subscription
+    // Determine if user has active subscription. Trialing and past_due (billing
+    // grace) both retain access; only expiry/cancellation ends it.
+    const ACTIVE_STATUSES = ['active', 'trialing', 'past_due'];
     const hasActiveSubscription =
       profile?.subscription_tier !== 'free' &&
-      profile?.subscription_status === 'active' &&
+      ACTIVE_STATUSES.includes(profile?.subscription_status ?? '') &&
       (!profile?.subscription_expires_at || new Date(profile.subscription_expires_at) > new Date());
 
     return NextResponse.json({

@@ -1,0 +1,774 @@
+<title>FitCircle Pro — Subscription Revenue Model</title>
+<style>
+  :root {
+    --page: #f7f9f8;
+    --surface: #fcfcfb;
+    --surface-2: #f0f3f1;
+    --ink: #0c0f0e;
+    --ink-2: #4e5450;
+    --ink-3: #868b86;
+    --grid: #e2e4e0;
+    --baseline: #c2c5c0;
+    --hairline: rgba(12, 15, 14, 0.10);
+    --accent: #199e70;
+    --accent-ink: #0e6b4a;
+    --s-monthly: #2a78d6;
+    --s-annual: #1baf7a;
+    --s-lifetime: #eda100;
+    --s-ads: #008300;
+    --good: #0ca30c;
+    --warning: #fab219;
+    --critical: #d03b3b;
+    --good-ink: #006300;
+    --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
+    --sans: system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --page: #0e100f;
+      --surface: #1a1a19;
+      --surface-2: #222423;
+      --ink: #f2f4f2;
+      --ink-2: #c0c5c0;
+      --ink-3: #8a8f8a;
+      --grid: #2c2c2a;
+      --baseline: #383835;
+      --hairline: rgba(255, 255, 255, 0.10);
+      --accent: #1baf7a;
+      --accent-ink: #4fd6a4;
+      --s-monthly: #3987e5;
+      --s-annual: #199e70;
+      --s-lifetime: #c98500;
+      --s-ads: #008300;
+      --good-ink: #0ca30c;
+    }
+  }
+  :root[data-theme="light"] {
+    --page: #f7f9f8; --surface: #fcfcfb; --surface-2: #f0f3f1;
+    --ink: #0c0f0e; --ink-2: #4e5450; --ink-3: #868b86;
+    --grid: #e2e4e0; --baseline: #c2c5c0; --hairline: rgba(12,15,14,.10);
+    --accent: #199e70; --accent-ink: #0e6b4a;
+    --s-monthly: #2a78d6; --s-annual: #1baf7a; --s-lifetime: #eda100; --s-ads: #008300;
+    --good-ink: #006300;
+  }
+  :root[data-theme="dark"] {
+    --page: #0e100f; --surface: #1a1a19; --surface-2: #222423;
+    --ink: #f2f4f2; --ink-2: #c0c5c0; --ink-3: #8a8f8a;
+    --grid: #2c2c2a; --baseline: #383835; --hairline: rgba(255,255,255,.10);
+    --accent: #1baf7a; --accent-ink: #4fd6a4;
+    --s-monthly: #3987e5; --s-annual: #199e70; --s-lifetime: #c98500; --s-ads: #008300;
+    --good-ink: #0ca30c;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--page); color: var(--ink);
+    font-family: var(--sans); font-size: 14px; line-height: 1.45;
+  }
+  .wrap { max-width: 1240px; margin: 0 auto; padding: 24px 20px 64px; }
+
+  header.top { display: flex; flex-wrap: wrap; align-items: baseline; gap: 12px 20px; margin-bottom: 6px; }
+  .brand { font-size: 12px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--accent-ink); }
+  h1 { font-size: 22px; font-weight: 650; margin: 2px 0 0; letter-spacing: -0.01em; text-wrap: balance; }
+  .subtitle { color: var(--ink-2); font-size: 13px; max-width: 68ch; margin: 4px 0 18px; }
+
+  .scenarios { display: flex; gap: 8px; margin: 0 0 20px; flex-wrap: wrap; align-items: center; }
+  .scenarios .lbl { font-size: 11px; letter-spacing: .07em; text-transform: uppercase; color: var(--ink-3); margin-right: 4px; }
+  .chip {
+    font: 600 12.5px var(--sans); padding: 6px 14px; border-radius: 999px;
+    border: 1px solid var(--hairline); background: var(--surface); color: var(--ink-2); cursor: pointer;
+  }
+  .chip:hover { border-color: var(--accent); color: var(--ink); }
+  .chip.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .chip:focus-visible, button:focus-visible, input:focus-visible, summary:focus-visible {
+    outline: 2px solid var(--accent); outline-offset: 2px;
+  }
+
+  .layout { display: grid; grid-template-columns: 296px 1fr; gap: 20px; align-items: start; }
+  @media (max-width: 900px) { .layout { grid-template-columns: 1fr; } }
+
+  /* ---------- assumptions rail ---------- */
+  .rail { display: flex; flex-direction: column; gap: 10px; position: sticky; top: 16px; }
+  @media (max-width: 900px) { .rail { position: static; } }
+  details.group {
+    background: var(--surface); border: 1px solid var(--hairline); border-radius: 10px; overflow: hidden;
+  }
+  details.group summary {
+    cursor: pointer; list-style: none; padding: 10px 14px;
+    font-size: 11.5px; font-weight: 650; letter-spacing: .07em; text-transform: uppercase; color: var(--ink-2);
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  details.group summary::-webkit-details-marker { display: none; }
+  details.group summary::after { content: "+"; color: var(--ink-3); font-weight: 500; }
+  details.group[open] summary::after { content: "–"; }
+  .fields { padding: 4px 14px 14px; display: flex; flex-direction: column; gap: 12px; }
+  .field label { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; font-size: 12.5px; color: var(--ink-2); }
+  .field .val { font: 600 12.5px var(--mono); color: var(--ink); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .field input[type=range] { width: 100%; margin: 6px 0 0; accent-color: var(--accent); }
+  .field .note { font-size: 11px; color: var(--ink-3); margin-top: 2px; }
+  .mixrow { display: flex; gap: 6px; font-size: 11px; color: var(--ink-3); }
+
+  /* ---------- main column ---------- */
+  .main { display: flex; flex-direction: column; gap: 20px; min-width: 0; }
+  .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+  .tile { background: var(--surface); border: 1px solid var(--hairline); border-radius: 10px; padding: 12px 14px; }
+  .tile .k { font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); }
+  .tile .v { font: 650 22px/1.15 var(--sans); margin-top: 4px; }
+  .tile .d { font-size: 11.5px; color: var(--ink-2); margin-top: 2px; }
+  .tile .d.up { color: var(--good-ink); }
+  .tile .d.bad { color: var(--critical); }
+
+  .card { background: var(--surface); border: 1px solid var(--hairline); border-radius: 12px; padding: 16px 18px; }
+  .card h2 { font-size: 14.5px; font-weight: 650; margin: 0 0 2px; }
+  .card .sub { font-size: 12px; color: var(--ink-3); margin: 0 0 10px; }
+  .chartbox { position: relative; }
+  .chartbox svg { display: block; width: 100%; height: auto; }
+  .legend { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 8px; font-size: 12px; color: var(--ink-2); }
+  .legend .sw { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 6px; vertical-align: -1px; }
+  .tooltip {
+    position: absolute; pointer-events: none; background: var(--surface); border: 1px solid var(--hairline);
+    border-radius: 8px; padding: 8px 10px; font-size: 12px; box-shadow: 0 4px 16px rgba(0,0,0,.18);
+    display: none; z-index: 5; min-width: 170px;
+  }
+  .tooltip .t { font-weight: 650; margin-bottom: 4px; }
+  .tooltip .row { display: flex; justify-content: space-between; gap: 14px; font-variant-numeric: tabular-nums; font-family: var(--mono); font-size: 11.5px; }
+  .tooltip .row .n { font-family: var(--sans); color: var(--ink-2); }
+
+  .duo { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+  @media (max-width: 900px) { .duo { grid-template-columns: 1fr; } }
+
+  table { border-collapse: collapse; width: 100%; font-size: 12.5px; }
+  th, td { text-align: right; padding: 6px 10px; border-bottom: 1px solid var(--grid); font-variant-numeric: tabular-nums; }
+  td { font-family: var(--mono); font-size: 11.5px; }
+  th { font-family: var(--sans); color: var(--ink-3); font-weight: 600; font-size: 11px; letter-spacing: .05em; text-transform: uppercase; }
+  th:first-child, td:first-child { text-align: left; }
+  .tablewrap { overflow-x: auto; }
+
+  .pill { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; padding: 3px 10px; border-radius: 999px; }
+  .pill.ok { background: color-mix(in srgb, var(--good) 14%, transparent); color: var(--good-ink); }
+  .pill.miss { background: color-mix(in srgb, var(--critical) 12%, transparent); color: var(--critical); }
+  .pill.warn { background: color-mix(in srgb, var(--warning) 16%, transparent); color: var(--ink); }
+
+  details.vpanel { border: 1px solid var(--hairline); border-radius: 10px; background: var(--surface); }
+  details.vpanel summary { cursor: pointer; padding: 10px 16px; font-size: 12.5px; font-weight: 600; color: var(--ink-2); }
+  .vlist { padding: 0 16px 14px; display: flex; flex-direction: column; gap: 6px; font-size: 12.5px; }
+  .vlist .vrow { display: flex; gap: 8px; align-items: baseline; }
+  .vlist .vrow .mark { font-weight: 700; }
+  .vlist .vrow.pass .mark { color: var(--good-ink); }
+  .vlist .vrow.fail .mark { color: var(--critical); }
+  .vlist .detail { color: var(--ink-3); font-family: var(--mono); font-size: 11px; }
+
+  .foot { color: var(--ink-3); font-size: 11.5px; max-width: 90ch; margin-top: 8px; }
+  .foot b { color: var(--ink-2); }
+  @media (prefers-reduced-motion: no-preference) {
+    .tile .v { transition: color .15s ease; }
+  }
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <div>
+      <div class="brand">FitCircle · Business Model</div>
+      <h1>Pro subscription revenue calculator</h1>
+    </div>
+  </header>
+  <p class="subtitle">
+    24-month bottoms-up model for FitCircle Pro ($9.99/mo · $59.99/yr · $149.99 lifetime, 7-day trial).
+    Defaults come from verified benchmarks (RevenueCat SOSA 2025/26, Adapty 2026) and the store fee
+    structures in effect Aug 2026. Every input is adjustable — the model recomputes live.
+  </p>
+
+  <div class="scenarios" role="group" aria-label="Scenario presets">
+    <span class="lbl">Scenario</span>
+    <button class="chip" data-scenario="conservative">Conservative</button>
+    <button class="chip active" data-scenario="base">Base</button>
+    <button class="chip" data-scenario="gtm">GTM target</button>
+    <span id="customFlag" class="lbl" style="display:none">· custom edits applied</span>
+  </div>
+
+  <div class="layout">
+    <!-- ============ assumptions rail ============ -->
+    <aside class="rail" id="rail" aria-label="Model assumptions"></aside>
+
+    <!-- ============ outputs ============ -->
+    <div class="main">
+      <div class="tiles" id="tiles"></div>
+
+      <div class="card">
+        <h2>Net revenue per month, by stream</h2>
+        <p class="sub">After store / processor / RevenueCat fees. Annual plans recognized at 1/12 per month; lifetime shown as cash in month of purchase.</p>
+        <div class="chartbox" id="revChart"></div>
+        <div class="legend" id="revLegend"></div>
+      </div>
+
+      <div class="card">
+        <h2>Paying subscribers, by plan</h2>
+        <p class="sub">Active paid accounts at month end. Monthly churns per month; annual renews (or not) at each anniversary.</p>
+        <div class="chartbox" id="subChart"></div>
+        <div class="legend" id="subLegend"></div>
+      </div>
+
+      <div class="duo">
+        <div class="card">
+          <h2>Lifetime value per plan (net)</h2>
+          <p class="sub">Closed-form: monthly = net price ÷ churn; annual = first year + renewals at full price.</p>
+          <div class="chartbox" id="ltvChart"></div>
+        </div>
+        <div class="card">
+          <h2>What $59.99 nets, per platform</h2>
+          <p class="sub">One annual subscription after each platform's cut (before the RevenueCat 1%).</p>
+          <div class="tablewrap"><table id="feeTable"></table></div>
+          <p class="sub" id="feeNote" style="margin-top:10px"></p>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>GTM feasibility check <span id="gtmPill"></span></h2>
+        <p class="sub">LAUNCH-PLAN target: 10,000 users and $50K MRR within 90 days. What the current assumptions produce at month 3, and the conversion the target implies.</p>
+        <div class="tablewrap"><table id="gtmTable"></table></div>
+      </div>
+
+      <div class="card">
+        <h2>Monthly detail</h2>
+        <p class="sub">Full simulation table — the numbers behind the charts.</p>
+        <div class="tablewrap"><table id="detailTable"></table></div>
+      </div>
+
+      <details class="vpanel">
+        <summary>Model self-checks <span id="vSummary"></span></summary>
+        <div class="vlist" id="vList"></div>
+      </details>
+
+      <p class="foot">
+        <b>Reading the model.</b> Installs grow monthly and are amplified by the viral factor (÷(1−K)).
+        Free users retain along a D30-anchored decay curve; a share starts the 7-day trial (mostly Day-0),
+        and trials convert at the trial→paid rate. Annual/monthly mix applies to each paid cohort; the
+        launch-window promo prices the first year of annual cohorts, which renew at full list. Ads monetize
+        free DAU only (Pro is ad-free). AI cost per user is tracked as a margin check, not netted from revenue.
+        Fees: Apple Small Business 15% · Google Play ≈15% effective (10% service + 5% billing, post-June-2026 US) ·
+        Stripe 2.9% + 30¢ + 0.5% Billing · RevenueCat 1% of tracked revenue past $2.5K MTR.
+      </p>
+    </div>
+  </div>
+</div>
+
+<script>
+"use strict";
+
+/* ================= parameter definitions ================= */
+const P = [
+  { g: "Growth", id: "installs0",  n: "Installs in month 1",        min: 500, max: 100000, step: 500, fmt: "int",  note: "Organic + paid, before viral amplification" },
+  { g: "Growth", id: "growth",     n: "Install growth / month",     min: 0, max: 40, step: 1, fmt: "pct" },
+  { g: "Growth", id: "kfactor",    n: "Viral K-factor",             min: 0, max: 0.9, step: 0.05, fmt: "num", note: "GTM target: 0.4 at launch → 0.7" },
+  { g: "Growth", id: "d30",        n: "D30 retention",              min: 2, max: 40, step: 1, fmt: "pct", note: "GTM gate: ≥ 10%" },
+  { g: "Growth", id: "decay",      n: "Retention decay / month",    min: 50, max: 98, step: 1, fmt: "pct", note: "Share of last month's retained users kept" },
+  { g: "Growth", id: "dauMau",     n: "DAU / MAU",                  min: 5, max: 60, step: 1, fmt: "pct" },
+
+  { g: "Funnel", id: "installTrial", n: "Install → trial",          min: 0.5, max: 15, step: 0.1, fmt: "pct", note: "H&F median 6.9% (top quartile >23%)" },
+  { g: "Funnel", id: "trialPaid",    n: "Trial → paid",             min: 5, max: 70, step: 1, fmt: "pct", note: "H&F median 37.7%" },
+  { g: "Funnel", id: "drip",         n: "Free → paid drip / month", min: 0, max: 2, step: 0.05, fmt: "pct", note: "Later conversions from the free base" },
+  { g: "Funnel", id: "annualShare",  n: "Annual share of new subs", min: 20, max: 90, step: 1, fmt: "pct", note: "Category: 67–68% annual" },
+  { g: "Funnel", id: "mixIos",       n: "Platform mix — iOS",       min: 0, max: 100, step: 5, fmt: "pct" },
+  { g: "Funnel", id: "mixAndroid",   n: "Platform mix — Android",   min: 0, max: 100, step: 5, fmt: "pct", note: "Web = remainder" },
+
+  { g: "Pricing & promo", id: "priceM",     n: "Monthly price",             min: 2.99, max: 19.99, step: 1, fmt: "usd" },
+  { g: "Pricing & promo", id: "priceA",     n: "Annual price",              min: 19.99, max: 119.99, step: 5, fmt: "usd" },
+  { g: "Pricing & promo", id: "priceL",     n: "Lifetime price",            min: 49, max: 299, step: 10, fmt: "usd" },
+  { g: "Pricing & promo", id: "lifeTake",   n: "Lifetime take (launch win.)", min: 0, max: 15, step: 0.5, fmt: "pct", note: "% of new paid choosing lifetime, months 1–{lifeWindow}" },
+  { g: "Pricing & promo", id: "lifeWindow", n: "Lifetime window (months)",  min: 0, max: 6, step: 1, fmt: "int" },
+  { g: "Pricing & promo", id: "promoPrice", n: "Promo: annual first year",  min: 19.99, max: 59.99, step: 5, fmt: "usd", note: "e.g. launch $39.99, renews at list" },
+  { g: "Pricing & promo", id: "promoWindow",n: "Promo window (months)",     min: 0, max: 12, step: 1, fmt: "int", note: "0 = promo off" },
+  { g: "Pricing & promo", id: "promoUptake",n: "Promo uptake of annual buyers", min: 0, max: 100, step: 5, fmt: "pct" },
+
+  { g: "Churn", id: "churnM", n: "Monthly-plan churn / month", min: 1, max: 20, step: 0.5, fmt: "pct" },
+  { g: "Churn", id: "renewA", n: "Annual renewal rate",        min: 10, max: 80, step: 1, fmt: "pct" },
+
+  { g: "Fees & costs", id: "feeApple",   n: "Apple fee",            min: 0, max: 30, step: 1, fmt: "pct", note: "Small Business Program: 15%" },
+  { g: "Fees & costs", id: "feeGoogle",  n: "Google Play fee",      min: 0, max: 30, step: 1, fmt: "pct", note: "Post-June-2026: ≈15% effective" },
+  { g: "Fees & costs", id: "feeWebPct",  n: "Stripe % (incl. Billing)", min: 0, max: 8, step: 0.1, fmt: "pct", note: "2.9% + 0.5% Billing (+ 30¢/txn applied)" },
+  { g: "Fees & costs", id: "rcOn",       n: "RevenueCat 1% past $2.5K MTR", min: 0, max: 1, step: 1, fmt: "bool" },
+  { g: "Fees & costs", id: "aiFree",     n: "AI cost / free MAU / mo", min: 0, max: 2, step: 0.05, fmt: "usd", note: "5 parses + 5 Fitzy msgs/day cap" },
+  { g: "Fees & costs", id: "aiPro",      n: "AI cost / Pro sub / mo",  min: 0, max: 6, step: 0.25, fmt: "usd" },
+  { g: "Fees & costs", id: "ecpm",       n: "Ads eCPM (free tier)",    min: 0, max: 30, step: 1, fmt: "usd" },
+  { g: "Fees & costs", id: "impsDau",    n: "Ad impressions / DAU / day", min: 0, max: 10, step: 0.5, fmt: "num" },
+  { g: "Fees & costs", id: "cpi",        n: "Blended CPI (paid UA)",   min: 0.5, max: 10, step: 0.25, fmt: "usd", note: "GTM guardrail: ≤$3.50 iOS / ≤$2 Android" },
+];
+
+const SCENARIOS = {
+  conservative: {
+    installs0: 4000, growth: 6, kfactor: 0.2, d30: 8, decay: 82, dauMau: 20,
+    installTrial: 2, trialPaid: 30, drip: 0.1, annualShare: 55, mixIos: 55, mixAndroid: 30,
+    priceM: 9.99, priceA: 59.99, priceL: 149.99, lifeTake: 2, lifeWindow: 2,
+    promoPrice: 39.99, promoWindow: 2, promoUptake: 60,
+    churnM: 8, renewA: 35,
+    feeApple: 15, feeGoogle: 15, feeWebPct: 3.4, rcOn: 1,
+    aiFree: 0.35, aiPro: 1.5, ecpm: 6, impsDau: 2, cpi: 3.5,
+  },
+  base: {
+    installs0: 12000, growth: 10, kfactor: 0.4, d30: 10, decay: 85, dauMau: 25,
+    installTrial: 4, trialPaid: 38, drip: 0.2, annualShare: 65, mixIos: 60, mixAndroid: 25,
+    priceM: 9.99, priceA: 59.99, priceL: 149.99, lifeTake: 3, lifeWindow: 3,
+    promoPrice: 39.99, promoWindow: 3, promoUptake: 70,
+    churnM: 6, renewA: 45,
+    feeApple: 15, feeGoogle: 15, feeWebPct: 3.4, rcOn: 1,
+    aiFree: 0.40, aiPro: 2.0, ecpm: 8, impsDau: 3, cpi: 3,
+  },
+  gtm: {
+    installs0: 30000, growth: 8, kfactor: 0.7, d30: 12, decay: 88, dauMau: 30,
+    installTrial: 6.9, trialPaid: 42, drip: 0.3, annualShare: 68, mixIos: 65, mixAndroid: 20,
+    priceM: 9.99, priceA: 59.99, priceL: 149.99, lifeTake: 4, lifeWindow: 3,
+    promoPrice: 39.99, promoWindow: 3, promoUptake: 75,
+    churnM: 5, renewA: 55,
+    feeApple: 15, feeGoogle: 15, feeWebPct: 3.4, rcOn: 1,
+    aiFree: 0.45, aiPro: 2.5, ecpm: 9, impsDau: 3, cpi: 2.5,
+  },
+};
+
+let state = { ...SCENARIOS.base };
+let activeScenario = "base";
+
+/* ================= model ================= */
+const MONTHS = 24;
+
+function pct(v) { return v / 100; }
+
+function runModel(s, horizon = MONTHS) {
+  const out = [];
+  const amp = 1 / (1 - Math.min(s.kfactor, 0.95));
+  const cohortsFree = [];              // install counts per month
+  let monthlySubs = 0;
+  const annualCohorts = [];            // {count, age, promoShare}
+  let lifetimeOwners = 0;
+  let cumInstalls = 0, cumSignups = 0;
+
+  for (let m = 1; m <= horizon; m++) {
+    const installs = s.installs0 * Math.pow(1 + pct(s.growth), m - 1) * amp;
+    cumInstalls += installs;
+    cohortsFree.push(installs);
+    cumSignups += installs;
+
+    // MAU: retention curve ret(0)=1 (install month), ret(1)=D30, ret(k)=D30*decay^(k-1)
+    let mau = 0;
+    for (let c = 0; c < cohortsFree.length; c++) {
+      const age = cohortsFree.length - 1 - c;
+      const ret = age === 0 ? 1 : pct(s.d30) * Math.pow(pct(s.decay), age - 1);
+      mau += cohortsFree[c] * ret;
+    }
+
+    // conversions
+    const trials = installs * pct(s.installTrial);
+    let newPaid = trials * pct(s.trialPaid) + mau * pct(s.drip);
+    const inLifeWindow = m <= s.lifeWindow;
+    const newLifetime = inLifeWindow ? newPaid * pct(s.lifeTake) : 0;
+    newPaid -= newLifetime;
+    const newAnnual = newPaid * pct(s.annualShare);
+    const newMonthly = newPaid - newAnnual;
+
+    // stocks
+    monthlySubs = monthlySubs * (1 - pct(s.churnM)) + newMonthly;
+    for (const c of annualCohorts) {
+      c.age += 1;
+      if (c.age > 0 && c.age % 12 === 0) { c.count *= pct(s.renewA); c.promoShare = 0; }
+    }
+    annualCohorts.push({ count: newAnnual, age: 0, promoShare: m <= s.promoWindow ? pct(s.promoUptake) : 0 });
+    lifetimeOwners += newLifetime;
+    const annualSubs = annualCohorts.reduce((a, c) => a + c.count, 0);
+    const paying = monthlySubs + annualSubs + lifetimeOwners;
+
+    // gross revenue (annual recognized /12; lifetime = cash this month)
+    const revMonthly = monthlySubs * s.priceM;
+    let revAnnual = 0;
+    for (const c of annualCohorts) {
+      const effPrice = c.promoShare > 0
+        ? c.promoShare * s.promoPrice + (1 - c.promoShare) * s.priceA
+        : s.priceA;
+      revAnnual += c.count * effPrice / 12;
+    }
+    const revLifetime = newLifetime * s.priceL;
+
+    // ads: free DAU only
+    const freeMau = Math.max(mau - paying, 0);
+    const freeDau = freeMau * pct(s.dauMau);
+    const revAds = freeDau * s.impsDau * (s.ecpm / 1000) * 30.4;
+
+    // fees on subscription revenue (per platform mix); ads have no store cut
+    const mixWeb = Math.max(0, 100 - s.mixIos - s.mixAndroid);
+    const storeFee = pct(s.mixIos) * pct(s.feeApple) + pct(s.mixAndroid) * pct(s.feeGoogle) + (mixWeb / 100) * pct(s.feeWebPct);
+    const subGross = revMonthly + revAnnual + revLifetime;
+    // Stripe 30¢/txn on the web share of new transactions (rough: new subs + monthly renewals on web)
+    const webTxns = (mixWeb / 100) * (newPaid + newLifetime + monthlySubs);
+    const txnFees = webTxns * 0.30;
+    const rcFee = (s.rcOn && subGross > 2500) ? subGross * 0.01 : 0;
+    const subNet = subGross * (1 - storeFee) - txnFees - rcFee;
+
+    const grossMrr = revMonthly + revAnnual;                 // recurring only
+    const netMrr = grossMrr * (1 - storeFee) - (s.rcOn && subGross > 2500 ? grossMrr * 0.01 : 0);
+    const aiCost = freeMau * s.aiFree + paying * s.aiPro;
+
+    out.push({
+      m, installs, mau, freeMau, freeDau, trials, newPaid: newPaid + newLifetime,
+      monthlySubs, annualSubs, lifetimeOwners, paying,
+      revMonthly, revAnnual, revLifetime, revAds, subGross, subNet,
+      netMonthly: revMonthly * (1 - storeFee), netAnnual: revAnnual * (1 - storeFee),
+      netLifetime: revLifetime * (1 - storeFee), netAds: revAds,
+      grossMrr, netMrr, aiCost, storeFee, cumInstalls,
+    });
+  }
+  return out;
+}
+
+function ltvs(s) {
+  const mixWeb = Math.max(0, 100 - s.mixIos - s.mixAndroid);
+  const storeFee = pct(s.mixIos) * pct(s.feeApple) + pct(s.mixAndroid) * pct(s.feeGoogle) + (mixWeb / 100) * pct(s.feeWebPct);
+  const rc = s.rcOn ? 0.01 : 0;
+  const netFactor = (1 - storeFee) * (1 - rc);
+  const netM = s.priceM * netFactor;
+  const netA = s.priceA * netFactor;
+  const netPromoA = s.promoPrice * netFactor;
+  const ltvMonthly = netM / pct(s.churnM);
+  const r = pct(s.renewA);
+  const ltvAnnual = netA + netA * r / (1 - r);
+  const promoShare = s.promoWindow > 0 ? pct(s.promoUptake) : 0;
+  const firstYear = promoShare * netPromoA + (1 - promoShare) * netA;
+  const ltvAnnualPromo = firstYear + netA * r / (1 - r);
+  const ltvLifetime = s.priceL * netFactor;
+  return { ltvMonthly, ltvAnnual, ltvAnnualPromo, ltvLifetime, netFactor, storeFee };
+}
+
+/* ================= formatting ================= */
+const fmtUsd0 = v => "$" + Math.round(v).toLocaleString("en-US");
+const fmtUsd2 = v => "$" + v.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const fmtInt = v => Math.round(v).toLocaleString("en-US");
+const fmtK = v => v >= 1e6 ? "$" + (v / 1e6).toFixed(2) + "M" : v >= 1e3 ? "$" + (v / 1e3).toFixed(1) + "K" : "$" + Math.round(v);
+const fmtKn = v => v >= 1e6 ? (v / 1e6).toFixed(2) + "M" : v >= 1e3 ? (v / 1e3).toFixed(1) + "K" : Math.round(v).toString();
+
+function fmtParam(p, v) {
+  if (p.fmt === "pct") return v + "%";
+  if (p.fmt === "usd") return fmtUsd2(v);
+  if (p.fmt === "int") return fmtInt(v);
+  if (p.fmt === "bool") return v ? "On" : "Off";
+  return String(v);
+}
+
+/* ================= rail UI ================= */
+function buildRail() {
+  const rail = document.getElementById("rail");
+  rail.innerHTML = "";
+  const groups = [...new Set(P.map(p => p.g))];
+  groups.forEach((g, gi) => {
+    const d = document.createElement("details");
+    d.className = "group";
+    if (gi < 3) d.open = true;
+    const sm = document.createElement("summary");
+    sm.textContent = g;
+    d.appendChild(sm);
+    const box = document.createElement("div");
+    box.className = "fields";
+    P.filter(p => p.g === g).forEach(p => {
+      const f = document.createElement("div");
+      f.className = "field";
+      const lab = document.createElement("label");
+      lab.htmlFor = "in_" + p.id;
+      lab.innerHTML = `<span>${p.n}</span><span class="val" id="val_${p.id}"></span>`;
+      const inp = document.createElement("input");
+      inp.type = "range"; inp.id = "in_" + p.id;
+      inp.min = p.min; inp.max = p.max; inp.step = p.step;
+      inp.value = state[p.id];
+      inp.setAttribute("aria-label", p.n);
+      inp.addEventListener("input", () => {
+        state[p.id] = parseFloat(inp.value);
+        markCustom();
+        render();
+      });
+      f.appendChild(lab); f.appendChild(inp);
+      if (p.note) {
+        const nt = document.createElement("div");
+        nt.className = "note"; nt.textContent = p.note.replace("{lifeWindow}", state.lifeWindow);
+        f.appendChild(nt);
+      }
+      box.appendChild(f);
+    });
+    d.appendChild(box);
+    rail.appendChild(d);
+  });
+}
+
+function syncRail() {
+  P.forEach(p => {
+    const el = document.getElementById("in_" + p.id);
+    const val = document.getElementById("val_" + p.id);
+    if (el) el.value = state[p.id];
+    if (val) val.textContent = fmtParam(p, state[p.id]);
+  });
+}
+
+function markCustom() {
+  document.querySelectorAll(".chip").forEach(c => c.classList.remove("active"));
+  document.getElementById("customFlag").style.display = "inline";
+}
+
+document.querySelectorAll(".chip").forEach(chip => {
+  chip.addEventListener("click", () => {
+    activeScenario = chip.dataset.scenario;
+    state = { ...SCENARIOS[activeScenario] };
+    document.querySelectorAll(".chip").forEach(c => c.classList.toggle("active", c === chip));
+    document.getElementById("customFlag").style.display = "none";
+    syncRail(); render();
+  });
+});
+
+/* ================= charts (hand-rolled SVG) ================= */
+const CW = 860, CH = 260, PAD = { l: 54, r: 12, t: 12, b: 26 };
+
+function stackedArea(elId, legendId, rows, series, yFmt, tooltipTitle) {
+  const box = document.getElementById(elId);
+  const n = rows.length;
+  const totals = rows.map(r => series.reduce((a, s) => a + r[s.key], 0));
+  const yMax = Math.max(...totals) * 1.08 || 1;
+  const x = i => PAD.l + (i / (n - 1)) * (CW - PAD.l - PAD.r);
+  const y = v => PAD.t + (1 - v / yMax) * (CH - PAD.t - PAD.b);
+
+  // grid: 4 hairlines
+  let gridEls = "";
+  for (let gi = 1; gi <= 4; gi++) {
+    const gv = (yMax * gi) / 4, gy = y(gv);
+    gridEls += `<line x1="${PAD.l}" x2="${CW - PAD.r}" y1="${gy}" y2="${gy}" stroke="var(--grid)" stroke-width="1"/>
+      <text x="${PAD.l - 8}" y="${gy + 3.5}" text-anchor="end" font-size="10" fill="var(--ink-3)" font-family="var(--mono)">${yFmt(gv)}</text>`;
+  }
+  // x labels: every 3rd month
+  let xEls = "";
+  for (let i = 0; i < n; i += 3) {
+    xEls += `<text x="${x(i)}" y="${CH - 8}" text-anchor="middle" font-size="10" fill="var(--ink-3)" font-family="var(--mono)">M${rows[i].m}</text>`;
+  }
+
+  // stacked bands, bottom-up; 2px surface-colored stroke separates bands
+  let bands = "";
+  const cum = new Array(n).fill(0);
+  series.forEach(s => {
+    const lower = cum.slice();
+    for (let i = 0; i < n; i++) cum[i] += rows[i][s.key];
+    let topPath = "", areaPath = "";
+    for (let i = 0; i < n; i++) topPath += (i ? "L" : "M") + x(i).toFixed(1) + " " + y(cum[i]).toFixed(1);
+    areaPath = topPath;
+    for (let i = n - 1; i >= 0; i--) areaPath += "L" + x(i).toFixed(1) + " " + y(lower[i]).toFixed(1);
+    areaPath += "Z";
+    bands += `<path d="${areaPath}" fill="${s.color}" fill-opacity="0.92"/>
+              <path d="${topPath}" fill="none" stroke="var(--surface)" stroke-width="2"/>`;
+  });
+
+  const baseline = `<line x1="${PAD.l}" x2="${CW - PAD.r}" y1="${y(0)}" y2="${y(0)}" stroke="var(--baseline)" stroke-width="1"/>`;
+  box.innerHTML = `<svg viewBox="0 0 ${CW} ${CH}" role="img" aria-label="${tooltipTitle} chart">${gridEls}${bands}${baseline}${xEls}
+    <line id="${elId}_cross" x1="0" x2="0" y1="${PAD.t}" y2="${CH - PAD.b}" stroke="var(--ink-3)" stroke-width="1" stroke-dasharray="3 3" visibility="hidden"/>
+  </svg><div class="tooltip" id="${elId}_tip"></div>`;
+
+  const legend = document.getElementById(legendId);
+  legend.innerHTML = series.map(s =>
+    `<span><span class="sw" style="background:${s.color}"></span>${s.name}</span>`).join("") +
+    `<span style="margin-left:auto;color:var(--ink-3)">Total M${rows[n-1].m}: <b style="color:var(--ink)">${yFmt(totals[n-1])}</b></span>`;
+
+  // hover layer
+  const svg = box.querySelector("svg");
+  const tip = document.getElementById(elId + "_tip");
+  const cross = document.getElementById(elId + "_cross");
+  svg.addEventListener("mousemove", ev => {
+    const r = svg.getBoundingClientRect();
+    const px = (ev.clientX - r.left) * (CW / r.width);
+    let i = Math.round(((px - PAD.l) / (CW - PAD.l - PAD.r)) * (n - 1));
+    i = Math.max(0, Math.min(n - 1, i));
+    cross.setAttribute("x1", x(i)); cross.setAttribute("x2", x(i));
+    cross.setAttribute("visibility", "visible");
+    const rowsHtml = series.map(s =>
+      `<div class="row"><span class="n"><span class="sw" style="background:${s.color};width:8px;height:8px;display:inline-block;border-radius:2px;margin-right:5px"></span>${s.name}</span><span>${yFmt(rows[i][s.key])}</span></div>`
+    ).join("");
+    tip.innerHTML = `<div class="t">Month ${rows[i].m}</div>${rowsHtml}
+      <div class="row" style="border-top:1px solid var(--grid);margin-top:4px;padding-top:4px"><span class="n">Total</span><span><b>${yFmt(totals[i])}</b></span></div>`;
+    tip.style.display = "block";
+    const bx = box.getBoundingClientRect();
+    let tx = (ev.clientX - bx.left) + 14;
+    if (tx > bx.width - 200) tx = (ev.clientX - bx.left) - 200;
+    tip.style.left = tx + "px";
+    tip.style.top = Math.max(0, ev.clientY - bx.top - 40) + "px";
+  });
+  svg.addEventListener("mouseleave", () => { tip.style.display = "none"; cross.setAttribute("visibility", "hidden"); });
+}
+
+function ltvBars(elId, items) {
+  const box = document.getElementById(elId);
+  const W = 420, rowH = 44, padL = 118, padR = 66;
+  const H = items.length * rowH + 10;
+  const max = Math.max(...items.map(i => i.v)) * 1.05 || 1;
+  let els = "";
+  items.forEach((it, idx) => {
+    const y0 = 8 + idx * rowH;
+    const w = Math.max(((W - padL - padR) * it.v) / max, 2);
+    // rounded only at the data end (right), flat at baseline
+    const rr = 4;
+    els += `<text x="${padL - 10}" y="${y0 + 17}" text-anchor="end" font-size="12" fill="var(--ink-2)">${it.name}</text>
+      <path d="M${padL} ${y0} H${padL + w - rr} Q${padL + w} ${y0} ${padL + w} ${y0 + rr} V${y0 + 24 - rr} Q${padL + w} ${y0 + 24} ${padL + w - rr} ${y0 + 24} H${padL} Z" fill="${it.color}">
+        <title>${it.name}: ${fmtUsd2(it.v)}</title></path>
+      <text x="${padL + w + 8}" y="${y0 + 17}" font-size="12" font-weight="650" fill="var(--ink)" font-family="var(--mono)">${fmtUsd0(it.v)}</text>`;
+  });
+  els += `<line x1="${padL}" x2="${padL}" y1="4" y2="${H - 4}" stroke="var(--baseline)" stroke-width="1"/>`;
+  box.innerHTML = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Lifetime value by plan">${els}</svg>`;
+}
+
+/* ================= render ================= */
+function render() {
+  syncRail();
+  const s = state;
+  const rows = runModel(s);
+  const L = ltvs(s);
+  const last = rows[rows.length - 1];
+  const m3 = rows[2];
+
+  // KPI tiles
+  const paidRate = last.newPaid / last.installs;
+  const cacPerPaying = paidRate > 0 ? s.cpi / paidRate : Infinity;
+  const promoShare = s.promoWindow > 0 ? pct(s.promoUptake) : 0;
+  const annShare = pct(s.annualShare);
+  const blendedLtv = (1 - annShare) * L.ltvMonthly + annShare * (s.promoWindow > 0 ? L.ltvAnnualPromo : L.ltvAnnual);
+  const ltvCac = blendedLtv / cacPerPaying;
+  const netPerPayerMo = last.paying > 0 ? last.netMrr / (last.monthlySubs + last.annualSubs || 1) : 0;
+  const payback = netPerPayerMo > 0 ? cacPerPaying / netPerPayerMo : Infinity;
+  const aiMarginOk = last.aiCost < last.subNet + last.netAds;
+
+  const tiles = [
+    { k: "Net MRR · month 24", v: fmtK(last.netMrr), d: "gross " + fmtK(last.grossMrr) },
+    { k: "ARR run-rate", v: fmtK(last.netMrr * 12), d: "net of store fees" },
+    { k: "Paying subscribers", v: fmtKn(last.paying), d: fmtKn(last.monthlySubs) + " mo · " + fmtKn(last.annualSubs) + " yr · " + fmtKn(last.lifetimeOwners) + " life" },
+    { k: "Free MAU", v: fmtKn(last.freeMau), d: fmtKn(last.mau) + " total MAU" },
+    { k: "Blended LTV (net)", v: fmtUsd0(blendedLtv), d: "GTM assumption: $60–80", cls: blendedLtv >= 60 ? "up" : "" },
+    { k: "LTV : CAC", v: isFinite(ltvCac) ? ltvCac.toFixed(1) + "×" : "—", d: "CAC/paying " + (isFinite(cacPerPaying) ? fmtUsd0(cacPerPaying) : "—"), cls: ltvCac >= 3 ? "up" : ltvCac < 1 ? "bad" : "" },
+    { k: "Payback", v: isFinite(payback) ? payback.toFixed(1) + " mo" : "—", d: "GTM gate: ≤ 6 months", cls: payback <= 6 ? "up" : "bad" },
+    { k: "AI cost · month 24", v: fmtK(last.aiCost), d: aiMarginOk ? "covered by net revenue" : "exceeds net revenue", cls: aiMarginOk ? "up" : "bad" },
+  ];
+  document.getElementById("tiles").innerHTML = tiles.map(t =>
+    `<div class="tile"><div class="k">${t.k}</div><div class="v">${t.v}</div><div class="d ${t.cls || ""}">${t.d}</div></div>`).join("");
+
+  // charts
+  stackedArea("revChart", "revLegend", rows, [
+    { key: "netMonthly", name: "Monthly plans", color: "var(--s-monthly)" },
+    { key: "netAnnual", name: "Annual plans", color: "var(--s-annual)" },
+    { key: "netLifetime", name: "Lifetime (cash)", color: "var(--s-lifetime)" },
+    { key: "netAds", name: "Ads (free tier)", color: "var(--s-ads)" },
+  ], fmtK, "Net revenue");
+
+  stackedArea("subChart", "subLegend", rows, [
+    { key: "monthlySubs", name: "Monthly", color: "var(--s-monthly)" },
+    { key: "annualSubs", name: "Annual", color: "var(--s-annual)" },
+    { key: "lifetimeOwners", name: "Lifetime", color: "var(--s-lifetime)" },
+  ], fmtKn, "Paying subscribers");
+
+  ltvBars("ltvChart", [
+    { name: "Monthly plan", v: L.ltvMonthly, color: "var(--s-monthly)" },
+    { name: "Annual (list)", v: L.ltvAnnual, color: "var(--s-annual)" },
+    ...(s.promoWindow > 0 ? [{ name: "Annual (promo yr 1)", v: L.ltvAnnualPromo, color: "var(--s-annual)" }] : []),
+    { name: "Lifetime", v: L.ltvLifetime, color: "var(--s-lifetime)" },
+  ]);
+
+  // fee table
+  const feeRows = [
+    { p: "iOS (App Store)", fee: pct(s.feeApple), extra: 0 },
+    { p: "Android (Play)", fee: pct(s.feeGoogle), extra: 0 },
+    { p: "Web (Stripe)", fee: pct(s.feeWebPct), extra: 0.30 },
+  ];
+  document.getElementById("feeTable").innerHTML =
+    `<tr><th>Platform</th><th>Fee</th><th>Net of $${s.priceA}</th><th>vs iOS</th></tr>` +
+    feeRows.map(r => {
+      const net = s.priceA * (1 - r.fee) - r.extra;
+      const iosNet = s.priceA * (1 - pct(s.feeApple));
+      const delta = net - iosNet;
+      return `<tr><td>${r.p}</td><td>${(r.fee * 100).toFixed(1)}%${r.extra ? " + 30¢" : ""}</td><td>${fmtUsd2(net)}</td><td>${delta === 0 ? "—" : (delta > 0 ? "+" : "") + fmtUsd2(delta)}</td></tr>`;
+    }).join("");
+  document.getElementById("feeNote").textContent =
+    `Blended store fee at current platform mix: ${(L.storeFee * 100).toFixed(1)}%` + (s.rcOn ? " · plus RevenueCat 1% past $2.5K MTR." : ".");
+
+  // GTM feasibility
+  const usersAt90 = m3.cumInstalls;
+  const mrrAt90 = m3.netMrr;
+  const hitUsers = usersAt90 >= 10000, hitMrr = mrrAt90 >= 50000;
+  const pill = hitUsers && hitMrr ? `<span class="pill ok">On track</span>` : (hitUsers || hitMrr ? `<span class="pill warn">Partial</span>` : `<span class="pill miss">Off target</span>`);
+  document.getElementById("gtmPill").innerHTML = pill;
+  // implied: what install->paid & installs would $50K net MRR at m3 require, holding prices/mix?
+  const perPayerMrr = (1 - annShare) * s.priceM * L.netFactor + annShare * ((promoShare * s.promoPrice + (1 - promoShare) * s.priceA) / 12) * L.netFactor;
+  const impliedPayers = 50000 / perPayerMrr;
+  document.getElementById("gtmTable").innerHTML =
+    `<tr><th>Metric</th><th>Target (day 90)</th><th>Model @ month 3</th><th>Status</th></tr>
+     <tr><td>Total users (installs)</td><td>10,000</td><td>${fmtInt(usersAt90)}</td><td>${hitUsers ? "✓" : "✗"}</td></tr>
+     <tr><td>Net MRR</td><td>$50,000</td><td>${fmtK(mrrAt90)}</td><td>${hitMrr ? "✓" : "✗"}</td></tr>
+     <tr><td>Paying subs needed for $50K MRR</td><td>${fmtInt(impliedPayers)}</td><td>${fmtInt(m3.monthlySubs + m3.annualSubs)}</td><td>${(m3.monthlySubs + m3.annualSubs) >= impliedPayers ? "✓" : "✗"}</td></tr>`;
+
+  // detail table
+  const dt = document.getElementById("detailTable");
+  dt.innerHTML = `<tr><th>Month</th><th>Installs</th><th>MAU</th><th>Trials</th><th>New paid</th><th>Paying</th><th>Gross rev</th><th>Net rev</th><th>Net MRR</th><th>AI cost</th></tr>` +
+    rows.map(r => `<tr><td>M${r.m}</td><td>${fmtInt(r.installs)}</td><td>${fmtInt(r.mau)}</td><td>${fmtInt(r.trials)}</td><td>${fmtInt(r.newPaid)}</td><td>${fmtInt(r.paying)}</td><td>${fmtUsd0(r.subGross + r.revAds)}</td><td>${fmtUsd0(r.subNet + r.netAds)}</td><td>${fmtUsd0(r.netMrr)}</td><td>${fmtUsd0(r.aiCost)}</td></tr>`).join("");
+
+  runChecks(s, rows, L);
+}
+
+/* ================= self-checks ================= */
+function runChecks(s, rows, L) {
+  const checks = [];
+  const near = (a, b, tol) => Math.abs(a - b) <= tol * Math.max(Math.abs(b), 1e-9);
+
+  // 1. revenue identity
+  const r = rows[rows.length - 1];
+  checks.push({
+    name: "Revenue identity: streams sum to gross",
+    pass: near(r.revMonthly + r.revAnnual + r.revLifetime, r.subGross, 1e-9),
+    detail: `${fmtUsd2(r.revMonthly + r.revAnnual + r.revLifetime)} = ${fmtUsd2(r.subGross)}`,
+  });
+
+  // 2. monthly LTV closed form vs 360-month simulation
+  let sim = 0, alive = 1;
+  const netM = s.priceM * L.netFactor;
+  for (let i = 0; i < 360; i++) { sim += alive * netM; alive *= 1 - pct(s.churnM); }
+  checks.push({
+    name: "Monthly LTV: closed form ≈ 360-month cohort simulation",
+    pass: near(L.ltvMonthly, sim, 0.02),
+    detail: `closed ${fmtUsd2(L.ltvMonthly)} vs sim ${fmtUsd2(sim)}`,
+  });
+
+  // 3. annual LTV closed form vs generation simulation
+  let simA = 0, aliveA = 1;
+  const netA = s.priceA * L.netFactor;
+  for (let gen = 0; gen < 60; gen++) { simA += aliveA * netA; aliveA *= pct(s.renewA); }
+  checks.push({
+    name: "Annual LTV (list): closed form ≈ 60-generation simulation",
+    pass: near(L.ltvAnnual, simA, 0.02),
+    detail: `closed ${fmtUsd2(L.ltvAnnual)} vs sim ${fmtUsd2(simA)}`,
+  });
+
+  // 4. fee case: $59.99 via Apple SBP 15% → $50.99
+  const appleNet = 59.99 * (1 - 0.15);
+  checks.push({
+    name: "Fee case: $59.99 annual via Apple 15% nets $50.99",
+    pass: near(appleNet, 50.99, 0.001),
+    detail: fmtUsd2(appleNet),
+  });
+
+  // 5. promo flows through: promo LTV < list LTV when promo active, gap = first-year discount
+  if (s.promoWindow > 0) {
+    const expectedGap = pct(s.promoUptake) * (s.priceA - s.promoPrice) * L.netFactor;
+    checks.push({
+      name: "Promo: annual LTV gap equals discounted first year",
+      pass: near(L.ltvAnnual - L.ltvAnnualPromo, expectedGap, 0.001),
+      detail: `gap ${fmtUsd2(L.ltvAnnual - L.ltvAnnualPromo)} = uptake × discount × net ${fmtUsd2(expectedGap)}`,
+    });
+  }
+
+  // 6. conservation: paying never exceeds cumulative signups
+  const conserved = rows.every(x => x.paying <= x.cumInstalls + 1);
+  checks.push({ name: "Conservation: paying ≤ cumulative installs each month", pass: conserved, detail: conserved ? "all 24 months" : "violated" });
+
+  const el = document.getElementById("vList");
+  el.innerHTML = checks.map(c =>
+    `<div class="vrow ${c.pass ? "pass" : "fail"}"><span class="mark">${c.pass ? "✓" : "✗"}</span><span>${c.name}</span><span class="detail">${c.detail}</span></div>`).join("");
+  const passed = checks.filter(c => c.pass).length;
+  document.getElementById("vSummary").textContent = ` — ${passed}/${checks.length} passing`;
+}
+
+/* ================= boot ================= */
+buildRail();
+render();
+</script>

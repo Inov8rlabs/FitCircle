@@ -31,8 +31,23 @@ export const BODY_COMP_FEATURE_KEYS = [
 ] as const;
 export type BodyCompFeatureKey = (typeof BODY_COMP_FEATURE_KEYS)[number];
 
+/** Pro gates seeded (dark) by migration 075, flipped live by 077. */
+export const PRO_FEATURE_KEYS = [
+  'food_ai_unlimited',
+  'fitzy_unlimited',
+  'history_extended',
+  'circles_unlimited',
+  'ads_removed',
+  'data_export',
+  'share_themes_custom',
+  'streak_shields_bonus',
+] as const;
+export type ProFeatureKey = (typeof PRO_FEATURE_KEYS)[number];
+
+export const ALL_FEATURE_KEYS = [...BODY_COMP_FEATURE_KEYS, ...PRO_FEATURE_KEYS] as const;
+
 // ============================================================================
-// Entitlements (GET /api/mobile/entitlements)
+// Entitlements (GET /api/mobile/entitlements and GET /api/entitlements)
 // ============================================================================
 
 export interface FeatureEntitlement {
@@ -40,9 +55,35 @@ export interface FeatureEntitlement {
   requiredTier: SubscriptionTier;
 }
 
+/** Daily quota numbers for display ("2 of 5 free scans"); null = unlimited. */
+export interface EntitlementLimits {
+  foodAiParsesPerDay: number | null;
+  fitzyMessagesPerDay: number | null;
+  maxActiveCreatedCircles: number | null;
+  historyDays: number | null;
+}
+
+/** Subscription display state (cache of RevenueCat truth on profiles). */
+export interface EntitlementSubscription {
+  status: string | null;
+  platform: string | null;
+  productId: string | null;
+  expiresAt: string | null;
+  willRenew: boolean;
+}
+
 export interface EntitlementsResponse {
   tier: SubscriptionTier;
   features: Record<string, FeatureEntitlement>;
+  /** Added with subscriptions (additive — older clients ignore them). */
+  limits?: EntitlementLimits;
+  subscription?: EntitlementSubscription;
+  /**
+   * Master switch for the whole subscription surface (feature_flags row
+   * 'subscriptions'). Clients hide every paywall/upgrade CTA when false.
+   * Fail-CLOSED: absent or errored → false.
+   */
+  subscriptionsEnabled?: boolean;
 }
 
 // ============================================================================

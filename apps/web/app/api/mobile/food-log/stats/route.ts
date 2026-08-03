@@ -7,6 +7,7 @@ import { type NextRequest, NextResponse } from 'next/server';
 
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { FoodLogService } from '@/lib/services/food-log-service';
+import { UsageService } from '@/lib/services/usage-service';
 import { createAdminSupabase } from '@/lib/supabase-admin';
 
 /**
@@ -47,8 +48,24 @@ export async function GET(request: NextRequest) {
       );
     }
 
+    // History soft-gate: free tier sees a 14-day window once history_extended is
+    // live. CLAMP the range start, never 403 — the client renders an "unlock full
+    // history" footer off meta.clamped.
+    let effectiveStart = startDate;
+    let clamped = false;
+    const windowDays = await UsageService.historyWindowDays(user.id);
+    if (Number.isFinite(windowDays)) {
+      const earliest = new Date();
+      earliest.setUTCDate(earliest.getUTCDate() - (windowDays as number));
+      const earliestStr = earliest.toISOString().slice(0, 10);
+      if (startDate < earliestStr) {
+        effectiveStart = earliestStr;
+        clamped = true;
+      }
+    }
+
     // Get stats
-    const result = await FoodLogService.getStats(user.id, startDate, endDate, supabase);
+    const result = await FoodLogService.getStats(user.id, effectiveStart, endDate, supabase);
 
     if (result.error) {
       throw result.error;
@@ -59,6 +76,7 @@ export async function GET(request: NextRequest) {
       data: result.data,
       meta: {
         requestTime: Date.now() - startTime,
+        ...(clamped ? { clamped: true, feature: 'history_extended', windowDays } : {}),
       },
       error: null,
     });

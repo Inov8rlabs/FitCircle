@@ -7,6 +7,7 @@ import type { FitzyChatResponse, FitzyMessage, IFitzyService } from '../types/fi
 import { BodyCompTrendsService, extractBodyFatGoal } from './body-comp-trends-service';
 import { DietaryPreferencesService } from './dietary-preferences-service';
 import { EntitlementService } from './entitlement-service';
+import { UsageService } from './usage-service';
 
 /**
  * FitzyService — "Fitzy", the FitCircle AI coach (full fitness + nutrition).
@@ -123,6 +124,13 @@ export class FitzyService implements IFitzyService {
     if (turns.length === 0) {
       return { answer: SAFE_FALLBACK, disclaimer: DISCLAIMER };
     }
+
+    // Tier-aware daily quota (free 5 msgs/day once the fitzy_unlimited gate is live).
+    // Throws UpgradeRequiredError / RateLimited — the route maps them to the contextual
+    // paywall / 429. Recording happens BEFORE the model call so the check/insert race
+    // can't be exploited to overshoot the quota.
+    await UsageService.assertFitzyQuota(userId);
+    await UsageService.recordFitzyMessage(userId);
 
     const context = await this.buildContext(userId, circleId);
     const system = context

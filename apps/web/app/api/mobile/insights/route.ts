@@ -2,6 +2,7 @@ import { type NextRequest, NextResponse } from 'next/server';
 
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { CrossSignalService } from '@/lib/services/cross-signal-service';
+import { UsageService } from '@/lib/services/usage-service';
 import { DEFAULT_LOOKBACK_DAYS } from '@/lib/types/cross-signal';
 
 /**
@@ -16,14 +17,25 @@ export async function GET(request: NextRequest) {
     const user = await requireMobileAuth(request);
     const { searchParams } = new URL(request.url);
     const lookbackRaw = searchParams.get('lookbackDays');
-    const lookbackDays = lookbackRaw ? parseInt(lookbackRaw, 10) : DEFAULT_LOOKBACK_DAYS;
+    let lookbackDays = lookbackRaw ? parseInt(lookbackRaw, 10) : DEFAULT_LOOKBACK_DAYS;
+
+    // History soft-gate: free tier sees a 14-day window once history_extended is
+    // live. CLAMP, never 403 — the client renders an "unlock full history" footer
+    // off meta.clamped instead of losing the feature.
+    const windowDays = await UsageService.historyWindowDays(user.id);
+    const clamped = Number.isFinite(windowDays) && lookbackDays > windowDays;
+    if (clamped) lookbackDays = windowDays as number;
 
     const insights = await CrossSignalService.getInsights(user.id, lookbackDays);
 
     return NextResponse.json({
       success: true,
       data: insights,
-      meta: { requestTime: Date.now() - startTime, count: insights.length },
+      meta: {
+        requestTime: Date.now() - startTime,
+        count: insights.length,
+        ...(clamped ? { clamped: true, feature: 'history_extended', windowDays } : {}),
+      },
       error: null,
     });
   } catch (error: any) {

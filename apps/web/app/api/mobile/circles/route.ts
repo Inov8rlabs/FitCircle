@@ -3,6 +3,7 @@ import { z } from 'zod';
 
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { CircleService } from '@/lib/services/circle-service';
+import { UsageService } from '@/lib/services/usage-service';
 
 // Validation schema for POST
 const createCircleSchema = z.object({
@@ -145,6 +146,25 @@ export async function POST(request: NextRequest) {
     // Parse and validate request body
     const body = await request.json();
     const validatedData = createCircleSchema.parse(body);
+
+    // Free tier caps active created circles once the circles_unlimited gate is live.
+    const circleCap = await UsageService.checkCircleCreation(user.id);
+    if (circleCap) {
+      return NextResponse.json(
+        {
+          success: false,
+          data: null,
+          error: {
+            code: 'UPGRADE_REQUIRED',
+            message: `Free accounts can run ${circleCap.limit} active circles — go Pro for unlimited.`,
+            details: { feature: 'circles_unlimited', used: circleCap.used, limit: circleCap.limit },
+            timestamp: new Date().toISOString(),
+          },
+          meta: null,
+        },
+        { status: 403 }
+      );
+    }
 
     // Validate dates
     const startDate = new Date(validatedData.startDate);

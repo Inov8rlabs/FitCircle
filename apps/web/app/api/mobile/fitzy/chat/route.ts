@@ -3,6 +3,7 @@ import { z } from 'zod';
 
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { FitzyService } from '@/lib/services/fitzy-service';
+import { UpgradeRequiredError } from '@/lib/services/usage-service';
 import type { FitzyChatResponse } from '@/lib/types/fitzy';
 
 /**
@@ -79,6 +80,30 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { success: false, data: null, error: { code: 'UNAUTHORIZED', message: 'Invalid or expired token', details: {}, timestamp: new Date().toISOString() }, meta: null },
         { status: 401 }
+      );
+    }
+
+    if (error instanceof UpgradeRequiredError) {
+      return NextResponse.json(
+        {
+          success: false,
+          data: null,
+          error: {
+            code: 'UPGRADE_REQUIRED',
+            message: "You've used today's free Fitzy messages — go Pro for unlimited coaching.",
+            details: { feature: error.feature, used: error.used, limit: error.limit },
+            timestamp: new Date().toISOString(),
+          },
+          meta: null,
+        },
+        { status: 429 }
+      );
+    }
+
+    if (error?.message === 'RateLimited') {
+      return NextResponse.json(
+        { success: false, data: null, error: { code: 'RATE_LIMITED', message: "You've reached today's message limit — try again tomorrow.", details: {}, timestamp: new Date().toISOString() }, meta: null },
+        { status: 429 }
       );
     }
 

@@ -3,6 +3,7 @@ import { z } from 'zod';
 
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { createAdminSupabase } from '@/lib/supabase-admin';
+import { UsageService } from '@/lib/services/usage-service';
 
 // Validation schema for creating a FitCircle
 const createFitCircleSchema = z.object({
@@ -29,6 +30,25 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json();
     const validatedData = createFitCircleSchema.parse(body);
+
+    // Free tier caps active created circles once the circles_unlimited gate is live.
+    const circleCap = await UsageService.checkCircleCreation(user.id);
+    if (circleCap) {
+      return NextResponse.json(
+        {
+          success: false,
+          data: null,
+          error: {
+            code: 'UPGRADE_REQUIRED',
+            message: `Free accounts can run ${circleCap.limit} active circles — go Pro for unlimited.`,
+            details: { feature: 'circles_unlimited', used: circleCap.used, limit: circleCap.limit },
+            timestamp: new Date().toISOString(),
+          },
+          meta: null,
+        },
+        { status: 403 }
+      );
+    }
 
     console.log('[FitCircles API] Creating FitCircle for user:', user.id);
 

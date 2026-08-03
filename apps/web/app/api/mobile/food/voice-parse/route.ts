@@ -3,6 +3,7 @@ import { z } from 'zod';
 
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { NutritionIntelligenceService } from '@/lib/services/nutrition-intelligence-service';
+import { UpgradeRequiredError } from '@/lib/services/usage-service';
 
 // LLM parse can exceed the platform default function timeout; give it room.
 export const maxDuration = 60;
@@ -76,7 +77,8 @@ export async function POST(request: NextRequest) {
       // Option B (§6.1): a failed OR rate-limited parse must not lose the user's spoken note.
       // Save the transcript as a normal food-log entry and return its id so the client can drop
       // the user into that entry to finish manually.
-      const isRate = parseError?.message === 'RateLimited';
+      const isUpgrade = parseError instanceof UpgradeRequiredError;
+      const isRate = parseError?.message === 'RateLimited' || isUpgrade;
       if (!isRate && parseError?.message !== 'ParseFailed') {
         throw parseError; // Unauthorized / unexpected → outer catch
       }
@@ -111,11 +113,22 @@ export async function POST(request: NextRequest) {
           success: false,
           data: null,
           error: {
-            code: isRate ? 'RATE_LIMITED' : 'PARSE_FAILED',
-            message: isRate
-              ? "You've reached today's voice-estimate limit — we saved your note so you can add the details."
-              : "Couldn't understand that — we saved your note so you can add the details.",
-            details: saved ? { savedEntryId: saved.entryId } : {},
+            code: isUpgrade ? 'UPGRADE_REQUIRED' : isRate ? 'RATE_LIMITED' : 'PARSE_FAILED',
+            message: isUpgrade
+              ? `You've used your ${(parseError as UpgradeRequiredError).limit} free AI logs today — go Pro for unlimited. We saved your note so you can add the details.`
+              : isRate
+                ? "You've reached today's voice-estimate limit — we saved your note so you can add the details."
+                : "Couldn't understand that — we saved your note so you can add the details.",
+            details: {
+              ...(saved ? { savedEntryId: saved.entryId } : {}),
+              ...(isUpgrade
+                ? {
+                    feature: (parseError as UpgradeRequiredError).feature,
+                    used: (parseError as UpgradeRequiredError).used,
+                    limit: (parseError as UpgradeRequiredError).limit,
+                  }
+                : {}),
+            },
             timestamp: new Date().toISOString(),
           },
           meta: { requestTime: Date.now() - startTime },

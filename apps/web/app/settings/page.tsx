@@ -7,7 +7,7 @@
 
 import { motion } from 'framer-motion';
 import {
-  Bell, Heart, Lock, Palette, Database, ChevronRight, LogOut, User,
+  Bell, Heart, Lock, Palette, Database, ChevronRight, Crown, LogOut, User,
 } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -74,6 +74,14 @@ const SECTIONS: Section[] = [
     iconColor: 'text-cyan-400',
     title: 'Data',
     description: 'Export, delete account',
+  },
+  {
+    href: '/settings/billing',
+    icon: Crown,
+    iconBg: 'bg-amber-500/15',
+    iconColor: 'text-amber-400',
+    title: 'Billing',
+    description: 'FitCircle Pro plan, payment, invoices',
   },
 ];
 

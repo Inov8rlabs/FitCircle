@@ -2,6 +2,7 @@ import { after, type NextRequest, NextResponse } from 'next/server';
 
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { NutritionIntelligenceService } from '@/lib/services/nutrition-intelligence-service';
+import { UpgradeRequiredError } from '@/lib/services/usage-service';
 import { PHOTO_PARSE_MAX_IMAGES, PHOTO_PARSE_MAX_NOTE_CHARS } from '@/lib/types/nutrition';
 
 // The vision parse routinely takes 20-40s. Without this, the function is killed at
@@ -117,7 +118,8 @@ export async function POST(request: NextRequest) {
       // Option B (§6.1): a failed OR rate-limited parse must not lose the user's photo. Save it
       // as a normal food-log entry (blank macros) and hand the client its id so it can drop the
       // user straight into that entry to finish manually.
-      const isRate = parseError?.message === 'RateLimited';
+      const isUpgrade = parseError instanceof UpgradeRequiredError;
+      const isRate = parseError?.message === 'RateLimited' || isUpgrade;
       if (!isRate && parseError?.message !== 'ParseFailed') {
         throw parseError; // Unauthorized / unexpected → outer catch
       }
@@ -162,11 +164,22 @@ export async function POST(request: NextRequest) {
           success: false,
           data: null,
           error: {
-            code: isRate ? 'RATE_LIMITED' : 'PARSE_FAILED',
-            message: isRate
-              ? "You've reached today's photo-estimate limit — we saved your photo so you can add the details."
-              : "Couldn't auto-detect the food — we saved your photo so you can add the details.",
-            details: saved ? { savedEntryId: saved.entryId, imageUrls: [] } : {},
+            code: isUpgrade ? 'UPGRADE_REQUIRED' : isRate ? 'RATE_LIMITED' : 'PARSE_FAILED',
+            message: isUpgrade
+              ? `You've used your ${(parseError as UpgradeRequiredError).limit} free AI scans today — go Pro for unlimited. We saved your photo so you can add the details.`
+              : isRate
+                ? "You've reached today's photo-estimate limit — we saved your photo so you can add the details."
+                : "Couldn't auto-detect the food — we saved your photo so you can add the details.",
+            details: {
+              ...(saved ? { savedEntryId: saved.entryId, imageUrls: [] } : {}),
+              ...(isUpgrade
+                ? {
+                    feature: (parseError as UpgradeRequiredError).feature,
+                    used: (parseError as UpgradeRequiredError).used,
+                    limit: (parseError as UpgradeRequiredError).limit,
+                  }
+                : {}),
+            },
             timestamp: new Date().toISOString(),
           },
           meta: { requestTime: Date.now() - startTime },

@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { NutritionIntelligenceService } from '../nutrition-intelligence-service';
+import { UsageService } from '../usage-service';
 
 const parsedItem = {
   name: 'Chicken biryani',
@@ -59,7 +60,7 @@ describe('NutritionIntelligenceService.estimateItem', () => {
   it('uses a bounded fallback when the primary model times out', async () => {
     const service = NutritionIntelligenceService as any;
     vi.spyOn(service, 'getCachedResult').mockResolvedValue(null);
-    vi.spyOn(service, 'countTodayParses').mockResolvedValue(0);
+    vi.spyOn(UsageService, 'assertFoodAiQuota').mockResolvedValue(undefined);
     vi.spyOn(service, 'recordParse').mockResolvedValue(undefined);
     vi.spyOn(service, 'finalizeEstimatedItem').mockResolvedValue(parsedItem);
     const callModel = vi

@@ -4,6 +4,7 @@ import { createAdminSupabase } from '../supabase-admin';
 import type { CoachResponse, INutritionCoachService } from '../types/nutrition-coach';
 
 import { DietaryPreferencesService } from './dietary-preferences-service';
+import { UsageService } from './usage-service';
 
 /**
  * NutritionCoachService — the AI Nutrition Coach (PRD v4 §6.9).
@@ -101,6 +102,11 @@ export class NutritionCoachService implements INutritionCoachService {
    * the unsafe answer is dropped and SAFE_FALLBACK is returned instead.
    */
   static async ask(userId: string, question: string, circleId?: string): Promise<CoachResponse> {
+    // 0. Tier-aware daily quota — shares the Fitzy coach budget (fitzy_message_log), since
+    // both are Sonnet-backed coach calls. Throws UpgradeRequiredError / RateLimited.
+    await UsageService.assertFitzyQuota(userId);
+    await UsageService.recordFitzyMessage(userId);
+
     // 1. Gather light, compact grounding context (aggregates only — never raw food rows).
     const context = await this.buildContext(userId, circleId);
 

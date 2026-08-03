@@ -13,13 +13,13 @@ import {
   type UnitOption,
   parsedFoodItemSchema,
   photoParseResultSchema,
-  PHOTO_PARSE_DAILY_SOFT_CAP,
 } from '../types/nutrition';
 
 import { FoodLogImageService } from './food-log-image-service';
 import { FoodLogService } from './food-log-service';
 import { FoodsSemanticService, type SemanticCandidate } from './foods-semantic-service';
 import { FoodsService } from './foods-service';
+import { UsageService } from './usage-service';
 
 /**
  * NutritionIntelligenceService — the server-side "brain" for nutrition (PRD §6.1, §7.2.1).
@@ -169,13 +169,11 @@ export class NutritionIntelligenceService {
       return await this.toDraft(userId, cached, VISION_MODEL, true, 'photo', 'llm_vision');
     }
 
-    // 2. Per-user daily soft cap on premium vision calls (§9.2). Caching is checked first so
-    //    repeat/identical photos don't count against the cap. A multi-image request is ONE
-    //    model call and counts as one parse.
-    const usedToday = await this.countTodayParses(userId);
-    if (usedToday >= PHOTO_PARSE_DAILY_SOFT_CAP) {
-      throw new Error('RateLimited');
-    }
+    // 2. Tier-aware per-user daily quota on premium vision calls (§9.2 + MONETIZATION-PLAN).
+    //    Caching is checked first so repeat/identical photos don't count against the quota.
+    //    A multi-image request is ONE model call and counts as one parse.
+    //    Throws UpgradeRequiredError (free limit, paywall trigger) or Error('RateLimited').
+    await UsageService.assertFoodAiQuota(userId);
 
     // 3. Structured vision call via the AI Gateway. generateText + Output.object validates
     //    the result against the Zod schema; explicit failover below handles a failed attempt.
@@ -251,11 +249,9 @@ export class NutritionIntelligenceService {
    * @throws Error('ParseFailed') when the model output cannot be validated
    */
   static async parseVoice(userId: string, transcript: string): Promise<NutritionDraftDTO> {
-    // Per-user daily soft cap. PHOTO_PARSE_DAILY_SOFT_CAP is the COMBINED cap shared across all
-    // paid parses (photo/voice/item) — every recorded parse counts toward the same daily budget.
-    if ((await this.countTodayParses(userId)) >= PHOTO_PARSE_DAILY_SOFT_CAP) {
-      throw new Error('RateLimited');
-    }
+    // Tier-aware daily quota — COMBINED across all paid parses (photo/voice/item); every
+    // recorded parse counts toward the same daily budget. May throw UpgradeRequiredError.
+    await UsageService.assertFoodAiQuota(userId);
 
     let result: PhotoParseResult;
     let model = VOICE_MODEL;
@@ -379,11 +375,9 @@ export class NutritionIntelligenceService {
       return await this.finalizeEstimatedItem(userId, cleanName, resolved, cached.items[0]);
     }
 
-    // Per-user daily soft cap. PHOTO_PARSE_DAILY_SOFT_CAP is the COMBINED cap shared across all
-    // paid parses (photo/voice/item) — every recorded parse counts toward the same daily budget.
-    if ((await this.countTodayParses(userId)) >= PHOTO_PARSE_DAILY_SOFT_CAP) {
-      throw new Error('RateLimited');
-    }
+    // Tier-aware daily quota — COMBINED across all paid parses (photo/voice/item); every
+    // recorded parse counts toward the same daily budget. May throw UpgradeRequiredError.
+    await UsageService.assertFoodAiQuota(userId);
 
     let llm: ParsedFoodItem;
     const startedAt = Date.now();
@@ -878,19 +872,6 @@ export class NutritionIntelligenceService {
     if (!data?.result) return null;
     const parsed = photoParseResultSchema.safeParse(data.result);
     return parsed.success ? parsed.data : null;
-  }
-
-  /** How many vision parses this user has made today (UTC), for the soft cap. */
-  private static async countTodayParses(userId: string): Promise<number> {
-    const supabase = createAdminSupabase();
-    const since = new Date();
-    since.setUTCHours(0, 0, 0, 0);
-    const { count } = await supabase
-      .from('nutrition_parse_log')
-      .select('*', { count: 'exact', head: true })
-      .eq('user_id', userId)
-      .gte('created_at', since.toISOString());
-    return count ?? 0;
   }
 
   /**
