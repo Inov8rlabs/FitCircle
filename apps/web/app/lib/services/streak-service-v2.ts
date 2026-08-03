@@ -220,6 +220,18 @@ export async function completeCheckin(
     }
     claimDates.add(checkInDate);
 
+    // Every claim path writes an activity row — client activity feeds use
+    // engagement_activities as their signal for "this day counted".
+    const { error: activityError } = await supabase.from('engagement_activities').insert({
+      user_id: userId,
+      activity_date: checkInDate,
+      activity_type: 'circle_checkin',
+      reference_id: null,
+    });
+    if (activityError && activityError.code !== '23505') {
+      console.error('[completeCheckin] activity insert error (non-blocking):', activityError);
+    }
+
     const newStreak = calculateStreak(claimDates, checkInDate);
     const crossed = milestoneCrossed(oldStreak, newStreak);
 
