@@ -6,7 +6,7 @@
 supabase/
   migrations/000_baseline.sql          production schema as of 2026-08-04
   seed.sql                             reference data (no user data)
-  pending/077_enable_pro_gates.sql     held back deliberately — see below
+  pending/082_enable_pro_gates.sql     held back deliberately — see below
   _archive/migrations_pre_baseline/    migrations 001–076, historical only
 ```
 
