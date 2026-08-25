@@ -234,10 +234,10 @@ export async function recalculateLeaderboard(
 
     // Get all active members of the FitCircle
     const { data: members, error: membersError } = await supabase
-      .from('circle_members')
+      .from('fitcircle_members')
       .select('user_id')
-      .eq('circle_id', fitcircleId)
-      .eq('is_active', true);
+      .eq('fitcircle_id', fitcircleId)
+      .eq('status', 'active');
 
     if (membersError || !members) {
       return { entries: [], error: new Error('Failed to fetch members') };

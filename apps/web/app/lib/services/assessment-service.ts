@@ -327,11 +327,12 @@ export class AssessmentService {
 
     // Get circles user is already in
     const { data: memberships } = await supabaseAdmin
-      .from('circle_members')
-      .select('circle_id')
-      .eq('user_id', userId);
+      .from('fitcircle_members')
+      .select('fitcircle_id')
+      .eq('user_id', userId)
+      .eq('status', 'active');
 
-    const memberCircleIds = new Set((memberships || []).map((m: any) => m.circle_id));
+    const memberCircleIds = new Set((memberships || []).map((m: any) => m.fitcircle_id));
 
     // Score and filter circles
     const recommendations: CircleRecommendation[] = [];

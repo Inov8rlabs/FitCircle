@@ -674,10 +674,10 @@ export async function getTeamWeeklyPerformance(
   try {
     // Get all members of the FitCircle
     const { data: members, error: membersError } = await supabase
-      .from('circle_members')
+      .from('fitcircle_members')
       .select('user_id')
-      .eq('circle_id', fitcircleId)
-      .eq('is_active', true);
+      .eq('fitcircle_id', fitcircleId)
+      .eq('status', 'active');
 
     if (membersError || !members) {
       return { totalSteps: 0, averageCompletion: 0, memberCount: 0, error: new Error('Failed to fetch members') };

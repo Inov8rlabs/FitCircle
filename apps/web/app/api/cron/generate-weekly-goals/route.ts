@@ -65,22 +65,22 @@ export async function GET(request: NextRequest) {
 
       // Get user's FitCircles and generate goals for each
       const { data: memberships } = await supabase
-        .from('circle_members')
-        .select('circle_id')
+        .from('fitcircle_members')
+        .select('fitcircle_id')
         .eq('user_id', userId)
-        .eq('is_active', true);
+        .eq('status', 'active');
 
       for (const membership of memberships || []) {
         const { error: fitcircleError } = await generateWeeklyGoals(
           userId,
           weekStart,
-          membership.circle_id,
+          membership.fitcircle_id,
           supabase
         );
 
         if (fitcircleError) {
           errorCount++;
-          errors.push(`User ${userId} (FitCircle ${membership.circle_id}): ${fitcircleError.message}`);
+          errors.push(`User ${userId} (FitCircle ${membership.fitcircle_id}): ${fitcircleError.message}`);
         } else {
           successCount++;
         }

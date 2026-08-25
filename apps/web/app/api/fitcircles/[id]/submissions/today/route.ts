@@ -39,11 +39,11 @@ export async function GET(
 
     // Verify user is a member of the FitCircle
     const { data: membership, error: memberError } = await supabase
-      .from('circle_members')
+      .from('fitcircle_members')
       .select('id')
-      .eq('circle_id', fitcircleId)
+      .eq('fitcircle_id', fitcircleId)
       .eq('user_id', user.id)
-      .eq('is_active', true)
+      .eq('status', 'active')
       .single();
 
     if (memberError || !membership) {

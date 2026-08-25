@@ -33,9 +33,9 @@ export async function GET(request: NextRequest) {
 
     // Get all active FitCircles (circles with active members)
     const { data: activeCircles, error: circlesError } = await supabase
-      .from('circle_members')
-      .select('circle_id')
-      .eq('is_active', true);
+      .from('fitcircle_members')
+      .select('fitcircle_id')
+      .eq('status', 'active');
 
     if (circlesError) {
       return NextResponse.json(
@@ -45,7 +45,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Get unique circle IDs
-    const uniqueCircleIds = [...new Set((activeCircles || []).map(m => m.circle_id))];
+    const uniqueCircleIds = [...new Set((activeCircles || []).map(m => m.fitcircle_id))];
 
     // Recalculate leaderboard for each circle
     let successCount = 0;

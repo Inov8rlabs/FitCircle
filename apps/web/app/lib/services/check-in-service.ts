@@ -246,11 +246,11 @@ export async function isUserInChallenge(
 ): Promise<boolean> {
   try {
     const { data, error } = await supabaseClient
-      .from('circle_members')
+      .from('fitcircle_members')
       .select('id')
       .eq('user_id', userId)
-      .eq('circle_id', challengeId)
-      .eq('is_active', true)
+      .eq('fitcircle_id', challengeId)
+      .eq('status', 'active')
       .single();
 
     return !error && data !== null;
@@ -413,20 +413,20 @@ export async function getCheckInsForUser(
   try {
     // 1. Check if users share any circles
     const { data: viewerCircles } = await supabaseClient
-      .from('circle_members')
-      .select('circle_id')
+      .from('fitcircle_members')
+      .select('fitcircle_id')
       .eq('user_id', viewerId)
-      .eq('is_active', true);
+      .eq('status', 'active');
 
     const { data: targetCircles } = await supabaseClient
-      .from('circle_members')
-      .select('circle_id')
+      .from('fitcircle_members')
+      .select('fitcircle_id')
       .eq('user_id', targetUserId)
-      .eq('is_active', true);
+      .eq('status', 'active');
 
     const sharedCircleIds = viewerCircles
-      ?.filter(vc => targetCircles?.some(tc => tc.circle_id === vc.circle_id))
-      .map(c => c.circle_id) || [];
+      ?.filter(vc => targetCircles?.some(tc => tc.fitcircle_id === vc.fitcircle_id))
+      .map(c => c.fitcircle_id) || [];
 
     // 2. If no shared circles, return empty
     if (sharedCircleIds.length === 0) {

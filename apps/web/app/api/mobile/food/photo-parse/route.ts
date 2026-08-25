@@ -1,3 +1,4 @@
+import * as Sentry from '@sentry/nextjs';
 import { after, type NextRequest, NextResponse } from 'next/server';
 
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
@@ -120,8 +121,26 @@ export async function POST(request: NextRequest) {
       // user straight into that entry to finish manually.
       const isUpgrade = parseError instanceof UpgradeRequiredError;
       const isRate = parseError?.message === 'RateLimited' || isUpgrade;
+
+      // Only a genuine auth failure should escape — that one has to become a 401.
+      if (parseError?.message === 'Unauthorized') {
+        throw parseError;
+      }
+
+      // Everything else from the parse stage is, to the user, a failed parse.
+      // This used to be an allow-list keyed on `parseError.message`, so any error
+      // whose message wasn't literally 'ParseFailed' or 'RateLimited' — an AI SDK
+      // error, a cache/quota fault, anything thrown outside the service's own
+      // try/catch — was rethrown into a 500 AND took the user's photo with it,
+      // because the fallback save below never ran. Recovery is now the default and
+      // the unexpected cases are reported rather than dropped.
       if (!isRate && parseError?.message !== 'ParseFailed') {
-        throw parseError; // Unauthorized / unexpected → outer catch
+        Sentry.captureException(parseError, {
+          level: 'error',
+          tags: { feature: 'nutrition_parse', parse_source: 'photo', parse_error_kind: 'route_unexpected' },
+          extra: { imageCount: files.length, hasNote: !!note, requestMs: Date.now() - startTime },
+          user: { id: user.id },
+        });
       }
 
       let saved: { entryId: string } | null = null;

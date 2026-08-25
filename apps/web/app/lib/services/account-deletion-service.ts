@@ -247,8 +247,11 @@ export class AccountDeletionService {
       // Circle invites (as inviter)
       safeDelete('circle_invites', { inviter_id: userId }),
 
-      // Circle members
-      safeDelete('circle_members', { user_id: userId }),
+      // Circle members. Was 'circle_members', dropped back in migration 018 and
+      // superseded by 'fitcircle_members' — safeDelete swallows a missing table
+      // with a warning, so erasure had been silently leaving membership rows
+      // behind for every deleted account.
+      safeDelete('fitcircle_members', { user_id: userId }),
 
       // Circle encouragements (sent)
       safeDelete('circle_encouragements', { from_user_id: userId }),

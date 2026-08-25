@@ -892,14 +892,28 @@ export class NutritionIntelligenceService {
     const name: string = e?.name ?? 'Error';
     const message: string = e?.message ?? String(err);
 
+    // The AI SDK prefixes its error class names with `AI_` (AI_NoOutputGeneratedError,
+    // AI_TypeValidationError, …), so match on the unprefixed name or every one of
+    // these lands in `unknown` — which is what happened to AI_NoOutputGeneratedError:
+    // it opened a NEW high-priority Sentry issue instead of grouping with the
+    // known parse failures.
+    const bareName = name.replace(/^AI_/, '');
+
     let kind = 'unknown';
     if (/Abort|Timeout/i.test(name) || /abort|timed?\s?out/i.test(message)) {
       kind = 'timeout_or_abort';
     } else if (e?.statusCode != null || e?.url != null) {
       kind = 'api_call_error';
-    } else if (name === 'NoObjectGeneratedError' || e?.text != null) {
+    } else if (
+      // NoObjectGenerated is the `generateObject` shape; NoOutputGenerated is the
+      // `generateText` + Output.object shape we actually use. Both mean the same
+      // thing: the model returned nothing that satisfies the schema.
+      bareName === 'NoObjectGeneratedError' ||
+      bareName === 'NoOutputGeneratedError' ||
+      e?.text != null
+    ) {
       kind = 'no_object_generated';
-    } else if (name === 'TypeValidationError' || name === 'ZodError') {
+    } else if (bareName === 'TypeValidationError' || bareName === 'ZodError') {
       kind = 'schema_validation';
     }
 
@@ -952,8 +966,15 @@ export class NutritionIntelligenceService {
 
     // Also report to Sentry (no-op until SENTRY_DSN is configured). Tags drive
     // grouping/filtering by where it failed and our classified failure `kind`.
+    //
+    // `warning`, not `error`: by the time we get here the failure is fully
+    // handled — the caller converts it to ParseFailed, the route saves the photo
+    // as a blank entry and returns 422, and the client drops the user into that
+    // entry to fill in manually. A model that can't read one photo is an expected
+    // operating condition, not a defect. Reporting it at `error` made every
+    // unreadable photo page as a high-priority new issue.
     Sentry.captureException(err, {
-      level: 'error',
+      level: 'warning',
       tags: {
         feature: 'nutrition_parse',
         parse_source: source,
