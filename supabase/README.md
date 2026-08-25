@@ -94,9 +94,9 @@ Still deliberately not restored, because nothing references them: 034
 (journeys), 037 (circle challenges), 012 (`progress_milestones`), and 068
 (`foods.name_embedding` + the `vector` extension).
 
-## `pending/077_enable_pro_gates.sql`
+## `pending/082_enable_pro_gates.sql`
 
-077 flips the eight Pro feature gates from `free` to `premium` — the moment
+082 (formerly 077 — renumbered because 078–081 are now applied and versions must be unique) flips the twelve Pro feature gates from `free` to `premium` — the moment
 free-tier limits begin for existing users. It is kept **out of `migrations/`**
 on purpose: otherwise the next person pushing an unrelated migration would
 silently launch paid gating.
@@ -104,4 +104,4 @@ silently launch paid gating.
 Launch order, from 076's own header:
 
 1. Enable the `subscriptions` flag (people can buy Pro; nothing is taken away).
-2. Move 077 into `migrations/` and `db push` (free-tier limits begin).
+2. Move 082 into `migrations/` and `db push` (free-tier limits begin). If another migration lands first, renumber it again — it must be the highest version.
