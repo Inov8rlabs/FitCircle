@@ -517,6 +517,11 @@ export default function DashboardPage() {
       energy: checkIn.energy_level || 0,
     }));
 
+  // Span of the weights in view, used to pad the weight chart's y-axis.
+  const weightValues = chartData.map(d => d.weight).filter((w): w is number => typeof w === 'number');
+  const weightAxisSpan =
+    weightValues.length > 0 ? Math.max(...weightValues) - Math.min(...weightValues) : 0;
+
   const handleCheckInClick = (checkIn: CheckIn) => {
     setSelectedCheckIn(checkIn);
     setShowCheckInDetail(true);
@@ -849,7 +854,19 @@ export default function DashboardPage() {
                         </defs>
                         <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
                         <XAxis dataKey="date" stroke="#94a3b8" className="text-xs" />
-                        <YAxis stroke="#94a3b8" className="text-xs" />
+                        {/* Tight, padded range around the readings (Apple Health
+                            style) instead of a 0-based axis that flattens a 2 lb
+                            change into a straight line. */}
+                        <YAxis
+                          stroke="#94a3b8"
+                          className="text-xs"
+                          allowDecimals={false}
+                          domain={[
+                            (min: number) => Math.floor(min - Math.max((weightAxisSpan) * 0.25, unitSystem === 'imperial' ? 2 : 1)),
+                            (max: number) => Math.ceil(max + Math.max((weightAxisSpan) * 0.25, unitSystem === 'imperial' ? 2 : 1)),
+                          ]}
+                          tickCount={4}
+                        />
                         <Tooltip
                           contentStyle={{
                             backgroundColor: '#1e293b',
@@ -862,12 +879,17 @@ export default function DashboardPage() {
                             return [`${value} ${getWeightUnit(unitSystem)}`, ''];
                           }}
                         />
+                        {/* Only days with a reading are in the series, so the line
+                            runs straight between weigh-ins — never down to 0. */}
                         <Area
-                          type="monotone"
+                          type="linear"
                           dataKey="weight"
                           stroke="#8b5cf6"
                           strokeWidth={3}
                           fill="url(#weightGradient)"
+                          connectNulls
+                          dot={{ r: 4, stroke: '#8b5cf6', strokeWidth: 2, fill: '#0f172a' }}
+                          activeDot={{ r: 6, fill: '#8b5cf6' }}
                         />
                       </AreaChart>
                     </ResponsiveContainer>
