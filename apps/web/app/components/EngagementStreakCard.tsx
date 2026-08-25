@@ -6,6 +6,7 @@ import { useState, useEffect } from 'react';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
+import { STREAK_AUTO_CLAIMED_EVENT } from '@/lib/streaks/auto-claim-events';
 import { useAuthStore } from '@/stores/auth-store';
 
 interface EngagementStreak {
@@ -34,6 +35,19 @@ export function EngagementStreakCard({ onOpenHistory, onOpenCheckIn }: Engagemen
       void fetchStreak();
       void checkTodayCheckIn();
     }
+  }, [user]);
+
+  // A logged meal / drink / workout was auto-claimed on the server — refetch
+  // so the card moves off "0 days" without a reload.
+  useEffect(() => {
+    if (!user) return;
+    const onAutoClaimed = () => {
+      void fetchStreak();
+      void checkTodayCheckIn();
+    };
+    window.addEventListener(STREAK_AUTO_CLAIMED_EVENT, onAutoClaimed);
+    return () => window.removeEventListener(STREAK_AUTO_CLAIMED_EVENT, onAutoClaimed);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
 
   useEffect(() => {

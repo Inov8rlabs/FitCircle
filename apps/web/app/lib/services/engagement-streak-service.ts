@@ -11,7 +11,9 @@ import {
   STREAK_ERROR_CODES,
 } from '../types/streak';
 import { StreakClaimError, CLAIM_ERROR_CODES } from '../types/streak-claiming';
-import { localToday, addDays, daysBetween, calculateStreak } from '../streaks/streak-calculator';
+import { localToday, addDays, daysBetween, calculateStreak,
+  isWithinRetroactiveWindow,
+} from '../streaks/streak-calculator';
 
 import { MomentumService } from './momentum-service';
 import { StreakShieldService } from './streak-shield-service';
@@ -132,8 +134,10 @@ export class EngagementStreakService {
     const today = localToday(timezone);
     const targetDate = missedDate || addDays(today, -1);
 
+    // Same window activateFreeze enforces (1..RETROACTIVE_WINDOW_DAYS-1), so
+    // a request can't pass here only to be rejected inside as TOO_OLD.
     const diff = daysBetween(targetDate, today);
-    if (diff < 1 || diff > 7) {
+    if (diff < 1 || !isWithinRetroactiveWindow(targetDate, today)) {
       throw new StreakError(
         'Can only apply freeze to missed days within the past 7 days',
         STREAK_ERROR_CODES.INVALID_DATE_RANGE

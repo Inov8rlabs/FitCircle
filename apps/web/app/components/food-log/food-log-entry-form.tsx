@@ -10,8 +10,7 @@ import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/components/ui/use-toast';
-import { BeverageLogService } from '@/lib/services/beverage-log-service';
-import { FoodLogService } from '@/lib/services/food-log-service';
+import { announceStreakAutoClaim, clientTimezone, extractStreakMeta } from '@/lib/streaks/auto-claim-events';
 import { supabase } from '@/lib/supabase';
 import type { BeverageCustomizations } from '@/lib/types/beverage-log';
 
@@ -151,6 +150,27 @@ export function FoodLogEntryForm() {
     return data.session?.access_token ?? null;
   }
 
+  /**
+   * Create through the mobile API (not the Supabase client directly) so the
+   * SERVER claims the streak day for this manual log and reports it in
+   * `meta.streak` — the same path iOS/Android use.
+   */
+  async function createViaApi<T extends { id?: string }>(path: string, body: Record<string, unknown>) {
+    const token = await getAccessToken();
+    if (!token) throw new Error('Not authenticated');
+    const res = await fetch(path, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ ...body, timezone: clientTimezone() }),
+    });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok || json?.success === false) {
+      throw new Error(json?.error?.message ?? `Request failed (${res.status})`);
+    }
+    return { data: json.data as T, streak: extractStreakMeta(json) };
+  }
+
   async function uploadFoodPhotosBatch(entryId: string) {
     if (photos.length === 0) return;
     const token = await getAccessToken();
@@ -196,29 +216,30 @@ export function FoodLogEntryForm() {
       const loggedAtISO = new Date(loggedAt).toISOString();
       const entryDate = loggedAt.slice(0, 10); // YYYY-MM-DD
 
+      let streakMeta: ReturnType<typeof extractStreakMeta> = null;
       if (category === 'meal' || category === 'snack') {
-        const { data, error } = await FoodLogService.createEntry(user.id, {
+        const { data, streak } = await createViaApi<{ id: string }>('/api/mobile/food-log', {
           entry_type: 'food',
-          meal_type: category === 'snack' ? 'snack' : (mealType as any),
+          meal_type: category === 'snack' ? 'snack' : mealType,
           title: category === 'snack' ? 'Snack' : 'Meal',
           notes,
           is_private: isPrivate,
           logged_at: loggedAtISO,
           entry_date: entryDate,
-        }, supabase as any);
-        if (error) throw error;
+        });
+        streakMeta = streak;
         if (data?.id) await uploadFoodPhotosBatch(data.id);
       } else if (category === 'water') {
         if (waterAmount <= 0) throw new Error('Please select water amount');
-        const { error } = await FoodLogService.createEntry(user.id, {
+        const { streak } = await createViaApi('/api/mobile/food-log', {
           entry_type: 'water',
           water_ml: waterAmount,
           notes,
           is_private: isPrivate,
           logged_at: loggedAtISO,
           entry_date: entryDate,
-        }, supabase as any);
-        if (error) throw error;
+        });
+        streakMeta = streak;
       } else {
         // Beverage (coffee/tea/soda/juice/alcohol)
         if (!selectedBevType) throw new Error('Please select a beverage type');
@@ -237,8 +258,8 @@ export function FoodLogEntryForm() {
           if (!Number.isNaN(count)) fullCustomizations.serving_count = count;
         }
 
-        const { data, error } = await BeverageLogService.createEntry(user.id, {
-          category: category as any,
+        const { data, streak } = await createViaApi<{ id: string }>('/api/mobile/beverages', {
+          category,
           beverage_type: selectedBevType.name,
           customizations: fullCustomizations,
           volume_ml: nutrition.volume,
@@ -249,8 +270,8 @@ export function FoodLogEntryForm() {
           is_private: isPrivate,
           logged_at: loggedAtISO,
           entry_date: entryDate,
-        }, supabase as any);
-        if (error) throw error;
+        });
+        streakMeta = streak;
         if (category === 'alcohol' && data?.id) {
           await uploadBeveragePhoto(data.id);
         }
@@ -258,7 +279,11 @@ export function FoodLogEntryForm() {
 
       toast({ title: 'Entry saved!', description: 'Your log has been added.' });
 
-      if (typeof window !== 'undefined') {
+      // The server claimed the streak day for this log — tell the dashboard
+      // and celebrate a milestone / earned shield.
+      announceStreakAutoClaim(streakMeta);
+
+      if (typeof window !== 'undefined' && !streakMeta) {
         window.dispatchEvent(new CustomEvent('streak-auto-claimed', { detail: { source: 'food_log' } }));
       }
 

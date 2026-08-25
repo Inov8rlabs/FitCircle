@@ -49,6 +49,9 @@ const TYPE_CATEGORY_MAP: Record<string, NotificationCategory> = {
   momentum_decay: 'momentum',
   momentum_reset: 'momentum',
   reset_encouragement: 'momentum',
+  shield_applied: 'momentum',
+  streak_lost: 'momentum',
+  shield_earned: 'celebration',
 
   // State - Circle (S5/S6/S12)
   circle_boost_threshold: 'circle',

@@ -209,7 +209,7 @@ export async function performDailyCheckIn(
     }
 
     try {
-      const credited = await StreakShieldService.earnForStreakIncrease(userId, oldStreak, newStreak);
+      const credited = await StreakShieldService.earnForStreakIncrease(userId, oldStreak, newStreak, checkInDate);
       freezeEarned = credited > 0;
       if (freezeEarned) {
         await supabase.from('engagement_activities').insert({
@@ -450,18 +450,35 @@ export async function useFreeze(
     throw e;
   }
 
-  await supabase.from('streak_claims').upsert(
-    {
-      user_id: userId,
-      claim_date: today,
-      claimed_at: new Date().toISOString(),
-      claim_method: 'freeze',
-      timezone: timezone || 'UTC',
-      health_data_synced: false,
-      metadata: { source: 'manual_freeze', planned: true, shield_type: consumed.consumedType },
-    },
-    { onConflict: 'user_id,claim_date' }
-  );
+  // INSERT, never upsert: a concurrent explicit claim must not be overwritten
+  // into a 'freeze' row. On a duplicate the day is already covered, so the
+  // shield goes back.
+  const { error: claimInsertError } = await supabase.from('streak_claims').insert({
+    user_id: userId,
+    claim_date: today,
+    claimed_at: new Date().toISOString(),
+    claim_method: 'freeze',
+    timezone: timezone || 'UTC',
+    health_data_synced: false,
+    metadata: { source: 'manual_freeze', planned: true, shield_type: consumed.consumedType },
+  });
+  if (claimInsertError) {
+    if (!consumed.unlimited) {
+      await StreakShieldService.refund(
+        userId,
+        consumed.consumedType as 'freeze' | 'milestone_shield' | 'purchased'
+      );
+    }
+    if (claimInsertError.code === '23505') {
+      const inventory = await StreakShieldService.getInventory(userId);
+      return {
+        success: false,
+        freezesRemaining: inventory.unlimited ? Number.MAX_SAFE_INTEGER : inventory.available,
+        message: 'Today is already claimed or protected',
+      };
+    }
+    throw new Error(`Failed to record shield: ${claimInsertError.message}`);
+  }
 
   await supabase.from('engagement_activities').insert({
     user_id: userId,

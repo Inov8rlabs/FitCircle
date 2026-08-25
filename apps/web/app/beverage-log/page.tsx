@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { toast } from 'sonner';
+import { announceStreakAutoClaim, clientTimezone, extractStreakMeta } from '@/lib/streaks/auto-claim-events';
 
 import { Navbar } from '@/components/layout/navbar';
 import { Button } from '@/components/ui/button';
@@ -90,11 +91,13 @@ export default function BeverageLogPage() {
 
   const handleAdd = async (input: CreateBeverageLogInput) => {
     try {
-      await authedFetch<{ data: BeverageLogEntry }>('/api/mobile/beverages', {
+      const env = await authedFetch<{ data: BeverageLogEntry; meta?: unknown }>('/api/mobile/beverages', {
         method: 'POST',
-        body: JSON.stringify(input),
+        body: JSON.stringify({ ...input, timezone: clientTimezone() }),
       });
       toast.success('Logged!');
+      // Server-side streak auto-claim for this drink → refresh streak UI + toast.
+      announceStreakAutoClaim(extractStreakMeta(env));
       setAddOpen(false);
       await load();
     } catch (e: any) {

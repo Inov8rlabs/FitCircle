@@ -3,6 +3,8 @@ import { z } from 'zod';
 
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { ExerciseService } from '@/lib/services/exercise-service';
+import { StreakClaimingService } from '@/lib/services/streak-claiming-service';
+import { resolveClientTimezone } from '@/lib/streaks/client-timezone';
 import {
   exercisesArraySchema,
   mapExercisesToInput,
@@ -43,10 +45,12 @@ export async function POST(request: NextRequest) {
     const validated = createExerciseSchema.parse(body);
 
     const supabaseAdmin = createAdminSupabase();
+    const timezone = resolveClientTimezone(request, body?.timezone);
 
     const result = await ExerciseService.createExercise(
       user.id,
       {
+        timezone,
         exercise_type: validated.exerciseType,
         category: validated.category,
         duration_minutes: validated.durationMinutes,
@@ -76,12 +80,25 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Manual workouts claim the streak day they were done on. HealthKit /
+    // Health Connect imports (source !== 'manual', or autoClaimStreak:false)
+    // never do — passive data doesn't prove the user showed up.
+    const isManual = (validated.source ?? 'manual') === 'manual' && validated.autoClaimStreak !== false;
+    const streak = isManual
+      ? await StreakClaimingService.autoClaimForManualLog(user.id, {
+          occurredAt: result.data?.exercise?.exercise_date ?? validated.date ?? validated.startedAt ?? null,
+          timezone,
+          source: 'exercise_log',
+          referenceId: result.data?.exercise?.id,
+        })
+      : null;
+
     return NextResponse.json({
       success: true,
       data: result.data?.exercise,
       newMilestones: result.data?.new_milestones || [],
       newPersonalRecords: result.data?.new_personal_records || [],
-      meta: { requestTime: Date.now() - startTime },
+      meta: { requestTime: Date.now() - startTime, streak },
       error: null,
     });
   } catch (error: unknown) {

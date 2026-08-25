@@ -64,6 +64,8 @@ export interface ClaimResult {
   success: boolean;
   streakCount: number;
   milestone?: MilestoneInfo;
+  /** YYYY-MM-DD that was auto-protected with a shield to keep this streak alive. */
+  shieldAutoApplied?: string;
   message: string;
   claim?: StreakClaim;
 }
@@ -84,6 +86,8 @@ export interface ClaimableDay {
   hasHealthData: boolean;
   canClaim: boolean;
   reason?: string;
+  /** How the day was covered: explicit / manual_entry / retroactive / freeze (shield). */
+  claimMethod?: string;
 }
 
 export interface ShieldStatus {
@@ -106,6 +110,26 @@ export interface MilestoneInfo {
   type: 'shield_earned' | 'achievement_unlocked';
   reward?: string;
   shieldsGranted?: number;
+  /** A shield was earned but not banked because the balance is at the cap. */
+  shieldsCapped?: boolean;
+}
+
+/** Result of the nightly protect-or-break check for one user. */
+export interface StreakBreakOutcome {
+  broken: boolean;
+  shieldApplied: boolean;
+  paywallEligible: boolean;
+  /** Length of the run that was interrupted (0 when nothing broke). */
+  lostStreak: number;
+  /** Derived streak after this check. */
+  currentStreak: number;
+  /** Shields left after an auto-protect (null for Pro / not applicable). */
+  shieldsRemaining: number | null;
+  unlimited: boolean;
+  /** This was the last auto-protect allowed in a row — next miss breaks. */
+  lastAutoProtect?: boolean;
+  /** Broke because MAX_CONSECUTIVE_AUTO_PROTECTS was exhausted, not for lack of shields. */
+  zombieGuard?: boolean;
 }
 
 export interface RecoveryInfo {
@@ -155,7 +179,40 @@ export interface HealthDataCheck {
   hasSteps: boolean;
   hasMood: boolean;
   hasEnergy: boolean;
+  /** A meal / water entry was logged that day. */
+  hasFoodLog: boolean;
+  /** A beverage entry was logged that day. */
+  hasBeverageLog: boolean;
+  /** A workout was logged that day. */
+  hasExerciseLog: boolean;
+  /** Any qualifying activity (tracking metrics OR logs) exists for the day. */
   hasAnyData: boolean;
+}
+
+/** Which manual log triggered a server-side auto-claim. */
+export type AutoClaimSource = 'food_log' | 'beverage_log' | 'exercise_log' | 'daily_tracking';
+
+/**
+ * Outcome of StreakClaimingService.autoClaimForManualLog. Returned to clients
+ * in the create response's `meta.streak` so they can refresh the streak card
+ * and celebrate an earned shield without a second round-trip. Never an error:
+ * a skipped claim is a normal outcome (e.g. backfilling a meal from 3 weeks
+ * ago must not claim a streak day).
+ */
+export interface AutoClaimResult {
+  /** A new claim row was written by this call. */
+  claimed: boolean;
+  /** The day was already claimed (by an earlier log, a tap, or a shield). */
+  alreadyClaimed: boolean;
+  /** The user-local YYYY-MM-DD the log counted for (null when skipped early). */
+  day: string | null;
+  /** Current streak after this call, when known. */
+  streakCount: number | null;
+  /** Milestone crossed / shield earned by this claim. */
+  milestone?: MilestoneInfo;
+  /** Why nothing was claimed. Absent when `claimed` or `alreadyClaimed`. */
+  skipped?: 'future' | 'outside_window' | 'not_allowed' | 'error';
+  source: AutoClaimSource;
 }
 
 export interface StreakBreakCheck {

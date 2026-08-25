@@ -19,25 +19,34 @@
 
 import { createAdminSupabase } from '../supabase-admin';
 import { StreakClaimError, CLAIM_ERROR_CODES } from '../types/streak-claiming';
-import { SHIELD_RULES, shieldsEarnedBetween } from '../streaks/streak-config';
+import { MILESTONES, SHIELD_RULES, type StreakMilestoneDef } from '../streaks/streak-config';
+import { addDays, localToday } from '../streaks/streak-calculator';
 import { normalizeTier } from './entitlement-service';
 
 export type ShieldType = 'freeze' | 'milestone_shield' | 'purchased';
 
 const CONSUME_ORDER: ShieldType[] = ['freeze', 'milestone_shield', 'purchased'];
 
-/**
- * Max shield awards in any rolling 7 days — the honest ceiling (one weekly
- * boundary plus at most one monthly boundary per week). Guards against
- * farming awards by breaking and retro-repairing across the same boundary.
- */
-const MAX_AWARDS_PER_WEEK = 2;
+/** How many paid boundary / celebrated milestone days to remember per user. */
+const PAID_HISTORY_LIMIT = 200;
 
 export interface ShieldInventory {
   available: number;
   unlimited: boolean;
   cap: number;
   breakdown: Record<ShieldType, number>;
+}
+
+/** Outcome of awarding shields + milestones for a streak that grew. */
+export interface StreakGrowthAward {
+  /** Shields actually banked by this call (0 when capped out or Pro). */
+  credited: number;
+  /** Shields the growth earned before the balance cap was applied. */
+  earned: number;
+  /** True when at least one earned shield was dropped because the bank is full. */
+  capped: boolean;
+  /** The highest milestone this growth newly reached that hasn't been celebrated yet. */
+  milestone: StreakMilestoneDef | null;
 }
 
 export interface ConsumeResult {
@@ -73,9 +82,12 @@ export class StreakShieldService {
       purchased: 0,
     };
 
+    let effectiveRows = rows;
     if (!rows || rows.length === 0) {
       // First touch: seed the starter shield so a new user's first slip
-      // doesn't kill the habit.
+      // doesn't kill the habit. Re-read afterwards — if a concurrent call
+      // seeded first (ignoreDuplicates), the rows it wrote are the truth,
+      // not our optimistic STARTER_SHIELDS guess.
       await supabase.from('streak_shields').upsert(
         [
           { user_id: userId, shield_type: 'freeze', available_count: SHIELD_RULES.STARTER_SHIELDS },
@@ -84,17 +96,26 @@ export class StreakShieldService {
         ],
         { onConflict: 'user_id,shield_type', ignoreDuplicates: true }
       );
-      breakdown.freeze = SHIELD_RULES.STARTER_SHIELDS;
-    } else {
-      for (const row of rows) {
-        if (row.shield_type in breakdown) {
-          breakdown[row.shield_type as ShieldType] = row.available_count || 0;
-        }
+      const { data: seeded } = await supabase
+        .from('streak_shields')
+        .select('shield_type, available_count')
+        .eq('user_id', userId);
+      effectiveRows = seeded;
+    }
+    for (const row of effectiveRows || []) {
+      if (row.shield_type in breakdown) {
+        breakdown[row.shield_type as ShieldType] = row.available_count || 0;
       }
     }
 
+    const available = breakdown.freeze + breakdown.milestone_shield + breakdown.purchased;
+    if (!rows || rows.length === 0) {
+      // Keep the legacy mirror truthful from the very first touch.
+      await this.mirrorLegacyBalance(userId, available);
+    }
+
     return {
-      available: breakdown.freeze + breakdown.milestone_shield + breakdown.purchased,
+      available,
       unlimited,
       cap: SHIELD_RULES.MAX_SHIELD_BALANCE,
       breakdown,
@@ -158,62 +179,122 @@ export class StreakShieldService {
   }
 
   /**
-   * Award shields earned by growing the streak from oldStreak → newStreak
-   * (+1 per 7-day boundary, +1 per 30-day boundary crossed). Banked into
-   * milestone_shield, capped at MAX_SHIELD_BALANCE across all types.
-   * Returns how many were actually credited (0 when capped out or Pro).
+   * Award shields + milestone for a streak that grew from oldStreak to
+   * newStreak, where the run ends on `runEndDay` (user-local YYYY-MM-DD:
+   * today if today is claimed, otherwise yesterday).
    *
-   * Rolling rate limit: at most 2 awards per 7 days — exactly the honest
-   * maximum (one weekly boundary + at most one monthly boundary can fall in
-   * any 7-day span). Without it, breaking and retro-repairing a streak
-   * re-crosses an already-paid boundary and farms extra shields.
+   * Every weekly/monthly boundary is anchored to the CALENDAR DAY the run
+   * crossed it (runEndDay - (newStreak - k*interval)). A boundary day is
+   * paid at most once, ever — recorded in the milestone_shield row's
+   * metadata. That makes awards path-independent: a retroactive claim that
+   * bridges a gap and merges two runs re-crosses the older run's boundaries
+   * on the SAME days, so they're recognised as already paid, while an honest
+   * new run after a break crosses boundaries on new days and earns normally.
+   * (This replaced a rolling "2 awards / 7 days" rate limit, which merely
+   * slowed break-and-repair farming and also truncated honest catch-ups.)
+   *
+   * Milestone celebrations are deduped the same way so a merged run doesn't
+   * re-fire "1-Week Warrior".
+   *
+   * Credited shields are banked into milestone_shield, capped at
+   * MAX_SHIELD_BALANCE across all types. Pro users never bank (unlimited).
    */
-  static async earnForStreakIncrease(
+  static async awardForStreakGrowth(
     userId: string,
-    oldStreak: number,
-    newStreak: number
-  ): Promise<number> {
-    const earned = shieldsEarnedBetween(oldStreak, newStreak);
-    if (earned <= 0) return 0;
+    params: { oldStreak: number; newStreak: number; runEndDay?: string }
+  ): Promise<StreakGrowthAward> {
+    const { oldStreak, newStreak } = params;
+    const none: StreakGrowthAward = { credited: 0, earned: 0, capped: false, milestone: null };
+    if (newStreak <= oldStreak) return none;
+
+    const runEndDay = params.runEndDay || localToday();
+    const dayForStreakValue = (value: number) => addDays(runEndDay, -(newStreak - value));
 
     const supabase = createAdminSupabase();
     const inventory = await this.getInventory(userId);
 
-    // Rolling-window award history lives on the milestone_shield row.
     const { data: milestoneRow } = await supabase
       .from('streak_shields')
-      .select('metadata')
+      .select('available_count, metadata')
       .eq('user_id', userId)
       .eq('shield_type', 'milestone_shield')
       .maybeSingle();
+    const metadata: Record<string, unknown> = (milestoneRow?.metadata as Record<string, unknown>) || {};
+    const paidBoundaries = new Set<string>((metadata.paid_boundaries as string[]) || []);
+    const celebrated = new Set<string>((metadata.celebrated_milestone_days as string[]) || []);
 
-    const weekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
-    const recentAwards: string[] = (milestoneRow?.metadata?.recent_awards || []).filter(
-      (ts: string) => new Date(ts).getTime() > weekAgo
-    );
-    const rateHeadroom = Math.max(0, MAX_AWARDS_PER_WEEK - recentAwards.length);
+    // Boundary days crossed by this growth that were never paid before.
+    const newlyPaid: string[] = [];
+    for (const interval of [SHIELD_RULES.WEEKLY_EARN_INTERVAL, SHIELD_RULES.MONTHLY_EARN_INTERVAL]) {
+      for (let k = Math.floor(oldStreak / interval) + 1; k * interval <= newStreak; k++) {
+        const day = `${interval}:${dayForStreakValue(k * interval)}`;
+        if (!paidBoundaries.has(day)) newlyPaid.push(day);
+      }
+    }
+    const earned = newlyPaid.length;
 
-    const capHeadroom = Math.max(0, SHIELD_RULES.MAX_SHIELD_BALANCE - inventory.available);
-    const credited = Math.min(earned, capHeadroom, rateHeadroom);
-    if (credited <= 0) return 0;
+    // Highest milestone newly reached whose day hasn't been celebrated.
+    let milestone: StreakMilestoneDef | null = null;
+    const newlyCelebrated: string[] = [];
+    for (const m of MILESTONES) {
+      if (m.days <= oldStreak || m.days > newStreak) continue;
+      const day = dayForStreakValue(m.days);
+      if (celebrated.has(day)) continue;
+      newlyCelebrated.push(day);
+      milestone = m; // MILESTONES is sorted ascending → last one wins
+    }
 
-    const now = new Date().toISOString();
-    const { error } = await supabase.from('streak_shields').upsert(
-      {
-        user_id: userId,
-        shield_type: 'milestone_shield',
-        available_count: inventory.breakdown.milestone_shield + credited,
-        metadata: {
-          ...(milestoneRow?.metadata || {}),
-          recent_awards: [...recentAwards, ...Array(credited).fill(now)],
-        },
-      },
-      { onConflict: 'user_id,shield_type' }
-    );
+    if (earned === 0 && newlyCelebrated.length === 0) return none;
+
+    const capHeadroom = inventory.unlimited
+      ? 0
+      : Math.max(0, SHIELD_RULES.MAX_SHIELD_BALANCE - inventory.available);
+    const credited = Math.min(earned, capHeadroom);
+    const capped = !inventory.unlimited && earned > credited;
+
+    const nextMetadata = {
+      ...metadata,
+      paid_boundaries: [...paidBoundaries, ...newlyPaid].slice(-PAID_HISTORY_LIMIT),
+      celebrated_milestone_days: [...celebrated, ...newlyCelebrated].slice(-PAID_HISTORY_LIMIT),
+      last_award_at: new Date().toISOString(),
+    };
+
+    // Optimistic-concurrency write: only apply if the milestone_shield count
+    // is still what we read, so a concurrent consume/earn can't be lost.
+    const seen = milestoneRow?.available_count ?? inventory.breakdown.milestone_shield;
+    const { data: updated, error } = await supabase
+      .from('streak_shields')
+      .update({ available_count: seen + credited, metadata: nextMetadata })
+      .eq('user_id', userId)
+      .eq('shield_type', 'milestone_shield')
+      .eq('available_count', seen)
+      .select('available_count');
     if (error) throw error;
+    if (!updated || updated.length === 0) {
+      // Lost the race — the balance moved under us. Retry once from fresh
+      // state; a second loss means another writer already handled it.
+      if (!(params as { _retried?: boolean })._retried) {
+        return this.awardForStreakGrowth(userId, { ...params, _retried: true } as typeof params);
+      }
+      return { credited: 0, earned, capped, milestone };
+    }
 
-    await this.mirrorLegacyBalance(userId, inventory.available + credited);
-    return credited;
+    if (credited > 0) await this.mirrorLegacyBalance(userId, inventory.available + credited);
+    return { credited, earned, capped, milestone };
+  }
+
+  /**
+   * Shields credited for a streak growing oldStreak → newStreak. Thin
+   * wrapper over awardForStreakGrowth for callers that only bank shields.
+   */
+  static async earnForStreakIncrease(
+    userId: string,
+    oldStreak: number,
+    newStreak: number,
+    runEndDay?: string
+  ): Promise<number> {
+    const award = await this.awardForStreakGrowth(userId, { oldStreak, newStreak, runEndDay });
+    return award.credited;
   }
 
   /**
@@ -223,24 +304,28 @@ export class StreakShieldService {
    */
   static async refund(userId: string, type: ShieldType): Promise<void> {
     const supabase = createAdminSupabase();
-    const { data: row } = await supabase
-      .from('streak_shields')
-      .select('available_count')
-      .eq('user_id', userId)
-      .eq('shield_type', type)
-      .maybeSingle();
-    if (!row) return;
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const inventory = await this.getInventory(userId);
+      // Cap against the WHOLE bank, not the single row — a refund must never
+      // push the total past MAX_SHIELD_BALANCE.
+      if (inventory.available >= SHIELD_RULES.MAX_SHIELD_BALANCE) return;
+      const seen = inventory.breakdown[type];
 
-    await supabase
-      .from('streak_shields')
-      .update({
-        available_count: Math.min(SHIELD_RULES.MAX_SHIELD_BALANCE, row.available_count + 1),
-      })
-      .eq('user_id', userId)
-      .eq('shield_type', type);
-
-    const inventory = await this.getInventory(userId);
-    await this.mirrorLegacyBalance(userId, inventory.available);
+      const { data: updated, error } = await supabase
+        .from('streak_shields')
+        .update({ available_count: seen + 1 })
+        .eq('user_id', userId)
+        .eq('shield_type', type)
+        .eq('available_count', seen)
+        .select('available_count');
+      if (error) throw error;
+      if (updated && updated.length > 0) {
+        await this.mirrorLegacyBalance(userId, inventory.available + 1);
+        return;
+      }
+      // Lost a race — re-read and try once more.
+    }
+    console.error(`[StreakShieldService.refund] gave up refunding ${type} for ${userId} after a race`);
   }
 
   /** Credit purchased shields (IAP / promo). Also capped. */
@@ -272,10 +357,11 @@ export class StreakShieldService {
   private static async mirrorLegacyBalance(userId: string, total: number): Promise<void> {
     const supabase = createAdminSupabase();
     const mirrored = Math.max(0, Math.min(total, SHIELD_RULES.MAX_SHIELD_BALANCE));
+    // Upsert so a user whose engagement_streaks row hasn't been created yet
+    // still gets a truthful mirror instead of a silent no-op.
     const { error } = await supabase
       .from('engagement_streaks')
-      .update({ streak_freezes_available: mirrored })
-      .eq('user_id', userId);
+      .upsert({ user_id: userId, streak_freezes_available: mirrored }, { onConflict: 'user_id' });
     // Mirror failures must never fail the primary operation.
     if (error) console.error('[StreakShieldService.mirrorLegacyBalance] Error:', error);
   }

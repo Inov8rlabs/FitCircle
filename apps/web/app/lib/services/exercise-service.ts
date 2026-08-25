@@ -11,6 +11,7 @@
  */
 
 import { type SupabaseClient } from '@supabase/supabase-js';
+import { localToday } from '../streaks/streak-calculator';
 
 import type {
   ExerciseLog,
@@ -146,7 +147,9 @@ export class ExerciseService {
     supabase: SupabaseClient
   ): Promise<{ data: ExerciseCreateResponse | null; error: Error | null }> {
     try {
-      const exerciseDate = data.date || new Date().toISOString().split('T')[0];
+      // Default to the USER's local today, not the server's UTC date — a
+      // 9pm workout in California is still "today" for the streak.
+      const exerciseDate = data.date || localToday(data.timezone);
       const source = data.source || 'manual';
 
       // Auto-assign body areas from defaults if not provided
@@ -241,7 +244,10 @@ export class ExerciseService {
         }
       }
 
-      // Streak claiming: manual entries claim streaks, HealthKit does not
+      // Engagement HISTORY only (the activity feed / calendar). The streak
+      // claim itself is written by the route via
+      // StreakClaimingService.autoClaimForManualLog — recordActivity does not
+      // create a streak_claims row, so it never counted toward the streak.
       const shouldClaimStreak = source === 'manual' && data.auto_claim_streak !== false;
       if (shouldClaimStreak) {
         try {

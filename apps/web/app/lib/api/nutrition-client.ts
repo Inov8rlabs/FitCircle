@@ -1,5 +1,6 @@
 import { PHOTO_PARSE_MAX_IMAGES, PHOTO_PARSE_MAX_NOTE_CHARS } from '@/lib/types/nutrition';
 import { useAuthStore } from '@/stores/auth-store';
+import { clientTimezone, extractStreakMeta, type StreakAutoClaimMeta } from '@/lib/streaks/auto-claim-events';
 
 // Shared per-request caps for photo-parse (defined once in types/nutrition.ts and
 // re-exported here for UI surfaces).
@@ -425,12 +426,14 @@ function authToken(): string {
   return token;
 }
 
-async function authedFetch<T>(path: string, init?: RequestInit): Promise<T> {
+/** Like authedFetch, but returns the whole envelope (callers that need `meta`). */
+async function authedFetchEnvelope<T>(path: string, init?: RequestInit): Promise<ApiEnvelope<T>> {
   const res = await fetch(path, {
     ...init,
     headers: {
       Authorization: `Bearer ${authToken()}`,
       'Content-Type': 'application/json',
+      'x-client-timezone': clientTimezone() ?? '',
       ...(init?.headers ?? {}),
     },
     credentials: 'include',
@@ -444,6 +447,11 @@ async function authedFetch<T>(path: string, init?: RequestInit): Promise<T> {
       json?.error?.details ?? null,
     );
   }
+  return json;
+}
+
+async function authedFetch<T>(path: string, init?: RequestInit): Promise<T> {
+  const json = await authedFetchEnvelope<T>(path, init);
   return json.data as T;
 }
 
@@ -650,12 +658,18 @@ export const nutritionClient = {
     return authedFetch<Insight[]>(`/api/mobile/insights${suffix}`);
   },
 
-  // Confirm-then-commit: commits the reviewed draft via the existing create endpoint.
-  createFoodLog: (input: CreateFoodLogEntry) =>
-    authedFetch<{ id: string }>('/api/mobile/food-log', {
+  // Confirm-then-commit: commits the reviewed draft via the existing create
+  // endpoint. The server auto-claims the streak day for this manual log and
+  // reports it in `meta.streak`, surfaced here as `streak`.
+  createFoodLog: async (
+    input: CreateFoodLogEntry
+  ): Promise<{ id: string; streak: StreakAutoClaimMeta | null }> => {
+    const env = await authedFetchEnvelope<{ id: string }>('/api/mobile/food-log', {
       method: 'POST',
-      body: JSON.stringify(input),
-    }),
+      body: JSON.stringify({ ...input, timezone: clientTimezone() }),
+    });
+    return { id: (env.data as { id: string }).id, streak: extractStreakMeta(env) };
+  },
 
   /**
    * Overwrite an existing entry's fields — used when a photo is added to an

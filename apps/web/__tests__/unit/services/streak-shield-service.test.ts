@@ -137,14 +137,47 @@ describe('earnForStreakIncrease', () => {
     expect(await StreakShieldService.earnForStreakIncrease(USER, 8, 9)).toBe(0);
   });
 
-  it('rate-limits awards to 2 per rolling 7 days (repair-farming guard)', async () => {
+  it('pays each calendar boundary day once — a retro gap-fill cannot re-earn it', async () => {
     seedFreeUser();
-    // Day 28 crossing (weekly) then day 30 crossing (monthly): both awarded.
-    expect(await StreakShieldService.earnForStreakIncrease(USER, 27, 28)).toBe(1);
-    expect(await StreakShieldService.earnForStreakIncrease(USER, 29, 30)).toBe(1);
-    // A third crossing inside the same week (e.g. via break-and-repair
-    // re-crossing an already-paid boundary) earns nothing.
-    expect(await StreakShieldService.earnForStreakIncrease(USER, 6, 7)).toBe(0);
+    // Run A: 7 days ending 2026-08-10 → the day-7 boundary fell on 08-10.
+    expect(await StreakShieldService.earnForStreakIncrease(USER, 6, 7, '2026-08-10')).toBe(1);
+    // Streak "breaks" (gap on 08-11), user restarts 08-12/08-13 (streak 2),
+    // then retro-claims 08-11: the merged run is 10 days ending 08-13, so
+    // the day-7 boundary is 08-13 - 3 = 08-10 — already paid → nothing.
+    expect(await StreakShieldService.earnForStreakIncrease(USER, 2, 10, '2026-08-13')).toBe(0);
+    // A genuinely new boundary (day 14 on 08-17) still pays.
+    expect(await StreakShieldService.earnForStreakIncrease(USER, 13, 14, '2026-08-17')).toBe(1);
+    const row = db.getRows('streak_shields').find(r => r.shield_type === 'milestone_shield');
+    expect(row!.available_count).toBe(2);
+    expect(row!.metadata.paid_boundaries).toEqual(['7:2026-08-10', '7:2026-08-17']);
+  });
+
+  it('honest catch-ups are not truncated (no rolling rate limit)', async () => {
+    seedFreeUser();
+    // 0 → 21 in one retroactive sweep crosses 7, 14, 21 → 3 shields (cap is 3).
+    expect(await StreakShieldService.earnForStreakIncrease(USER, 0, 21, '2026-08-21')).toBe(3);
+  });
+
+  it('dedupes milestone celebrations by day and reports capped earns', async () => {
+    seedFreeUser({ freeze: SHIELD_RULES.MAX_SHIELD_BALANCE });
+    // 0 → 7 celebrates day 3 (08-06) and day 7 (08-10); the highest is reported.
+    const first = await StreakShieldService.awardForStreakGrowth(USER, {
+      oldStreak: 0,
+      newStreak: 7,
+      runEndDay: '2026-08-10',
+    });
+    expect(first.milestone?.days).toBe(7);
+    expect(first.earned).toBe(1);
+    expect(first.credited).toBe(0);
+    expect(first.capped).toBe(true);
+
+    const again = await StreakShieldService.awardForStreakGrowth(USER, {
+      oldStreak: 2,
+      newStreak: 10,
+      runEndDay: '2026-08-13',
+    });
+    expect(again.milestone).toBeNull();
+    expect(again.earned).toBe(0);
   });
 });
 

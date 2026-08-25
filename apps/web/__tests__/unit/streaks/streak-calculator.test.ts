@@ -122,3 +122,16 @@ describe('calculateStreak', () => {
     expect(calculateStreak(claims, '2026-08-05')).toBe(0);
   });
 });
+
+describe('localDayOf / isValidTimezone', () => {
+  it('projects an instant into the user timezone', async () => {
+    const { localDayOf, isValidTimezone } = await import('@/lib/streaks/streak-calculator');
+    expect(localDayOf('2026-08-03T06:30:00.000Z', 'America/Los_Angeles')).toBe('2026-08-02');
+    expect(localDayOf('2026-08-03T19:00:00.000Z', 'Asia/Kolkata')).toBe('2026-08-04');
+    expect(localDayOf('2026-08-03T12:00:00.000Z', null)).toBe('2026-08-03');
+    expect(localDayOf('2026-08-03T12:00:00.000Z', 'Not/AZone')).toBe('2026-08-03');
+    expect(isValidTimezone('Europe/London')).toBe(true);
+    expect(isValidTimezone('Nowhere/Land')).toBe(false);
+    expect(isValidTimezone(null)).toBe(false);
+  });
+});

@@ -9,6 +9,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { toast } from 'sonner';
+import { announceStreakAutoClaim } from '@/lib/streaks/auto-claim-events';
 
 import { Navbar } from '@/components/layout/navbar';
 import { Button } from '@/components/ui/button';
@@ -58,7 +59,7 @@ export default function NewExerciseEntry() {
     if (!canSave) return;
     setIsSaving(true);
     try {
-      await exerciseClient.create({
+      const { streak } = await exerciseClient.create({
         exercise_type: exerciseType.trim(),
         category,
         duration_minutes: Number(duration),
@@ -69,6 +70,8 @@ export default function NewExerciseEntry() {
         source: 'manual',
       });
       toast.success('Workout logged!');
+      // Server-side streak auto-claim for this workout → refresh streak UI + toast.
+      announceStreakAutoClaim(streak);
       router.push('/exercise-log');
     } catch (e: any) {
       toast.error(e?.message ?? 'Could not save');

@@ -3,6 +3,8 @@ import { z } from 'zod';
 
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { WorkoutLoggingService } from '@/lib/services/workout-logging-service';
+import { StreakClaimingService } from '@/lib/services/streak-claiming-service';
+import { resolveClientTimezone } from '@/lib/streaks/client-timezone';
 
 const quickLogSchema = z.object({
   brand: z.string().min(1).max(50),
@@ -23,11 +25,21 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const validated = quickLogSchema.parse(body);
 
+    const timezone = resolveClientTimezone(request, body?.timezone);
     const result = await WorkoutLoggingService.quickLog(user.id, {
       brand: validated.brand,
       category: validated.category,
       duration_minutes: validated.duration_minutes,
       notes: validated.notes,
+      timezone,
+    });
+
+    // Quick-log is always a manual workout → claims today (user-local).
+    const streak = await StreakClaimingService.autoClaimForManualLog(user.id, {
+      occurredAt: (result.exercise?.exercise_date as string | undefined) ?? null,
+      timezone,
+      source: 'exercise_log',
+      referenceId: result.exercise?.id as string | undefined,
     });
 
     return NextResponse.json({
@@ -37,7 +49,7 @@ export async function POST(request: NextRequest) {
         momentum: result.momentum,
         counts_as_checkin: validated.duration_minutes >= 10,
       },
-      meta: { requestTime: Date.now() - startTime },
+      meta: { requestTime: Date.now() - startTime, streak },
       error: null,
     });
   } catch (error: unknown) {

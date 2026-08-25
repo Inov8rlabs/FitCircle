@@ -10,6 +10,8 @@ import { z } from 'zod';
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { FeatureFlagService } from '@/lib/services/feature-flag-service';
 import { FoodLogService } from '@/lib/services/food-log-service';
+import { StreakClaimingService } from '@/lib/services/streak-claiming-service';
+import { resolveClientTimezone } from '@/lib/streaks/client-timezone';
 import { createAdminSupabase } from '@/lib/supabase-admin';
 import { CreateFoodLogEntrySchema, FoodLogQuerySchema } from '@/lib/validation/food-log-validation';
 
@@ -250,12 +252,23 @@ export async function POST(request: NextRequest) {
       throw result.error;
     }
 
+    // Logging a meal is a manual action → it claims the streak day the meal
+    // was eaten on (server-side, so every client and the offline sync queue
+    // get identical behaviour). Never fails the create.
+    const streak = await StreakClaimingService.autoClaimForManualLog(user.id, {
+      occurredAt: result.data?.logged_at ?? validatedData.entry_date ?? null,
+      timezone: resolveClientTimezone(request, body?.timezone),
+      source: 'food_log',
+      referenceId: result.data?.id,
+    });
+
     return NextResponse.json(
       {
         success: true,
         data: result.data,
         meta: {
           requestTime: Date.now() - startTime,
+          streak,
         },
         error: null,
       },

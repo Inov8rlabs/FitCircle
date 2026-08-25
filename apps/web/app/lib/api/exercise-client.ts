@@ -4,6 +4,7 @@ import type {
   ExerciseStatsResponse,
 } from '@/lib/types/exercise';
 import { useAuthStore } from '@/stores/auth-store';
+import { clientTimezone, extractStreakMeta } from '@/lib/streaks/auto-claim-events';
 
 async function authedFetch<T>(path: string, init?: RequestInit): Promise<T> {
   const token = useAuthStore.getState().token;
@@ -37,11 +38,17 @@ export const exerciseClient = {
     );
   },
 
-  create: (input: ExerciseLogCreateInput) =>
-    authedFetch<{ exercise: ExerciseLog }>('/api/mobile/exercises', {
+  /**
+   * Create a workout. Manual entries are auto-claimed for the streak on the
+   * server; the outcome rides back in `meta.streak` (returned as `streak`).
+   */
+  create: async (input: ExerciseLogCreateInput) => {
+    const json = await authedFetch<{ data: ExerciseLog; meta?: unknown }>('/api/mobile/exercises', {
       method: 'POST',
-      body: JSON.stringify(input),
-    }),
+      body: JSON.stringify({ ...input, timezone: clientTimezone() }),
+    });
+    return { exercise: json.data, streak: extractStreakMeta(json) };
+  },
 
   delete: (id: string) =>
     authedFetch<{ success: boolean }>(`/api/mobile/exercises/${id}`, { method: 'DELETE' }),

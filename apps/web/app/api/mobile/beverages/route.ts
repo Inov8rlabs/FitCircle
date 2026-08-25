@@ -9,6 +9,8 @@ import { z } from 'zod';
 
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { BeverageLogService } from '@/lib/services/beverage-log-service';
+import { StreakClaimingService } from '@/lib/services/streak-claiming-service';
+import { resolveClientTimezone } from '@/lib/streaks/client-timezone';
 import { createAdminSupabase } from '@/lib/supabase-admin';
 import {
   CreateBeverageLogSchema,
@@ -197,12 +199,21 @@ export async function POST(request: NextRequest) {
       throw result.error;
     }
 
+    // Manual log → server-side streak auto-claim for the day it was drunk.
+    const streak = await StreakClaimingService.autoClaimForManualLog(user.id, {
+      occurredAt: result.data?.logged_at ?? validatedData.entry_date ?? null,
+      timezone: resolveClientTimezone(request, body?.timezone),
+      source: 'beverage_log',
+      referenceId: result.data?.id,
+    });
+
     return NextResponse.json(
       {
         success: true,
         data: result.data,
         meta: {
           requestTime: Date.now() - startTime,
+          streak,
         },
         error: null,
       },

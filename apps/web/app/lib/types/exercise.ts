@@ -221,6 +221,8 @@ export interface ExerciseLogCreateInput {
   healthkit_workout_id?: string;
   source_device_name?: string;
   auto_claim_streak?: boolean; // defaults to true for manual, false for healthkit
+  /** Client IANA timezone; anchors the default `date` on the user's local today. */
+  timezone?: string | null;
   exercises?: WorkoutExerciseInput[]; // NEW: optional structured exercise log (nested write)
 }
 

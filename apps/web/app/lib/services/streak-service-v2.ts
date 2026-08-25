@@ -235,7 +235,7 @@ export async function completeCheckin(
     const newStreak = calculateStreak(claimDates, checkInDate);
     const crossed = milestoneCrossed(oldStreak, newStreak);
 
-    await StreakShieldService.earnForStreakIncrease(userId, oldStreak, newStreak).catch(e =>
+    await StreakShieldService.earnForStreakIncrease(userId, oldStreak, newStreak, checkInDate).catch(e =>
       console.error('[completeCheckin] shield earn error (non-blocking):', e)
     );
 

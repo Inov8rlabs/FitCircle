@@ -1,6 +1,7 @@
 'use client';
 
 import { Camera, Check, ChevronDown, Loader2, Minus, Plus, Sparkles, Trash2, X } from 'lucide-react';
+import { announceStreakAutoClaim } from '@/lib/streaks/auto-claim-events';
 import { useRef, useState } from 'react';
 
 import {
@@ -361,9 +362,16 @@ export function NutritionConfirm({
 
       // Editing an existing meal (a photo was added to a logged meal) → PATCH
       // its merged nutrition and attach the new photos. Otherwise create anew.
-      const entryId = editEntry
-        ? (await nutritionClient.updateFoodLog(editEntry.id, { meal_type: mealType, title, nutrition_data }), editEntry.id)
-        : (await nutritionClient.createFoodLog({ entry_type: 'food', meal_type: mealType, title, nutrition_data })).id;
+      let entryId: string;
+      if (editEntry) {
+        await nutritionClient.updateFoodLog(editEntry.id, { meal_type: mealType, title, nutrition_data });
+        entryId = editEntry.id;
+      } else {
+        const created = await nutritionClient.createFoodLog({ entry_type: 'food', meal_type: mealType, title, nutrition_data });
+        entryId = created.id;
+        // Server-side streak auto-claim for this meal → refresh streak UI + toast.
+        announceStreakAutoClaim(created.streak);
+      }
 
       if (images.length > 0) {
         // Best-effort — the entry's nutrition is authoritative even if a photo fails.

@@ -6,6 +6,8 @@ import {
 } from '../services/notification-orchestrator';
 import { PushService } from '../services/push-service';
 import { createAdminSupabase } from '../supabase-admin';
+import { MILESTONES } from '../streaks/streak-config';
+import { StreakShieldService } from '../services/streak-shield-service';
 
 // ============================================================================
 // HELPERS
@@ -159,16 +161,8 @@ export async function sendMomentumNotifications(): Promise<{
     throw error;
   }
 
-  // Milestones for near-milestone check
-  const MILESTONES = [
-    { days: 3, name: '3-Day Spark' },
-    { days: 7, name: '1-Week Flame' },
-    { days: 14, name: '2-Week Blaze' },
-    { days: 30, name: 'Monthly Inferno' },
-    { days: 60, name: '60-Day Furnace' },
-    { days: 100, name: 'Centurion Flame' },
-    { days: 365, name: 'Eternal Flame' },
-  ];
+  // Milestones come from the canonical streak config so the nudge names
+  // match what the app celebrates (and none of the later tiers are missed).
 
   for (const streak of streaks || []) {
     try {
@@ -195,11 +189,17 @@ export async function sendMomentumNotifications(): Promise<{
       }
 
       // If hasn't checked in today and has significant momentum, send at-risk
+      // — and tell them whether a shield will cover them if they can't.
       if (currentMomentum >= 3) {
+        const inventory = await StreakShieldService.getInventory(streak.user_id).catch(() => null);
         const result = await NotificationOrchestrator.send(
           streak.user_id,
           'momentum_at_risk',
-          { currentMomentum }
+          {
+            currentMomentum,
+            shieldsRemaining: inventory?.available ?? null,
+            unlimited: inventory?.unlimited ?? false,
+          }
         );
         if (result.sent) sent++;
       }

@@ -1,4 +1,5 @@
 import { createAdminSupabase } from '../supabase-admin';
+import { localToday } from '../streaks/streak-calculator';
 
 import { BoostService } from './boost-service';
 import { MomentumService } from './momentum-service';
@@ -12,6 +13,8 @@ export interface QuickLogInput {
   category: 'cardio' | 'strength' | 'flexibility' | 'sports' | 'outdoor' | 'other';
   duration_minutes: number;
   notes?: string;
+  /** Client IANA timezone for the user-local exercise date. */
+  timezone?: string | null;
 }
 
 export interface BrandInfo {
@@ -86,7 +89,8 @@ export class WorkoutLoggingService {
     input: QuickLogInput
   ): Promise<{ exercise: Record<string, unknown>; momentum: Record<string, unknown> | null }> {
     const supabaseAdmin = createAdminSupabase();
-    const today = new Date().toISOString().split('T')[0];
+    // User-local today (falls back to UTC when the client sent no zone).
+    const today = localToday(input.timezone);
     const countsAsCheckin = input.duration_minutes >= 10;
     const exerciseType = BRAND_EXERCISE_TYPE[input.brand] || 'other';
 

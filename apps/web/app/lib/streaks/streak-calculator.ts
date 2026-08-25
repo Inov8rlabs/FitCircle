@@ -29,6 +29,40 @@ export function localToday(timezone?: string | null): string {
   return new Date().toISOString().split('T')[0];
 }
 
+/** True when `timezone` is an IANA zone Intl can resolve. */
+export function isValidTimezone(timezone?: string | null): timezone is string {
+  if (!timezone) return false;
+  try {
+    new Intl.DateTimeFormat('en-CA', { timeZone: timezone });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * The YYYY-MM-DD local day that `instant` falls on in `timezone` (UTC if the
+ * zone is absent/invalid). This is how "when was this meal eaten" becomes
+ * "which streak day does it count for".
+ */
+export function localDayOf(instant: Date | string, timezone?: string | null): string {
+  const date = typeof instant === 'string' ? new Date(instant) : instant;
+  if (Number.isNaN(date.getTime())) return localToday(timezone);
+  if (timezone) {
+    try {
+      return new Intl.DateTimeFormat('en-CA', {
+        timeZone: timezone,
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+      }).format(date);
+    } catch {
+      // fall through to UTC
+    }
+  }
+  return date.toISOString().split('T')[0];
+}
+
 /** dayStr + delta days, as YYYY-MM-DD (delta may be negative). */
 export function addDays(dayStr: string, delta: number): string {
   const d = new Date(`${dayStr}T00:00:00Z`);

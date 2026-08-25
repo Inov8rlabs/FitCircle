@@ -52,6 +52,15 @@ export interface NotificationData {
   challengeId?: string;
   messageId?: string;
 
+  // Streak shields
+  shieldsRemaining?: number | null;
+  shieldsGranted?: number;
+  unlimited?: boolean;
+  lostStreak?: number;
+  paywallEligible?: boolean;
+  zombieGuard?: boolean;
+  lastAutoProtect?: boolean;
+
   // Deep link
   deepLink?: string;
 
@@ -78,6 +87,10 @@ export type NotificationType =
   | 'momentum_decay'
   | 'momentum_reset'
   | 'reset_encouragement'
+  // State - Streak shields
+  | 'shield_applied'
+  | 'streak_lost'
+  | 'shield_earned'
   // State - Circle (S5/S6/S12)
   | 'circle_boost_threshold'
   | 'perfect_day'
@@ -182,7 +195,13 @@ export const NOTIFICATION_TEMPLATES: Record<
   // ---- State - Momentum (S1-S4b) ----
   momentum_at_risk: (data) => ({
     title: 'Your flame is flickering! 🕯️',
-    body: `Don't let your ${data.currentMomentum || 0}-day momentum slip. A quick workout keeps it alive!`,
+    body: `Don't let your ${data.currentMomentum || 0}-day streak slip. Log a meal or workout to keep it alive${
+      data.unlimited
+        ? ' — and Pro shields have your back if you can\'t.'
+        : typeof data.shieldsRemaining === 'number' && data.shieldsRemaining > 0
+          ? ` — or a shield (${data.shieldsRemaining} left) will cover you.`
+          : '. No shields left to cover a miss!'
+    }`,
     category: 'momentum',
   }),
   near_milestone: (data) => ({
@@ -194,6 +213,31 @@ export const NOTIFICATION_TEMPLATES: Record<
     title: 'Grace day activated 🛡️',
     body: "We've got your back! Your grace day protected your momentum. Try to check in tomorrow!",
     category: 'momentum',
+  }),
+  shield_applied: (data) => ({
+    title: 'A shield saved your streak 🛡️',
+    body: `You missed yesterday, so a shield kept your ${data.streakDays || 0}-day streak alive.${
+      data.unlimited
+        ? ' Pro keeps you covered.'
+        : data.shieldsRemaining === 0
+          ? " That was your last one — show up today to keep it going!"
+          : ` ${data.shieldsRemaining ?? 0} shield${data.shieldsRemaining === 1 ? '' : 's'} left.`
+    }${data.lastAutoProtect ? ' Shields won\'t cover another miss in a row.' : ''}`,
+    category: 'momentum',
+  }),
+  streak_lost: (data) => ({
+    title: `Your ${data.lostStreak || 0}-day streak ended 💔`,
+    body: data.zombieGuard
+      ? 'Shields can only cover two misses in a row. Log something today to start a fresh streak.'
+      : data.paywallEligible
+        ? 'No shields left to cover yesterday. Pro members get unlimited shields — or start fresh today!'
+        : 'Log a meal, a workout, or check in today to start a new one.',
+    category: 'momentum',
+  }),
+  shield_earned: (data) => ({
+    title: 'Shield earned 🛡️',
+    body: `${data.streakDays || 0} days strong! You earned ${data.shieldsGranted === 1 ? 'a streak shield' : `${data.shieldsGranted} streak shields`} — it auto-protects your next missed day.`,
+    category: 'celebration',
   }),
   momentum_decay: (data) => ({
     title: 'Momentum slipping 📉',
@@ -418,14 +462,18 @@ export class NotificationOrchestrator {
 
     const sentCount = await PushService.sendPush(userId, pushNotification);
 
-    // 6. Log the notification
-    await this.logNotification(userId, type, content, data, false);
-
-    console.log(
-      `[NotificationOrchestrator] Sent "${type}" to user ${userId} (${sentCount} devices)`
-    );
-
-    return { sent: true };
+    // 6. Log the notification — truthfully. With no registered device (or
+    //    no FCM credentials) nothing was delivered, and a "sent" log row
+    //    would both mislead and count against the daily frequency cap.
+    if (sentCount > 0) {
+      await this.logNotification(userId, type, content, data, false);
+      console.log(
+        `[NotificationOrchestrator] Sent "${type}" to user ${userId} (${sentCount} devices)`
+      );
+      return { sent: true };
+    }
+    await this.logNotification(userId, type, content, data, true, 'no_delivery');
+    return { sent: false, reason: 'no_delivery' };
   }
 
   /**
