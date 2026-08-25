@@ -10,7 +10,7 @@ Everything code-side is built, tested, and **dark**. This file lists every manua
 | **2. RevenueCat API keys** (absent today) | Whether the mobile SDKs talk to RevenueCat at all. Absent = billing code inert. | iOS `Config.revenueCatAPIKey` / Android `REVENUECAT_API_KEY` build property |
 | **3. Migration 082** (formerly 077; NOT applied today) | Free-tier *quotas* (5 AI parses, 5 Fitzy msgs, 14-day history, 2 circles, ads gating). Until applied, behavior is byte-identical to today. | `supabase/pending/082_enable_pro_gates.sql` |
 
-Launch order is always **1 → (verify) → 3**. Turning on the flag before 077 means people can buy Pro while free users lose nothing — a safe soft-launch. 077 is the moment free limits begin.
+Launch order is always **1 → (verify) → 3**. Turning on the flag before 082 means people can buy Pro while free users lose nothing — a safe soft-launch. 082 is the moment free limits begin.
 
 ### How to turn the feature ON
 
