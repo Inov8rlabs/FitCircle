@@ -1,5 +1,5 @@
 -- ============================================================================
--- 081: Restore GDPR/CCPA consent tables
+-- 078: Restore GDPR/CCPA consent tables
 -- ============================================================================
 -- RESTORE. This was written as 016_add_consent_management.sql but never reached production — it was
 -- missed in the era when migrations were applied by hand in the SQL editor,

@@ -1,5 +1,5 @@
 -- ============================================================================
--- 083: Restore nutrition training-sample capture
+-- 080: Restore nutrition training-sample capture
 -- ============================================================================
 -- RESTORE. This was written as 067_nutrition_training_samples.sql but never reached production — it was
 -- missed in the era when migrations were applied by hand in the SQL editor,

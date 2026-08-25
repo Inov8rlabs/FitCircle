@@ -1,5 +1,5 @@
 -- ============================================================================
--- 082: Restore exercise logging catalog
+-- 079: Restore exercise logging catalog
 -- ============================================================================
 -- RESTORE. This was written as 073_exercise_logging.sql 074_exercise_catalog_seed.sql but never reached production — it was
 -- missed in the era when migrations were applied by hand in the SQL editor,

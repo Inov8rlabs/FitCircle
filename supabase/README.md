@@ -70,13 +70,13 @@ not re-apply them.**
 
 Capturing production faithfully also exposed what was missing from it. Each of
 these had backend code querying an object the database did not have; all were
-restored in migrations 081–083 (numbered after the already-pending 078_streak_shield_consolidation — migration versions must be unique) and by a code fix, on 2026-08-04:
+restored in migrations 078–080 (applied to production 2026-08-04) and by a code fix, on 2026-08-04:
 
 | Was missing | Restored by |
 |---|---|
-| `privacy_settings`, `user_consent` — the GDPR/CCPA consent trail | `081_restore_consent_management.sql` (originally 016) |
-| `exercises`, `exercise_sets`, `workout_exercises` + the 182-row catalogue | `082_restore_exercise_logging.sql` (originally 073/074) |
-| `nutrition_training_samples` | `083_restore_nutrition_training_samples.sql` (originally 067) |
+| `privacy_settings`, `user_consent` — the GDPR/CCPA consent trail | `078_restore_consent_management.sql` (originally 016) |
+| `exercises`, `exercise_sets`, `workout_exercises` + the 182-row catalogue | `079_restore_exercise_logging.sql` (originally 073/074) |
+| `nutrition_training_samples` | `080_restore_nutrition_training_samples.sql` (originally 067) |
 | `circle_members` — dropped in 018, superseded by `fitcircle_members` | code fix across 13 call sites |
 
 The `circle_members` fix was not a rename: the old table used `circle_id` and a
@@ -84,6 +84,11 @@ boolean `is_active`, the new one uses `fitcircle_id` and a `status` text column.
 One of those call sites was in the account-deletion cascade, where `safeDelete`
 swallows a missing table with a warning — so erasure had been silently leaving
 membership rows behind for every deleted account.
+
+`081_streak_shield_consolidation.sql` (the shield-inventory data migration,
+written as 078 on 2026-08-03) was never applied before the squash and was
+renumbered to 081 because 078 was taken; it is the next migration to push.
+Migration versions must be unique — `schema_migrations.version` is the key.
 
 Still deliberately not restored, because nothing references them: 034
 (journeys), 037 (circle challenges), 012 (`progress_milestones`), and 068
