@@ -5,6 +5,7 @@ import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { ExerciseService } from '@/lib/services/exercise-service';
 import { StreakClaimingService } from '@/lib/services/streak-claiming-service';
 import { resolveClientTimezone } from '@/lib/streaks/client-timezone';
+import { workoutCountsForStreak } from '@/lib/streaks/workout-claim-policy';
 import {
   exercisesArraySchema,
   mapExercisesToInput,
@@ -80,11 +81,13 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Manual workouts claim the streak day they were done on. HealthKit /
-    // Health Connect imports (source !== 'manual', or autoClaimStreak:false)
-    // never do — passive data doesn't prove the user showed up.
-    const isManual = (validated.source ?? 'manual') === 'manual' && validated.autoClaimStreak !== false;
-    const streak = isManual
+    // A workout claims the streak day it was done on: any manual log, or a
+    // synced HealthKit / Health Connect session of >= 10 minutes (real effort
+    // is real effort, however it was recorded). The request's legacy
+    // `autoClaimStreak` flag no longer decides — the policy lives server-side
+    // in workout-claim-policy so all clients behave identically.
+    const countsForStreak = workoutCountsForStreak(validated.durationMinutes, validated.source ?? 'manual');
+    const streak = countsForStreak
       ? await StreakClaimingService.autoClaimForManualLog(user.id, {
           occurredAt: result.data?.exercise?.exercise_date ?? validated.date ?? validated.startedAt ?? null,
           timezone,

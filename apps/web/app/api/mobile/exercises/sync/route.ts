@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { ExerciseService } from '@/lib/services/exercise-service';
 import { createAdminSupabase } from '@/lib/supabase-admin';
+import { resolveClientTimezone } from '@/lib/streaks/client-timezone';
 
 const exerciseItemSchema = z.object({
   exerciseType: z.string().min(1).max(50),
@@ -26,7 +27,8 @@ const exerciseItemSchema = z.object({
 
 const bulkSyncSchema = z.object({
   exercises: z.array(exerciseItemSchema).min(1).max(100),
-  autoClaimStreak: z.boolean().optional().default(false),
+  /** Accepted for old clients; ignored — the server decides (workout-claim-policy). */
+  autoClaimStreak: z.boolean().optional(),
 });
 
 /**
@@ -60,12 +62,13 @@ export async function POST(request: NextRequest) {
       healthkit_workout_id: e.healthkitWorkoutId,
       source_device_name: e.sourceDeviceName,
       source: e.source,
-      auto_claim_streak: false, // Never claim streak for bulk sync
     }));
 
+    // Synced workouts of >= 10 min claim their streak day (workout-claim-policy);
+    // the outcome rides back in meta.streak so the client can refresh the card.
     const result = await ExerciseService.bulkSyncExercises(
       user.id,
-      { exercises, auto_claim_streak: false },
+      { exercises, timezone: resolveClientTimezone(request, body?.timezone) },
       supabaseAdmin
     );
 
@@ -79,7 +82,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: true,
       data: result.data,
-      meta: { requestTime: Date.now() - startTime },
+      meta: { requestTime: Date.now() - startTime, streak: result.streak },
       error: null,
     });
   } catch (error: unknown) {

@@ -220,7 +220,8 @@ export interface ExerciseLogCreateInput {
   notes?: string;
   healthkit_workout_id?: string;
   source_device_name?: string;
-  auto_claim_streak?: boolean; // defaults to true for manual, false for healthkit
+  /** @deprecated Ignored — whether a workout claims the streak is decided server-side (workout-claim-policy). */
+  auto_claim_streak?: boolean;
   /** Client IANA timezone; anchors the default `date` on the user's local today. */
   timezone?: string | null;
   exercises?: WorkoutExerciseInput[]; // NEW: optional structured exercise log (nested write)
@@ -231,7 +232,10 @@ export interface ExerciseLogCreateInput {
  */
 export interface ExerciseBulkSyncInput {
   exercises: ExerciseLogCreateInput[];
-  auto_claim_streak?: boolean; // always false for HealthKit sync
+  /** @deprecated Ignored — whether a workout claims the streak is decided server-side (workout-claim-policy). */
+  auto_claim_streak?: boolean;
+  /** Client IANA timezone; anchors default dates and the streak day. */
+  timezone?: string | null;
 }
 
 /**

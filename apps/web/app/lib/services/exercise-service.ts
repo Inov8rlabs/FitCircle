@@ -12,6 +12,9 @@
 
 import { type SupabaseClient } from '@supabase/supabase-js';
 import { localToday } from '../streaks/streak-calculator';
+import { workoutCountsForStreak } from '../streaks/workout-claim-policy';
+import { StreakClaimingService } from './streak-claiming-service';
+import type { AutoClaimResult } from '../types/streak-claiming';
 
 import type {
   ExerciseLog,
@@ -248,7 +251,9 @@ export class ExerciseService {
       // claim itself is written by the route via
       // StreakClaimingService.autoClaimForManualLog — recordActivity does not
       // create a streak_claims row, so it never counted toward the streak.
-      const shouldClaimStreak = source === 'manual' && data.auto_claim_streak !== false;
+      // Same policy as the claim: any manual log, or a synced workout of
+      // >= 10 minutes (see workout-claim-policy).
+      const shouldClaimStreak = workoutCountsForStreak(data.duration_minutes, source);
       if (shouldClaimStreak) {
         try {
           const { EngagementStreakService } = await import('./engagement-streak-service');
@@ -317,12 +322,15 @@ export class ExerciseService {
     userId: string,
     data: ExerciseBulkSyncInput,
     supabase: SupabaseClient
-  ): Promise<{ data: ExerciseBulkSyncResponse | null; error: Error | null }> {
+  ): Promise<{ data: ExerciseBulkSyncResponse | null; error: Error | null; streak: AutoClaimResult | null }> {
     try {
       const results: ExerciseSyncResult[] = [];
       let synced = 0;
       let skipped = 0;
       let failed = 0;
+      // Newly inserted workouts that qualify for the streak: claimed in date
+      // order after the loop so the final streakCount is the current one.
+      const claimable: { id: string; day: string }[] = [];
 
       for (const exercise of data.exercises) {
         try {
@@ -357,11 +365,12 @@ export class ExerciseService {
             continue;
           }
 
-          const exerciseDate = exercise.date || new Date().toISOString().split('T')[0];
+          // User-local today, not the server's UTC date, when the client sent no date.
+          const exerciseDate = exercise.date || localToday(data.timezone);
           const bodyAreas = DEFAULT_BODY_AREAS[exercise.exercise_type] || ['fullBody'];
           const countsAsCheckin = exercise.duration_minutes >= 10;
 
-          const { error: insertError } = await supabase
+          const { data: inserted, error: insertError } = await supabase
             .from('exercise_logs')
             .insert({
               user_id: userId,
@@ -385,7 +394,9 @@ export class ExerciseService {
               source_device_name: exercise.source_device_name ?? null,
               is_public: true,
               counts_as_checkin: countsAsCheckin,
-            });
+            })
+            .select('id')
+            .single();
 
           if (insertError) {
             // Handle unique constraint violation gracefully
@@ -413,6 +424,9 @@ export class ExerciseService {
               status: 'created',
             });
             synced++;
+            if (workoutCountsForStreak(exercise.duration_minutes, 'healthkit') && inserted?.id) {
+              claimable.push({ id: inserted.id, day: exerciseDate });
+            }
           }
         } catch (itemError) {
           results.push({
@@ -445,14 +459,33 @@ export class ExerciseService {
         }
       }
 
+      // A synced workout of >= 10 min is "showing up": claim each day it
+      // covers (bounded by the retro window; already-claimed days are fine).
+      // Oldest first so the last result carries the up-to-date streak count.
+      let streak: AutoClaimResult | null = null;
+      let anyClaimed = false;
+      for (const item of claimable.sort((a, b) => a.day.localeCompare(b.day))) {
+        const outcome = await StreakClaimingService.autoClaimForManualLog(userId, {
+          occurredAt: item.day,
+          timezone: data.timezone,
+          source: 'exercise_log',
+          referenceId: item.id,
+        });
+        anyClaimed = anyClaimed || outcome.claimed;
+        if (outcome.claimed || outcome.alreadyClaimed || !streak) streak = outcome;
+      }
+      if (streak) streak = { ...streak, claimed: anyClaimed };
+
       return {
         data: { synced, skipped, failed, results },
         error: null,
+        streak,
       };
     } catch (err) {
       return {
         data: null,
         error: err instanceof Error ? err : new Error('Failed to sync exercises'),
+        streak: null,
       };
     }
   }
