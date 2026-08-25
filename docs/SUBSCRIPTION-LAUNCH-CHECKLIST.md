@@ -39,7 +39,7 @@ UPDATE feature_flags SET is_enabled = false WHERE name = 'subscriptions';
 - [ ] Apply `supabase/migrations/075_subscription_infrastructure.sql` (subscription_events, fitzy_message_log, profile columns, dark gates)
 - [ ] Apply `supabase/migrations/076_subscriptions_feature_flag.sql` (the flag row, `is_enabled=false`)
 - [ ] Verify migration 066 is applied in prod (`payments` client writes revoked) — it predates this work but is a security prerequisite
-- [ ] Do **NOT** apply 077 yet
+- [ ] Do **NOT** apply 082 yet
 
 ## Phase B — Stripe (web billing)
 
@@ -104,7 +104,7 @@ Then:
 ## Phase G — Launch sequence
 
 1. [ ] Flag → staged rollout (10% → 50% → 100%) while watching: trial starts, trial→paid, webhook error logs, reconcile-cron corrected count (should stay ~0)
-2. [ ] When conversion loop is proven end-to-end: apply **migration 077** (free-tier quotas begin; ads gate on entitlement; watch the guardrail metrics — K-factor ≥ 0.4, D1/D7/D30 ≥ 40/20/10, week-1 circle-join ≥ 35%; if they drop, loosen free limits before touching the paywall)
+2. [ ] When conversion loop is proven end-to-end: apply **migration 082** (free-tier quotas begin; ads gate on entitlement; watch the guardrail metrics — K-factor ≥ 0.4, D1/D7/D30 ≥ 40/20/10, week-1 circle-join ≥ 35%; if they drop, loosen free limits before touching the paywall)
 3. [ ] Launch promo: switch RC current offering to `launch`, set `STRIPE_COUPON_LAUNCH` + `NEXT_PUBLIC_LAUNCH_PROMO_ANNUAL`, enable the Play/App Store intro offers; time-box and reverse the same way
 4. [ ] Lifetime window: `NEXT_PUBLIC_LIFETIME_OFFER=true` (web) + include the lifetime package in the current RC offering; retire after the window
 5. [ ] Post-launch: RevenueCat Experiments on price/trial/copy; weekly review vs the calculator's Base scenario (`SUBSCRIPTION-MODEL-CALCULATOR.html`); recalibrate monthly
