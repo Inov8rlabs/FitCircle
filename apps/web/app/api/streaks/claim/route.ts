@@ -64,6 +64,15 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(result);
   } catch (error: any) {
     console.error('[POST /api/streaks/claim] Error:', error);
+    // An expired/invalid token must surface as 401 so the client can refresh and
+    // retry — not a 500, which the app can't recover from and which shows up in
+    // Sentry as a server error (FITCIRCLE-IOS-2).
+    if (error?.message === 'Unauthorized') {
+      return NextResponse.json(
+        { success: false, error: { code: 'UNAUTHORIZED', message: 'Invalid or expired token' } },
+        { status: 401 }
+      );
+    }
     console.error('[POST /api/streaks/claim] Error message:', error?.message);
     console.error('[POST /api/streaks/claim] Error stack:', error?.stack);
 

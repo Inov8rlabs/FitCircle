@@ -46,8 +46,15 @@ export async function GET(request: NextRequest) {
       shields_unlimited: shields.unlimited,
       next_milestone: nextMilestone,
     });
-  } catch (error) {
+  } catch (error: any) {
     console.error('Get current streak error:', error);
+    // Expired/invalid token → 401 so the client refreshes and retries (not a 500).
+    if (error?.message === 'Unauthorized') {
+      return NextResponse.json(
+        { success: false, error: { code: 'UNAUTHORIZED', message: 'Invalid or expired token' } },
+        { status: 401 }
+      );
+    }
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }

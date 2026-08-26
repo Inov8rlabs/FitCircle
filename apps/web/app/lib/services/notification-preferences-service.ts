@@ -167,9 +167,13 @@ export class NotificationPreferencesService {
   private static async createDefaults(userId: string): Promise<NotificationPreferences> {
     const supabaseAdmin = createAdminSupabase();
 
-    const { data, error } = await supabaseAdmin
-      .from('notification_preferences')
-      .insert({
+    // Upsert, not insert: a user's first notifications often fan out in
+    // parallel (chat recipients, cron batches), and two concurrent callers
+    // both see "no row". With a plain insert the loser threw on the unique
+    // user_id key and the whole send aborted. ignoreDuplicates makes the
+    // race a no-op; whoever won, we then read the row back.
+    const { error: upsertError } = await supabaseAdmin.from('notification_preferences').upsert(
+      {
         user_id: userId,
         journey_enabled: true,
         momentum_enabled: true,
@@ -178,15 +182,23 @@ export class NotificationPreferencesService {
         social_enabled: true,
         celebration_enabled: true,
         quiet_hours_timezone: 'America/New_York',
-      })
-      .select()
-      .single();
-
-    if (error) {
-      console.error('[NotificationPreferencesService.createDefaults] Error:', error);
-      throw error;
+      },
+      { onConflict: 'user_id', ignoreDuplicates: true }
+    );
+    if (upsertError) {
+      console.error('[NotificationPreferencesService.createDefaults] Error:', upsertError);
+      throw upsertError;
     }
 
+    const { data, error } = await supabaseAdmin
+      .from('notification_preferences')
+      .select('*')
+      .eq('user_id', userId)
+      .single();
+    if (error) {
+      console.error('[NotificationPreferencesService.createDefaults] Read-back error:', error);
+      throw error;
+    }
     return data as NotificationPreferences;
   }
 }

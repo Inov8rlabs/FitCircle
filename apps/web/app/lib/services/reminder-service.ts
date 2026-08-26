@@ -59,14 +59,30 @@ export class ReminderService {
       return { candidates: 0, sent: 0, skippedActed: 0, skippedHour: 0, errors: 0 };
     }
 
-    // Batch the per-user context (timezone + current streak).
-    const [{ data: prefs }, { data: streaks }] = await Promise.all([
+    // Batch the per-user context (timezone + current streak). Timezone
+    // priority: notification_preferences → the zone on the user's most
+    // recent streak claim (what the device actually sends) → America/New_York.
+    // Most users have no preferences row, so the claim zone is the one that
+    // keeps "7pm" from meaning 7pm Eastern for everyone.
+    const [{ data: prefs }, { data: streaks }, { data: recentClaims }] = await Promise.all([
       supabase.from('notification_preferences').select('user_id, quiet_hours_timezone').in('user_id', userIds),
       supabase.from('engagement_streaks').select('user_id, current_streak').in('user_id', userIds),
+      supabase
+        .from('streak_claims')
+        .select('user_id, timezone, claim_date')
+        .in('user_id', userIds)
+        .order('claim_date', { ascending: false })
+        .limit(userIds.length * 5),
     ]);
-    const tzByUser = new Map(
-      (prefs ?? []).map((p: any) => [p.user_id, p.quiet_hours_timezone || 'America/New_York'] as const),
-    );
+    const claimTzByUser = new Map<string, string>();
+    for (const c of (recentClaims ?? []) as { user_id: string; timezone: string | null }[]) {
+      if (c.timezone && !claimTzByUser.has(c.user_id)) claimTzByUser.set(c.user_id, c.timezone);
+    }
+    const tzByUser = new Map<string, string>();
+    for (const id of userIds) tzByUser.set(id, claimTzByUser.get(id) || 'America/New_York');
+    for (const p of (prefs ?? []) as { user_id: string; quiet_hours_timezone: string | null }[]) {
+      if (p.quiet_hours_timezone) tzByUser.set(p.user_id, p.quiet_hours_timezone);
+    }
     const streakByUser = new Map(
       (streaks ?? []).map((s: any) => [s.user_id, (s.current_streak ?? 0) as number] as const),
     );
