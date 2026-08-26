@@ -5,14 +5,16 @@ import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { MobileAPIService } from '@/lib/services/mobile-api-service';
 
 // Validation schema for PUT
+// The canonical profiles.goals[] element — the shape every client decodes
+// (iOS Goal / Android Goal / sanitizeGoalsArray). The previous {type, target,
+// unit} schema overwrote goals with a shape none of them could read.
 const updateGoalsSchema = z.object({
   goals: z.array(
     z.object({
-      type: z.string(),
-      target: z.number(),
-      unit: z.string(),
-      description: z.string().optional(),
-      deadline: z.string().optional(),
+      type: z.enum(['weight', 'steps', 'workout_minutes']),
+      target_weight_kg: z.number().min(20).max(400).nullable().optional(),
+      starting_weight_kg: z.number().min(20).max(400).nullable().optional(),
+      daily_steps_target: z.number().int().min(500).max(100000).nullable().optional(),
     })
   ),
 });

@@ -858,6 +858,9 @@ export class MobileAPIService {
         weight: dbPreferences.units?.weight || (dbPreferences.unitSystem === 'imperial' ? 'lbs' : 'kg'),
       },
       unitSystem: dbPreferences.unitSystem || 'metric',
+      // Hydration target lives in preferences (not goals[] — shipped iOS builds
+      // decode goals[].type as a closed enum). Optional; clients ignore if absent.
+      ...(dbPreferences.hydration ? { hydration: dbPreferences.hydration } : {}),
     };
 
     return {

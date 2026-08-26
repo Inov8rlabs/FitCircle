@@ -90,6 +90,12 @@ class FakeQuery {
     return this;
   }
 
+  /** PostgREST `.is(col, null)` — the only form the services use. */
+  is(column: string, value: any) {
+    this.filters.push(r => (value === null ? r[column] == null : r[column] === value));
+    return this;
+  }
+
   neq(column: string, value: any) {
     this.filters.push(r => r[column] !== value);
     return this;

@@ -51,11 +51,15 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { UnitToggle } from '@/components/ui/unit-toggle';
+import { BmiScaleCard } from '@/components/vitals/BmiScaleCard';
+import { useVitals } from '@/components/vitals/useVitals';
+import { VitalsGoalDialog } from '@/components/vitals/VitalsGoalDialog';
+import { WaterWeekCard } from '@/components/vitals/WaterWeekCard';
+import { WeightVitalsCard } from '@/components/vitals/WeightVitalsCard';
 import { useDailyGoals } from '@/hooks/useDailyGoals';
 import { useUnitPreference } from '@/hooks/useUnitPreference';
 import { supabase } from '@/lib/supabase';
 import {
-  formatWeight,
   parseWeightToKg,
   weightKgToDisplay,
   getWeightUnit,
@@ -91,6 +95,9 @@ export default function DashboardPage() {
   const { user } = useAuthStore();
   const { unitSystem, setUnitSystem, isLoading: isLoadingUnits } = useUnitPreference();
   const { goals, progress, streak, isLoading: isLoadingGoals, error: goalsError, refresh: refreshGoals } = useDailyGoals();
+  // Dashboard vitals (Weight / BMI / Water cards) — one server payload, VITALS_CLIENT_CONTRACT.md
+  const vitals = useVitals();
+  const [showVitalsGoals, setShowVitalsGoals] = useState(false);
   const [checkIns, setCheckIns] = useState<CheckIn[]>([]);
   const [isLoadingCheckIns, setIsLoadingCheckIns] = useState(true);
   const [goalWeightKg, setGoalWeightKg] = useState<number | undefined>();
@@ -438,6 +445,7 @@ export default function DashboardPage() {
     void fetchCheckIns();
     void fetchDailyStats();
     void refreshGoals(); // Refresh daily goals too
+    void vitals.refresh(); // New reading → weight/BMI cards
   };
 
   // Quick entry for steps
@@ -503,6 +511,7 @@ export default function DashboardPage() {
     toast.success(`Data saved for ${dateDisplay}!`);
     void fetchCheckIns();
     void fetchDailyStats();
+    void vitals.refresh();
   };
 
   const chartData = checkIns
@@ -760,39 +769,30 @@ export default function DashboardPage() {
                 transition={{ delay: 0.1 }}
               >
                 <Card className="bg-slate-900/50 border-slate-800 backdrop-blur-xl h-full">
-                  <CardContent className="p-4 sm:p-6 flex flex-col items-center space-y-3 sm:space-y-4">
-                    {/* Header Icon */}
-                    <div className="w-full flex justify-start">
-                      <div className="w-10 h-10 rounded-full bg-purple-500/20 flex items-center justify-center">
-                        <BathroomScale className="w-5 h-5 text-purple-400" />
-                      </div>
-                    </div>
-
-                    {/* Weight Display (no ring, just value) */}
-                    <div className="h-28 sm:h-32 flex flex-col items-center justify-center space-y-2">
-                      <p className="text-3xl sm:text-4xl font-bold text-white">
-                        {formatWeight(dailyStats.todayWeight, unitSystem)}
-                      </p>
-                      <p className="text-xs text-gray-400">
-                        {dailyStats.lastWeightDate
-                          ? `Logged: ${new Date(dailyStats.lastWeightDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`
-                          : 'No data'}
-                      </p>
-                    </div>
-
-                    {/* Goal */}
-                    <div className="text-center">
-                      <p className="text-sm sm:text-base font-semibold text-white">Weight</p>
-                      <p className="text-xs text-gray-400">
-                        {goalWeightKg
-                          ? `Goal: ${weightKgToDisplay(goalWeightKg, unitSystem).toFixed(1)} ${unitSystem === 'metric' ? 'kg' : 'lbs'}`
-                          : 'Set goal in profile'}
-                      </p>
-                    </div>
+                  <CardContent className="p-0 h-full">
+                    {/* Weight · 7 days — server summary, falls back to today's reading until it loads */}
+                    <WeightVitalsCard
+                      summary={vitals.summary}
+                      unitSystem={unitSystem}
+                      fallbackWeightKg={dailyStats.todayWeight}
+                      fallbackWeightDate={dailyStats.lastWeightDate}
+                      fallbackGoalKg={goalWeightKg}
+                      onEditGoal={() => setShowVitalsGoals(true)}
+                    />
                   </CardContent>
                 </Card>
               </motion.div>
             </div>
+
+            {/* BMI + Water this week (VITALS_CLIENT_CONTRACT.md) */}
+            <BmiScaleCard bmi={vitals.summary?.bmi ?? null} unitSystem={unitSystem} loading={vitals.loading} />
+            <WaterWeekCard
+              water={vitals.summary?.water ?? null}
+              today={vitals.summary?.period.end}
+              unitSystem={unitSystem}
+              loading={vitals.loading}
+              onEditGoal={() => setShowVitalsGoals(true)}
+            />
 
             {/* Body Composition — latest BF% + trend state, links to the journal */}
             <BodyCompDashboardCard />
@@ -973,6 +973,18 @@ export default function DashboardPage() {
           )}
         </div>
       </div>
+
+      {/* Vitals goals (target weight + daily water) */}
+      <VitalsGoalDialog
+        open={showVitalsGoals}
+        onOpenChange={setShowVitalsGoals}
+        summary={vitals.summary}
+        unitSystem={unitSystem}
+        onSave={async (body) => {
+          await vitals.saveGoals(body);
+          void fetchGoalWeight(); // keep the profile-sourced goal state in sync
+        }}
+      />
 
       {/* Backfill Data Dialog */}
       <BackfillDataDialog
