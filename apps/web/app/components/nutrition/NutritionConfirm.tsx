@@ -1,8 +1,9 @@
 'use client';
 
 import { Camera, Check, ChevronDown, Loader2, Minus, Plus, Sparkles, Trash2, X } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+
 import { announceStreakAutoClaim } from '@/lib/streaks/auto-claim-events';
-import { useRef, useState } from 'react';
 
 import {
   LOW_CONFIDENCE_THRESHOLD,
@@ -14,6 +15,13 @@ import {
 } from '@/lib/api/nutrition-client';
 import { cn } from '@/lib/utils';
 import { compressImagesForUpload } from '@/lib/utils/image-compression';
+import {
+  formatQuantity,
+  parseQuantity,
+  quantityStepSize,
+  snapServings,
+  stepQuantity,
+} from '@/lib/utils/quantity-input';
 
 type MealType = 'breakfast' | 'lunch' | 'dinner' | 'snack' | 'other';
 const MEAL_TYPES: MealType[] = ['breakfast', 'lunch', 'dinner', 'snack', 'other'];
@@ -312,8 +320,6 @@ export function NutritionConfirm({
     }
   };
 
-  const num = (v: string) => (v === '' ? 0 : Number(v));
-
   const commit = async () => {
     const named = items.filter((i) => i.name.trim()).map((i) => scaleItem(i, servings));
     if (named.length === 0) {
@@ -466,9 +472,9 @@ export function NutritionConfirm({
           <div className="text-[11px] text-gray-400">How many of this plate</div>
         </div>
         <div className="flex items-center gap-3 rounded-lg bg-slate-900/60 px-2 py-1">
-          <Step icon={<Minus className="h-3.5 w-3.5" />} onClick={() => setServings((s) => Math.max(1, Math.round((s - 0.5) * 2) / 2))} />
+          <Step icon={<Minus className="h-3.5 w-3.5" />} onClick={() => setServings((s) => snapServings(s - 0.25))} />
           <span className="min-w-[2ch] text-center text-base font-bold text-white tabular-nums">{numFmt(servings)}</span>
-          <Step icon={<Plus className="h-3.5 w-3.5" />} onClick={() => setServings((s) => Math.round((s + 0.5) * 2) / 2)} />
+          <Step icon={<Plus className="h-3.5 w-3.5" />} onClick={() => setServings((s) => snapServings(s + 0.25))} />
         </div>
       </div>
 
@@ -561,21 +567,12 @@ export function NutritionConfirm({
                   })}
                 </div>
 
-                {/* Quantity stepper */}
-                <div className="flex items-center justify-between">
-                  <span className="text-xs text-gray-400">Amount</span>
-                  <div className="flex items-center gap-3 rounded-lg bg-slate-900/60 px-2 py-1">
-                    <Step icon={<Minus className="h-3.5 w-3.5" />} onClick={() => setPortion(idx, Math.max(0, Math.round((it.quantity - stepSize(it)) * 100) / 100), it.servingUnit)} />
-                    <input
-                      type="number"
-                      step={stepSize(it)}
-                      value={it.quantity}
-                      onChange={(e) => setPortion(idx, num(e.target.value), it.servingUnit)}
-                      className="w-16 bg-transparent text-center text-sm font-bold text-white focus:outline-none"
-                    />
-                    <Step icon={<Plus className="h-3.5 w-3.5" />} onClick={() => setPortion(idx, Math.round((it.quantity + stepSize(it)) * 100) / 100, it.servingUnit)} />
-                  </div>
-                </div>
+                {/* Quantity stepper — decimals + ¼ chips, 0.25 increments */}
+                <QuantityField
+                  value={it.quantity}
+                  unit={it.servingUnit}
+                  onChange={(v) => setPortion(idx, v, it.servingUnit)}
+                />
 
                 {/* Editable macros */}
                 <div className="grid grid-cols-4 gap-2">
@@ -669,28 +666,83 @@ export function NutritionConfirm({
   );
 }
 
-function stepSize(item: NutritionDraftItem): number {
-  switch ((item.servingUnit || 'g').toLowerCase()) {
-    case 'g':
-    case 'gram':
-    case 'grams':
-    case 'ml':
-    case 'milliliter':
-      return 10;
-    case 'oz':
-    case 'ounce':
-    case 'ounces':
-      return 1;
-    case 'cup':
-    case 'cups':
-    case 'tbsp':
-    case 'tablespoon':
-    case 'tsp':
-    case 'teaspoon':
-      return 0.25; // volume units — quarter-steps so ¼/½/¾ are reachable
-    default:
-      return 0.5; // count units (piece, slice, serving, …) — allow halves
-  }
+const FRACTION_PRESETS: { label: string; value: number }[] = [
+  { label: '¼', value: 0.25 },
+  { label: '½', value: 0.5 },
+  { label: '¾', value: 0.75 },
+];
+
+function QuantityField({
+  value,
+  unit,
+  onChange,
+}: {
+  value: number;
+  unit?: string | null;
+  onChange: (v: number) => void;
+}) {
+  const step = quantityStepSize(unit);
+  const [text, setText] = useState(() => formatQuantity(value));
+  const [focused, setFocused] = useState(false);
+
+  useEffect(() => {
+    setText((prev) => {
+      const parsed = parseQuantity(prev);
+      if (parsed != null && Math.abs(parsed - value) < 0.0001) return prev;
+      if (parsed == null && focused) return prev;
+      return formatQuantity(value);
+    });
+  }, [value, focused]);
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between">
+        <span className="text-xs text-gray-400">Amount</span>
+        <div className="flex items-center gap-3 rounded-lg bg-slate-900/60 px-2 py-1">
+          <Step icon={<Minus className="h-3.5 w-3.5" />} onClick={() => onChange(stepQuantity(value, -step))} />
+          <input
+            type="text"
+            inputMode="decimal"
+            autoComplete="off"
+            value={text}
+            onFocus={() => setFocused(true)}
+            onBlur={() => {
+              setFocused(false);
+              setText(formatQuantity(value));
+            }}
+            onChange={(e) => {
+              const next = e.target.value;
+              setText(next);
+              const parsed = parseQuantity(next);
+              if (parsed != null) onChange(parsed);
+            }}
+            className="w-16 bg-transparent text-center text-sm font-bold text-white tabular-nums focus:outline-none"
+          />
+          <Step icon={<Plus className="h-3.5 w-3.5" />} onClick={() => onChange(stepQuantity(value, step))} />
+        </div>
+      </div>
+      <div className="flex gap-1.5">
+        {FRACTION_PRESETS.map((p) => {
+          const selected = Math.abs(value - p.value) < 0.001;
+          return (
+            <button
+              key={p.label}
+              type="button"
+              onClick={() => onChange(p.value)}
+              className={cn(
+                'rounded-full border px-3 py-1 text-xs transition-colors',
+                selected
+                  ? 'border-indigo-500/60 bg-indigo-500 text-white'
+                  : 'border-slate-700/60 bg-slate-900/60 text-gray-300 hover:bg-slate-700/60'
+              )}
+            >
+              {p.label}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
 }
 
 function Step({ icon, onClick }: { icon: React.ReactNode; onClick: () => void }) {
