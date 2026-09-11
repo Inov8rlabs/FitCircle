@@ -110,6 +110,8 @@ export interface PlateScore {
   date: string;
   components: { adherence: number; balance: number; goalFit: number };
   breakdown: Record<string, unknown>;
+  /** Daily calorie budget; omitted on older payloads. */
+  calorieTarget?: number;
 }
 
 export type ReactionKind = 'flame' | 'clap' | 'eyes' | 'same' | 'heart' | 'laugh';

@@ -288,9 +288,8 @@ export function FoodLogList({ entries, userId }: FoodLogListProps) {
         }
     };
 
-    // Group by date. Within a day, sort ASCENDING by logged_at so the
-    // timeline reads breakfast → lunch → dinner. Days themselves are
-    // newest-first.
+    // Group by date. Within a day, newest submission first so the meal just
+    // logged lands at the top of Today. Days themselves are also newest-first.
     const groupedEntries: Record<string, any[]> = entryList.reduce((acc, entry) => {
         const date = entry.entry_date;
         if (!acc[date]) acc[date] = [];
@@ -301,7 +300,7 @@ export function FoodLogList({ entries, userId }: FoodLogListProps) {
         groupedEntries[key].sort((a, b) => {
             const ta = new Date(a.logged_at ?? a.created_at).getTime();
             const tb = new Date(b.logged_at ?? b.created_at).getTime();
-            return ta - tb;
+            return tb - ta;
         });
     }
     // Re-order the outer record so newest day comes first.

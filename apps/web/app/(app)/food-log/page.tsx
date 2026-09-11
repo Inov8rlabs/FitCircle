@@ -2,6 +2,7 @@ import { Plus } from 'lucide-react';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 
+import { CalorieBudgetCard, DEFAULT_CALORIE_BUDGET } from '@/components/food-log/calorie-budget-card';
 import { FoodLogList } from '@/components/food-log/food-log-list';
 import { FirstFoodLogPrompt } from '@/components/nutrition/FirstFoodLogPrompt';
 import { FoodLogNutritionSection } from '@/components/nutrition/FoodLogNutritionSection';
@@ -9,6 +10,7 @@ import { Button } from '@/components/ui/button';
 import { BeverageLogService } from '@/lib/services/beverage-log-service';
 import { FoodLogImageService } from '@/lib/services/food-log-image-service';
 import { FoodLogService } from '@/lib/services/food-log-service';
+import { PlateScoreService } from '@/lib/services/plate-score-service';
 import { createServerSupabase } from '@/lib/supabase-server';
 
 export const dynamic = 'force-dynamic';
@@ -34,6 +36,9 @@ export default async function FoodLogPage() {
 
     const totalCalories = (foodStats?.total_calories || 0) + (beverageStats?.total_calories || 0);
     const totalWater = (foodStats?.total_water_ml || 0) + (beverageStats?.total_water_ml || 0);
+    const calorieBudget = await PlateScoreService.getForDay(user.id, today)
+      .then((s) => (s.calorieTarget > 0 ? s.calorieTarget : DEFAULT_CALORIE_BUDGET))
+      .catch(() => DEFAULT_CALORIE_BUDGET);
 
     // Get entry IDs that have images
     const foodEntryIds = (foodLogs || [])
@@ -69,19 +74,14 @@ export default async function FoodLogPage() {
                 </Link>
             </div>
 
+            <CalorieBudgetCard consumed={totalCalories} budget={calorieBudget} />
+
             {/* First-run nudge (§6.14) — only when the user has no logs yet */}
             <FirstFoodLogPrompt hasLogs={allEntries.length > 0} />
 
-            {/* Stats Overview */}
-            <div className="grid grid-cols-2 gap-4">
-                <div className="p-4 rounded-xl bg-primary/5 border border-primary/10">
-                    <div className="text-sm text-muted-foreground">Today&apos;s Calories</div>
-                    <div className="text-2xl font-bold text-primary">{Math.round(totalCalories)}</div>
-                </div>
-                <div className="p-4 rounded-xl bg-cyan-500/5 border border-cyan-500/10">
-                    <div className="text-sm text-muted-foreground">Water Intake</div>
-                    <div className="text-2xl font-bold text-cyan-600">{Math.round(totalWater)} ml</div>
-                </div>
+            <div className="p-4 rounded-xl bg-cyan-500/5 border border-cyan-500/10">
+                <div className="text-sm text-muted-foreground">Water Intake</div>
+                <div className="text-2xl font-bold text-cyan-600">{Math.round(totalWater)} ml</div>
             </div>
 
             {/* Nutrition: Plate Score, Insights, Dietary preferences */}

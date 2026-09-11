@@ -59,7 +59,7 @@ export class PlateScoreService {
 
   // Persona/fitness-level derived "reasonable" daily calorie target used ONLY when
   // the user has no active challenge target. Two-sided band, never "less is better".
-  private static readonly DEFAULT_CAL_TARGET = 2000;
+  static readonly DEFAULT_CAL_TARGET = 2000;
 
   /** Compute (and upsert) the score for a given user + ISO date. */
   static async computeForDay(userId: string, date: string): Promise<PlateScoreDTO> {
@@ -119,7 +119,12 @@ export class PlateScoreService {
       weights,
       totals,
       notes: this.buildNotes(mealCount, balance, goalFit, target.usedChallengeTarget),
-      basis: { persona, fitnessLevel, usedChallengeTarget: target.usedChallengeTarget },
+      basis: {
+        persona,
+        fitnessLevel,
+        usedChallengeTarget: target.usedChallengeTarget,
+        calorieTarget: target.calorieTarget ?? this.DEFAULT_CAL_TARGET,
+      },
     };
 
     // 6. Upsert the cached result.
@@ -147,6 +152,7 @@ export class PlateScoreService {
         goalFit: round2(goalFit),
       },
       breakdown,
+      calorieTarget: target.calorieTarget ?? this.DEFAULT_CAL_TARGET,
     };
   }
 
@@ -321,6 +327,11 @@ export class PlateScoreService {
   }
 
   private static toDTO(row: any): PlateScoreDTO {
+    const breakdown = (row.breakdown ?? {}) as PlateScoreBreakdown;
+    const calorieTarget =
+      Number(breakdown?.basis?.calorieTarget) > 0
+        ? Number(breakdown.basis.calorieTarget)
+        : this.DEFAULT_CAL_TARGET;
     return {
       score: Number(row.score),
       date: typeof row.score_date === 'string' ? row.score_date.slice(0, 10) : String(row.score_date),
@@ -329,7 +340,8 @@ export class PlateScoreService {
         balance: Number(row.balance_component),
         goalFit: Number(row.goalfit_component),
       },
-      breakdown: (row.breakdown ?? {}) as PlateScoreBreakdown,
+      breakdown,
+      calorieTarget,
     };
   }
 }

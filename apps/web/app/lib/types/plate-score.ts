@@ -54,6 +54,8 @@ export type PlateScoreBreakdown = {
     fitnessLevel: string | null;
     /** Whether an active challenge target informed goalFit. */
     usedChallengeTarget: boolean;
+    /** Daily calorie budget used for goal-fit (and the food-log budget widget). */
+    calorieTarget: number;
   };
 };
 
@@ -65,6 +67,8 @@ export type PlateScoreDTO = {
   date: string;
   components: PlateScoreComponents;
   breakdown: PlateScoreBreakdown;
+  /** Daily calorie budget for this user/day (challenge target or persona default). */
+  calorieTarget: number;
 };
 
 /**
