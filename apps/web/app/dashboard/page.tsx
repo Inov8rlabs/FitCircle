@@ -792,6 +792,7 @@ export default function DashboardPage() {
               unitSystem={unitSystem}
               loading={vitals.loading}
               onEditGoal={() => setShowVitalsGoals(true)}
+              onLogWater={vitals.logWater}
             />
 
             {/* Body Composition — latest BF% + trend state, links to the journal */}

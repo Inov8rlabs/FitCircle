@@ -10,6 +10,7 @@ import { cn } from '@/lib/utils';
 import type { UnitSystem } from '@/lib/utils/units';
 
 import { formatVolume, mlToVolume, volumeUnit, weekdayInitial } from './format';
+import { WaterQuickAdd } from './WaterQuickAdd';
 
 interface WaterWeekCardProps {
   water: VitalsWater | null;
@@ -18,6 +19,8 @@ interface WaterWeekCardProps {
   unitSystem: UnitSystem;
   loading?: boolean;
   onEditGoal: () => void;
+  /** POST a water food-log entry (ml) then refresh vitals. */
+  onLogWater?: (ml: number) => Promise<void>;
 }
 
 const CYAN = '#06b6d4';
@@ -54,7 +57,7 @@ function DayTick(props: { x?: number; y?: number; payload?: { value: string }; d
  * Water this week (VITALS_CLIENT_CONTRACT.md §3): one bar per day from
  * `water.days`, dashed goal line, weekday initials. Full width.
  */
-export function WaterWeekCard({ water, today, unitSystem, loading, onEditGoal }: WaterWeekCardProps) {
+export function WaterWeekCard({ water, today, unitSystem, loading, onEditGoal, onLogWater }: WaterWeekCardProps) {
   const unit = volumeUnit(unitSystem);
 
   const data = useMemo<DayPoint[]>(() => {
@@ -197,6 +200,9 @@ export function WaterWeekCard({ water, today, unitSystem, loading, onEditGoal }:
           </>
         ) : (
           <div className="h-40 sm:h-44 rounded-lg bg-slate-800/40 animate-pulse" aria-hidden />
+        )}
+        {onLogWater && (
+          <WaterQuickAdd unitSystem={unitSystem} disabled={loading && !water} onLogWater={onLogWater} />
         )}
       </CardContent>
     </Card>

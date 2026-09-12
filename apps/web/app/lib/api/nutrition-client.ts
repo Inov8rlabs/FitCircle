@@ -388,14 +388,16 @@ export interface NutritionDataPayload {
 }
 
 export interface CreateFoodLogEntry {
-  entry_type: 'food';
-  meal_type: 'breakfast' | 'lunch' | 'dinner' | 'snack' | 'other';
-  title: string;
+  entry_type: 'food' | 'water';
+  meal_type?: 'breakfast' | 'lunch' | 'dinner' | 'snack' | 'other';
+  title?: string;
   description?: string;
   notes?: string;
   nutrition_data?: NutritionDataPayload;
   logged_at?: string;
   visibility?: 'private' | 'shared' | 'circle';
+  is_private?: boolean;
+  water_ml?: number;
 }
 
 // --- envelope plumbing -----------------------------------------------------

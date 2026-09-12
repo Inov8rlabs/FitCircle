@@ -86,6 +86,7 @@ Placement: directly below the existing hero grid (steps ring | weight card), abo
 - Bars: one per `days[]` entry (cyan; green when `goal_met`), dashed goal line at `goal_ml`,
   weekday initials under each bar, today emphasised. Y labels in L (metric) or fl oz/cups (imperial: show `oz`).
 - Goal editable: small pencil/`Edit` affordance → goal sheet.
+- Quick-add (on the card): `+ Half` (120 ml) · `+ Glass` (240 ml) · `+ 8 oz` (237 ml), plus Custom with a Glasses / oz / L toggle. POSTs `POST /api/mobile/food-log` `{ "entry_type": "water", "water_ml" }` then refreshes this summary. Same glass/oz amounts as Food Log.
 
 ### Goal sheet (new on iOS & Android; web uses existing profile flow + inline edit)
 Two fields: target weight (display units, converted to kg on save) and daily water (ml / oz).
