@@ -83,7 +83,7 @@ const CATEGORIES: Array<{
   {
     key: 'momentum_enabled',
     label: 'Streak reminders',
-    description: "Daily reminder if you haven't logged, and when a streak is lost or a shield saves it",
+    description: "Lunch and dinner logging nudges, a heads-up when your streak is at risk, and when a streak is lost or a shield saves it",
     icon: Flame,
     color: 'text-orange-400',
   },

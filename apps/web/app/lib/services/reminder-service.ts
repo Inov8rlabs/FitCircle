@@ -13,6 +13,15 @@ import { NotificationOrchestrator } from './notification-orchestrator';
  * active push token.
  */
 const TARGET_LOCAL_HOUR = Number(process.env.REMINDER_LOCAL_HOUR ?? 19); // 7pm local
+// Meal-logging nudges (decided 2026-09-13): lunch + dinner, cap-exempt, only for
+// users who actually log food (an entry in the last 14 days), and only when
+// that meal hasn't been logged yet today.
+const LUNCH_LOCAL_HOUR = Number(process.env.LUNCH_REMINDER_LOCAL_HOUR ?? 13);
+const DINNER_LOCAL_HOUR = Number(process.env.DINNER_REMINDER_LOCAL_HOUR ?? 18);
+const FOOD_LOGGER_WINDOW_DAYS = 14;
+// Idempotency window: the cron is hourly and each reminder fires at one local
+// hour, so "already sent in the last 20h" == "already sent today".
+const SENT_WINDOW_HOURS = 20;
 
 const MILESTONES = [
   { days: 7, name: '1 week' },
@@ -86,12 +95,14 @@ export class ReminderService {
     const streakByUser = new Map(
       (streaks ?? []).map((s: any) => [s.user_id, (s.current_streak ?? 0) as number] as const),
     );
+    const foodLoggers = await this.recentFoodLoggers(supabase, userIds);
 
     let candidates = 0;
     let sent = 0;
     let skippedActed = 0;
     let skippedHour = 0;
     let errors = 0;
+    let mealsSent = 0;
 
     for (const userId of userIds) {
       try {
@@ -103,12 +114,33 @@ export class ReminderService {
           local = localDateAndHour('America/New_York');
         }
 
+        // Meal reminders ride the same hourly pass at their own local hours.
+        if (local.hour === LUNCH_LOCAL_HOUR || local.hour === DINNER_LOCAL_HOUR) {
+          if (foodLoggers.has(userId)) {
+            const meal = local.hour === LUNCH_LOCAL_HOUR ? 'lunch' : 'dinner';
+            if (await this.sendMealReminder(supabase, userId, meal, local.date, streakByUser.get(userId) ?? 0)) {
+              mealsSent++;
+            }
+          }
+          // A meal hour is never the streak-reminder hour; fall through to the
+          // hour check below so the counters stay truthful.
+        }
+
         // One reminder per day, at the user's local target hour (the cron runs hourly).
         if (local.hour !== TARGET_LOCAL_HOUR) {
           skippedHour++;
           continue;
         }
         candidates++;
+
+        // Guard against a double run inside the same hour.
+        if (
+          (await NotificationOrchestrator.hasSent(userId, 'momentum_at_risk', { withinHours: SENT_WINDOW_HOURS })) ||
+          (await NotificationOrchestrator.hasSent(userId, 'near_milestone', { withinHours: SENT_WINDOW_HOURS }))
+        ) {
+          skippedActed++;
+          continue;
+        }
 
         // Already engaged today (in their local date)? Then don't nag.
         if (await this.claimedToday(supabase, userId, local.date)) {
@@ -138,7 +170,57 @@ export class ReminderService {
       }
     }
 
+    if (mealsSent > 0) console.log(`[ReminderService] meal reminders sent: ${mealsSent}`);
     return { candidates, sent, skippedActed, skippedHour, errors };
+  }
+
+  /** Users with at least one non-deleted food entry in the last FOOD_LOGGER_WINDOW_DAYS. */
+  private static async recentFoodLoggers(supabase: any, userIds: string[]): Promise<Set<string>> {
+    const since = new Date();
+    since.setUTCDate(since.getUTCDate() - FOOD_LOGGER_WINDOW_DAYS);
+    const { data } = await supabase
+      .from('food_log_entries')
+      .select('user_id')
+      .in('user_id', userIds)
+      .gte('entry_date', since.toISOString().slice(0, 10))
+      .is('deleted_at', null);
+    return new Set(((data ?? []) as { user_id: string }[]).map((r) => r.user_id));
+  }
+
+  /**
+   * Lunch / dinner nudge: only if that meal has no entry on the user's local
+   * date, and only once per day. The dinner copy carries the streak so the
+   * 7pm streak reminder can be suppressed behind it (see SUPPRESSION_CHAINS).
+   */
+  private static async sendMealReminder(
+    supabase: any,
+    userId: string,
+    meal: 'lunch' | 'dinner',
+    localDate: string,
+    currentStreak: number,
+  ): Promise<boolean> {
+    const type = meal === 'lunch' ? 'meal_reminder_lunch' : 'meal_reminder_dinner';
+    if (await NotificationOrchestrator.hasSent(userId, type, { withinHours: SENT_WINDOW_HOURS })) {
+      return false;
+    }
+    const { data } = await supabase
+      .from('food_log_entries')
+      .select('id')
+      .eq('user_id', userId)
+      .eq('entry_date', localDate)
+      .eq('meal_type', meal)
+      .is('deleted_at', null)
+      .limit(1)
+      .maybeSingle();
+    if (data) return false;
+
+    const claimed = meal === 'dinner' ? await this.claimedToday(supabase, userId, localDate) : true;
+    const result = await NotificationOrchestrator.send(userId, type, {
+      mealType: meal,
+      // Only mention the streak when it is genuinely still on the line today.
+      currentMomentum: meal === 'dinner' && !claimed ? currentStreak : 0,
+    });
+    return result.sent;
   }
 
   /** Did the user claim their streak on their local date? (canonical "engaged today"). */

@@ -1,4 +1,3 @@
-import { MomentumService } from '../services/momentum-service';
 import {
   NotificationOrchestrator,
   type NotificationType,
@@ -6,8 +5,6 @@ import {
 } from '../services/notification-orchestrator';
 import { PushService } from '../services/push-service';
 import { createAdminSupabase } from '../supabase-admin';
-import { MILESTONES } from '../streaks/streak-config';
-import { StreakShieldService } from '../services/streak-shield-service';
 
 // ============================================================================
 // HELPERS
@@ -55,12 +52,9 @@ export async function sendJourneyNotifications(): Promise<{
 
   // Journey notification day mappings
   const journeyDayMap: Array<{ day: number; type: NotificationType }> = [
-    { day: 0, type: 'welcome_day0' },
-    { day: 1, type: 'day1_first_workout' },
+    { day: 1, type: 'day1_nothing_logged' },
     { day: 3, type: 'day3_circle_invite' },
-    { day: 7, type: 'day7_weekly_summary' },
     { day: 14, type: 'day14_challenge_nudge' },
-    { day: 21, type: 'day21_momentum_check' },
     { day: 30, type: 'day30_monthly_recap' },
   ];
 
@@ -123,97 +117,6 @@ export async function sendJourneyNotifications(): Promise<{
 
   console.log(
     `[Cron:JourneyNotifications] Done: ${processed} processed, ${sent} sent, ${errors} errors`
-  );
-  return { processed, sent, errors };
-}
-
-// ============================================================================
-// MOMENTUM NOTIFICATIONS
-// ============================================================================
-
-/**
- * Send momentum-related notifications (at-risk, near-milestone, decay warnings).
- * Should be called once per day (e.g., evening, 6:00 PM UTC).
- */
-export async function sendMomentumNotifications(): Promise<{
-  processed: number;
-  sent: number;
-  errors: number;
-}> {
-  const supabaseAdmin = createAdminSupabase();
-  const now = new Date();
-  const today = now.toISOString().split('T')[0];
-  let processed = 0;
-  let sent = 0;
-  let errors = 0;
-
-  console.log('[Cron:MomentumNotifications] Starting...');
-
-  // Get all users with active momentum who haven't checked in today
-  const { data: streaks, error } = await supabaseAdmin
-    .from('engagement_streaks')
-    .select('user_id, current_streak, last_engagement_date, best_momentum, grace_day_used_this_week, paused')
-    .gt('current_streak', 0)
-    .eq('paused', false);
-
-  if (error) {
-    console.error('[Cron:MomentumNotifications] Error:', error);
-    throw error;
-  }
-
-  // Milestones come from the canonical streak config so the nudge names
-  // match what the app celebrates (and none of the later tiers are missed).
-
-  for (const streak of streaks || []) {
-    try {
-      processed++;
-      const hasCheckedInToday = streak.last_engagement_date === today;
-
-      if (hasCheckedInToday) continue;
-
-      const currentMomentum = streak.current_streak;
-
-      // Check if near a milestone (within 2 days)
-      const nearMilestone = MILESTONES.find(
-        (m) => m.days > currentMomentum && m.days - currentMomentum <= 2
-      );
-
-      if (nearMilestone) {
-        const result = await NotificationOrchestrator.send(streak.user_id, 'near_milestone', {
-          currentMomentum,
-          daysAway: nearMilestone.days - currentMomentum,
-          milestoneName: nearMilestone.name,
-        });
-        if (result.sent) sent++;
-        continue; // Don't double-notify
-      }
-
-      // If hasn't checked in today and has significant momentum, send at-risk
-      // — and tell them whether a shield will cover them if they can't.
-      if (currentMomentum >= 3) {
-        const inventory = await StreakShieldService.getInventory(streak.user_id).catch(() => null);
-        const result = await NotificationOrchestrator.send(
-          streak.user_id,
-          'momentum_at_risk',
-          {
-            currentMomentum,
-            shieldsRemaining: inventory?.available ?? null,
-            unlimited: inventory?.unlimited ?? false,
-          }
-        );
-        if (result.sent) sent++;
-      }
-    } catch (err) {
-      console.error(
-        `[Cron:MomentumNotifications] Error for user ${streak.user_id}:`,
-        err
-      );
-      errors++;
-    }
-  }
-
-  console.log(
-    `[Cron:MomentumNotifications] Done: ${processed} processed, ${sent} sent, ${errors} errors`
   );
   return { processed, sent, errors };
 }

@@ -30,12 +30,9 @@ export type NotificationCategory =
 // Maps notification type prefix to category
 const TYPE_CATEGORY_MAP: Record<string, NotificationCategory> = {
   // Journey (J1-J11)
-  welcome_day0: 'journey',
-  day1_first_workout: 'journey',
+  day1_nothing_logged: 'journey',
   day3_circle_invite: 'journey',
-  day7_weekly_summary: 'journey',
   day14_challenge_nudge: 'journey',
-  day21_momentum_check: 'journey',
   day30_monthly_recap: 'journey',
   dormant_7d: 'journey',
   dormant_14d: 'journey',
@@ -45,10 +42,9 @@ const TYPE_CATEGORY_MAP: Record<string, NotificationCategory> = {
   // State - Momentum (S1-S4b)
   momentum_at_risk: 'momentum',
   near_milestone: 'momentum',
-  grace_day_used: 'momentum',
-  momentum_decay: 'momentum',
-  momentum_reset: 'momentum',
   reset_encouragement: 'momentum',
+  meal_reminder_lunch: 'momentum',
+  meal_reminder_dinner: 'momentum',
   shield_applied: 'momentum',
   streak_lost: 'momentum',
   shield_earned: 'celebration',
@@ -67,7 +63,6 @@ const TYPE_CATEGORY_MAP: Record<string, NotificationCategory> = {
   weekly_summary: 'journey',
   daily_drop: 'challenge',
   milestone_achieved: 'celebration',
-  points_earned: 'celebration',
   circle_invite_received: 'social',
 
   // Circle Chat
@@ -207,6 +202,9 @@ export class NotificationPreferencesService {
         challenge_enabled: true,
         social_enabled: true,
         celebration_enabled: true,
+        // Default quiet window (PRD: 10pm–7am). Null means the user turned it off.
+        quiet_hours_start: '22:00',
+        quiet_hours_end: '07:00',
         quiet_hours_timezone: 'America/New_York',
       },
       { onConflict: 'user_id', ignoreDuplicates: true }

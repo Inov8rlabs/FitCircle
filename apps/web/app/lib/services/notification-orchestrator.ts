@@ -32,6 +32,10 @@ export interface NotificationData {
 
   // Summary
   workoutsThisWeek?: number;
+  mealsThisWeek?: number;
+  workoutsThisMonth?: number;
+  mealsThisMonth?: number;
+  bestStreak?: number;
   streakDays?: number;
   pointsEarned?: number;
   totalPoints?: number;
@@ -68,25 +72,21 @@ export interface NotificationData {
 }
 
 export type NotificationType =
-  // Journey (J1-J11)
-  | 'welcome_day0'
-  | 'day1_first_workout'
+  // Journey: account age + dormancy ladder
+  | 'day1_nothing_logged'
   | 'day3_circle_invite'
-  | 'day7_weekly_summary'
   | 'day14_challenge_nudge'
-  | 'day21_momentum_check'
   | 'day30_monthly_recap'
   | 'dormant_7d'
   | 'dormant_14d'
   | 'dormant_30d'
   | 'win_back_60d'
-  // State - Momentum (S1-S4b)
+  // Streak state + logging reminders
   | 'momentum_at_risk'
   | 'near_milestone'
-  | 'grace_day_used'
-  | 'momentum_decay'
-  | 'momentum_reset'
   | 'reset_encouragement'
+  | 'meal_reminder_lunch'
+  | 'meal_reminder_dinner'
   // State - Streak shields
   | 'shield_applied'
   | 'streak_lost'
@@ -103,7 +103,6 @@ export type NotificationType =
   | 'weekly_summary'
   | 'daily_drop'
   | 'milestone_achieved'
-  | 'points_earned'
   | 'circle_invite_received'
   // Circle Chat (social + celebration)
   | 'chat_message'
@@ -135,24 +134,20 @@ export type NotificationScreen =
 
 export const TYPE_SCREEN_MAP: Record<NotificationType, NotificationScreen> = {
   // Journey
-  welcome_day0: 'dashboard',
-  day1_first_workout: 'dashboard',
+  day1_nothing_logged: 'food_log',
   day3_circle_invite: 'circles',
-  day7_weekly_summary: 'dashboard',
   day14_challenge_nudge: 'challenges',
-  day21_momentum_check: 'streaks',
   day30_monthly_recap: 'dashboard',
   dormant_7d: 'dashboard',
   dormant_14d: 'dashboard',
   dormant_30d: 'dashboard',
   win_back_60d: 'dashboard',
-  // Streak state
+  // Streak state + logging reminders
   momentum_at_risk: 'streaks',
   near_milestone: 'streaks',
-  grace_day_used: 'streaks',
-  momentum_decay: 'streaks',
-  momentum_reset: 'streaks',
   reset_encouragement: 'streaks',
+  meal_reminder_lunch: 'food_log',
+  meal_reminder_dinner: 'food_log',
   shield_applied: 'streaks',
   streak_lost: 'streaks',
   shield_earned: 'streaks',
@@ -168,7 +163,6 @@ export const TYPE_SCREEN_MAP: Record<NotificationType, NotificationScreen> = {
   weekly_summary: 'dashboard',
   daily_drop: 'challenges',
   milestone_achieved: 'streaks',
-  points_earned: 'dashboard',
   circle_invite_received: 'circles',
   // Circle chat
   chat_message: 'circle_chat',
@@ -203,85 +197,76 @@ export const NOTIFICATION_TEMPLATES: Record<
   NotificationType,
   (data: NotificationData) => NotificationContent
 > = {
-  // ---- Journey (J1-J11) ----
-  welcome_day0: () => ({
-    title: 'Welcome to FitCircle! 🎉',
-    body: 'Your fitness journey starts now. Log your first workout to build momentum!',
-    category: 'journey',
-  }),
-  day1_first_workout: (data) => ({
-    title: 'Great start! 💪',
-    body: `Way to go${data.userName ? `, ${data.userName}` : ''}! You logged your first workout. Keep the momentum going tomorrow!`,
+  // ---- Journey: account age + dormancy ladder ----
+  day1_nothing_logged: () => ({
+    title: 'Your streak starts with one log 🍽️',
+    body: 'You joined FitCircle yesterday. Log a meal or a workout today and day 1 is yours.',
     category: 'journey',
   }),
   day3_circle_invite: () => ({
     title: 'Better together! 👋',
-    body: "You've been at it for 3 days! Invite friends to a FitCircle and crush goals together.",
-    category: 'journey',
-  }),
-  day7_weekly_summary: (data) => ({
-    title: 'Your first week in review! 📊',
-    body: `What a week! ${data.workoutsThisWeek || 0} workouts logged and ${data.streakDays || 0} day streak. You're building something great.`,
+    body: "Three days in. Invite a friend to a FitCircle and keep each other honest.",
     category: 'journey',
   }),
   day14_challenge_nudge: () => ({
     title: 'Ready for a challenge? 🏋️',
-    body: "Two weeks in! Time to level up — join a challenge and compete with your circle.",
+    body: 'Two weeks in! Join a challenge and compete with your circle.',
     category: 'journey',
   }),
-  day21_momentum_check: (data) => ({
-    title: '3 weeks strong! 🔥',
-    body: `Your momentum is at ${data.currentMomentum || 0} days. You're building a real habit. Don't stop now!`,
-    category: 'journey',
-  }),
-  day30_monthly_recap: (data) => ({
-    title: 'One month milestone! 🏆',
-    body: `30 days of commitment! ${data.workoutsThisWeek ? `${data.workoutsThisWeek} workouts this month` : 'Amazing progress'}. Here's to the next 30!`,
-    category: 'journey',
-  }),
+  day30_monthly_recap: (data) => {
+    const parts: string[] = [];
+    if (data.workoutsThisMonth) parts.push(`${data.workoutsThisMonth} workouts`);
+    if (data.mealsThisMonth) parts.push(`${data.mealsThisMonth} days of meals logged`);
+    if (data.bestStreak) parts.push(`a ${data.bestStreak}-day best streak`);
+    return {
+      title: 'One month with FitCircle 🏆',
+      body: parts.length
+        ? `30 days in: ${parts.join(', ')}. Here's to the next 30!`
+        : "30 days in. Here's to the next 30!",
+      category: 'journey',
+    };
+  },
   dormant_7d: () => ({
-    title: 'We miss you! 😢',
-    body: "It's been a week since your last check-in. A quick workout is all it takes to restart your momentum!",
+    title: 'We miss you 👋',
+    body: "It's been a week since you last logged. One meal or workout restarts your streak.",
     category: 'journey',
   }),
   dormant_14d: () => ({
     title: "Don't let your progress fade 🕯️",
-    body: "Two weeks away is tough, but you can bounce back. Your circle is still going — jump back in!",
+    body: 'Two weeks away is tough, but you can bounce back. Your circle is still going — jump back in!',
     category: 'journey',
   }),
   dormant_30d: () => ({
-    title: 'Your FitCircle misses you! 💔',
-    body: "It's been a month. No judgment — just open the app and take one small step today.",
+    title: 'Still here for you 🌱',
+    body: 'A month away happens. Open the app and log one thing. That is all it takes.',
     category: 'journey',
   }),
   win_back_60d: () => ({
     title: 'A fresh start awaits 🌅',
-    body: "It's never too late to restart. Your friends are still here, and so is your potential. Come back!",
+    body: "It's never too late to restart. Your friends are still here, and so is your progress.",
     category: 'journey',
   }),
 
-  // ---- State - Momentum (S1-S4b) ----
+  // ---- Streak state + logging reminders ----
   momentum_at_risk: (data) => ({
-    title: 'Your flame is flickering! 🕯️',
-    body: `Don't let your ${data.currentMomentum || 0}-day streak slip. Log a meal or workout to keep it alive${
+    title: 'Your streak is at risk 🔥',
+    body: `Your ${data.currentMomentum || 0}-day streak ends at midnight unless you log a meal or workout${
       data.unlimited
-        ? ' — and Pro shields have your back if you can\'t.'
+        ? ' — Pro shields have your back if you can\'t.'
         : typeof data.shieldsRemaining === 'number' && data.shieldsRemaining > 0
           ? ` — or a shield (${data.shieldsRemaining} left) will cover you.`
           : '. No shields left to cover a miss!'
     }`,
     category: 'momentum',
   }),
-  near_milestone: (data) => ({
-    title: 'So close! 🏆',
-    body: `You're ${data.daysAway || 0} day(s) from your ${data.milestoneName || 'next'} milestone. Keep going!`,
-    category: 'momentum',
-  }),
-  grace_day_used: () => ({
-    title: 'Grace day activated 🛡️',
-    body: "We've got your back! Your grace day protected your momentum. Try to check in tomorrow!",
-    category: 'momentum',
-  }),
+  near_milestone: (data) => {
+    const days = data.daysAway || 0;
+    return {
+      title: 'So close! 🏆',
+      body: `You're ${days} ${days === 1 ? 'day' : 'days'} from ${data.milestoneName || 'your next milestone'}. Log today to keep going.`,
+      category: 'momentum',
+    };
+  },
   shield_applied: (data) => ({
     title: 'A shield saved your streak 🛡️',
     body: `You missed yesterday, so a shield kept your ${data.streakDays || 0}-day streak alive.${
@@ -307,19 +292,22 @@ export const NOTIFICATION_TEMPLATES: Record<
     body: `${data.streakDays || 0} days strong! You earned ${data.shieldsGranted === 1 ? 'a streak shield' : `${data.shieldsGranted} streak shields`} — it auto-protects your next missed day.`,
     category: 'celebration',
   }),
-  momentum_decay: (data) => ({
-    title: 'Momentum slipping 📉',
-    body: `Your momentum dropped by ${data.decayAmount || 0} to ${data.currentMomentum || 0} days. Check in today to stop the slide!`,
-    category: 'momentum',
-  }),
-  momentum_reset: () => ({
-    title: 'Fresh start time 🌱',
-    body: "Your momentum reset to 0, but that's OK. Every champion has comebacks. Start building again today!",
-    category: 'momentum',
-  }),
   reset_encouragement: () => ({
     title: 'You got this! 💪',
-    body: "Yesterday was a reset, today is a comeback. One check-in is all it takes to start your new streak!",
+    body: 'Yesterday ended a streak, today starts one. A single log is all it takes.',
+    category: 'momentum',
+  }),
+  meal_reminder_lunch: () => ({
+    title: 'Lunch logged? 🥗',
+    body: "Haven't seen lunch yet. Snap it or type it — ten seconds.",
+    category: 'momentum',
+  }),
+  meal_reminder_dinner: (data) => ({
+    title: 'Dinner time 🍽️',
+    body:
+      data.currentMomentum && data.currentMomentum > 0
+        ? `Log dinner to keep your ${data.currentMomentum}-day streak alive.`
+        : "Log tonight's dinner to close out the day.",
     category: 'momentum',
   }),
 
@@ -358,11 +346,16 @@ export const NOTIFICATION_TEMPLATES: Record<
   }),
 
   // ---- State - Summary (S10-S15) ----
-  weekly_summary: (data) => ({
-    title: 'Your week in review 📊',
-    body: `${data.workoutsThisWeek || 0} workouts, ${data.streakDays || 0}-day streak${data.pointsEarned ? `, ${data.pointsEarned} points earned` : ''}. Nice work this week!`,
-    category: 'journey',
-  }),
+  weekly_summary: (data) => {
+    const parts = [`${data.workoutsThisWeek || 0} workouts`];
+    if (typeof data.mealsThisWeek === 'number') parts.push(`${data.mealsThisWeek} days of meals logged`);
+    parts.push(`${data.streakDays || 0}-day streak`);
+    return {
+      title: 'Your week in review 📊',
+      body: `${parts.join(', ')}. Nice work this week!`,
+      category: 'journey',
+    };
+  },
   daily_drop: (data) => ({
     title: "Today's challenge is here! 🎯",
     body: `${data.challengeTitle || 'A new daily challenge'} is waiting for you. Complete it for bonus points!`,
@@ -371,11 +364,6 @@ export const NOTIFICATION_TEMPLATES: Record<
   milestone_achieved: (data) => ({
     title: 'Milestone unlocked! 🏅',
     body: `You just hit ${data.milestoneName || 'a new milestone'}! Your dedication is paying off.`,
-    category: 'celebration',
-  }),
-  points_earned: (data) => ({
-    title: 'Points earned! 🌟',
-    body: `+${data.pointsEarned || 0} points! Your total is now ${data.totalPoints || 0}. Keep stacking them up!`,
     category: 'celebration',
   }),
   circle_invite_received: (data) => ({
@@ -409,35 +397,75 @@ export const NOTIFICATION_TEMPLATES: Record<
 // ============================================================================
 
 const SUPPRESSION_CHAINS: Array<{ blocker: NotificationType; blocked: NotificationType; windowMinutes: number }> = [
-  // Don't send momentum_at_risk if user just completed a check-in milestone
+  // One evening nudge, not two: the dinner reminder already carries the streak.
+  { blocker: 'meal_reminder_dinner', blocked: 'momentum_at_risk', windowMinutes: 120 },
+  // Don't send momentum_at_risk if the user just got a milestone-flavoured nudge.
   { blocker: 'near_milestone', blocked: 'momentum_at_risk', windowMinutes: 120 },
   { blocker: 'milestone_achieved', blocked: 'momentum_at_risk', windowMinutes: 120 },
-  // Don't send decay warning right after a reset
-  { blocker: 'momentum_reset', blocked: 'momentum_decay', windowMinutes: 240 },
-  // Don't send reset_encouragement if welcome was just sent
-  { blocker: 'welcome_day0', blocked: 'reset_encouragement', windowMinutes: 1440 },
-  // Don't spam dormant messages back-to-back
+  // Don't spam dormant messages back-to-back.
   { blocker: 'dormant_7d', blocked: 'dormant_14d', windowMinutes: 1440 * 6 },
   { blocker: 'dormant_14d', blocked: 'dormant_30d', windowMinutes: 1440 * 14 },
-  // Don't send challenge_ending right after halfway
+  // Don't send challenge_ending right after halfway.
   { blocker: 'challenge_halfway', blocked: 'challenge_ending_tomorrow', windowMinutes: 1440 },
-  // Don't send grace_day_used and momentum_at_risk together
-  { blocker: 'grace_day_used', blocked: 'momentum_at_risk', windowMinutes: 720 },
 ];
 
-// Frequency cap
-const MAX_NOTIFICATIONS_PER_DAY = 5;
+// Frequency cap: at most this many *nudges* per user per local day. Anything
+// in CAP_EXEMPT_TYPES neither counts toward it nor is blocked by it, so the
+// effective ceiling on a busy day is 3 nudges + lunch + dinner reminders +
+// outcomes the user must not miss.
+export const MAX_NOTIFICATIONS_PER_DAY = 3;
 
-// Chat notifications are real-time conversation traffic: they are exempt from
-// the daily frequency cap AND excluded from its count (so a busy chat never
-// starves other notification types). Quiet hours + category preferences still
-// apply. They also ride the chat wire shape (data-only on Android, alert +
-// thread-id on iOS) — see PushService.
+// Chat notifications are real-time conversation traffic: they ride the chat
+// wire shape (data-only on Android, alert + thread-id on iOS) — see PushService.
 const CHAT_NOTIFICATION_TYPES: NotificationType[] = [
   'chat_message',
   'chat_mention',
   'chat_rally',
 ];
+
+// Cap-exempt: chat (conversation traffic), the two meal reminders (decided
+// 2026-09-13: "3 + lunch and dinner"), and outcomes that report something
+// that already happened to the user's streak or challenge — those must never
+// be dropped in favour of a nudge sent earlier the same day.
+export const CAP_EXEMPT_TYPES: ReadonlySet<NotificationType> = new Set<NotificationType>([
+  ...CHAT_NOTIFICATION_TYPES,
+  'meal_reminder_lunch',
+  'meal_reminder_dinner',
+  'streak_lost',
+  'shield_applied',
+  'challenge_completed',
+]);
+
+export function isCapExempt(type: NotificationType): boolean {
+  return CAP_EXEMPT_TYPES.has(type);
+}
+
+/** Start of the current day in an IANA timezone, as a UTC instant. */
+export function startOfLocalDay(timeZone: string, now: Date = new Date()): Date {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone,
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  }).formatToParts(now);
+  const get = (t: string) => Number(parts.find((p) => p.type === t)?.value ?? 0);
+  // Intl may render midnight as "24" with hour12:false; wrap it.
+  const secondsIntoDay = (get('hour') % 24) * 3600 + get('minute') * 60 + get('second');
+  return new Date(now.getTime() - secondsIntoDay * 1000);
+}
+
+/** Pure quiet-hours test; start/end are "HH:MM" (or "HH:MM:SS" from Postgres TIME). */
+export function isWithinQuietWindow(currentMinutes: number, start: string, end: string): boolean {
+  const [sh, sm] = start.split(':').map(Number);
+  const [eh, em] = end.split(':').map(Number);
+  const startMinutes = sh * 60 + sm;
+  const endMinutes = eh * 60 + em;
+  if (startMinutes === endMinutes) return false;
+  return startMinutes < endMinutes
+    ? currentMinutes >= startMinutes && currentMinutes < endMinutes
+    : currentMinutes >= startMinutes || currentMinutes < endMinutes;
+}
 
 // ============================================================================
 // SERVICE
@@ -467,9 +495,9 @@ export class NotificationOrchestrator {
       return { sent: false, reason: 'category_disabled' };
     }
 
-    // 2. Check frequency cap (chat types are exempt — see CHAT_NOTIFICATION_TYPES)
+    // 2. Check frequency cap (see CAP_EXEMPT_TYPES)
     const isChatType = CHAT_NOTIFICATION_TYPES.includes(type);
-    if (!isChatType) {
+    if (!isCapExempt(type)) {
       const capResult = await this.checkFrequencyCap(userId);
       if (!capResult.allowed) {
         await this.logNotification(userId, type, content, data, true, 'frequency_cap');
@@ -555,15 +583,21 @@ export class NotificationOrchestrator {
   ): Promise<{ allowed: boolean; count: number }> {
     const supabaseAdmin = createAdminSupabase();
 
-    const startOfDay = new Date();
-    startOfDay.setHours(0, 0, 0, 0);
+    // "Per day" means the user's day, not the server's.
+    const prefs = await NotificationPreferencesService.getPreferences(userId);
+    let startOfDay: Date;
+    try {
+      startOfDay = startOfLocalDay(prefs.quiet_hours_timezone || 'America/New_York');
+    } catch {
+      startOfDay = startOfLocalDay('America/New_York');
+    }
 
     const { count, error } = await supabaseAdmin
       .from('notification_log')
       .select('id', { count: 'exact', head: true })
       .eq('user_id', userId)
       .eq('suppressed', false)
-      .not('notification_type', 'in', `(${CHAT_NOTIFICATION_TYPES.join(',')})`)
+      .not('notification_type', 'in', `(${[...CAP_EXEMPT_TYPES].join(',')})`)
       .gte('sent_at', startOfDay.toISOString());
 
     if (error) {
@@ -598,21 +632,40 @@ export class NotificationOrchestrator {
     );
     const currentMinutes = userTime.getHours() * 60 + userTime.getMinutes();
 
-    const [startHour, startMin] = prefs.quiet_hours_start.split(':').map(Number);
-    const [endHour, endMin] = prefs.quiet_hours_end.split(':').map(Number);
-    const startMinutes = startHour * 60 + startMin;
-    const endMinutes = endHour * 60 + endMin;
+    return {
+      inQuietHours: isWithinQuietWindow(currentMinutes, prefs.quiet_hours_start, prefs.quiet_hours_end),
+    };
+  }
 
-    let inQuietHours: boolean;
-    if (startMinutes <= endMinutes) {
-      // Same day range (e.g., 09:00 - 17:00)
-      inQuietHours = currentMinutes >= startMinutes && currentMinutes < endMinutes;
-    } else {
-      // Overnight range (e.g., 22:00 - 07:00)
-      inQuietHours = currentMinutes >= startMinutes || currentMinutes < endMinutes;
+  /**
+   * Idempotency guard for time-based generators: was `type` already delivered
+   * to this user within the window (optionally for the same entity)? Crons can
+   * run twice, and late retry passes exist; this is what keeps a user from
+   * getting the same nudge twice.
+   */
+  static async hasSent(
+    userId: string,
+    type: NotificationType,
+    opts: { withinHours: number; entityKey?: 'circleId' | 'challengeId'; entityId?: string }
+  ): Promise<boolean> {
+    const supabaseAdmin = createAdminSupabase();
+    const since = new Date(Date.now() - opts.withinHours * 60 * 60 * 1000).toISOString();
+    let query = supabaseAdmin
+      .from('notification_log')
+      .select('id', { count: 'exact', head: true })
+      .eq('user_id', userId)
+      .eq('notification_type', type)
+      .eq('suppressed', false)
+      .gte('sent_at', since);
+    if (opts.entityKey && opts.entityId) {
+      query = query.eq(`data->>${opts.entityKey}`, opts.entityId);
     }
-
-    return { inQuietHours };
+    const { count, error } = await query;
+    if (error) {
+      console.error('[NotificationOrchestrator.hasSent] Error:', error);
+      return false; // fail open: a duplicate beats a silent miss
+    }
+    return (count || 0) > 0;
   }
 
   /**
