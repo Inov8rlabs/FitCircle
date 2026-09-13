@@ -116,6 +116,74 @@ interface NotificationContent {
   category: NotificationCategory;
 }
 
+/**
+ * Where a tap on the push should land. This is the wire contract with both
+ * mobile apps (Android allowlists exactly these values in
+ * NotificationDeepLink; iOS maps them in DeepLinkRouter). Types that need an
+ * entity id (circle_detail / circle_chat) fall back to the list screen when
+ * the id is absent — see screenFor().
+ */
+export type NotificationScreen =
+  | 'dashboard'
+  | 'food_log'
+  | 'exercise_log'
+  | 'circles'
+  | 'circle_detail'
+  | 'circle_chat'
+  | 'challenges'
+  | 'streaks';
+
+export const TYPE_SCREEN_MAP: Record<NotificationType, NotificationScreen> = {
+  // Journey
+  welcome_day0: 'dashboard',
+  day1_first_workout: 'dashboard',
+  day3_circle_invite: 'circles',
+  day7_weekly_summary: 'dashboard',
+  day14_challenge_nudge: 'challenges',
+  day21_momentum_check: 'streaks',
+  day30_monthly_recap: 'dashboard',
+  dormant_7d: 'dashboard',
+  dormant_14d: 'dashboard',
+  dormant_30d: 'dashboard',
+  win_back_60d: 'dashboard',
+  // Streak state
+  momentum_at_risk: 'streaks',
+  near_milestone: 'streaks',
+  grace_day_used: 'streaks',
+  momentum_decay: 'streaks',
+  momentum_reset: 'streaks',
+  reset_encouragement: 'streaks',
+  shield_applied: 'streaks',
+  streak_lost: 'streaks',
+  shield_earned: 'streaks',
+  // Circle
+  circle_boost_threshold: 'circle_detail',
+  perfect_day: 'circle_detail',
+  friend_joined_circle: 'circle_detail',
+  // Challenge
+  challenge_halfway: 'challenges',
+  challenge_ending_tomorrow: 'challenges',
+  challenge_completed: 'challenges',
+  // Summary / celebration
+  weekly_summary: 'dashboard',
+  daily_drop: 'challenges',
+  milestone_achieved: 'streaks',
+  points_earned: 'dashboard',
+  circle_invite_received: 'circles',
+  // Circle chat
+  chat_message: 'circle_chat',
+  chat_mention: 'circle_chat',
+  chat_rally: 'circle_chat',
+};
+
+export function screenFor(type: NotificationType, data: NotificationData): NotificationScreen {
+  const screen = TYPE_SCREEN_MAP[type] ?? 'dashboard';
+  if ((screen === 'circle_detail' || screen === 'circle_chat') && !data.circleId) {
+    return 'circles';
+  }
+  return screen;
+}
+
 interface NotificationLogEntry {
   user_id: string;
   notification_type: string;
@@ -293,12 +361,12 @@ export const NOTIFICATION_TEMPLATES: Record<
   weekly_summary: (data) => ({
     title: 'Your week in review 📊',
     body: `${data.workoutsThisWeek || 0} workouts, ${data.streakDays || 0}-day streak${data.pointsEarned ? `, ${data.pointsEarned} points earned` : ''}. Nice work this week!`,
-    category: 'social',
+    category: 'journey',
   }),
   daily_drop: (data) => ({
     title: "Today's challenge is here! 🎯",
     body: `${data.challengeTitle || 'A new daily challenge'} is waiting for you. Complete it for bonus points!`,
-    category: 'social',
+    category: 'challenge',
   }),
   milestone_achieved: (data) => ({
     title: 'Milestone unlocked! 🏅',
@@ -435,6 +503,7 @@ export class NotificationOrchestrator {
     const pushData: Record<string, string> = {
       type,
       category: content.category,
+      screen: screenFor(type, data),
     };
     if (data.circleId) pushData.circleId = String(data.circleId);
     if (data.challengeId) pushData.challengeId = String(data.challengeId);

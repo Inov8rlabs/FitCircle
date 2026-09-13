@@ -64,8 +64,8 @@ const TYPE_CATEGORY_MAP: Record<string, NotificationCategory> = {
   challenge_completed: 'challenge',
 
   // State - Summary (S10-S15)
-  weekly_summary: 'social',
-  daily_drop: 'social',
+  weekly_summary: 'journey',
+  daily_drop: 'challenge',
   milestone_achieved: 'celebration',
   points_earned: 'celebration',
   circle_invite_received: 'social',
@@ -148,9 +148,35 @@ export class NotificationPreferencesService {
       return true;
     }
 
-    const prefs = await this.getPreferences(userId);
+    const [prefs, masterEnabled] = await Promise.all([
+      this.getPreferences(userId),
+      this.isPushMasterEnabled(userId),
+    ]);
+    if (!masterEnabled) return false;
     const enabledKey = `${category}_enabled` as keyof NotificationPreferences;
     return prefs[enabledKey] as boolean;
+  }
+
+  /**
+   * Legacy master switch. Older app builds and the web settings page stored a
+   * `notifications.push` boolean inside `profiles.preferences`. Category
+   * preferences in `notification_preferences` are the source of truth, but a
+   * user who explicitly turned push off there must stay off.
+   */
+  static async isPushMasterEnabled(userId: string): Promise<boolean> {
+    const supabaseAdmin = createAdminSupabase();
+    const { data, error } = await supabaseAdmin
+      .from('profiles')
+      .select('preferences')
+      .eq('id', userId)
+      .maybeSingle();
+    if (error) {
+      console.error('[NotificationPreferencesService.isPushMasterEnabled] Error:', error);
+      return true; // fail open on a read error; category prefs still apply
+    }
+    const push = (data?.preferences as { notifications?: { push?: unknown } } | null)
+      ?.notifications?.push;
+    return push !== false;
   }
 
   /**
