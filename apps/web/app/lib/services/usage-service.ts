@@ -12,7 +12,7 @@ import { TIER_LIMITS, LEGACY_LIMITS } from '../config/tier-limits';
  *  - Error('RateLimited') (abuse ceiling, or the legacy cap while gates are
  *    dark): plain rate limit; clients keep their existing 429 handling.
  *
- * Gate-dark behavior (before migration 077): LEGACY limits apply to everyone —
+ * Gate-dark behavior (before pending migration 083, the Pro launch switch): LEGACY limits apply to everyone —
  * byte-identical to pre-subscription FitCircle.
  *
  * Counting uses the proven insert-then-count pattern (nutrition_parse_log /

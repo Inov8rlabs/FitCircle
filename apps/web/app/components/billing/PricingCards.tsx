@@ -97,8 +97,8 @@ export function PricingCards() {
           <span className="text-xs font-medium text-muted-foreground">/yr</span>
         </p>,
         PROMO_ANNUAL !== null
-          ? `Launch offer — $${annualPerMonth}/mo billed yearly for your first year, then $${PRICE_ANNUAL}/yr. 7 days free first.`
-          : `$${annualPerMonth}/mo billed yearly. 7 days free first.`,
+          ? `Launch offer — $${annualPerMonth}/mo billed yearly for your first year, then $${PRICE_ANNUAL}/yr.`
+          : `$${annualPerMonth}/mo billed yearly. Cancel anytime.`,
         'BEST VALUE'
       )}
       {planCard(
@@ -108,7 +108,7 @@ export function PricingCards() {
           ${PRICE_MONTHLY}
           <span className="text-xs font-medium text-muted-foreground">/mo</span>
         </p>,
-        '7 days free, then billed monthly. Cancel anytime.'
+        'Billed monthly. Cancel anytime.'
       )}
       {SHOW_LIFETIME &&
         planCard(

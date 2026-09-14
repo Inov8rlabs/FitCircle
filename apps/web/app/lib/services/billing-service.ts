@@ -58,10 +58,10 @@ export class BillingService {
   }
 
   /**
-   * Create a Checkout Session for a plan. Annual carries the 7-day trial and,
+   * Create a Checkout Session for a plan. Annual carries an optional STRIPE_TRIAL_DAYS trial and,
    * while STRIPE_COUPON_LAUNCH is set, the launch first-period discount
    * (renewals bill at list price — coupons with duration 'once' only touch the
-   * first invoice). Monthly also gets the 7-day trial per the offering design.
+   * first invoice). Monthly gets the same optional trial. Launch config: no trial.
    */
   static async createCheckoutSession(params: {
     userId: string;
@@ -70,6 +70,7 @@ export class BillingService {
     origin: string;
   }): Promise<{ url: string }> {
     const { userId, email, plan, origin } = params;
+    const trialDays = Number(process.env.STRIPE_TRIAL_DAYS ?? 0) || 0;
     const stripe = getStripe();
     const customerId = await this.findOrCreateCustomer(userId, email);
 
@@ -85,7 +86,9 @@ export class BillingService {
       ...(isSubscription
         ? {
             subscription_data: {
-              trial_period_days: 7,
+              // No trial at launch (decided 2026-09-14). Set STRIPE_TRIAL_DAYS to
+              // run a free-trial promo without a deploy; 0/unset means none.
+              ...(trialDays > 0 ? { trial_period_days: trialDays } : {}),
               metadata: { app_user_id: userId, plan },
             },
             ...(plan === 'annual' && launchCoupon

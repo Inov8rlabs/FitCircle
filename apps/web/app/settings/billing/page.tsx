@@ -117,7 +117,7 @@ export default function BillingSettingsPage() {
                   href="/upgrade"
                   className="block w-full rounded-lg bg-purple-500 py-2.5 text-center text-sm font-bold text-white hover:bg-purple-600"
                 >
-                  Start your free week of Pro
+                  Upgrade to Pro
                 </Link>
               </>
             ) : (

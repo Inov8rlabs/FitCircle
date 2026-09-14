@@ -1,5 +1,6 @@
 -- ============================================================================
--- 082: LAUNCH SWITCH (was 077; renumbered 2026-08-25 — versions 078–081 are applied, versions must be unique) — flip Pro feature gates to premium
+-- 083: LAUNCH SWITCH (was 077, then 082; renumbered 2026-09-13 because 082 became the
+-- notification quiet-hours migration and versions must be unique) — flip Pro feature gates to premium
 -- ============================================================================
 -- ⚠️  DO NOT APPLY until the full trial→paid loop is verified end-to-end on all
 -- three platforms (see docs plan "Verification §5 cross-platform acceptance").

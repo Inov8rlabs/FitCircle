@@ -2,7 +2,7 @@
  * Tier quota limits (MONETIZATION-PLAN.md free-vs-Pro matrix).
  *
  * These only take effect once the corresponding feature gate is flipped to
- * 'premium' (migration 077). While a gate is dark, UsageService applies the
+ * 'premium' (pending migration 083, the Pro launch switch). While a gate is dark, UsageService applies the
  * LEGACY limits so behavior is byte-identical to pre-subscription FitCircle.
  *
  * Premium numbers are ABUSE CEILINGS (protect AI spend from scripted abuse),

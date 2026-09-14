@@ -6,7 +6,7 @@
 supabase/
   migrations/000_baseline.sql          production schema as of 2026-08-04
   seed.sql                             reference data (no user data)
-  pending/082_enable_pro_gates.sql     held back deliberately — see below
+  pending/083_enable_pro_gates.sql     held back deliberately — see below
   _archive/migrations_pre_baseline/    migrations 001–076, historical only
 ```
 
@@ -94,7 +94,7 @@ Still deliberately not restored, because nothing references them: 034
 (journeys), 037 (circle challenges), 012 (`progress_milestones`), and 068
 (`foods.name_embedding` + the `vector` extension).
 
-## `pending/082_enable_pro_gates.sql`
+## `pending/083_enable_pro_gates.sql`
 
 082 (formerly 077 — renumbered because 078–081 are now applied and versions must be unique) flips the twelve Pro feature gates from `free` to `premium` — the moment
 free-tier limits begin for existing users. It is kept **out of `migrations/`**
