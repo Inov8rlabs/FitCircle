@@ -597,24 +597,24 @@ export class CircleChatService {
 
     const supabaseAdmin = createAdminSupabase();
 
-    // Batch sender profiles for all distinct sender_ids.
-    const senderIds = Array.from(
-      new Set(rows.map((r) => r.sender_id).filter((id): id is string => !!id))
-    );
-
+    // Batch profiles for all distinct sender_ids AND system-event actor ids.
+    // System posts store actors as `{ id }` only (the copy is pre-rendered into
+    // `body`), but the wire contract promises `{ id, name }` — the iOS client
+    // failed to decode whole pages when `name` was absent.
+    const senderIds = rows.map((r) => r.sender_id).filter((id): id is string => !!id);
+    const actorIds = rows.flatMap((r) => this.actorIdsOf(r));
+    const profileIds = Array.from(new Set([...senderIds, ...actorIds]));
     const senderById = new Map<string, MessageSender>();
-    if (senderIds.length > 0) {
+    if (profileIds.length > 0) {
       const { data: profiles, error } = await supabaseAdmin
         .from('profiles')
         .select('id, display_name, avatar_url')
-        .in('id', senderIds);
-
+        .in('id', profileIds);
       if (error) throw error;
-
       for (const p of profiles ?? []) {
         senderById.set(p.id, {
           id: p.id,
-          name: p.display_name,
+          name: p.display_name ?? '',
           avatarUrl: p.avatar_url ?? null,
         });
       }
@@ -626,7 +626,7 @@ export class CircleChatService {
 
     return rows.map((row) => {
       const sender = row.sender_id ? senderById.get(row.sender_id) ?? null : null;
-      const system = row.kind === 'system_event' ? this.buildSystemBlock(row) : null;
+      const system = row.kind === 'system_event' ? this.buildSystemBlock(row, senderById) : null;
       // Deleted rows always serialize as tombstones (no body, no photo),
       // regardless of what the stored row still holds.
       const isDeleted = !!row.deleted_at;
@@ -648,16 +648,48 @@ export class CircleChatService {
     });
   }
 
-  private static buildSystemBlock(row: CircleMessageRow): MessageSystemBlock {
-    const payload = (row.system_payload ?? {});
+  /** Actor ids referenced by a system post's payload (for the profile batch). */
+  private static actorIdsOf(row: CircleMessageRow): string[] {
+    if (row.kind !== 'system_event') return [];
+    const payload = (row.system_payload ?? {}) as { actors?: unknown };
+    if (!Array.isArray(payload.actors)) return [];
+    return payload.actors
+      .map((a) => (a && typeof a === 'object' ? (a as { id?: unknown }).id : undefined))
+      .filter((id): id is string => typeof id === 'string' && id.length > 0);
+  }
 
+  /**
+   * Normalize stored actors to the `{ id, name }` wire shape. Names come from
+   * the payload when present, else the batched profile lookup, else ''. Entries
+   * without a usable id are dropped rather than sent malformed.
+   */
+  static normalizeActors(
+    raw: unknown,
+    nameById: ReadonlyMap<string, { name: string }>
+  ): Array<{ id: string; name: string }> {
+    if (!Array.isArray(raw)) return [];
+    const out: Array<{ id: string; name: string }> = [];
+    for (const entry of raw) {
+      if (!entry || typeof entry !== 'object') continue;
+      const { id, name } = entry as { id?: unknown; name?: unknown };
+      if (typeof id !== 'string' || id.length === 0) continue;
+      out.push({
+        id,
+        name: typeof name === 'string' && name.length > 0 ? name : nameById.get(id)?.name ?? '',
+      });
+    }
+    return out;
+  }
+
+  private static buildSystemBlock(
+    row: CircleMessageRow,
+    nameById: ReadonlyMap<string, { name: string }> = new Map()
+  ): MessageSystemBlock {
+    const payload = (row.system_payload ?? {});
     const renderHint = (
       typeof payload.render_hint === 'string' ? (payload.render_hint as RenderHint) : 'text'
     );
-
-    const actors = Array.isArray(payload.actors)
-      ? (payload.actors as Array<{ id: string; name: string }>)
-      : [];
+    const actors = this.normalizeActors(payload.actors, nameById);
 
     return {
       eventType: row.system_event_type as SystemEventType,

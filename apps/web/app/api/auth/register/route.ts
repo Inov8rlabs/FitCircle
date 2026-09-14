@@ -4,18 +4,20 @@ import { z } from 'zod';
 
 import { sendWelcomeEmail } from '@/lib/email/email-service';
 import { registerRateLimiter, getIdentifier, applyRateLimit } from '@/lib/middleware/rate-limit';
+import {
+  USERNAME_PATTERN,
+  USERNAME_RULES_MESSAGE,
+  deriveUsernameBase,
+  ensureUniqueUsername,
+} from '@/lib/services/username-service';
 
 // Validation schema
 const registerSchema = z.object({
   email: z.string().email('Invalid email address'),
   password: z.string().min(8, 'Password must be at least 8 characters'),
   fullName: z.string().min(2, 'Full name is required'),
-  username: z
-    .string()
-    .min(3, 'Username must be at least 3 characters')
-    .max(30, 'Username must be less than 30 characters')
-    .regex(/^[a-zA-Z0-9_+]+$/, 'Username can only contain letters, numbers, underscores, and plus signs')
-    .optional(),
+  // Optional: derived from the email when the form doesn't collect one.
+  username: z.string().trim().regex(USERNAME_PATTERN, USERNAME_RULES_MESSAGE).optional(),
 });
 
 export async function POST(request: NextRequest) {
@@ -42,6 +44,26 @@ export async function POST(request: NextRequest) {
       }
     );
 
+    // Resolve a valid, unique username (explicit or derived from the email).
+    const usernameTaken = async (candidate: string): Promise<boolean> => {
+      const { data } = await supabase
+        .from('profiles')
+        .select('id')
+        .ilike('username', candidate)
+        .limit(1)
+        .maybeSingle();
+      return !!data;
+    };
+    let username: string;
+    if (validatedData.username) {
+      if (await usernameTaken(validatedData.username)) {
+        return NextResponse.json({ error: 'This username is already in use' }, { status: 409 });
+      }
+      username = validatedData.username;
+    } else {
+      username = await ensureUniqueUsername(deriveUsernameBase(validatedData.email), usernameTaken);
+    }
+
     // Register user with Supabase Auth
     const { data: authData, error: authError } = await supabase.auth.signUp({
       email: validatedData.email,
@@ -49,7 +71,7 @@ export async function POST(request: NextRequest) {
       options: {
         data: {
           full_name: validatedData.fullName,
-          username: validatedData.username,
+          username,
         }
       }
     });
@@ -75,7 +97,7 @@ export async function POST(request: NextRequest) {
         id: authData.user.id,
         email: validatedData.email,
         full_name: validatedData.fullName,
-        username: validatedData.username,
+        username,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       });

@@ -4,17 +4,22 @@ import { z } from 'zod';
 
 import { registerRateLimiter, getIdentifier, applyRateLimit } from '@/lib/middleware/rate-limit';
 import { MobileAPIService } from '@/lib/services/mobile-api-service';
+import {
+  USERNAME_PATTERN,
+  USERNAME_RULES_MESSAGE,
+  deriveUsernameBase,
+  ensureUniqueUsername,
+} from '@/lib/services/username-service';
 
 // Validation schema
 const registerSchema = z.object({
   email: z.string().email('Invalid email address'),
   password: z.string().min(8, 'Password must be at least 8 characters'),
-  username: z
-    .string()
-    .min(3, 'Username must be at least 3 characters')
-    .max(30, 'Username must be less than 30 characters')
-    .regex(/^[a-zA-Z0-9_+]+$/, 'Username can only contain letters, numbers, underscores, and plus signs'),
-  displayName: z.string().min(1, 'Display name is required'),
+  // Optional: clients that don't collect a username (iOS) omit it and the
+  // server derives a valid, unique one from the email. When provided it must
+  // satisfy the shared rule in username-service.ts.
+  username: z.string().trim().regex(USERNAME_PATTERN, USERNAME_RULES_MESSAGE).optional(),
+  displayName: z.string().trim().min(1, 'Display name is required'),
 });
 
 export async function POST(request: NextRequest) {
@@ -39,22 +44,33 @@ export async function POST(request: NextRequest) {
       }
     );
 
-    // Check if username already exists
-    const { data: existingUsername } = await supabase
-      .from('profiles')
-      .select('id')
-      .eq('username', validatedData.username)
-      .single();
+    // Resolve the username: honour an explicitly chosen one (409 if taken),
+    // otherwise derive a unique one from the email.
+    const usernameTaken = async (candidate: string): Promise<boolean> => {
+      const { data } = await supabase
+        .from('profiles')
+        .select('id')
+        .ilike('username', candidate)
+        .limit(1)
+        .maybeSingle();
+      return !!data;
+    };
 
-    if (existingUsername) {
-      return NextResponse.json(
-        {
-          error: 'Username taken',
-          message: 'This username is already in use',
-          code: 'USERNAME_EXISTS',
-        },
-        { status: 409 }
-      );
+    let username: string;
+    if (validatedData.username) {
+      if (await usernameTaken(validatedData.username)) {
+        return NextResponse.json(
+          {
+            error: 'Username taken',
+            message: 'This username is already in use',
+            code: 'USERNAME_EXISTS',
+          },
+          { status: 409 }
+        );
+      }
+      username = validatedData.username;
+    } else {
+      username = await ensureUniqueUsername(deriveUsernameBase(validatedData.email), usernameTaken);
     }
 
     // Sign up with Supabase Auth
@@ -67,7 +83,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         {
           error: authError.message,
-          message: 'Failed to create account',
+          message: authError.message || 'Failed to create account',
+          code: 'SIGNUP_FAILED',
         },
         { status: 400 }
       );
@@ -78,6 +95,7 @@ export async function POST(request: NextRequest) {
         {
           error: 'Registration failed',
           message: 'Failed to create user account',
+          code: 'SIGNUP_FAILED',
         },
         { status: 500 }
       );
@@ -89,7 +107,7 @@ export async function POST(request: NextRequest) {
       .insert({
         id: authData.user.id,
         email: validatedData.email,
-        username: validatedData.username,
+        username,
         display_name: validatedData.displayName,
         onboarding_completed: false,
       })
@@ -104,6 +122,7 @@ export async function POST(request: NextRequest) {
         {
           error: 'Profile creation failed',
           message: profileError.message,
+          code: 'PROFILE_CREATE_FAILED',
         },
         { status: 500 }
       );
@@ -164,10 +183,12 @@ export async function POST(request: NextRequest) {
     console.error('Mobile register error:', error);
 
     if (error instanceof z.ZodError) {
+      const first = error.errors[0];
       return NextResponse.json(
         {
           error: 'Validation error',
-          message: 'Invalid input data',
+          message: first?.message ?? 'Invalid input data',
+          code: 'VALIDATION_ERROR',
           details: error.errors,
         },
         { status: 400 }
@@ -178,6 +199,7 @@ export async function POST(request: NextRequest) {
       {
         error: 'Internal server error',
         message: 'An unexpected error occurred',
+        code: 'INTERNAL_SERVER_ERROR',
       },
       { status: 500 }
     );
