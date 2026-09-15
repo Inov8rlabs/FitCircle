@@ -86,7 +86,7 @@ Then:
 - [ ] Entitlement **`pro`** attached to ALL products (both subs + lifetime on every store)
 - [ ] Offerings: `default` (monthly/annual/lifetime packages, annual first) and `launch` (the discounted packages). Optional `metadata` keys `paywall_headline` / `paywall_promo` for remote copy. **Switching the current offering `default`↔`launch` starts/ends a promo with no app release.**
 - [ ] Webhook → `https://<your-domain>/api/webhooks/revenuecat` with a custom **Authorization header** value you generate (long random string)
-- [ ] Set Vercel env vars: `REVENUECAT_WEBHOOK_AUTH_TOKEN` (that header value), `REVENUECAT_SECRET_API_KEY` (REST API secret key)
+- [ ] Set Vercel env vars: `REVENUECAT_WEBHOOK_AUTH_TOKEN` (that header value), `REVENUECAT_SECRET_API_KEY` (API **v2** secret key, `sk_…`), `REVENUECAT_PROJECT_ID` (`proj…`)
 - [ ] Copy the **public** SDK keys into the apps:
   - iOS: `appl_...` → Xcode Cloud workflow environment variable `REVENUECAT_API_KEY` (ci_pre_xcodebuild.sh writes it into Info.plist `RevenueCatAPIKey`; Config.swift reads that, then the env var, then its fallback)
   - Android: `goog_...` → `revenueCatApiKey=` in the gitignored `local.properties` (see `local.properties.example`), or `-PrevenueCatApiKey=` / `REVENUECAT_API_KEY` env in CI
@@ -119,5 +119,7 @@ STRIPE_TRIAL_DAYS                       (optional, free-trial promo only; unset 
 NEXT_PUBLIC_LAUNCH_PROMO_ANNUAL=39.99   (optional, promo display)
 NEXT_PUBLIC_LIFETIME_OFFER=true         (optional, lifetime window)
 REVENUECAT_WEBHOOK_AUTH_TOKEN           (must match RC webhook config header)
-REVENUECAT_SECRET_API_KEY               (RC REST — reconcile cron + transfers)
+REVENUECAT_SECRET_API_KEY               (RC REST v2 secret key — reconcile cron, transfers, sync fallback)
+REVENUECAT_PROJECT_ID                   (RC project id, proj… — required with the v2 key)
+REVENUECAT_ENTITLEMENT                  (optional, default "fitcircle_pro" — RC entitlement lookup key)
 ```

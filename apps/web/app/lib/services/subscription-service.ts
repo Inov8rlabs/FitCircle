@@ -49,6 +49,15 @@ export type ProcessOutcome =
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+export interface RevenueCatState {
+  active: boolean;
+  trialing: boolean;
+  expiresAt: string | null;
+  willRenew: boolean;
+  platform: 'app_store' | 'play_store' | 'stripe' | 'promotional' | null;
+  productId: string | null;
+}
+
 function mapStore(store: string | undefined): string | null {
   switch (store) {
     case 'APP_STORE':
@@ -358,25 +367,21 @@ export class SubscriptionService {
   }
 
   /**
-   * Pull a user's current subscriber state from the RevenueCat REST API and
-   * re-apply it. Used for TRANSFER targets and the daily reconcile cron.
+   * Pull a user's current state from the RevenueCat REST API (v2) and re-apply
+   * it. Used for TRANSFER targets, the daily reconcile cron, and the mobile
+   * post-purchase sync fallback.
+   *
+   * Requires REVENUECAT_SECRET_API_KEY (a v2 secret key, `sk_…`) and
+   * REVENUECAT_PROJECT_ID (`proj…`). The entitlement is matched by lookup key
+   * (REVENUECAT_ENTITLEMENT, default "fitcircle_pro"). A customer RevenueCat has never
+   * seen is simply free.
    */
   static async syncFromRevenueCat(userId: string): Promise<void> {
-    const apiKey = process.env.REVENUECAT_SECRET_API_KEY;
-    if (!apiKey) throw new Error('REVENUECAT_SECRET_API_KEY is not configured');
-
-    const res = await fetch(
-      `https://api.revenuecat.com/v1/subscribers/${encodeURIComponent(userId)}`,
-      { headers: { Authorization: `Bearer ${apiKey}` } }
-    );
-    if (!res.ok) throw new Error(`RevenueCat subscriber fetch failed: ${res.status}`);
-    const body = await res.json();
-
-    const entitlement = body?.subscriber?.entitlements?.pro;
+    const state = await this.fetchRevenueCatState(userId);
     const supabase = createAdminSupabase();
     const now = new Date().toISOString();
 
-    if (!entitlement) {
+    if (!state.active) {
       await supabase
         .from('profiles')
         .update({
@@ -389,27 +394,88 @@ export class SubscriptionService {
       return;
     }
 
-    const expiresAt: string | null = entitlement.expires_date ?? null;
-    const active = expiresAt === null || new Date(expiresAt).getTime() > Date.now();
-    const productId: string | null = entitlement.product_identifier ?? null;
-    const sub = productId ? body?.subscriber?.subscriptions?.[productId] : null;
-    const willRenew = active && expiresAt !== null && !sub?.unsubscribe_detected_at;
-
     await supabase
       .from('profiles')
       .update({
-        subscription_tier: active ? 'premium' : 'free',
-        subscription_status: active
-          ? sub?.period_type === 'trial'
-            ? 'trialing'
-            : 'active'
-          : 'cancelled',
-        subscription_expires_at: expiresAt,
-        subscription_will_renew: willRenew,
-        subscription_platform: mapStore(sub?.store?.toUpperCase?.()) ?? null,
-        subscription_product_id: productId,
+        subscription_tier: 'premium',
+        subscription_status: state.trialing ? 'trialing' : 'active',
+        subscription_expires_at: state.expiresAt,
+        subscription_will_renew: state.willRenew,
+        subscription_platform: state.platform,
+        subscription_product_id: state.productId,
         subscription_synced_at: now,
       })
       .eq('id', userId);
+  }
+
+  /**
+   * Resolve the user's Pro state from RevenueCat v2: active subscriptions
+   * (status trialing/active/in_grace_period/in_billing_retry give access) or an
+   * unrevoked one-time purchase, filtered to the entitlement we care about.
+   */
+  static async fetchRevenueCatState(userId: string): Promise<RevenueCatState> {
+    const apiKey = process.env.REVENUECAT_SECRET_API_KEY;
+    const projectId = process.env.REVENUECAT_PROJECT_ID;
+    if (!apiKey) throw new Error('REVENUECAT_SECRET_API_KEY is not configured');
+    if (!projectId) throw new Error('REVENUECAT_PROJECT_ID is not configured');
+    const entitlementKey = process.env.REVENUECAT_ENTITLEMENT || 'fitcircle_pro';
+    const base = `https://api.revenuecat.com/v2/projects/${encodeURIComponent(projectId)}`;
+    const headers = { Authorization: `Bearer ${apiKey}` };
+    const free: RevenueCatState = { active: false, trialing: false, expiresAt: null, willRenew: false, platform: null, productId: null };
+
+    const get = async (path: string): Promise<any | null> => {
+      const res = await fetch(`${base}${path}`, { headers });
+      if (res.status === 404) return null;
+      if (!res.ok) throw new Error(`RevenueCat v2 ${path} failed: ${res.status}`);
+      return res.json();
+    };
+
+    // Entitlement lookup key → RevenueCat entitlement id.
+    const ents = await get('/entitlements?limit=100');
+    const entitlementId: string | undefined = (ents?.items ?? []).find(
+      (e: any) => e.lookup_key === entitlementKey
+    )?.id;
+    if (!entitlementId) return { ...free };
+
+    const grants = (item: any): boolean =>
+      Array.isArray(item?.entitlements?.items) &&
+      item.entitlements.items.some((e: any) => e.id === entitlementId);
+
+    const customerPath = `/customers/${encodeURIComponent(userId)}`;
+    const [subs, purchases] = await Promise.all([
+      get(`${customerPath}/subscriptions?limit=100&expand=items.entitlements`),
+      get(`${customerPath}/purchases?limit=100&expand=items.entitlements`),
+    ]);
+    if (subs === null && purchases === null) return { ...free }; // unknown customer
+
+    // Lifetime: an unrevoked one-time purchase for the entitlement.
+    const lifetime = (purchases?.items ?? []).find((p: any) => !p.revoked_at && grants(p));
+    if (lifetime) {
+      return {
+        active: true,
+        trialing: false,
+        expiresAt: null,
+        willRenew: false,
+        platform: mapStore(String(lifetime.store ?? '').toUpperCase()) as RevenueCatState['platform'],
+        productId: lifetime.product_id ?? null,
+      };
+    }
+
+    const ACCESS = new Set(['trialing', 'active', 'in_grace_period', 'in_billing_retry']);
+    const live = (subs?.items ?? [])
+      .filter((s: any) => grants(s) && (s.gives_access === true || ACCESS.has(s.status)))
+      .sort((a: any, b: any) => (b.current_period_ends_at ?? 0) - (a.current_period_ends_at ?? 0));
+    const sub = live[0];
+    if (!sub) return { ...free };
+
+    const endsMs: number | null = typeof sub.current_period_ends_at === 'number' ? sub.current_period_ends_at : null;
+    return {
+      active: true,
+      trialing: sub.status === 'trialing',
+      expiresAt: endsMs ? new Date(endsMs).toISOString() : null,
+      willRenew: ['will_renew', 'will_change_product', 'has_already_renewed'].includes(sub.auto_renewal_status),
+      platform: mapStore(String(sub.store ?? '').toUpperCase()) as RevenueCatState['platform'],
+      productId: sub.product_id ?? null,
+    };
   }
 }

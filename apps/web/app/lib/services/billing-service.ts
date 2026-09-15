@@ -121,9 +121,10 @@ export class BillingService {
    * this forward is the critical hop.
    */
   static async forwardReceiptToRevenueCat(appUserId: string, fetchToken: string): Promise<void> {
-    const apiKey =
-      process.env.REVENUECAT_STRIPE_PUBLIC_API_KEY || process.env.REVENUECAT_SECRET_API_KEY;
-    if (!apiKey) throw new Error('RevenueCat API key is not configured');
+    // The v1 receipts endpoint takes the Stripe app's PUBLIC key (strp_…); a v2
+    // secret key is rejected there, so never fall back to it.
+    const apiKey = process.env.REVENUECAT_STRIPE_PUBLIC_API_KEY;
+    if (!apiKey) throw new Error('REVENUECAT_STRIPE_PUBLIC_API_KEY is not configured');
 
     const res = await fetch('https://api.revenuecat.com/v1/receipts', {
       method: 'POST',
