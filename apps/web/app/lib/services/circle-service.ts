@@ -28,6 +28,19 @@ import {
 
 import { LeaderboardService } from './leaderboard-service';
 
+/** Alphabet without look-alikes (no 0/O, 1/I/L). */
+const INVITE_CODE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+
+export function randomInviteSuffix(length: number): string {
+  let out = '';
+  for (let i = 0; i < length; i++) {
+    out += INVITE_CODE_ALPHABET[crypto.randomInt(0, INVITE_CODE_ALPHABET.length)];
+  }
+  return out;
+}
+
+export const INVITE_CODE_PATTERN = /^FIT-?[A-Z0-9]{6}$/;
+
 export class CircleService {
   // ============================================================================
   // CIRCLE MANAGEMENT
@@ -216,30 +229,16 @@ export class CircleService {
   // ============================================================================
 
   /**
-   * Generate a unique 9-character invite code
+   * Generate a unique invite code in the format the database enforces:
+   * `FIT` + 6 unambiguous alphanumerics (CHECK invite_code_format
+   * `^FIT-?[A-Z0-9]{6}$`, varchar(10)). Uses a CSPRNG so codes cannot be
+   * enumerated.
    */
   static async generateInviteCode(): Promise<string> {
     const supabaseAdmin = createAdminSupabase();
-    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // No ambiguous characters
-    const LETTERS_LEN = 24; // first 24 chars are letters
-    const DIGITS_LEN = 9; // last 9 chars are digits
-
     let attempts = 0;
     while (attempts < 10) {
-      let code = '';
-
-      // Generate ABC123XYZ format (3 letters, 3 numbers, 3 letters)
-      // Use a CSPRNG (crypto.randomInt) instead of Math.random() so invite
-      // codes are unpredictable and cannot be enumerated/brute-forced.
-      for (let i = 0; i < 3; i++) {
-        code += chars[crypto.randomInt(0, LETTERS_LEN)]; // Letters only (first 24 chars)
-      }
-      for (let i = 0; i < 3; i++) {
-        code += chars[LETTERS_LEN + crypto.randomInt(0, DIGITS_LEN)]; // Numbers only (last 9 chars)
-      }
-      for (let i = 0; i < 3; i++) {
-        code += chars[crypto.randomInt(0, LETTERS_LEN)]; // Letters only
-      }
+      const code = 'FIT' + randomInviteSuffix(6);
 
       // Check uniqueness
       const { data: existing } = await supabaseAdmin

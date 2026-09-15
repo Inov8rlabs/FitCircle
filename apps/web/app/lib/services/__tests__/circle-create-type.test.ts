@@ -35,3 +35,16 @@ describe('CircleService.createCircle — type', () => {
     expect(inserted[0].type).toBe('step_count');
   });
 });
+
+import { INVITE_CODE_PATTERN, randomInviteSuffix } from '../circle-service';
+
+describe('invite codes', () => {
+  it('always match the DB invite_code_format check and fit varchar(10)', () => {
+    for (let i = 0; i < 2000; i++) {
+      const code = 'FIT' + randomInviteSuffix(6);
+      expect(code).toMatch(INVITE_CODE_PATTERN);
+      expect(code.length).toBeLessThanOrEqual(10);
+      expect(code).not.toContain('undefined');
+    }
+  });
+});
