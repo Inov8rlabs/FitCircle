@@ -218,3 +218,24 @@ describe('SubscriptionService.processRevenueCatEvent — safety guarantees', () 
     expect(profile().subscription_tier).toBe('free');
   });
 });
+
+describe('SubscriptionService.processRevenueCatEvent — unknown users', () => {
+  it("records a UUID app_user_id that has no profile with user_id = null (RevenueCat's test event)", async () => {
+    const stranger = '72ac2ef4-6c0e-4949-a6db-d951f23774c4';
+    const outcome = await SubscriptionService.processRevenueCatEvent(
+      rcEvent({ type: 'TEST', app_user_id: stranger, environment: 'SANDBOX' }),
+      { apply: false }
+    );
+    expect(outcome).toBe('ignored');
+    const row = [...getDb().subscription_events.values()][0] as any;
+    expect(row.user_id).toBeNull(); // would violate subscription_events_user_id_fkey otherwise
+  });
+
+  it('a real event for a UUID with no profile is recorded and skipped', async () => {
+    const outcome = await SubscriptionService.processRevenueCatEvent(
+      rcEvent({ app_user_id: '72ac2ef4-6c0e-4949-a6db-d951f23774c4' })
+    );
+    expect(outcome).toBe('unknown_user');
+    expect(getDb().subscription_events.size).toBe(1);
+  });
+});

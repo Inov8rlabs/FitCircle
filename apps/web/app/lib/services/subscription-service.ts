@@ -108,10 +108,24 @@ export class SubscriptionService {
     const apply = options.apply !== false;
     const supabase = createAdminSupabase();
 
+    // 0. Resolve the subject user up front. subscription_events.user_id has a FK to
+    // profiles, so an app_user_id that is not (or no longer) a profile — RevenueCat's
+    // "send test event" uses a random UUID — must be recorded with user_id = null
+    // rather than failing the insert.
+    const profile = UUID_RE.test(event.app_user_id)
+      ? (
+          await supabase
+            .from('profiles')
+            .select('id, subscription_synced_at')
+            .eq('id', event.app_user_id)
+            .maybeSingle()
+        ).data
+      : null;
+
     // 1. Idempotency: the PK insert is the check. A duplicate delivery conflicts and we stop.
     const { error: insertError } = await supabase.from('subscription_events').insert({
       id: event.id,
-      user_id: UUID_RE.test(event.app_user_id) ? event.app_user_id : null,
+      user_id: profile?.id ?? null,
       type: event.type,
       store: event.store ?? null,
       environment: event.environment ?? null,
@@ -136,11 +150,6 @@ export class SubscriptionService {
       console.warn('[SubscriptionService] non-UUID app_user_id, skipping:', event.app_user_id, event.type);
       return 'unknown_user';
     }
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('id, subscription_synced_at')
-      .eq('id', event.app_user_id)
-      .maybeSingle();
     if (!profile) {
       console.warn('[SubscriptionService] no profile for app_user_id, skipping:', event.app_user_id);
       return 'unknown_user';
