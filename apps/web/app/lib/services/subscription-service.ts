@@ -1,4 +1,5 @@
 import { createAdminSupabase } from '../supabase-admin';
+import { ComplimentaryGrantService } from './complimentary-grant-service';
 
 /**
  * SubscriptionService — the ONLY code that writes subscription state (MONETIZATION-PLAN.md).
@@ -170,6 +171,13 @@ export class SubscriptionService {
     if (!mapped) return 'ignored';
 
     const { patch, payment } = mapped;
+    // A backend-issued complimentary grant outranks any store downgrade
+    // (expiration, cancellation, refund): re-pin the grant and only record the
+    // payment row, never drop the user to free.
+    if (patch.subscription_tier === 'free' && (await ComplimentaryGrantService.holdIfGranted(profile.id))) {
+      console.log('[SubscriptionService] downgrade held by complimentary grant:', profile.id, event.type);
+      return 'applied';
+    }
     // Strip undefined keys — they mean "leave unchanged", never "overwrite with null".
     const update: Record<string, unknown> = {
       subscription_synced_at: eventIso ?? new Date().toISOString(),
@@ -358,7 +366,9 @@ export class SubscriptionService {
     const from = (event.transferred_from ?? []).filter((id) => UUID_RE.test(id));
     const to = (event.transferred_to ?? []).filter((id) => UUID_RE.test(id));
 
-    if (from.length > 0) {
+    for (const userId of from) {
+      // A complimentary grant on the source account survives the transfer.
+      if (await ComplimentaryGrantService.holdIfGranted(userId)) continue;
       await supabase
         .from('profiles')
         .update({
@@ -367,7 +377,7 @@ export class SubscriptionService {
           subscription_will_renew: false,
           subscription_synced_at: toIso(event.event_timestamp_ms) ?? new Date().toISOString(),
         })
-        .in('id', from);
+        .eq('id', userId);
     }
     for (const userId of to) {
       await this.syncFromRevenueCat(userId);
@@ -391,6 +401,8 @@ export class SubscriptionService {
     const now = new Date().toISOString();
 
     if (!state.active) {
+      // No store subscription — but a complimentary grant keeps the user premium.
+      if (await ComplimentaryGrantService.holdIfGranted(userId)) return;
       await supabase
         .from('profiles')
         .update({

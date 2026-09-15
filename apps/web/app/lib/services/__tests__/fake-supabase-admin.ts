@@ -17,6 +17,7 @@ export class FakeDb {
   fitzy_message_log: Row[] = [];
   fitcircles: Row[] = [];
   feature_flags: Row[] = [];
+  complimentary_grants: Row[] = [];
 
   client() {
     return { from: (table: string) => new FakeQuery(this, table) };
@@ -43,13 +44,15 @@ export class FakeDb {
         return this.fitcircles;
       case 'feature_flags':
         return this.feature_flags;
+      case 'complimentary_grants':
+        return this.complimentary_grants;
       default:
         throw new Error(`FakeDb: unknown table ${table}`);
     }
   }
 }
 
-type Filter = { kind: 'eq' | 'neq' | 'gte' | 'lt'; col: string; val: any } | { kind: 'in'; col: string; vals: any[] } | { kind: 'notIs'; col: string; val: any };
+type Filter = { kind: 'eq' | 'neq' | 'gte' | 'lt' | 'ilike'; col: string; val: any } | { kind: 'in'; col: string; vals: any[] } | { kind: 'notIs'; col: string; val: any };
 
 class FakeQuery implements PromiseLike<any> {
   private op: 'select' | 'insert' | 'update' | 'delete' = 'select';
@@ -86,6 +89,8 @@ class FakeQuery implements PromiseLike<any> {
   }
 
   eq(col: string, val: any) { this.filters.push({ kind: 'eq', col, val }); return this; }
+  is(col: string, val: any) { this.filters.push({ kind: 'eq', col, val }); return this; }
+  ilike(col: string, val: string) { this.filters.push({ kind: 'ilike', col, val }); return this; }
   neq(col: string, val: any) { this.filters.push({ kind: 'neq', col, val }); return this; }
   gte(col: string, val: any) { this.filters.push({ kind: 'gte', col, val }); return this; }
   lt(col: string, val: any) { this.filters.push({ kind: 'lt', col, val }); return this; }
@@ -100,6 +105,7 @@ class FakeQuery implements PromiseLike<any> {
   }
 
   async single() {
+    if (this.op === 'insert') return this.run();
     const rows = this.filtered();
     return rows[0]
       ? { data: rows[0], error: null }
@@ -118,6 +124,7 @@ class FakeQuery implements PromiseLike<any> {
       this.filters.every((f) => {
         switch (f.kind) {
           case 'eq': return row[f.col] === f.val;
+          case 'ilike': return String(row[f.col] ?? '').toLowerCase() === String(f.val).toLowerCase();
           case 'neq': return row[f.col] !== f.val;
           case 'gte': return row[f.col] >= f.val;
           case 'lt': return row[f.col] != null && row[f.col] < f.val;
@@ -150,6 +157,11 @@ class FakeQuery implements PromiseLike<any> {
         if (this.table === 'nutrition_parse_log') {
           this.db.nutrition_parse_log.push({ created_at: new Date().toISOString(), ...row });
           return { data: null, error: null };
+        }
+        if (this.table === 'complimentary_grants') {
+          const stored = { id: `grant_${this.db.complimentary_grants.length + 1}`, created_at: new Date().toISOString(), revoked_at: null, ...row };
+          this.db.complimentary_grants.push(stored);
+          return { data: stored, error: null };
         }
         throw new Error(`FakeDb: insert not supported on ${this.table}`);
       }

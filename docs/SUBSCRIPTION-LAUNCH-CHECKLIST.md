@@ -123,3 +123,28 @@ REVENUECAT_SECRET_API_KEY               (RC REST v2 secret key — reconcile cro
 REVENUECAT_PROJECT_ID                   (RC project id, proj… — required with the v2 key)
 REVENUECAT_ENTITLEMENT                  (optional, default "fitcircle_pro" — RC entitlement lookup key)
 ```
+
+## Complimentary Pro (friends / testers / support)
+
+Grant Pro from the backend without a purchase. Audit rows live in
+`complimentary_grants` (migration 084); the profile is pinned to
+`premium` / `promotional` while a grant is active, and webhooks, the reconcile
+cron and the sync fallback never downgrade below an active grant. A real store
+purchase always takes precedence; when it lapses the grant takes over again.
+
+Env: `ADMIN_API_SECRET` (Vercel production). Endpoint: `/api/admin/subscriptions/grants`.
+
+```bash
+export ADMIN_API_SECRET=...   # from Vercel → Settings → Environment Variables
+B=https://www.fitcircle.ai/api/admin/subscriptions/grants
+H=(-H "Authorization: Bearer $ADMIN_API_SECRET" -H "Content-Type: application/json")
+
+curl -s -X POST $B "${H[@]}" -d '{"email":"friend@example.com","note":"beta tester"}'       # until revoked
+curl -s -X POST $B "${H[@]}" -d '{"email":"friend@example.com","days":90,"note":"90 days"}'  # time-boxed
+curl -s $B "${H[@]}"                                                                          # list active grants
+curl -s -X DELETE $B "${H[@]}" -d '{"email":"friend@example.com"}'                           # revoke → back to free
+```
+
+The user sees Pro on the next app launch (entitlements are refetched on
+foreground); no purchase, RevenueCat or App Store involvement.
+
