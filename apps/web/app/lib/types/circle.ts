@@ -110,9 +110,13 @@ export interface DailyHighFiveLimit {
 // API INPUT TYPES
 // ============================================================================
 
+export type CircleType = 'weight_loss' | 'step_count' | 'workout_minutes' | 'custom';
+
 export interface CreateCircleInput {
   name: string;
   description?: string;
+  /** fitcircles.type (NOT NULL enum). Defaults to 'custom' in the service. */
+  type?: CircleType;
   start_date: string;
   end_date: string;
   max_participants?: number;

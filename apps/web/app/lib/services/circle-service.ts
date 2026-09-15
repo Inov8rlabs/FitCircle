@@ -58,6 +58,7 @@ export class CircleService {
         name: sanitizedName,
         description: sanitizedDescription,
         creator_id: userId,
+        type: data.type ?? 'custom',
         start_date: data.start_date,
         end_date: data.end_date,
         invite_code: inviteCode,

@@ -2,13 +2,34 @@ import { type NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
+import type { CircleType } from '@/lib/types/circle';
 import { CircleService } from '@/lib/services/circle-service';
 import { UsageService } from '@/lib/services/usage-service';
 
 // Validation schema for POST
+// fitcircles.type is a NOT NULL enum (weight_loss | step_count | workout_minutes | custom).
+// iOS also sends its legacy ChallengeType raw values; map them onto the DB enum.
+const CIRCLE_TYPE_ALIASES: Record<string, CircleType> = {
+  weight_loss: 'weight_loss',
+  weight: 'weight_loss',
+  step_count: 'step_count',
+  steps: 'step_count',
+  workout_minutes: 'workout_minutes',
+  exercise: 'workout_minutes',
+  check_in: 'custom',
+  custom: 'custom',
+};
+
 const createCircleSchema = z.object({
   name: z.string().min(1, 'Circle name is required').max(100),
   description: z.string().optional(),
+  type: z
+    .string()
+    .transform((value) => CIRCLE_TYPE_ALIASES[value])
+    .refine((value): value is CircleType => value !== undefined, {
+      message: 'type must be one of weight_loss, step_count, workout_minutes, custom',
+    })
+    .optional(),
   startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Invalid date format (YYYY-MM-DD)'),
   endDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Invalid date format (YYYY-MM-DD)'),
   allowLateJoin: z.boolean().optional(),
@@ -194,6 +215,7 @@ export async function POST(request: NextRequest) {
     const circle = await CircleService.createCircle(user.id, {
       name: validatedData.name,
       description: validatedData.description,
+      type: validatedData.type ?? 'custom',
       start_date: validatedData.startDate,
       end_date: validatedData.endDate,
       allow_late_join: validatedData.allowLateJoin,
