@@ -79,7 +79,7 @@ export async function GET(
     });
 
     // Add cache headers (5 minutes cache for profile data)
-    response.headers.set('Cache-Control', 'private, max-age=300');
+    response.headers.set('Cache-Control', 'private, no-store');
 
     return response;
   } catch (error: any) {

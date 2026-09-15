@@ -52,7 +52,7 @@ export async function GET(request: NextRequest) {
       meta: { count: result.data.length, limit, requestTime: Date.now() - startTime },
       error: null,
     });
-    response.headers.set('Cache-Control', 'private, max-age=300');
+    response.headers.set('Cache-Control', 'private, no-store');
     return response;
   } catch (error: unknown) {
     if (error instanceof Error && error.message === 'Unauthorized') {

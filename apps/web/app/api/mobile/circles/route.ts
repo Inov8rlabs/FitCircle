@@ -109,7 +109,7 @@ export async function GET(request: NextRequest) {
     });
 
     // Add cache headers (2 minutes cache for circles)
-    response.headers.set('Cache-Control', 'private, max-age=120');
+    response.headers.set('Cache-Control', 'private, no-store');
 
     return response;
   } catch (error: any) {

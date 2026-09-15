@@ -30,7 +30,7 @@ export async function GET(request: NextRequest) {
       error: null,
       meta: { timestamp: new Date().toISOString() },
     });
-    response.headers.set('Cache-Control', 'private, max-age=60');
+    response.headers.set('Cache-Control', 'private, no-store');
     return await addAutoRefreshHeaders(request, response, user);
   } catch (error: any) {
     if (error?.message === 'Unauthorized') {

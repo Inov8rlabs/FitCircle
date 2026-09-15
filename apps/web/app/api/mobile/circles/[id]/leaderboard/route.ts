@@ -126,7 +126,7 @@ export async function GET(
         {
           status: 200,
           headers: {
-            'Cache-Control': 'private, max-age=60',
+            'Cache-Control': 'private, no-store',
           },
         }
       );
@@ -168,7 +168,7 @@ export async function GET(
       {
         status: 200,
         headers: {
-          'Cache-Control': 'private, max-age=60', // Cache for 1 minute
+          'Cache-Control': 'private, no-store', // Cache for 1 minute
         },
       }
     );

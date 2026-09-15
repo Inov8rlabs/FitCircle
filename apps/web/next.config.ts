@@ -70,6 +70,13 @@ const nextConfig: NextConfig = {
         ],
       },
       {
+        // Authenticated API responses must never be reused from a shared HTTP
+        // cache: iOS URLCache / browsers key by URL, not by Authorization, so a
+        // cached response would be served to the next account on the device.
+        source: '/api/(.*)',
+        headers: [{ key: 'Cache-Control', value: 'private, no-store' }],
+      },
+      {
         source: '/sw.js',
         headers: [
           {

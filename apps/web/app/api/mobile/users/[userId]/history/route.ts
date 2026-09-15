@@ -160,7 +160,7 @@ export async function GET(
     });
 
     // Add cache headers (2 minutes cache for history data)
-    response.headers.set('Cache-Control', 'private, max-age=120');
+    response.headers.set('Cache-Control', 'private, no-store');
 
     return response;
   } catch (error: any) {

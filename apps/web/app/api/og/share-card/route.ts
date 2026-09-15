@@ -28,7 +28,7 @@ export async function GET(request: NextRequest) {
       status: 200,
       headers: {
         'Content-Type': 'text/html',
-        'Cache-Control': 'public, max-age=86400',
+        'Cache-Control': 'private, no-store',
         'Content-Security-Policy': "default-src 'none'; img-src data:; style-src 'unsafe-inline'",
       },
     });

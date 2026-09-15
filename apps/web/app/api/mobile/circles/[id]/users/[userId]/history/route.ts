@@ -50,7 +50,7 @@ export async function GET(
       },
       {
         headers: {
-          'Cache-Control': 'private, max-age=120', // 2 minutes
+          'Cache-Control': 'private, no-store', // 2 minutes
         },
       }
     );

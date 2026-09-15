@@ -69,7 +69,7 @@ export async function GET(request: NextRequest) {
     });
 
     // Add cache headers (1 minute cache for tracking data)
-    response.headers.set('Cache-Control', 'private, max-age=60');
+    response.headers.set('Cache-Control', 'private, no-store');
 
     return response;
   } catch (error: any) {

@@ -19,7 +19,7 @@ export async function GET(request: NextRequest) {
       error: null,
     });
 
-    response.headers.set('Cache-Control', 'private, max-age=30');
+    response.headers.set('Cache-Control', 'private, no-store');
     return response;
   } catch (error: unknown) {
     if (error instanceof Error && error.message === 'Unauthorized') {

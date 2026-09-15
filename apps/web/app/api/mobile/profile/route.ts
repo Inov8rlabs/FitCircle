@@ -56,8 +56,8 @@ export async function GET(request: NextRequest) {
       error: null,
     });
 
-    // Add cache headers (5 minutes cache for profile data)
-    response.headers.set('Cache-Control', 'private, max-age=300');
+    // Never cacheable: URLCache/browser caches key by URL, not Authorization.
+    response.headers.set('Cache-Control', 'private, no-store');
 
     return response;
   } catch (error: any) {

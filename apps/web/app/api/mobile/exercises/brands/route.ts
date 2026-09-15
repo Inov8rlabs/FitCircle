@@ -20,7 +20,7 @@ export async function GET(request: NextRequest) {
     });
 
     // Cache for 24 hours (static data)
-    response.headers.set('Cache-Control', 'private, max-age=86400');
+    response.headers.set('Cache-Control', 'private, no-store');
     return response;
   } catch (error: unknown) {
     if (error instanceof Error && error.message === 'Unauthorized') {
