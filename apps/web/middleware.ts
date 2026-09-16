@@ -67,6 +67,7 @@ export async function middleware(request: NextRequest) {
     '/join',
     '/privacy',
     '/terms',
+    '/support',
   ];
 
   const { pathname } = request.nextUrl;
