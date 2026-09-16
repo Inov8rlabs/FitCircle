@@ -5,8 +5,13 @@ vi.mock('../../supabase-admin', () => ({ createAdminSupabase: () => ({}) }));
 import { SubscriptionService } from '../subscription-service';
 
 const ENT = { items: [{ id: 'entl1', lookup_key: 'fitcircle_pro' }, { id: 'entl2', lookup_key: 'other' }] };
+const PRO = { items: [{ id: 'entl1', lookup_key: 'fitcircle_pro' }] };
+const OTHER = { items: [{ id: 'entl2', lookup_key: 'other' }] };
+const CUSTOMER = { '/customers/u1': { status: 200, body: { id: 'u1' } } };
+const PRODUCTS = { '/products': { status: 200, body: { items: [{ id: 'prod1', store_identifier: 'com.inov8rlabs.fitcircle.pro.annual' }] } } };
 function mockFetch(routes: Record<string, { status: number; body?: unknown }>) {
   return vi.fn(async (url: string) => {
+    if (url.includes('expand=')) return { ok: false, status: 400, json: async () => ({}) } as any; // RC rejects expand here
     const path = url.replace(/^https:\/\/api\.revenuecat\.com\/v2\/projects\/[^/]+/, '').split('?')[0];
     const r = routes[path] ?? { status: 404 };
     return { ok: r.status < 300, status: r.status, json: async () => r.body ?? {} } as any;
@@ -21,18 +26,18 @@ describe('SubscriptionService.fetchRevenueCatState (API v2)', () => {
   afterEach(() => { vi.unstubAllEnvs(); vi.unstubAllGlobals(); });
 
   it('unknown customer is free', async () => {
-    vi.stubGlobal('fetch', mockFetch({ '/entitlements': { status: 200, body: ENT } }));
+    vi.stubGlobal('fetch', mockFetch({ ...PRODUCTS }));
     const s = await SubscriptionService.fetchRevenueCatState('u1');
     expect(s.active).toBe(false);
   });
 
   it('active App Store subscription on the pro entitlement is premium and will renew', async () => {
     vi.stubGlobal('fetch', mockFetch({
-      '/entitlements': { status: 200, body: ENT },
+      ...CUSTOMER, ...PRODUCTS,
       '/customers/u1/subscriptions': { status: 200, body: { items: [{
-        product_id: 'com.inov8rlabs.fitcircle.pro.annual', store: 'app_store', status: 'active',
+        product_id: 'prod1', store: 'app_store', status: 'active',
         current_period_ends_at: Date.parse('2027-01-01T00:00:00Z'), auto_renewal_status: 'will_renew',
-        gives_access: true, entitlements: { items: [{ id: 'entl1' }] } }] } },
+        gives_access: true, entitlements: PRO }] } },
       '/customers/u1/purchases': { status: 200, body: { items: [] } },
     }));
     const s = await SubscriptionService.fetchRevenueCatState('u1');
@@ -42,10 +47,10 @@ describe('SubscriptionService.fetchRevenueCatState (API v2)', () => {
 
   it('ignores subscriptions on other entitlements and expired ones', async () => {
     vi.stubGlobal('fetch', mockFetch({
-      '/entitlements': { status: 200, body: ENT },
+      ...CUSTOMER, ...PRODUCTS,
       '/customers/u1/subscriptions': { status: 200, body: { items: [
-        { product_id: 'x', store: 'app_store', status: 'active', gives_access: true, entitlements: { items: [{ id: 'entl2' }] } },
-        { product_id: 'y', store: 'app_store', status: 'expired', gives_access: false, entitlements: { items: [{ id: 'entl1' }] } },
+        { product_id: 'x', store: 'app_store', status: 'active', gives_access: true, entitlements: OTHER },
+        { product_id: 'y', store: 'app_store', status: 'expired', gives_access: false, entitlements: PRO },
       ] } },
       '/customers/u1/purchases': { status: 200, body: { items: [] } },
     }));
@@ -54,9 +59,9 @@ describe('SubscriptionService.fetchRevenueCatState (API v2)', () => {
 
   it('an unrevoked lifetime purchase wins with no expiry', async () => {
     vi.stubGlobal('fetch', mockFetch({
-      '/entitlements': { status: 200, body: ENT },
+      ...CUSTOMER, ...PRODUCTS,
       '/customers/u1/subscriptions': { status: 200, body: { items: [] } },
-      '/customers/u1/purchases': { status: 200, body: { items: [{ product_id: 'com.inov8rlabs.fitcircle.pro.lifetime', store: 'app_store', revoked_at: null, entitlements: { items: [{ id: 'entl1' }] } }] } },
+      '/customers/u1/purchases': { status: 200, body: { items: [{ product_id: 'com.inov8rlabs.fitcircle.pro.lifetime', store: 'app_store', revoked_at: null, entitlements: PRO }] } },
     }));
     const s = await SubscriptionService.fetchRevenueCatState('u1');
     expect(s).toMatchObject({ active: true, expiresAt: null, willRenew: false, productId: 'com.inov8rlabs.fitcircle.pro.lifetime' });
@@ -64,8 +69,8 @@ describe('SubscriptionService.fetchRevenueCatState (API v2)', () => {
 
   it('grace period still grants access; cancelled-but-running does not renew', async () => {
     vi.stubGlobal('fetch', mockFetch({
-      '/entitlements': { status: 200, body: ENT },
-      '/customers/u1/subscriptions': { status: 200, body: { items: [{ product_id: 'p', store: 'play_store', status: 'in_grace_period', current_period_ends_at: Date.now() + 86400000, auto_renewal_status: 'will_not_renew', entitlements: { items: [{ id: 'entl1' }] } }] } },
+      ...CUSTOMER, ...PRODUCTS,
+      '/customers/u1/subscriptions': { status: 200, body: { items: [{ product_id: 'p', store: 'play_store', status: 'in_grace_period', current_period_ends_at: Date.now() + 86400000, auto_renewal_status: 'will_not_renew', entitlements: PRO }] } },
       '/customers/u1/purchases': { status: 200, body: { items: [] } },
     }));
     const s = await SubscriptionService.fetchRevenueCatState('u1');
@@ -75,5 +80,21 @@ describe('SubscriptionService.fetchRevenueCatState (API v2)', () => {
   it('fails loudly when the project id is missing', async () => {
     vi.stubEnv('REVENUECAT_PROJECT_ID', '');
     await expect(SubscriptionService.fetchRevenueCatState('u1')).rejects.toThrow(/REVENUECAT_PROJECT_ID/);
+  });
+});
+
+
+describe('customer id casing', () => {
+  it('finds a customer RevenueCat stored in upper case when the profile id is lower case', async () => {
+    vi.stubEnv('REVENUECAT_SECRET_API_KEY', 'sk_v2'); vi.stubEnv('REVENUECAT_PROJECT_ID', 'projx');
+    vi.stubGlobal('fetch', mockFetch({
+      '/customers/ABC-1': { status: 200, body: { id: 'ABC-1' } },
+      '/customers/ABC-1/subscriptions': { status: 200, body: { items: [{ product_id: 'prod1', store: 'app_store', status: 'active', environment: 'sandbox', gives_access: true, auto_renewal_status: 'will_renew', current_period_ends_at: Date.now() + 86400000, entitlements: PRO }] } },
+      '/customers/ABC-1/purchases': { status: 200, body: { items: [] } },
+      ...PRODUCTS,
+    }));
+    const s = await SubscriptionService.fetchRevenueCatState('abc-1');
+    expect(s.active).toBe(true);
+    expect(s.productId).toBe('com.inov8rlabs.fitcircle.pro.annual');
   });
 });

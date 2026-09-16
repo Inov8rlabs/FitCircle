@@ -451,23 +451,27 @@ export class SubscriptionService {
       return res.json();
     };
 
-    // Entitlement lookup key → RevenueCat entitlement id.
-    const ents = await get('/entitlements?limit=100');
-    const entitlementId: string | undefined = (ents?.items ?? []).find(
-      (e: any) => e.lookup_key === entitlementKey
-    )?.id;
-    if (!entitlementId) return { ...free };
+    // RevenueCat customer ids are CASE-SENSITIVE and the apps log in with the
+    // profile uuid in different casings (iOS uses UUID().uuidString = upper).
+    // Resolve whichever casing RevenueCat knows; an unknown customer is free.
+    const customerPath = await this.resolveCustomerPath(userId, get);
+    if (!customerPath) return { ...free };
 
+    // Subscriptions/purchases embed their entitlements inline; `expand` is not
+    // supported on these endpoints (400).
+    const [subs, purchases, products] = await Promise.all([
+      get(`${customerPath}/subscriptions?limit=100`),
+      get(`${customerPath}/purchases?limit=100`),
+      get('/products?limit=100'),
+    ]);
+
+    const storeIdOf = (rcProductId: string | null | undefined): string | null => {
+      const hit = (products?.items ?? []).find((p: any) => p.id === rcProductId);
+      return hit?.store_identifier ?? rcProductId ?? null;
+    };
     const grants = (item: any): boolean =>
       Array.isArray(item?.entitlements?.items) &&
-      item.entitlements.items.some((e: any) => e.id === entitlementId);
-
-    const customerPath = `/customers/${encodeURIComponent(userId)}`;
-    const [subs, purchases] = await Promise.all([
-      get(`${customerPath}/subscriptions?limit=100&expand=items.entitlements`),
-      get(`${customerPath}/purchases?limit=100&expand=items.entitlements`),
-    ]);
-    if (subs === null && purchases === null) return { ...free }; // unknown customer
+      item.entitlements.items.some((e: any) => e.lookup_key === entitlementKey);
 
     // Lifetime: an unrevoked one-time purchase for the entitlement.
     const lifetime = (purchases?.items ?? []).find((p: any) => !p.revoked_at && grants(p));
@@ -478,7 +482,7 @@ export class SubscriptionService {
         expiresAt: null,
         willRenew: false,
         platform: mapStore(String(lifetime.store ?? '').toUpperCase()) as RevenueCatState['platform'],
-        productId: lifetime.product_id ?? null,
+        productId: storeIdOf(lifetime.product_id),
       };
     }
 
@@ -496,7 +500,21 @@ export class SubscriptionService {
       expiresAt: endsMs ? new Date(endsMs).toISOString() : null,
       willRenew: ['will_renew', 'will_change_product', 'has_already_renewed'].includes(sub.auto_renewal_status),
       platform: mapStore(String(sub.store ?? '').toUpperCase()) as RevenueCatState['platform'],
-      productId: sub.product_id ?? null,
+      productId: storeIdOf(sub.product_id),
     };
   }
+
+  /** Try the id as given, then upper- and lower-case; returns the customer path or null. */
+  private static async resolveCustomerPath(
+    userId: string,
+    get: (path: string) => Promise<any | null>
+  ): Promise<string | null> {
+    const candidates = [...new Set([userId, userId.toUpperCase(), userId.toLowerCase()])];
+    for (const id of candidates) {
+      const customer = await get(`/customers/${encodeURIComponent(id)}`);
+      if (customer) return `/customers/${encodeURIComponent(id)}`;
+    }
+    return null;
+  }
+
 }
