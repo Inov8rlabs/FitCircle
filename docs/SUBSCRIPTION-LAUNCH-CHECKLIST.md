@@ -148,3 +148,12 @@ curl -s -X DELETE $B "${H[@]}" -d '{"email":"friend@example.com"}'              
 The user sees Pro on the next app launch (entitlements are refetched on
 foreground); no purchase, RevenueCat or App Store involvement.
 
+### Force a resync ("I paid but the app shows free")
+
+```bash
+curl -s -X POST https://www.fitcircle.ai/api/admin/subscriptions/sync "${H[@]}" -d '{"email":"user@example.com"}'
+```
+Pulls the user's RevenueCat state (v2) into the profile and returns the resulting tier.
+The apps pick it up on next foreground; iOS also self-heals on launch when RevenueCat
+says Pro but the server says free (`EntitlementsReconciler.reconcileIfDrifted`).
+
