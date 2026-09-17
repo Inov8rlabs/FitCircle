@@ -6,6 +6,7 @@ import { ShareCardService, type ShareCardType } from '@/lib/services/share-card-
 
 const VALID_CARD_TYPES: ShareCardType[] = [
   'milestone',
+  'streak_milestone',
   'challenge_complete',
   'perfect_week',
   'momentum_flame',

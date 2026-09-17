@@ -118,6 +118,10 @@ function getCardTypeStyles(cardType: string): string {
       .card { background: linear-gradient(135deg, #7c3aed 0%, #6366f1 50%, #8b5cf6 100%); }
       .card::before { background: radial-gradient(circle, #a78bfa, transparent); }
     `,
+    streak_milestone: `
+      .card { background: linear-gradient(135deg, #9a3412 0%, #ea580c 45%, #f59e0b 100%); }
+      .card::before { background: radial-gradient(circle, #fdba74, transparent); }
+    `,
     challenge_complete: `
       .card { background: linear-gradient(135deg, #059669 0%, #10b981 50%, #34d399 100%); }
       .card::before { background: radial-gradient(circle, #6ee7b7, transparent); }
@@ -141,18 +145,40 @@ function getCardTypeStyles(cardType: string): string {
 
 function getCardContent(cardType: string, data: Record<string, unknown>): string {
   switch (cardType) {
-    case 'milestone':
+    case 'milestone': {
+      // Clients send snake_case (milestone_name / days); accept both spellings.
+      const name = data.milestoneName ?? data.milestone_name;
+      const days = data.dayCount ?? data.days ?? data.currentStreak ?? data.current_momentum;
       return `
         <div>
-          <div class="badge">${safeEmoji(data.badgeEmoji, '🏆')}</div>
-          <div class="title">${escapeHtml(String(data.milestoneName || 'Milestone'))}</div>
+          <div class="badge">${safeEmoji(data.badgeEmoji ?? data.badge, '🏆')}</div>
+          <div class="title">${escapeHtml(String(name || 'Milestone'))}</div>
           <div class="subtitle">Momentum milestone achieved</div>
         </div>
         <div>
-          <div class="stat">${safeNumber(data.dayCount)} days</div>
-          <div class="stat-label">Current streak: ${safeNumber(data.currentStreak)} days</div>
+          <div class="stat">${safeNumber(days)} days</div>
+          <div class="stat-label">Momentum on FitCircle</div>
         </div>
       `;
+    }
+
+    case 'streak_milestone': {
+      // Daily-streak milestone (e.g. "1-Week Warrior" at 7 days).
+      const days = safeNumber(data.streak_days ?? data.streakDays ?? data.days);
+      const title = String(data.milestone_title ?? data.milestoneTitle ?? `${days}-day streak`);
+      const name = data.display_name ?? data.displayName;
+      return `
+        <div>
+          <div class="badge">${safeEmoji(data.badge ?? data.badgeEmoji, '🔥')}</div>
+          <div class="title">${escapeHtml(title)}</div>
+          <div class="subtitle">${escapeHtml(name ? `${String(name)} kept the streak alive` : 'Daily streak on FitCircle')}</div>
+        </div>
+        <div>
+          <div class="stat">${days}-day streak</div>
+          <div class="stat-label">Logged every single day</div>
+        </div>
+      `;
+    }
 
     case 'challenge_complete':
       return `

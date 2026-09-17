@@ -6,6 +6,7 @@ import { createAdminSupabase } from '../supabase-admin';
 
 export type ShareCardType =
   | 'milestone'
+  | 'streak_milestone'
   | 'challenge_complete'
   | 'perfect_week'
   | 'momentum_flame'
@@ -70,6 +71,7 @@ export interface ShareCardRow {
 
 const CARD_TEMPLATES: Record<ShareCardType, { templateName: string; title: string }> = {
   milestone: { templateName: 'milestone_achievement', title: 'Milestone Achieved!' },
+  streak_milestone: { templateName: 'streak_milestone_flame', title: 'Streak Milestone!' },
   challenge_complete: { templateName: 'challenge_victory', title: 'Challenge Complete!' },
   perfect_week: { templateName: 'perfect_week_glow', title: 'Perfect Week!' },
   momentum_flame: { templateName: 'momentum_fire', title: 'On Fire!' },
