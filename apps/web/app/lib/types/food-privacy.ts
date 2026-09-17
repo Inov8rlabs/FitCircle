@@ -14,7 +14,7 @@ export type FoodPrivacyTier = 'full' | 'summary' | 'private';
 export const FOOD_PRIVACY_TIERS: readonly FoodPrivacyTier[] = ['full', 'summary', 'private'] as const;
 
 /** The default tier for any (circle, user) without an explicit row (§6.4). */
-export const DEFAULT_FOOD_PRIVACY_TIER: FoodPrivacyTier = 'summary';
+export const DEFAULT_FOOD_PRIVACY_TIER: FoodPrivacyTier = 'full'; // sharing by default (2026-09-17); users opt down to summary/private per circle
 
 /** A stored per-circle tier row (mirrors the circle_food_privacy table). */
 export interface CircleFoodPrivacyRow {

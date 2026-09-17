@@ -53,8 +53,12 @@ export class FoodLogService {
           water_ml: data.water_ml,
           supplement_name: data.supplement_name,
           supplement_dosage: data.supplement_dosage,
-          is_private: data.is_private ?? true,
-          visibility: data.visibility || 'private',
+          // Sharing by default (product decision 2026-09-17): a meal is shared
+          // with the user's circles unless they mark it private. `visibility`
+          // is what the circle feed filters on, so derive it from is_private
+          // whenever the client doesn't set it explicitly.
+          is_private: data.is_private ?? false,
+          visibility: data.visibility ?? ((data.is_private ?? false) ? 'private' : 'circle'),
           tags: data.tags || [],
         })
         .select()
