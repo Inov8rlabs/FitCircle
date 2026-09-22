@@ -28,6 +28,7 @@ export function toIosAuthUser(
   const fallbackName = email.split('@')[0] || 'user';
   const dbPreferences = profile?.preferences || {};
   const goals = Array.isArray(profile?.goals) ? profile.goals : [];
+  const fitnessLevel = profile?.fitness_level;
 
   return {
     id: userId,
@@ -40,7 +41,7 @@ export function toIosAuthUser(
     height_cm: iosNumber(profile?.height_cm),
     weight_kg: iosNumber(profile?.weight_kg),
     timezone: profile?.timezone || 'UTC',
-    fitness_level: IOS_FITNESS_LEVELS.has(profile?.fitness_level) ? profile.fitness_level : null,
+    fitness_level: typeof fitnessLevel === 'string' && IOS_FITNESS_LEVELS.has(fitnessLevel) ? fitnessLevel : null,
     goals: goals
       .filter((goal: any) => goal && typeof goal === 'object' && IOS_GOAL_TYPES.has(goal.type))
       .map((goal: any) => ({
