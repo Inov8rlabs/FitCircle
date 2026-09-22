@@ -5,18 +5,106 @@ import { z } from 'zod';
 import { authRateLimiter, getIdentifier, applyRateLimit } from '@/lib/middleware/rate-limit';
 import { MobileAPIService } from '@/lib/services/mobile-api-service';
 
+/** Native Sign in with Apple identity tokens use the iOS bundle id as `aud`. */
+export const APPLE_NATIVE_BUNDLE_ID = 'com.inov8rlabs.apps.fitcircle';
+
+const optionalText = z.string().nullish();
+
 const appleAuthSchema = z.object({
-  identityToken: z.string(),
-  authorizationCode: z.string(),
-  user: z.object({
-    email: z.string().email().optional(),
-    name: z.object({
-      firstName: z.string(),
-      lastName: z.string(),
-    }).optional(),
-  }).optional(),
-  userIdentifier: z.string(),
+  identityToken: optionalText,
+  identity_token: optionalText,
+  authorizationCode: optionalText,
+  authorization_code: optionalText,
+  userIdentifier: optionalText,
+  user_identifier: optionalText,
+  email: optionalText,
+  full_name: z
+    .object({
+      given_name: optionalText,
+      family_name: optionalText,
+    })
+    .nullish(),
+  fullName: z
+    .object({
+      givenName: optionalText,
+      familyName: optionalText,
+    })
+    .nullish(),
+  user: z
+    .object({
+      email: optionalText,
+      name: z
+        .object({
+          firstName: optionalText,
+          lastName: optionalText,
+        })
+        .nullish(),
+    })
+    .nullish(),
 });
+
+export interface AppleAuthRequest {
+  identityToken: string;
+  userIdentifier: string;
+  /** Present only when the client sent one. The identity token's email wins. */
+  email?: string;
+  firstName: string;
+  lastName: string;
+}
+
+function text(value: string | null | undefined): string | undefined {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : undefined;
+}
+
+/**
+ * Audiences accepted for an Apple identity token.
+ * The native bundle id is always included so a stale Services ID or the
+ * pre-migration bundle id in the environment cannot reject the iOS app.
+ */
+export function appleTokenAudiences(): string[] {
+  const configured = [process.env.APPLE_CLIENT_ID, process.env.APPLE_BUNDLE_ID]
+    .map((value) => value?.trim())
+    .filter((value): value is string => Boolean(value));
+  return Array.from(new Set([APPLE_NATIVE_BUNDLE_ID, ...configured]));
+}
+
+/** Accept the iOS snake_case body and the older camelCase body. */
+export function parseAppleAuthRequest(body: unknown): AppleAuthRequest {
+  const parsed = appleAuthSchema.parse(body);
+  const identityToken = text(parsed.identity_token) ?? text(parsed.identityToken);
+  const userIdentifier = text(parsed.user_identifier) ?? text(parsed.userIdentifier);
+
+  if (!identityToken || !userIdentifier) {
+    throw new z.ZodError([
+      {
+        code: z.ZodIssueCode.custom,
+        path: [identityToken ? 'user_identifier' : 'identity_token'],
+        message: identityToken ? 'user_identifier is required' : 'identity_token is required',
+      },
+    ]);
+  }
+
+  const email = text(parsed.email) ?? text(parsed.user?.email);
+  const firstName =
+    text(parsed.full_name?.given_name) ??
+    text(parsed.fullName?.givenName) ??
+    text(parsed.user?.name?.firstName) ??
+    '';
+  const lastName =
+    text(parsed.full_name?.family_name) ??
+    text(parsed.fullName?.familyName) ??
+    text(parsed.user?.name?.lastName) ??
+    '';
+
+  return {
+    identityToken,
+    userIdentifier,
+    email: email && z.string().email().safeParse(email).success ? email : undefined,
+    firstName,
+    lastName,
+  };
+}
 
 interface AppleJWTPayload {
   iss: string;
@@ -35,15 +123,9 @@ async function verifyAppleIdentityToken(identityToken: string): Promise<AppleJWT
     const APPLE_JWKS_URL = new URL('https://appleid.apple.com/auth/keys');
     const jwks = createRemoteJWKSet(APPLE_JWKS_URL);
 
-    const clientId = process.env.APPLE_CLIENT_ID || process.env.APPLE_BUNDLE_ID;
-    if (!clientId) {
-      console.error('[Apple Auth] APPLE_CLIENT_ID or APPLE_BUNDLE_ID not configured');
-      return null;
-    }
-
     const { payload } = await jwtVerify(identityToken, jwks, {
       issuer: 'https://appleid.apple.com',
-      audience: clientId,
+      audience: appleTokenAudiences(),
     });
 
     return payload as unknown as AppleJWTPayload;
@@ -60,7 +142,8 @@ export async function POST(request: NextRequest) {
     if (rateLimitResponse) return rateLimitResponse;
 
     const body = await request.json();
-    const { identityToken, user, userIdentifier } = appleAuthSchema.parse(body);
+    const { identityToken, userIdentifier, email: requestEmail, firstName, lastName } =
+      parseAppleAuthRequest(body);
 
     const appleUser = await verifyAppleIdentityToken(identityToken);
 
@@ -81,15 +164,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    let email = appleUser.email;
-    let firstName = '';
-    let lastName = '';
-
-    if (user) {
-      email = user.email || email;
-      firstName = user.name?.firstName || '';
-      lastName = user.name?.lastName || '';
-    }
+    const tokenEmail = typeof appleUser.email === 'string' ? appleUser.email.trim() : '';
+    const email = tokenEmail || requestEmail;
 
     if (!email) {
       return NextResponse.json(
