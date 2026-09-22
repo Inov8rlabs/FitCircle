@@ -6,6 +6,7 @@ import { authRateLimiter, getIdentifier, applyRateLimit } from '@/lib/middleware
 import { MobileAPIService } from '@/lib/services/mobile-api-service';
 
 import { appleTokenAudiences, parseAppleAuthRequest } from './apple-request';
+import { toIosAuthUser } from './ios-auth-user';
 
 interface AppleJWTPayload {
   iss: string;
@@ -162,30 +163,7 @@ export async function POST(request: NextRequest) {
         access_token: tokens.access_token,
         refresh_token: tokens.refresh_token,
         expires_in: Math.floor(tokens.expires_at - Date.now() / 1000),
-        user: {
-          id: userId,
-          username: profile?.username || email.split('@')[0],
-          display_name: profile?.display_name || email.split('@')[0],
-          email,
-          avatar_url: profile?.avatar_url || null,
-          bio: profile?.bio || null,
-          date_of_birth: profile?.date_of_birth || null,
-          height_cm: profile?.height_cm || null,
-          weight_kg: profile?.weight_kg || null,
-          timezone: profile?.timezone || 'UTC',
-          fitness_level: profile?.fitness_level || null,
-          goals: profile?.goals || [],
-          preferences: profile?.preferences || {},
-          total_points: profile?.total_points || 0,
-          current_streak: profile?.current_streak || 0,
-          longest_streak: profile?.longest_streak || 0,
-          challenges_completed: profile?.challenges_completed || 0,
-          challenges_won: profile?.challenges_won || 0,
-          is_active: profile?.is_active !== undefined ? profile.is_active : true,
-          last_active_at: profile?.last_active_at || new Date().toISOString(),
-          created_at: profile?.created_at || new Date().toISOString(),
-          updated_at: profile?.updated_at || new Date().toISOString(),
-        },
+        user: toIosAuthUser(profile, userId, email),
       },
       error: null,
       meta: null,
