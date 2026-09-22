@@ -5,7 +5,7 @@ import {
   APPLE_NATIVE_BUNDLE_ID,
   appleTokenAudiences,
   parseAppleAuthRequest,
-} from '../route';
+} from '../apple-request';
 
 describe('parseAppleAuthRequest', () => {
   it('accepts the iOS Sign in with Apple body', () => {
