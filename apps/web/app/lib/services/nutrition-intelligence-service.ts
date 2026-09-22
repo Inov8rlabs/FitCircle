@@ -510,6 +510,53 @@ export class NutritionIntelligenceService {
     };
   }
 
+  /**
+   * Generation limits per model. `answerTokens` is what the JSON answer itself needs.
+   *
+   * Gemini 3 is a reasoning model and its thinking tokens count toward
+   * `maxOutputTokens`. With the old flat 2 000 / 800-token cap the model spent the
+   * whole budget thinking, the answer was cut off (finishReason "length"), the SDK
+   * had nothing to parse, and every fallback ended in AI_NoOutputGeneratedError
+   * with zero diagnostics — so the fallback never actually rescued anything
+   * (2026-09-16 item, 2026-09-22 photo). Ask Gemini for minimal thinking and leave
+   * headroom for whatever it still spends.
+   */
+  static modelCallOptions(model: string, answerTokens: number): {
+    maxOutputTokens: number;
+    providerOptions: Record<string, Record<string, unknown>>;
+  } {
+    const isGemini = model.startsWith('google/gemini');
+    return {
+      maxOutputTokens: isGemini ? answerTokens + 4_000 : answerTokens,
+      providerOptions: isGemini
+        ? { google: { thinkingConfig: { thinkingLevel: 'minimal', includeThoughts: false } } }
+        : {},
+    };
+  }
+
+  /**
+   * `result.output` throws a bare AI_NoOutputGeneratedError whenever the step did
+   * not end with finishReason "stop" (the SDK only parses the object then). Turn
+   * that into an error that says WHY — length cut-off, content filter, tool call —
+   * with the usage numbers, so the parse-failure log is actionable.
+   */
+  static outputOrThrow<T>(
+    result: { finishReason: string; output: T; usage?: unknown; text?: string },
+    model: string,
+  ): T {
+    if (result.finishReason !== 'stop') {
+      const err = new Error(
+        `${model} ended with finishReason=${result.finishReason} before a complete object was produced`,
+      ) as Error & { finishReason?: string; usage?: unknown; text?: string };
+      err.name = 'IncompleteOutputError';
+      err.finishReason = result.finishReason;
+      err.usage = result.usage;
+      err.text = result.text;
+      throw err;
+    }
+    return result.output;
+  }
+
   private static async callPhotoModel(
     model: string,
     userId: string,
@@ -517,14 +564,16 @@ export class NutritionIntelligenceService {
     images: ParsePhotoImage[],
     timeoutMs: number,
   ): Promise<PhotoParseResult> {
-    const { output } = await generateText({
+    const limits = this.modelCallOptions(model, 2_000);
+    const result = await generateText({
       model,
       output: Output.object({ schema: photoParseResultSchema }),
       system: SYSTEM_PROMPT,
       maxRetries: 0,
       timeout: timeoutMs,
-      maxOutputTokens: 2_000,
+      maxOutputTokens: limits.maxOutputTokens,
       providerOptions: {
+        ...limits.providerOptions,
         gateway: this.gatewayOptions(userId, 'photo'),
       },
       messages: [
@@ -541,7 +590,7 @@ export class NutritionIntelligenceService {
         },
       ],
     });
-    return output;
+    return this.outputOrThrow(result, model);
   }
 
   private static async callVoiceModel(
@@ -550,14 +599,16 @@ export class NutritionIntelligenceService {
     transcript: string,
     timeoutMs: number,
   ): Promise<PhotoParseResult> {
-    const { output } = await generateText({
+    const limits = this.modelCallOptions(model, 2_000);
+    const result = await generateText({
       model,
       output: Output.object({ schema: photoParseResultSchema }),
       system: VOICE_SYSTEM_PROMPT,
       maxRetries: 0,
       timeout: timeoutMs,
-      maxOutputTokens: 2_000,
+      maxOutputTokens: limits.maxOutputTokens,
       providerOptions: {
+        ...limits.providerOptions,
         gateway: this.gatewayOptions(userId, 'voice'),
       },
       messages: [
@@ -572,7 +623,7 @@ export class NutritionIntelligenceService {
         },
       ],
     });
-    return output;
+    return this.outputOrThrow(result, model);
   }
 
   private static async callItemModel(
@@ -582,14 +633,16 @@ export class NutritionIntelligenceService {
     portion: string,
     timeoutMs: number,
   ): Promise<ParsedFoodItem> {
-    const { output } = await generateText({
+    const limits = this.modelCallOptions(model, 800);
+    const result = await generateText({
       model,
       output: Output.object({ schema: parsedFoodItemSchema }),
       system: ITEM_SYSTEM_PROMPT,
       maxRetries: 0,
       timeout: timeoutMs,
-      maxOutputTokens: 800,
+      maxOutputTokens: limits.maxOutputTokens,
       providerOptions: {
+        ...limits.providerOptions,
         gateway: this.gatewayOptions(userId, 'item'),
       },
       messages: [
@@ -604,7 +657,7 @@ export class NutritionIntelligenceService {
         },
       ],
     });
-    return output;
+    return this.outputOrThrow(result, model);
   }
 
   private static async finalizeEstimatedItem(
@@ -902,6 +955,10 @@ export class NutritionIntelligenceService {
     let kind = 'unknown';
     if (/Abort|Timeout/i.test(name) || /abort|timed?\s?out/i.test(message)) {
       kind = 'timeout_or_abort';
+    } else if (bareName === 'IncompleteOutputError') {
+      // Our own guard: the model stopped for a reason other than "stop" (length,
+      // content-filter, …) so there was no complete object to validate.
+      kind = 'incomplete_output';
     } else if (e?.statusCode != null || e?.url != null) {
       kind = 'api_call_error';
     } else if (
@@ -934,7 +991,23 @@ export class NutritionIntelligenceService {
       responseBody: truncate(e?.responseBody),
       causeName: e?.cause?.name,
       causeMessage: truncate(e?.cause?.message, 300),
+      // For a schema rejection the useful part is WHICH fields failed, not the
+      // first 300 chars of the model's JSON. NoObjectGeneratedError → cause is a
+      // TypeValidationError → its cause is the ZodError with `issues`.
+      issues: this.validationIssues(e),
     };
+  }
+
+  /** `[{ path, code, message }]` from a nested ZodError, if there is one. */
+  private static validationIssues(e: any): Array<{ path: string; code: string; message: string }> | undefined {
+    const candidates = [e?.cause?.cause?.issues, e?.cause?.issues, e?.issues];
+    const issues = candidates.find((c) => Array.isArray(c) && c.length > 0);
+    if (!issues) return undefined;
+    return issues.slice(0, 10).map((i: any) => ({
+      path: Array.isArray(i?.path) ? i.path.join('.') : String(i?.path ?? ''),
+      code: String(i?.code ?? ''),
+      message: String(i?.message ?? ''),
+    }));
   }
 
   /**

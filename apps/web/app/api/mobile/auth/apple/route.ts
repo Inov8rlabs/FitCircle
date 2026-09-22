@@ -4,6 +4,7 @@ import { z } from 'zod';
 
 import { authRateLimiter, getIdentifier, applyRateLimit } from '@/lib/middleware/rate-limit';
 import { MobileAPIService } from '@/lib/services/mobile-api-service';
+import { SocialAuthError, findOrCreateSocialUser } from '@/lib/services/social-auth-service';
 
 import { appleTokenAudiences, parseAppleAuthRequest } from './apple-request';
 import { toIosAuthUser } from './ios-auth-user';
@@ -92,66 +93,13 @@ export async function POST(request: NextRequest) {
       { auth: { autoRefreshToken: false, persistSession: false } }
     );
 
-    // Check if user exists in Supabase Auth
-    const { data: existingUsers } = await supabase.auth.admin.listUsers();
-    const existingAuthUser = existingUsers?.users?.find(u => u.email === email);
-
-    let userId: string;
-
-    if (existingAuthUser) {
-      userId = existingAuthUser.id;
-    } else {
-      // Create user in Supabase Auth with a random password (Apple-only auth)
-      const crypto = await import('crypto');
-      const { data: newUser, error: createError } = await supabase.auth.admin.createUser({
-        email,
-        email_confirm: true,
-        password: crypto.randomBytes(32).toString('hex'),
-        user_metadata: {
-          first_name: firstName,
-          last_name: lastName,
-          apple_identifier: userIdentifier,
-          provider: 'apple',
-        },
-      });
-
-      if (createError || !newUser.user) {
-        console.error('[Apple Auth] Failed to create user:', createError);
-        return NextResponse.json(
-          {
-            success: false,
-            data: null,
-            error: {
-              code: 'USER_CREATION_FAILED',
-              message: 'Failed to create user account',
-              details: {},
-              timestamp: new Date().toISOString(),
-            },
-            meta: null,
-          },
-          { status: 500 }
-        );
-      }
-
-      userId = newUser.user.id;
-
-      // Create profile
-      await supabase.from('profiles').upsert({
-        id: userId,
-        email,
-        display_name: [firstName, lastName].filter(Boolean).join(' ') || email.split('@')[0],
-        username: email.split('@')[0],
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      });
-    }
-
-    // Fetch profile
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('id', userId)
-      .single();
+    const { userId, profile, isNewUser } = await findOrCreateSocialUser(supabase, {
+      email,
+      firstName,
+      lastName,
+      provider: 'apple',
+      providerUserId: userIdentifier,
+    });
 
     const tokens = await MobileAPIService.generateTokens(userId, email);
 
@@ -164,12 +112,26 @@ export async function POST(request: NextRequest) {
         refresh_token: tokens.refresh_token,
         expires_in: Math.floor(tokens.expires_at - Date.now() / 1000),
         user: toIosAuthUser(profile, userId, email),
+        // First sign-in with this Apple ID: clients route to onboarding.
+        is_new_user: isNewUser,
       },
       error: null,
       meta: null,
     });
   } catch (error) {
     console.error('[Apple Auth] Error:', error);
+
+    if (error instanceof SocialAuthError) {
+      return NextResponse.json(
+        {
+          success: false,
+          data: null,
+          error: { code: error.code, message: error.message, details: {}, timestamp: new Date().toISOString() },
+          meta: null,
+        },
+        { status: 500 }
+      );
+    }
 
     if (error instanceof z.ZodError) {
       return NextResponse.json(

@@ -37,17 +37,33 @@ const nonNegative = z.preprocess((v) => Math.max(0, toFiniteNumber(v)), z.number
 // 0..1, clamped (per-item and overall confidence).
 const unitInterval = z.preprocess((v) => Math.min(1, Math.max(0, toFiniteNumber(v))), z.number().min(0).max(1));
 
+// The numeric fields above are self-healing; the STRING / object fields were not, and a
+// single glitch there ("servingUnit": null, a missing "notes" or "quantityRange" key,
+// an empty name for a garnish) rejected an otherwise perfect plate as
+// "response did not match schema" (2026-09-22, claude-haiku-4.5, 1 333 output tokens of
+// valid items thrown away). Same philosophy as the numbers: coerce, don't reject.
+const trimmedText = (v: unknown): string => (typeof v === 'string' ? v.trim() : '');
+// A string that falls back to `fallback` when missing/blank/not a string.
+const textOr = (fallback: string) => z.preprocess((v) => trimmedText(v) || fallback, z.string());
+// A nullable string: missing/blank/non-string → null.
+const textOrNull = z.preprocess((v) => trimmedText(v) || null, z.string().nullable());
+// {min,max} or null; anything that isn't an object (missing key, "", 0) → null.
+const rangeOrNull = z.preprocess(
+  (v) => (v != null && typeof v === 'object' ? v : null),
+  z.object({ min: nonNegative, max: nonNegative }).nullable(),
+);
+
 export const parsedFoodItemSchema = z.object({
-  name: z.string().min(1).describe('Common food name, e.g. "grilled chicken breast"'),
+  // Empty names are kept here so the plate-level schema can drop the item instead of
+  // failing the whole parse; see photoParseResultSchema.
+  name: textOr('').describe('Common food name, e.g. "grilled chicken breast"'),
   quantity: nonNegative.describe('Estimated amount in the serving unit (midpoint if a range)'),
-  quantityRange: z
-    .object({ min: nonNegative, max: nonNegative })
-    .nullable()
-    .describe('Min/max when the model is uncertain; null when confident. UI defaults to quantity (midpoint).'),
-  servingUnit: z
-    .string()
-    .min(1)
-    .describe('Natural unit for THIS food, e.g. "skewer", "piece", "cup", "slice", "serving", or "g"'),
+  quantityRange: rangeOrNull.describe(
+    'Min/max when the model is uncertain; null when confident. UI defaults to quantity (midpoint).',
+  ),
+  servingUnit: textOr('serving').describe(
+    'Natural unit for THIS food, e.g. "skewer", "piece", "cup", "slice", "serving", or "g"',
+  ),
   // Canonical edible weight — every macro scales linearly from this, and the client
   // converts between the natural unit and grams using gramsPerUnit.
   grams: nonNegative.describe('Total estimated edible weight of this item, in grams'),
@@ -80,9 +96,13 @@ export interface NutritionDraftItem extends ParsedFoodItem {
 
 // The full LLM result for one photo: the plate is an array of items + an overall confidence.
 export const photoParseResultSchema = z.object({
-  items: z.array(parsedFoodItemSchema).describe('Every distinct food component visible on the plate'),
+  items: z
+    .array(parsedFoodItemSchema)
+    // An item the model could not name is noise, not a reason to fail the plate.
+    .transform((items) => items.filter((item) => item.name.length > 0))
+    .describe('Every distinct food component visible on the plate'),
   overallConfidence: unitInterval.describe('Confidence the plate as a whole was identified'),
-  notes: z.string().nullable().describe('Optional caveat, e.g. "sauce contents uncertain"; null if none'),
+  notes: textOrNull.describe('Optional caveat, e.g. "sauce contents uncertain"; null if none'),
 });
 export type PhotoParseResult = z.infer<typeof photoParseResultSchema>;
 
