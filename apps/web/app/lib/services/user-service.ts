@@ -2,6 +2,14 @@ import { createAdminSupabase } from '../supabase-admin';
 
 import { LeaderboardService } from './leaderboard-service';
 
+/** A weight only counts when it is a real positive number; 0 / null / '' mean "not set". */
+function positiveOrNull(value: unknown): number | null {
+  const n = typeof value === 'string' ? Number(value) : (value as number | null | undefined);
+  return typeof n === 'number' && Number.isFinite(n) && n > 0 ? n : null;
+}
+
+const round1 = (n: number): number => Math.round(n * 10) / 10;
+
 // ============================================================================
 // TYPES
 // ============================================================================
@@ -239,7 +247,7 @@ export class UserService {
     // Get user profile with privacy settings
     const { data: profile, error: profileError } = await supabaseAdmin
       .from('profiles')
-      .select('preferences')
+      .select('preferences, goals')
       .eq('id', userId)
       .single();
 
@@ -262,16 +270,13 @@ export class UserService {
       // We'll still return percentage but not absolute values
     }
 
-    // Get progress data
+    // Circle goal values (kg). A member row exists for every active member,
+    // but goal_start/goal_target are only filled for weight-based challenges —
+    // a circle without one used to fall through as 0 / 0 and the client then
+    // showed "Lost -91.7 kg, To Go 91.7 kg".
     let query = supabaseAdmin
       .from('fitcircle_members')
-      .select(`
-        goal_start_value,
-        current_value,
-        goal_target_value,
-        progress_percentage,
-        updated_at
-      `)
+      .select('goal_start_value, current_value, goal_target_value, progress_percentage, updated_at, joined_at')
       .eq('user_id', userId)
       .eq('status', 'active')
       .order('updated_at', { ascending: false });
@@ -280,26 +285,13 @@ export class UserService {
       query = query.eq('fitcircle_id', circleId);
     }
 
-    const { data: progressData, error: progressError } = await query.limit(1).single();
+    const { data: progressData } = await query.limit(1).maybeSingle();
+    const memberStart = positiveOrNull(progressData?.goal_start_value);
+    const memberTarget = positiveOrNull(progressData?.goal_target_value);
 
-    if (progressError || !progressData) {
-      console.log(`[UserService.getUserProgress] No progress data found`);
-      // Return empty data
-      return {
-        starting_weight: null,
-        current_weight: null,
-        target_weight: null,
-        progress_percentage: 0,
-        weight_lost: 0,
-        weight_to_go: 0,
-        last_updated: null,
-      };
-    }
-
-    // Get the most recent check-in to get current weight
-    let currentWeightValue = progressData.current_value;
-
-    // Try to get from circle_check_ins first
+    // Current weight: latest circle check-in, else latest daily_tracking
+    // weigh-in, else the member row's cached value.
+    let currentKg: number | null = null;
     if (circleId) {
       const { data: latestCheckIn } = await supabaseAdmin
         .from('circle_check_ins')
@@ -308,16 +300,10 @@ export class UserService {
         .eq('circle_id', circleId)
         .order('check_in_date', { ascending: false })
         .limit(1)
-        .single();
-
-      if (latestCheckIn) {
-        currentWeightValue = latestCheckIn.check_in_value;
-        console.log(`[UserService.getUserProgress] Using latest circle check-in: ${currentWeightValue}kg`);
-      }
+        .maybeSingle();
+      currentKg = positiveOrNull(latestCheckIn?.check_in_value);
     }
-
-    // Fall back to daily_tracking if no circle check-in
-    if (!currentWeightValue || currentWeightValue === progressData.current_value) {
+    if (currentKg == null) {
       const { data: latestTracking } = await supabaseAdmin
         .from('daily_tracking')
         .select('weight_kg, tracking_date')
@@ -325,30 +311,40 @@ export class UserService {
         .not('weight_kg', 'is', null)
         .order('tracking_date', { ascending: false })
         .limit(1)
-        .single();
+        .maybeSingle();
+      currentKg = positiveOrNull(latestTracking?.weight_kg);
+    }
+    if (currentKg == null) currentKg = positiveOrNull(progressData?.current_value);
 
-      if (latestTracking && latestTracking.weight_kg) {
-        currentWeightValue = latestTracking.weight_kg;
-        console.log(`[UserService.getUserProgress] Using latest daily tracking: ${currentWeightValue}kg`);
+    // Fallback goal: the member's own weight goal (profiles.goals[type=weight],
+    // the same source the dashboard vitals card reads), so a circle without a
+    // weight challenge still shows real progress instead of zeros.
+    const goals = (profile as { goals?: unknown }).goals;
+    const weightGoal = Array.isArray(goals)
+      ? (goals as Array<Record<string, unknown>>).find((g) => g?.type === 'weight')
+      : undefined;
+    const targetKg = memberTarget ?? positiveOrNull(weightGoal?.target_weight_kg);
+    let startKg = memberStart ?? positiveOrNull(weightGoal?.starting_weight_kg);
+    if (startKg == null && targetKg != null) {
+      // Earliest weigh-in since joining the circle (or ever, if no join date).
+      let earliest = supabaseAdmin
+        .from('daily_tracking')
+        .select('weight_kg, tracking_date')
+        .eq('user_id', userId)
+        .gt('weight_kg', 0)
+        .order('tracking_date', { ascending: true });
+      if (progressData?.joined_at) {
+        earliest = earliest.gte('tracking_date', String(progressData.joined_at).slice(0, 10));
       }
+      const { data: rows } = await earliest.limit(1);
+      startKg = positiveOrNull(rows?.[0]?.weight_kg);
     }
 
-    // Calculate derived values
-    const startingWeight = progressData.goal_start_value || 0;
-    const currentWeight = currentWeightValue || 0;
-    const targetWeight = progressData.goal_target_value || 0;
-    const weightLost = startingWeight - currentWeight;
-    const weightToGo = currentWeight - targetWeight;
-
-    // Recalculate progress in real-time using LeaderboardService
-    const recalculatedProgress = LeaderboardService.calculateProgress(
-      startingWeight,
-      currentWeight,
-      targetWeight,
-      'weight_loss' // Assume weight loss for user progress
+    const derived = this.deriveWeightProgress({ startKg, currentKg, targetKg });
+    const lastUpdated = (progressData?.updated_at as string | null | undefined) ?? null;
+    console.log(
+      `[UserService.getUserProgress] start=${derived.starting_weight} current=${derived.current_weight} target=${derived.target_weight} → ${derived.progress_percentage}% (${derived.weight_lost}kg lost)`
     );
-
-    console.log(`[UserService.getUserProgress] Progress: ${recalculatedProgress}% (cached: ${progressData.progress_percentage}%), ${weightLost}kg lost`);
 
     // If show_progress is false, return only percentage
     if (!privacy.show_progress && userId !== requesterId) {
@@ -356,21 +352,52 @@ export class UserService {
         starting_weight: null,
         current_weight: null,
         target_weight: null,
-        progress_percentage: recalculatedProgress,
+        progress_percentage: derived.progress_percentage,
         weight_lost: 0,
         weight_to_go: 0,
-        last_updated: progressData.updated_at,
+        last_updated: lastUpdated,
       };
     }
 
+    return { ...derived, last_updated: lastUpdated };
+  }
+
+  /**
+   * Pure derivation of the weight-progress card numbers. Unknown inputs stay
+   * null (clients render a dash) and the derived numbers are only computed
+   * from inputs that exist — never from a 0 stand-in. `weight_lost` is
+   * start − current (negative = gained); `weight_to_go` is the distance left
+   * in the goal's direction, floored at 0 once the target is reached.
+   */
+  static deriveWeightProgress(inputs: {
+    startKg: number | null | undefined;
+    currentKg: number | null | undefined;
+    targetKg: number | null | undefined;
+  }): Omit<UserProgressData, 'last_updated'> {
+    const start = positiveOrNull(inputs.startKg);
+    const current = positiveOrNull(inputs.currentKg);
+    const target = positiveOrNull(inputs.targetKg);
+
+    const lost = start != null && current != null ? round1(start - current) : 0;
+
+    let toGo = 0;
+    if (current != null && target != null) {
+      const losing = start != null ? target < start : target < current;
+      toGo = round1(Math.max(0, losing ? current - target : target - current));
+    }
+
+    const progress =
+      start != null && current != null && target != null
+        ? Math.round(LeaderboardService.calculateProgress(start, current, target, 'weight_loss') * 10) / 10
+        : 0;
+
     return {
-      starting_weight: startingWeight,
-      current_weight: currentWeight,
-      target_weight: targetWeight,
-      progress_percentage: recalculatedProgress, // Use recalculated value
-      weight_lost: Math.round(weightLost * 10) / 10,
-      weight_to_go: Math.round(Math.max(0, weightToGo) * 10) / 10,
-      last_updated: progressData.updated_at,
+      starting_weight: start,
+      current_weight: current,
+      target_weight: target,
+      progress_percentage: progress,
+      weight_lost: lost,
+      weight_to_go: toGo,
     };
   }
 
