@@ -225,7 +225,14 @@ export const pinnedCopyCases: PinnedCopyCase[] = [
     eventType: 'daily_summary',
     actors: [],
     payload: { checkedIn: 4, total: 5 } as Record<string, unknown>,
-    expected: "Today's circle: 4 of 5 checked in. Nice momentum 👏",
+    expected: '4 of 5 checked in today 👏',
+  },
+  {
+    label: 'daily_summary (full house)',
+    eventType: 'daily_summary',
+    actors: [],
+    payload: { checkedIn: 5, total: 5 } as Record<string, unknown>,
+    expected: 'Everyone checked in today — full house 🎉',
   },
   {
     label: 'notable_meal (no number)',

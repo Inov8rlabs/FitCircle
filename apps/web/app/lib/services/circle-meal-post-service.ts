@@ -59,7 +59,10 @@ export interface EntryLike {
 }
 
 const SHAREABLE_VISIBILITY = new Set(['circle', 'shared']);
-const MEAL_ENTRY_TYPES = new Set(['meal', 'snack']);
+// food_log_entries.entry_type is 'food' | 'water' | 'supplement' (the meal slot
+// lives in meal_type). 'meal'/'snack' are accepted for older rows/clients.
+// Shipped with only 'meal'/'snack' on 2026-09-22 → zero posts for a day.
+const MEAL_ENTRY_TYPES = new Set(['food', 'meal', 'snack']);
 
 export class CircleMealPostService {
   // ==========================================================================

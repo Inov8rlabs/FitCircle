@@ -153,7 +153,14 @@ export class SystemPostEngine {
       case 'daily_summary': {
         const checkedIn = (payload as { checkedIn?: number } | undefined)?.checkedIn ?? 0;
         const total = (payload as { total?: number } | undefined)?.total ?? 0;
-        return `Today's circle: ${checkedIn} of ${total} checked in. Nice momentum 👏`;
+        // Posted at the END of the circle's local day (DailySummaryService), and
+        // only when someone checked in — "0 of 2 … nice momentum" was nonsense.
+        if (total > 0 && checkedIn >= total) {
+          return total === 1
+            ? 'Checked in today ✅'
+            : `Everyone checked in today — full house 🎉`;
+        }
+        return `${checkedIn} of ${total} checked in today 👏`;
       }
 
       case 'member_joined':

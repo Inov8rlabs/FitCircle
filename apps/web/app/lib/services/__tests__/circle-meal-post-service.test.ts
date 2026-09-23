@@ -8,8 +8,8 @@ import { DailySummaryService } from '../daily-summary-service';
 const meal = {
   id: 'e1',
   user_id: 'u1',
-  entry_type: 'meal' as const,
-  visibility: 'circle' as const,
+  entry_type: 'food', // what food_log_entries actually stores; the slot is meal_type
+  visibility: 'circle',
   title: 'Pancakes with fruit',
   meal_type: 'breakfast' as const,
   logged_at: '2026-09-22T12:30:00.000Z',
@@ -21,9 +21,11 @@ const meal = {
 };
 
 describe('CircleMealPostService.isShareableMeal', () => {
-  it('shares meals and snacks the owner left visible to circles', () => {
+  it("shares 'food' rows (the real entry_type) the owner left visible to circles, plus legacy meal/snack", () => {
     expect(CircleMealPostService.isShareableMeal(meal)).toBe(true);
-    expect(CircleMealPostService.isShareableMeal({ ...meal, entry_type: 'snack', visibility: 'shared' })).toBe(true);
+    expect(CircleMealPostService.isShareableMeal({ ...meal, visibility: 'shared', meal_type: 'snack' })).toBe(true);
+    expect(CircleMealPostService.isShareableMeal({ ...meal, entry_type: 'meal' })).toBe(true);
+    expect(CircleMealPostService.isShareableMeal({ ...meal, entry_type: 'snack' })).toBe(true);
   });
 
   it('never shares private, deleted, water or supplement entries', () => {
@@ -78,5 +80,26 @@ describe('DailySummaryService.shouldPostSummary', () => {
     expect(DailySummaryService.shouldPostSummary(1, 2)).toBe(true);
     expect(DailySummaryService.shouldPostSummary(2, 2)).toBe(true);
     expect(DailySummaryService.shouldPostSummary(0, 0)).toBe(false);
+  });
+});
+
+describe('DailySummaryService local-day timing', () => {
+  it('summarizes only once the circle reaches its local evening', () => {
+    expect(DailySummaryService.isSummaryHour(20)).toBe(false);
+    expect(DailySummaryService.isSummaryHour(21)).toBe(true);
+    expect(DailySummaryService.isSummaryHour(23)).toBe(true);
+  });
+
+  it("reads the hour in the circle's zone, not UTC (the old 20:00 UTC run was 16:00 Eastern)", () => {
+    const run = new Date('2026-09-22T20:00:00Z');
+    expect(DailySummaryService.localHour(run, 'America/New_York')).toBe(16);
+    expect(DailySummaryService.localHour(run, 'UTC')).toBe(20);
+    expect(DailySummaryService.localHour(new Date('2026-09-23T01:30:00Z'), 'America/New_York')).toBe(21);
+  });
+
+  it('falls back to Eastern for a missing or invalid circle timezone', () => {
+    expect(DailySummaryService.circleTimezone(null)).toBe('America/New_York');
+    expect(DailySummaryService.circleTimezone('Mars/Olympus')).toBe('America/New_York');
+    expect(DailySummaryService.circleTimezone('America/Los_Angeles')).toBe('America/Los_Angeles');
   });
 });

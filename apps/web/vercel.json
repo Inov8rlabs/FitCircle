@@ -50,7 +50,7 @@
     },
     {
       "path": "/api/cron/circle-daily-summary",
-      "schedule": "0 20 * * *"
+      "schedule": "30 * * * *"
     },
     {
       "path": "/api/cron/subscriptions/reconcile",
