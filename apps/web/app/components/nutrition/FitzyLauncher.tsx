@@ -3,6 +3,7 @@
 import { AnimatePresence, motion } from 'framer-motion';
 import { Sparkles, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 
 import { FitzyChat } from './FitzyChat';
 
@@ -19,6 +20,9 @@ interface FitzyLauncherProps {
  */
 export function FitzyLauncher({ variant = 'nav', onOpen }: FitzyLauncherProps) {
   const [open, setOpen] = useState(false);
+  // Portal target only exists on the client; render the drawer after mount.
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
 
   // Lock scroll + allow Escape to close while the drawer is open.
   useEffect(() => {
@@ -68,10 +72,11 @@ export function FitzyLauncher({ variant = 'nav', onOpen }: FitzyLauncherProps) {
       </button>
     );
 
-  return (
-    <>
-      {trigger}
-
+  // The overlay is rendered into <body> via a portal, NOT inline. The trigger
+  // lives inside the Navbar, whose `backdrop-blur` makes it the containing
+  // block for fixed descendants in Chromium — so an inline `fixed inset-0`
+  // drawer was clipped to the navbar's height (header + composer only).
+  const overlay = (
       <AnimatePresence>
         {open && (
           <motion.div
@@ -114,6 +119,12 @@ export function FitzyLauncher({ variant = 'nav', onOpen }: FitzyLauncherProps) {
           </motion.div>
         )}
       </AnimatePresence>
+  );
+
+  return (
+    <>
+      {trigger}
+      {mounted ? createPortal(overlay, document.body) : null}
     </>
   );
 }
