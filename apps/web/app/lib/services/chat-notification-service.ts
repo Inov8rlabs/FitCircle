@@ -87,6 +87,64 @@ export class ChatNotificationService {
   }
 
   /**
+   * Who gets told about a reaction: the message's author, or for a system
+   * post (meal card, streak) the member it is about — never the reactor
+   * themselves, never a post with no person behind it (daily summary).
+   * Pure; unit-tested.
+   */
+  static reactionRecipient(
+    message: { sender_id: string | null; system_payload?: Record<string, unknown> | null },
+    reactorId: string
+  ): string | null {
+    let recipient: string | null = message.sender_id;
+    if (!recipient) {
+      const actors = (message.system_payload as { actors?: unknown } | null)?.actors;
+      const first = Array.isArray(actors) ? actors[0] : undefined;
+      const id = first && typeof first === 'object' ? (first as { id?: unknown }).id : undefined;
+      recipient = typeof id === 'string' && id.length > 0 ? id : null;
+    }
+    return recipient && recipient !== reactorId ? recipient : null;
+  }
+
+  /**
+   * Someone reacted to a message. Tell the author (once per new reaction —
+   * the caller only invokes this when a row was actually inserted). Honours
+   * the recipient's mute for this circle. Never throws.
+   */
+  static async notifyReaction(params: {
+    circleId: string;
+    circleName: string;
+    messageId: string;
+    recipientId: string;
+    reactorId: string;
+    reactorName: string;
+    emoji: string;
+    preview: string;
+  }): Promise<void> {
+    try {
+      const members = await this.getActiveMembers(params.circleId);
+      const recipient = members.find((m) => m.userId === params.recipientId);
+      if (!recipient || recipient.muted) return;
+
+      await NotificationOrchestrator.send(params.recipientId, 'chat_reaction', {
+        circleName: params.circleName,
+        friendName: params.reactorName,
+        senderName: params.reactorName,
+        emoji: params.emoji,
+        preview: this.truncatePreview(params.preview),
+        deepLink: `fitcircle://circles/${params.circleId}/chat`,
+        messageId: params.messageId,
+        circleId: params.circleId,
+      });
+    } catch (err) {
+      console.error(
+        `[ChatNotificationService.notifyReaction] Failed for message ${params.messageId}:`,
+        err
+      );
+    }
+  }
+
+  /**
    * Notify all active members of an ordinary (non-rally) system post — a
    * streak, a workout, the daily summary, a bundled "all got moving" line.
    * Rides the plain `chat_message` template ("<actor> in <circle>: <body>"),

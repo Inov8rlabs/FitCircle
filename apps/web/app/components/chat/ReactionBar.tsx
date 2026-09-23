@@ -11,6 +11,7 @@ import {
 import { cn } from '@/lib/utils';
 
 const REACTION_EMOJI: Record<ReactionKind, string> = {
+  thumbs_up: '👍',
   flame: '🔥',
   clap: '👏',
   eyes: '👀',

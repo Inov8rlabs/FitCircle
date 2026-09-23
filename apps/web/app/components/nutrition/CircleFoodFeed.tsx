@@ -15,8 +15,9 @@ import {
 import { formatCalories, formatGrams } from '@/lib/format/units';
 import { cn } from '@/lib/utils';
 
-const REACTION_KINDS: ReactionKind[] = ['flame', 'clap', 'eyes', 'same', 'heart', 'laugh'];
+const REACTION_KINDS: ReactionKind[] = ['thumbs_up', 'same', 'heart', 'flame', 'clap', 'laugh', 'eyes'];
 const REACTION_EMOJI: Record<ReactionKind, string> = {
+  thumbs_up: '👍',
   flame: '🔥',
   clap: '👏',
   eyes: '👀',

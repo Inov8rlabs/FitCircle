@@ -11,15 +11,16 @@ export type MessageKind = 'user_text' | 'user_photo' | 'system_event';
 
 export type RenderHint = 'text' | 'stat_card' | 'completion_card' | 'summary_card';
 
-export type ReactionKind = 'flame' | 'clap' | 'eyes' | 'same' | 'heart' | 'laugh';
+export type ReactionKind = 'flame' | 'clap' | 'eyes' | 'same' | 'heart' | 'laugh' | 'thumbs_up';
 
 export const REACTION_KINDS: ReactionKind[] = [
-  'flame',
-  'clap',
-  'eyes',
+  'thumbs_up',
   'same',
   'heart',
+  'flame',
+  'clap',
   'laugh',
+  'eyes',
 ];
 
 export interface MessageSender {

@@ -48,6 +48,7 @@ export interface NotificationData {
 
   // Circle Chat
   preview?: string;
+  emoji?: string; // chat_reaction: the reaction glyph
   body?: string;
   senderName?: string;
 
@@ -107,7 +108,8 @@ export type NotificationType =
   // Circle Chat (social + celebration)
   | 'chat_message'
   | 'chat_mention'
-  | 'chat_rally';
+  | 'chat_rally'
+  | 'chat_reaction';
 
 interface NotificationContent {
   title: string;
@@ -168,6 +170,7 @@ export const TYPE_SCREEN_MAP: Record<NotificationType, NotificationScreen> = {
   chat_message: 'circle_chat',
   chat_mention: 'circle_chat',
   chat_rally: 'circle_chat',
+  chat_reaction: 'circle_chat',
 };
 
 export function screenFor(type: NotificationType, data: NotificationData): NotificationScreen {
@@ -388,6 +391,12 @@ export const NOTIFICATION_TEMPLATES: Record<
     body: data.body || 'Something worth celebrating just happened!',
     category: 'celebration',
   }),
+  // Someone reacted to a message you posted (or a meal/streak card about you).
+  chat_reaction: (data) => ({
+    title: `${data.friendName || 'Someone'} reacted ${data.emoji || ''}`.trim(),
+    body: data.preview ? `to "${data.preview}"` : 'to your message',
+    category: 'social',
+  }),
 };
 
 // ============================================================================
@@ -421,6 +430,7 @@ const CHAT_NOTIFICATION_TYPES: NotificationType[] = [
   'chat_message',
   'chat_mention',
   'chat_rally',
+  'chat_reaction',
 ];
 
 // Cap-exempt: chat (conversation traffic), the two meal reminders (decided

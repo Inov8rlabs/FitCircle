@@ -19,6 +19,7 @@ import {
   MESSAGE_EDIT_WINDOW_MS,
   MESSAGE_PAGE_DEFAULT_LIMIT,
   MESSAGE_PAGE_MAX_LIMIT,
+  REACTION_EMOJI,
 } from '../types/circle-chat';
 
 import { ChatNotificationService } from './chat-notification-service';
@@ -414,6 +415,17 @@ export class CircleChatService {
     if (messageError) throw messageError;
     if (messageRow?.deleted_at) throw new Error('MessageDeleted');
 
+    // Was this reaction already there? A re-tap / retry must not re-notify.
+    const { data: priorRow, error: priorError } = await supabaseAdmin
+      .from('circle_message_reactions')
+      .select('message_id')
+      .eq('message_id', messageId)
+      .eq('user_id', userId)
+      .eq('reaction', reaction)
+      .maybeSingle();
+    if (priorError) throw priorError;
+    const isNew = !priorRow;
+
     const { error } = await supabaseAdmin
       .from('circle_message_reactions')
       .upsert(
@@ -422,6 +434,11 @@ export class CircleChatService {
       );
 
     if (error) throw error;
+
+    // Tell the author (fire-and-forget; never affects the reaction response).
+    if (isNew) {
+      void this.notifyReactionAuthor(circleId, messageId, userId, reaction).catch(() => {});
+    }
 
     // Re-check after the write: a concurrent delete may have tombstoned the
     // message between the check above and the upsert. Roll the reaction back
@@ -472,6 +489,57 @@ export class CircleChatService {
 
     const summaries = await this.buildReactionSummaries([messageId], userId);
     return summaries.get(messageId) ?? [];
+  }
+
+  /**
+   * A NEW reaction landed on a message: push the author (or, for a system
+   * post, the member it is about). Resolves names/preview here so the
+   * notification layer stays free of chat-row knowledge. Never throws.
+   */
+  private static async notifyReactionAuthor(
+    circleId: string,
+    messageId: string,
+    reactorId: string,
+    reaction: ReactionKind
+  ): Promise<void> {
+    try {
+      const supabaseAdmin = createAdminSupabase();
+      const { data: row } = await supabaseAdmin
+        .from('circle_messages')
+        .select('sender_id, kind, body, system_payload')
+        .eq('id', messageId)
+        .maybeSingle();
+      if (!row) return;
+
+      const recipientId = ChatNotificationService.reactionRecipient(
+        row as { sender_id: string | null; system_payload?: Record<string, unknown> | null },
+        reactorId
+      );
+      if (!recipientId) return;
+
+      const [{ data: reactor }, circleName] = await Promise.all([
+        supabaseAdmin.from('profiles').select('display_name').eq('id', reactorId).maybeSingle(),
+        this.resolveCircleName(circleId),
+      ]);
+
+      const preview =
+        row.kind === 'user_photo'
+          ? 'your photo'
+          : ((row.body as string | null) ?? '').trim();
+
+      await ChatNotificationService.notifyReaction({
+        circleId,
+        circleName,
+        messageId,
+        recipientId,
+        reactorId,
+        reactorName: (reactor?.display_name as string | null) ?? 'Someone',
+        emoji: REACTION_EMOJI[reaction] ?? '',
+        preview,
+      });
+    } catch (err) {
+      console.error(`[CircleChatService.notifyReactionAuthor] swallowed for ${messageId}:`, err);
+    }
   }
 
   // ============================================================================

@@ -1,6 +1,6 @@
+import { clientTimezone, extractStreakMeta, type StreakAutoClaimMeta } from '@/lib/streaks/auto-claim-events';
 import { PHOTO_PARSE_MAX_IMAGES, PHOTO_PARSE_MAX_NOTE_CHARS } from '@/lib/types/nutrition';
 import { useAuthStore } from '@/stores/auth-store';
-import { clientTimezone, extractStreakMeta, type StreakAutoClaimMeta } from '@/lib/streaks/auto-claim-events';
 
 // Shared per-request caps for photo-parse (defined once in types/nutrition.ts and
 // re-exported here for UI surfaces).
@@ -114,7 +114,7 @@ export interface PlateScore {
   calorieTarget?: number;
 }
 
-export type ReactionKind = 'flame' | 'clap' | 'eyes' | 'same' | 'heart' | 'laugh';
+export type ReactionKind = 'thumbs_up' | 'same' | 'heart' | 'flame' | 'clap' | 'laugh' | 'eyes';
 
 export interface FoodReactionSummary {
   reaction: ReactionKind;

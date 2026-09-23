@@ -69,6 +69,7 @@ const TYPE_CATEGORY_MAP: Record<string, NotificationCategory> = {
   chat_message: 'social',
   chat_mention: 'social',
   chat_rally: 'celebration',
+  chat_reaction: 'social',
 };
 
 // ============================================================================

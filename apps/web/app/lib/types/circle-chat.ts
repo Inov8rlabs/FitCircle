@@ -26,8 +26,20 @@ export type SystemEventType =
 
 export type MessagePriority = 'p0' | 'p1' | 'p2';
 
-export type ReactionKind = 'flame' | 'clap' | 'eyes' | 'same' | 'heart' | 'laugh';
-export const REACTION_KINDS: ReactionKind[] = ['flame', 'clap', 'eyes', 'same', 'heart', 'laugh'];
+// 'same' renders as 🙌 (high five). 'thumbs_up' added 2026-09-23 (migration 087).
+export type ReactionKind = 'flame' | 'clap' | 'eyes' | 'same' | 'heart' | 'laugh' | 'thumbs_up';
+export const REACTION_KINDS: ReactionKind[] = ['thumbs_up', 'same', 'heart', 'flame', 'clap', 'laugh', 'eyes'];
+
+/** Emoji per reaction — the single source of truth for push copy; clients keep their own maps. */
+export const REACTION_EMOJI: Record<ReactionKind, string> = {
+  thumbs_up: '👍',
+  same: '🙌',
+  heart: '❤️',
+  flame: '🔥',
+  clap: '👏',
+  laugh: '😂',
+  eyes: '👀',
+};
 
 export type RenderHint = 'text' | 'stat_card' | 'completion_card' | 'summary_card' | 'meal_card';
 
