@@ -83,12 +83,23 @@
     font-feature-settings: 'rlig' 1, 'calt' 1;
     -webkit-tap-highlight-color: transparent;
     -webkit-touch-callout: none;
-    overflow-x: hidden;
   }
 
   /* Prevent horizontal overflow on all devices */
-  html {
+  /* Stop horizontal overflow WITHOUT turning html/body into scroll
+     containers. `overflow-x: hidden` here (together with the old
+     `overscroll-behavior-y: contain` on body) made touch scrolling on the
+     homepage dead on iPhone — swipes on page content never reached the
+     viewport. `clip` clips without creating a scroller. */
+  html,
+  body {
     overflow-x: hidden;
+  }
+  @supports (overflow: clip) {
+    html,
+    body {
+      overflow-x: clip;
+    }
   }
 
   /* Force dark mode by default */
@@ -155,9 +166,12 @@
     @apply absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-white/10 to-transparent animate-shimmer;
   }
 
-  /* Prevent pull-to-refresh on Chrome Android */
-  body {
-    overscroll-behavior-y: contain;
+  /* Prevent pull-to-refresh only in the installed PWA. On the open web this
+     rule combined with overflow-x on body to block touch scrolling. */
+  @media (display-mode: standalone) {
+    body {
+      overscroll-behavior-y: contain;
+    }
   }
 
   /* Bottom sheet styles */

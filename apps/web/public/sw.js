@@ -1,8 +1,8 @@
 // Service Worker for FitCircle PWA
-const CACHE_NAME = 'fitcircle-v1';
-const STATIC_CACHE = 'fitcircle-static-v1';
-const DYNAMIC_CACHE = 'fitcircle-dynamic-v1';
-const IMAGE_CACHE = 'fitcircle-images-v1';
+const CACHE_NAME = 'fitcircle-v2';
+const STATIC_CACHE = 'fitcircle-static-v2';
+const DYNAMIC_CACHE = 'fitcircle-dynamic-v2';
+const IMAGE_CACHE = 'fitcircle-images-v2';
 
 // Files to cache on install
 const STATIC_FILES = [
@@ -65,6 +65,24 @@ self.addEventListener('fetch', (event) => {
   // the network for API calls and do not persist the response.
   if (url.pathname.startsWith('/api/')) {
     event.respondWith(fetch(request));
+    return;
+  }
+
+  // Pages (navigations) - network first, cache fallback. Cache-first here
+  // pinned visitors to whatever homepage HTML their service worker had
+  // stored, so content updates only showed up after the SW itself changed.
+  if (request.mode === 'navigate') {
+    event.respondWith(
+      fetch(request)
+        .then((response) => {
+          if (response && response.status === 200) {
+            const copy = response.clone();
+            caches.open(DYNAMIC_CACHE).then((cache) => cache.put(request, copy));
+          }
+          return response;
+        })
+        .catch(() => caches.match(request).then((cached) => cached || caches.match('/offline')))
+    );
     return;
   }
 

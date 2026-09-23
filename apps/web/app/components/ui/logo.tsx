@@ -1,6 +1,13 @@
+import Image from 'next/image';
 import React from 'react';
 
 import { cn } from '@/lib/utils';
+
+/**
+ * Brand mark. The image is the same icon the iOS / Android apps ship with
+ * (public/brand/fitcircle-icon-*.png, copied from the app icon set), so the
+ * web, the store listings and the home-screen icon all match.
+ */
 
 interface LogoProps {
   className?: string;
@@ -9,12 +16,14 @@ interface LogoProps {
   variant?: 'default' | 'white';
 }
 
+const ICON_SRC = '/brand/fitcircle-icon-512.png';
+
 export function Logo({ className, size = 'md', showText = true, variant = 'default' }: LogoProps) {
   const sizes = {
-    sm: { icon: 'w-8 h-8', text: 'text-lg', fontSize: 'text-xl' },
-    md: { icon: 'w-10 h-10', text: 'text-xl', fontSize: 'text-2xl' },
-    lg: { icon: 'w-14 h-14', text: 'text-2xl', fontSize: 'text-3xl' },
-    xl: { icon: 'w-20 h-20', text: 'text-3xl', fontSize: 'text-5xl' },
+    sm: { px: 32, text: 'text-lg' },
+    md: { px: 40, text: 'text-xl' },
+    lg: { px: 56, text: 'text-2xl' },
+    xl: { px: 80, text: 'text-3xl' },
   };
 
   const currentSize = sizes[size];
@@ -22,22 +31,7 @@ export function Logo({ className, size = 'md', showText = true, variant = 'defau
 
   return (
     <div className={cn('flex items-center gap-2', className)}>
-      {/* Logo Icon - Simple circle with cursive f */}
-      <div className={cn('relative flex items-center justify-center rounded-full', currentSize.icon,
-        isWhite ? 'bg-white' : 'bg-primary'
-      )}>
-        <span
-          className={cn(
-            'font-serif italic',
-            currentSize.fontSize,
-            isWhite ? 'text-primary' : 'text-primary-foreground'
-          )}
-        >
-          f
-        </span>
-      </div>
-
-      {/* Text */}
+      <LogoIcon px={currentSize.px} />
       {showText && (
         <span className={cn(
           'font-bold tracking-tight',
@@ -51,21 +45,28 @@ export function Logo({ className, size = 'md', showText = true, variant = 'defau
   );
 }
 
-// Simplified Logo Icon component for use in smaller spaces
-export function LogoIcon({ className, size = 'md' }: { className?: string; size?: 'sm' | 'md' | 'lg' }) {
-  const sizes = {
-    sm: { icon: 'w-8 h-8', fontSize: 'text-xl' },
-    md: { icon: 'w-10 h-10', fontSize: 'text-2xl' },
-    lg: { icon: 'w-12 h-12', fontSize: 'text-3xl' },
-  };
-
-  const currentSize = sizes[size];
+// Icon-only mark for compact spaces.
+export function LogoIcon({
+  className,
+  size = 'md',
+  px,
+}: {
+  className?: string;
+  size?: 'sm' | 'md' | 'lg' | 'xl';
+  /** Explicit pixel size; overrides `size`. */
+  px?: number;
+}) {
+  const sizes = { sm: 32, md: 40, lg: 64, xl: 96 };
+  const dimension = px ?? sizes[size];
 
   return (
-    <div className={cn('relative flex items-center justify-center rounded-full bg-primary', currentSize.icon, className)}>
-      <span className={cn('font-serif italic text-primary-foreground', currentSize.fontSize)}>
-        f
-      </span>
-    </div>
+    <Image
+      src={ICON_SRC}
+      alt="FitCircle"
+      width={dimension}
+      height={dimension}
+      priority={dimension >= 64}
+      className={cn('rounded-full shrink-0', className)}
+    />
   );
 }

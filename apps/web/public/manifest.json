@@ -1,9 +1,9 @@
 {
-  "name": "FitCircle - Social Fitness Platform",
+  "name": "FitCircle: Fitness & Nutrition",
   "short_name": "FitCircle",
-  "description": "Your social fitness companion for weight loss challenges and team motivation",
+  "description": "Log meals with a photo, keep your streak alive, and stay accountable with friends in your FitCircle.",
   "theme_color": "#8b5cf6",
-  "background_color": "#0f172a",
+  "background_color": "#0b0b1f",
   "display": "standalone",
   "orientation": "portrait",
   "scope": "/",
