@@ -21,6 +21,9 @@ import type {
   FoodLogShare,
 } from '@/lib/types/food-log';
 
+import { CircleMealPostService } from './circle-meal-post-service';
+
+
 export class FoodLogService {
   /**
    * Create a new food log entry
@@ -70,6 +73,9 @@ export class FoodLogService {
 
       // Audit log
       await this.auditLog(userId, entry.id, 'create', supabase);
+
+      // Circle chat: shared meals become meal cards (fire-and-forget, never throws).
+      void CircleMealPostService.onMealLogged(entry as FoodLogEntry);
 
       return { data: entry, error: null };
     } catch (error) {
@@ -292,6 +298,9 @@ export class FoodLogService {
 
       // Audit log
       await this.auditLog(userId, entryId, 'update', supabase, { changes: data });
+
+      // Keep the circle chat meal cards in sync (or pull them if it went private).
+      void CircleMealPostService.onMealUpdated(updated as FoodLogEntry);
 
       return { data: updated, error: null };
     } catch (error) {
@@ -599,6 +608,9 @@ export class FoodLogService {
 
       // Audit log
       await this.auditLog(userId, entryId, 'delete', supabase);
+
+      // A deleted meal disappears from every circle chat it was posted to.
+      void CircleMealPostService.onMealDeleted(entryId);
 
       return { success: true, error: null };
     } catch (error) {

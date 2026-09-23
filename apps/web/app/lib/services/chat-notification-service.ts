@@ -87,6 +87,45 @@ export class ChatNotificationService {
   }
 
   /**
+   * Notify all active members of an ordinary (non-rally) system post — a
+   * streak, a workout, the daily summary, a bundled "all got moving" line.
+   * Rides the plain `chat_message` template ("<actor> in <circle>: <body>"),
+   * skips the actor and muted members. Never throws.
+   */
+  static async notifySystemPost(
+    circleId: string,
+    circleName: string,
+    body: string,
+    actorUserId: string | null,
+    actorName: string
+  ): Promise<void> {
+    try {
+      const members = await this.getActiveMembers(circleId);
+      const recipients = members.filter((m) => m.userId !== actorUserId && !m.muted);
+      if (recipients.length === 0) return;
+      const preview = this.truncatePreview(body);
+      const deepLink = `fitcircle://circles/${circleId}/chat`;
+      for (const member of recipients) {
+        void NotificationOrchestrator.send(member.userId, 'chat_message', {
+          circleName,
+          friendName: actorName,
+          senderName: actorName,
+          preview,
+          deepLink,
+          circleId,
+        }).catch((err) => {
+          console.error(
+            `[ChatNotificationService.notifySystemPost] Failed for member ${member.userId}:`,
+            err
+          );
+        });
+      }
+    } catch (err) {
+      console.error(`[ChatNotificationService.notifySystemPost] Failed for circle ${circleId}:`, err);
+    }
+  }
+
+  /**
    * Notify all active members of a P0 "rally" system post. Caller must only
    * invoke this for priority='p0' posts. Never throws.
    */

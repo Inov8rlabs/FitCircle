@@ -165,6 +165,10 @@ export class SystemPostEngine {
       case 'notable_meal':
         return `${names[0]} logged a ${payload?.mealDescriptor ?? 'meal'} 🍽️`;
 
+      case 'meal_logged':
+        // Real meal posts are authored by CircleMealPostService with the entry title.
+        return `${names[0]} logged a meal 🍽️`;
+
       default: {
         // Exhaustiveness guard — every SystemEventType handled above.
         const _exhaustive: never = eventType;
@@ -223,6 +227,18 @@ export class SystemPostEngine {
               await this.resolveCircleName(signal.fitcircleId),
               written.body ?? post.body ?? '',
               post.eventType ?? signal.eventType
+            ).catch(() => {});
+          } else if (post.disposition === 'post' || post.disposition === 'post_bundled') {
+            // Every other post that lands in the timeline (streaks, workouts,
+            // daily summary, …) is a chat message to the members too
+            // (product decision 2026-09-22). Quiet hours are enforced per
+            // recipient by the orchestrator; the actor is not notified.
+            void ChatNotificationService.notifySystemPost(
+              signal.fitcircleId,
+              await this.resolveCircleName(signal.fitcircleId),
+              written.body ?? post.body ?? '',
+              signal.eventType === 'daily_summary' ? null : signal.actorUserId,
+              signal.eventType === 'daily_summary' ? 'Daily summary' : signal.actorName
             ).catch(() => {});
           }
         } else {

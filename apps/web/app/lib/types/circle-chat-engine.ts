@@ -64,6 +64,8 @@ export const EVENT_TAXONOMY: Record<SystemEventType, EventPolicy> = {
   daily_summary:       { priority: 'p1', bundleable: false, cappable: false, renderHint: 'summary_card',    enabledByDefault: true  },
   member_joined:       { priority: 'p1', bundleable: true,  cappable: false, renderHint: 'text',            enabledByDefault: true  },
   new_challenge:       { priority: 'p1', bundleable: false, cappable: false, renderHint: 'text',            enabledByDefault: true  },
+  // Written directly by CircleMealPostService (member content, never capped/bundled); listed so the engine's tables stay exhaustive.
+  meal_logged:         { priority: 'p1', bundleable: false, cappable: false, renderHint: 'meal_card',       enabledByDefault: true  },
 };
 
 // Hard exclusions — event/source kinds that must NEVER become a post, enforced

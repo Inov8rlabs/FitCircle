@@ -10,6 +10,8 @@ import sharp from 'sharp';
 import { ImageProcessingError, StorageError } from '@/lib/errors/food-log-errors';
 import type { FoodLogImage } from '@/lib/types/food-log';
 
+import { CircleMealPostService } from './circle-meal-post-service';
+
 export class FoodLogImageService {
   /**
    * Upload and process image for food log entry
@@ -128,6 +130,12 @@ export class FoodLogImageService {
           has_images: true 
         })
         .eq('id', entryId);
+
+      // Photos upload after the entry row exists, so the chat meal card was
+      // created without one. Fill it in now (fire-and-forget, never throws).
+      if ((entryData?.image_count || 0) === 0) {
+        void CircleMealPostService.onMealPhotoAttached(entryId, imageId);
+      }
 
       // Audit log
       await supabase.from('food_log_audit').insert({

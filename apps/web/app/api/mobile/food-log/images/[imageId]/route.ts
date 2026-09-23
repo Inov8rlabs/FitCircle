@@ -10,6 +10,7 @@
 import { type NextRequest, NextResponse } from 'next/server';
 
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
+import { CircleMealPostService } from '@/lib/services/circle-meal-post-service';
 import { createAdminSupabase } from '@/lib/supabase-admin';
 
 /**
@@ -106,32 +107,23 @@ export async function GET(
       );
     }
 
-    // Authorization: Check if user owns this image
-    // For now, only the owner can view their images
-    // Future: Add support for shared entries in FitCircles
+    // Authorization: the owner always; otherwise the viewer must be allowed to
+    // see the entry itself — shareable meal + a shared active circle where the
+    // owner's food-privacy tier is 'full' (the same rule that put the meal card
+    // in the circle chat). The previous check queried tables that no longer
+    // exist, so every member request 403'd.
     if (imageRecord.user_id !== user.id) {
-      // Check if the entry is shared in a FitCircle the user belongs to
       const { data: entryData } = await supabase
         .from('food_log_entries')
-        .select(
-          `
-          id,
-          user_id,
-          is_private,
-          fit_circle_shares!inner(
-            fit_circle_id,
-            fit_circles!inner(
-              id,
-              participants!inner(user_id)
-            )
-          )
-        `
-        )
+        .select('id, user_id, entry_type, visibility, is_private, title, meal_type, logged_at, deleted_at')
         .eq('id', imageRecord.food_log_entry_id)
-        .eq('fit_circle_shares.fit_circles.participants.user_id', user.id)
-        .single();
+        .maybeSingle();
 
-      if (!entryData || entryData.is_private) {
+      const allowed = entryData
+        ? await CircleMealPostService.viewerCanSeeEntry(user.id, entryData as any)
+        : false;
+
+      if (!allowed) {
         console.warn('[Image Proxy] Unauthorized access attempt:', {
           imageId,
           userId: user.id,

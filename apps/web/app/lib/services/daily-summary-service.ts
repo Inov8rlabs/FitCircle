@@ -52,6 +52,11 @@ export class DailySummaryService {
    * Generate (at most) one daily_summary per currently-running circle.
    * Returns a batch summary. Never throws on a single circle's failure.
    */
+  /** Pure: a summary is worth posting only when at least one member checked in. */
+  static shouldPostSummary(checkedIn: number, total: number): boolean {
+    return total >= 1 && checkedIn >= 1;
+  }
+
   static async generateForAllActiveCircles(): Promise<DailySummaryResult> {
     const supabaseAdmin = createAdminSupabase();
     const engine = new SystemPostEngine();
@@ -133,7 +138,13 @@ export class DailySummaryService {
           ).size;
         }
 
-        // 5. Build the signal. The circle is the actor for a circle-wide summary;
+        // 5. Nothing to celebrate: "0 of N checked in" is not a message anyone
+        //    wants (product decision 2026-09-22). Post only when someone did.
+        if (!DailySummaryService.shouldPostSummary(checkedIn, total)) {
+          continue;
+        }
+
+        // 5b. Build the signal. The circle is the actor for a circle-wide summary;
         //    actorName is the circle's display name (used by the renderer's
         //    fallbacks even though daily_summary copy is name-agnostic), and
         //    actorUserId stands in as the creator when available, else the

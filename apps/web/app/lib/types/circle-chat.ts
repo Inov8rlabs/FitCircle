@@ -20,6 +20,7 @@ export type SystemEventType =
   | 'challenge_milestone'
   | 'challenge_resolved'
   | 'daily_summary'
+  | 'meal_logged'
   | 'member_joined'
   | 'new_challenge';
 
@@ -28,7 +29,7 @@ export type MessagePriority = 'p0' | 'p1' | 'p2';
 export type ReactionKind = 'flame' | 'clap' | 'eyes' | 'same' | 'heart' | 'laugh';
 export const REACTION_KINDS: ReactionKind[] = ['flame', 'clap', 'eyes', 'same', 'heart', 'laugh'];
 
-export type RenderHint = 'text' | 'stat_card' | 'completion_card' | 'summary_card';
+export type RenderHint = 'text' | 'stat_card' | 'completion_card' | 'summary_card' | 'meal_card';
 
 export type ReportStatus = 'open' | 'reviewed' | 'actioned';
 
