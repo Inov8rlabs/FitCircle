@@ -43,7 +43,7 @@ UPDATE feature_flags SET is_enabled = false WHERE name = 'subscriptions';
 
 ## Phase B — Stripe (web billing)
 
-- [ ] Create Products/Prices: Pro Monthly $9.99/mo, Pro Annual $59.99/yr, Pro Lifetime $149.99 one-time
+- [ ] Create Products/Prices: Pro Monthly $9.99/mo, Pro Annual $29.99/yr, Pro Lifetime $179.99 one-time (App Store prices as of 2026-09-23; Stripe must match)
 - [ ] Create the launch coupon (e.g. **$20 off, duration "once"** → first year $39.99) — optional until you run the promo
 - [ ] Enable the Customer Portal (cancel + payment-method update)
 - [ ] Add webhook endpoint `https://<your-domain>/api/webhooks/stripe`, subscribe to `checkout.session.completed` and `invoice.payment_failed`; copy the signing secret
@@ -54,9 +54,9 @@ UPDATE feature_flags SET is_enabled = false WHERE name = 'subscriptions';
 - [ ] Sign the **Paid Applications Agreement** (Agreements, Tax, Banking) — blocks everything else; do first
 - [ ] Subscription group "FitCircle Pro" with:
   - `com.inov8rlabs.fitcircle.pro.monthly` — $9.99/mo, **no introductory offer at launch** (decided 2026-09-14; a free-trial promo can be added later and the paywall picks it up from StoreKit)
-  - `com.inov8rlabs.fitcircle.pro.annual` — $59.99/yr, **no introductory offer at launch** (same rank level as monthly)
+  - `com.inov8rlabs.fitcircle.pro.annual` — $29.99/yr, **no introductory offer at launch** (same rank level as monthly)
   - For the launch promo: add a pay-up-front intro offer at $39.99 first year on the annual (replaces the free-trial intro while active — decide which intro you run at launch; you cannot stack both)
-- [ ] Non-consumable `com.inov8rlabs.fitcircle.pro.lifetime` — $149.99
+- [ ] Non-consumable `com.inov8rlabs.fitcircle.pro.lifetime` — $179.99
 - [ ] Localized names/descriptions + a paywall screenshot per product (review requirement)
 - [ ] App Store Server Notifications **V2** URL (Production + Sandbox) → the RevenueCat-provided URL (RC dashboard → your iOS app → Apple Server Notifications)
 - [ ] Generate an In-App Purchase API key and upload to RevenueCat
