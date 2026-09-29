@@ -20,6 +20,7 @@ describe('parseAppleAuthRequest', () => {
     expect(parsed).toEqual({
       identityToken: 'header.payload.sig',
       userIdentifier: '001234.apple',
+      authorizationCode: 'code',
       email: 'ani@bajirao.me',
       firstName: 'Ani',
       lastName: 'Bajirao',

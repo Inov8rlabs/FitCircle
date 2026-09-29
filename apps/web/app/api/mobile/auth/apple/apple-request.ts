@@ -1,5 +1,7 @@
 import { z } from 'zod';
 
+import { parseLenient } from '@/lib/validation/lenient-parse';
+
 /** Native Sign in with Apple identity tokens use the iOS bundle id as `aud`. */
 export const APPLE_NATIVE_BUNDLE_ID = 'com.inov8rlabs.apps.fitcircle';
 
@@ -41,6 +43,8 @@ const appleAuthSchema = z.object({
 export interface AppleAuthRequest {
   identityToken: string;
   userIdentifier: string;
+  /** Single-use code from Apple; exchanged for a refresh token kept only for revocation. */
+  authorizationCode?: string;
   /** Present only when the client sent one. The identity token's email wins. */
   email?: string;
   firstName: string;
@@ -66,7 +70,7 @@ export function appleTokenAudiences(): string[] {
 
 /** Accept the iOS snake_case body and the older camelCase body. */
 export function parseAppleAuthRequest(body: unknown): AppleAuthRequest {
-  const parsed = appleAuthSchema.parse(body);
+  const parsed = parseLenient(appleAuthSchema, body);
   const identityToken = text(parsed.identity_token) ?? text(parsed.identityToken);
   const userIdentifier = text(parsed.user_identifier) ?? text(parsed.userIdentifier);
 
@@ -95,6 +99,7 @@ export function parseAppleAuthRequest(body: unknown): AppleAuthRequest {
   return {
     identityToken,
     userIdentifier,
+    authorizationCode: text(parsed.authorization_code) ?? text(parsed.authorizationCode),
     email: email && z.string().email().safeParse(email).success ? email : undefined,
     firstName,
     lastName,

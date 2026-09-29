@@ -1,10 +1,12 @@
 import { createClient } from '@supabase/supabase-js';
-import { type NextRequest, NextResponse } from 'next/server';
+import { after, type NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 
 import { authRateLimiter, getIdentifier, applyRateLimit } from '@/lib/middleware/rate-limit';
+import { AppleTokenService } from '@/lib/services/apple-token-service';
 import { MobileAPIService } from '@/lib/services/mobile-api-service';
 import { SocialAuthError, findOrCreateSocialUser } from '@/lib/services/social-auth-service';
+import { validationMessage } from '@/lib/validation/lenient-parse';
 
 import { appleTokenAudiences, parseAppleAuthRequest } from './apple-request';
 import { toIosAuthUser } from './ios-auth-user';
@@ -45,7 +47,7 @@ export async function POST(request: NextRequest) {
     if (rateLimitResponse) return rateLimitResponse;
 
     const body = await request.json();
-    const { identityToken, userIdentifier, email: requestEmail, firstName, lastName } =
+    const { identityToken, userIdentifier, authorizationCode, email: requestEmail, firstName, lastName } =
       parseAppleAuthRequest(body);
 
     const appleUser = await verifyAppleIdentityToken(identityToken);
@@ -103,6 +105,13 @@ export async function POST(request: NextRequest) {
 
     const tokens = await MobileAPIService.generateTokens(userId, email);
 
+    // Apple requires the user's tokens to be revoked when the account is
+    // deleted, which needs a refresh token. Runs after the response so sign-in
+    // is never slowed or failed by it; a no-op until the Apple key is configured.
+    if (authorizationCode) {
+      after(() => AppleTokenService.exchangeAndStoreRefreshToken(userId, authorizationCode));
+    }
+
     console.log('[Apple Auth] Sign-in successful for user:', userId);
 
     return NextResponse.json({
@@ -140,7 +149,7 @@ export async function POST(request: NextRequest) {
           data: null,
           error: {
             code: 'VALIDATION_ERROR',
-            message: 'Invalid request data',
+            message: validationMessage(error),
             details: error.errors,
             timestamp: new Date().toISOString(),
           },
