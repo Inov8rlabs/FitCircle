@@ -3,6 +3,7 @@ import { z } from 'zod';
 
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { ShareCardService, type ShareCardType } from '@/lib/services/share-card-service';
+import { parseLenient, validationMessage } from '@/lib/validation/lenient-parse';
 
 const VALID_CARD_TYPES: ShareCardType[] = [
   'milestone',
@@ -26,13 +27,11 @@ export async function POST(request: NextRequest) {
   try {
     const user = await requireMobileAuth(request);
     const body = await request.json();
-    const { card_type, card_data } = generateCardSchema.parse(body);
+    const { card_type, card_data } = parseLenient(generateCardSchema, body);
 
-    const card = await ShareCardService.generateCard(
-      user.id,
-      card_type as ShareCardType,
-      card_data as unknown as Parameters<typeof ShareCardService.generateCard>[2]
-    );
+    // `card_data` is stored and returned as sent; the service normalises a copy
+    // (snake_case strings -> camelCase numbers) for the rendered image only.
+    const card = await ShareCardService.generateCard(user.id, card_type as ShareCardType, card_data);
 
     return NextResponse.json({
       success: true,
@@ -49,7 +48,7 @@ export async function POST(request: NextRequest) {
 
     if (error instanceof z.ZodError) {
       return NextResponse.json(
-        { success: false, data: null, error: { code: 'VALIDATION_ERROR', message: 'Invalid request', details: error.errors } },
+        { success: false, data: null, error: { code: 'VALIDATION_ERROR', message: validationMessage(error), details: error.errors } },
         { status: 400 }
       );
     }

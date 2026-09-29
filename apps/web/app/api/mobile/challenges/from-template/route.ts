@@ -3,6 +3,7 @@ import { z } from 'zod';
 
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { TemplateService } from '@/lib/services/template-service';
+import { parseLenient, validationMessage } from '@/lib/validation/lenient-parse';
 
 const createFromTemplateSchema = z.object({
   template_id: z.string().uuid(),
@@ -17,7 +18,7 @@ export async function POST(request: NextRequest) {
   try {
     const user = await requireMobileAuth(request);
     const body = await request.json();
-    const validated = createFromTemplateSchema.parse(body);
+    const validated = parseLenient(createFromTemplateSchema, body);
 
     const challenge = await TemplateService.createFromTemplate(
       validated.template_id,
@@ -39,7 +40,7 @@ export async function POST(request: NextRequest) {
     }
     if (error instanceof z.ZodError) {
       return NextResponse.json(
-        { success: false, data: null, error: { code: 'VALIDATION_ERROR', message: 'Invalid data', details: error.errors } },
+        { success: false, data: null, error: { code: 'VALIDATION_ERROR', message: validationMessage(error), details: error.errors } },
         { status: 400 }
       );
     }

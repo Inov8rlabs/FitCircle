@@ -5,6 +5,8 @@ import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { addAutoRefreshHeaders } from '@/lib/middleware/mobile-auto-refresh';
 import { DailyGoalService } from '@/lib/services/daily-goals';
 import { createAdminSupabase } from '@/lib/supabase-admin';
+import { safeParseLenient, validationMessage } from '@/lib/validation/lenient-parse';
+import { normalizeCreateGoalBody } from '@/lib/validators/daily-goals';
 
 /**
  * Validation schema for creating daily goal
@@ -114,7 +116,8 @@ export async function POST(request: NextRequest) {
     console.log(`[Mobile Daily Goals] Creating goal for user: ${user.id}`, body);
 
     // Validate input
-    const validationResult = createGoalSchema.safeParse(body);
+    // snake_case is the contract; camelCase keys and explicit nulls are tolerated.
+    const validationResult = safeParseLenient(createGoalSchema, normalizeCreateGoalBody(body));
 
     if (!validationResult.success) {
       return NextResponse.json(
@@ -123,7 +126,7 @@ export async function POST(request: NextRequest) {
           data: null,
           error: {
             code: 'VALIDATION_ERROR',
-            message: 'Invalid request data',
+            message: validationMessage(validationResult.error),
             details: validationResult.error.errors,
             timestamp: new Date().toISOString(),
           },

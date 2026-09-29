@@ -3,33 +3,16 @@ import { z } from 'zod';
 
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { MobileAPIService } from '@/lib/services/mobile-api-service';
+import { toProfileUpdateResponse } from '@/lib/services/mobile-profile-response';
+import { resolveClientTimezone } from '@/lib/streaks/client-timezone';
+import { isFutureCalendarDate, normalizeDateOfBirth } from '@/lib/validation/date-of-birth';
+import { parseLenient, validationMessage } from '@/lib/validation/lenient-parse';
+import { updateProfileSchema } from '@/lib/validation/profile-validation';
 
-// Validation schema for PUT
-const updateProfileSchema = z.object({
-  displayName: z.string().min(1).max(100).optional(),
-  username: z
-    .string()
-    .min(3)
-    .max(30)
-    .regex(/^[a-zA-Z0-9_]+$/, 'Username can only contain letters, numbers, and underscores')
-    .optional(),
-  avatarUrl: z.string().url().optional(),
-  bio: z.string().max(500).optional(),
-  // Physical profile / onboarding fields sent by iOS + Android
-  heightCm: z.number().positive().max(300, 'Height must be less than 300 cm').optional(),
-  weightKg: z.number().positive().max(1000, 'Weight must be less than 1000 kg').optional(),
-  dateOfBirth: z
-    .string()
-    .regex(/^\d{4}-\d{2}-\d{2}$/, 'Invalid date format (YYYY-MM-DD)')
-    .refine((val) => {
-      const dob = new Date(`${val}T00:00:00Z`);
-      return !Number.isNaN(dob.getTime()) && dob.getTime() <= Date.now();
-    }, 'Date of birth cannot be in the future')
-    .optional(),
-  fitnessLevel: z
-    .enum(['beginner', 'intermediate', 'advanced', 'expert', 'athlete'])
-    .optional(),
-});
+/** A validation failure on one field, reported like any other schema error. */
+function fieldError(field: string, message: string): z.ZodError {
+  return new z.ZodError([{ code: z.ZodIssueCode.custom, path: [field], message }]);
+}
 
 /**
  * GET /api/mobile/profile
@@ -113,8 +96,9 @@ export async function PUT(request: NextRequest) {
     const user = await requireMobileAuth(request);
 
     // Parse and validate request body
+    // parseLenient: an explicit JSON null on an optional field means "not sent".
     const body = await request.json();
-    const validatedData = updateProfileSchema.parse(body);
+    const validatedData = parseLenient(updateProfileSchema, body);
 
     // Build update object
     const updates: any = {};
@@ -145,11 +129,27 @@ export async function PUT(request: NextRequest) {
     }
 
     if (validatedData.dateOfBirth !== undefined) {
-      updates.date_of_birth = validatedData.dateOfBirth;
+      // Android sends the calendar date; iOS sends an ISO-8601 instant. Store
+      // the day the user picked (rule: lib/validation/date-of-birth.ts).
+      const dateOfBirth = normalizeDateOfBirth(validatedData.dateOfBirth, {
+        timeZone: resolveClientTimezone(request),
+        storedDate: typeof user.date_of_birth === 'string' ? user.date_of_birth.slice(0, 10) : null,
+      });
+      if (!dateOfBirth) {
+        throw fieldError('dateOfBirth', 'Invalid date format (YYYY-MM-DD)');
+      }
+      if (isFutureCalendarDate(dateOfBirth)) {
+        throw fieldError('dateOfBirth', 'Date of birth cannot be in the future');
+      }
+      updates.date_of_birth = dateOfBirth;
     }
 
     if (validatedData.fitnessLevel !== undefined) {
       updates.fitness_level = validatedData.fitnessLevel;
+    }
+
+    if (validatedData.gender !== undefined) {
+      updates.gender = validatedData.gender;
     }
 
     // Update profile
@@ -158,7 +158,8 @@ export async function PUT(request: NextRequest) {
     return NextResponse.json({
       success: true,
       data: {
-        user: updatedProfile,
+        // The stored row plus the nested preference defaults iOS needs to decode it.
+        user: toProfileUpdateResponse(updatedProfile),
       },
       meta: {
         requestTime: Date.now() - startTime,
@@ -197,7 +198,7 @@ export async function PUT(request: NextRequest) {
           data: null,
           error: {
             code: 'VALIDATION_ERROR',
-            message: 'Invalid input data',
+            message: validationMessage(error),
             details: error.errors.reduce((acc: any, err) => {
               acc[err.path.join('.')] = err.message;
               return acc;

@@ -112,11 +112,19 @@ export interface DailyHighFiveLimit {
 
 export type CircleType = 'weight_loss' | 'step_count' | 'workout_minutes' | 'custom';
 
+/** fitcircles.visibility (enum challenge_visibility). */
+export type CircleVisibility = 'public' | 'private' | 'invite_only';
+
 export interface CreateCircleInput {
   name: string;
   description?: string;
   /** fitcircles.type (NOT NULL enum). Defaults to 'custom' in the service. */
   type?: CircleType;
+  /**
+   * Stored only when the caller sent one. When omitted the column default
+   * applies (currently 'public'), exactly as before this field existed.
+   */
+  visibility?: CircleVisibility;
   start_date: string;
   end_date: string;
   max_participants?: number;

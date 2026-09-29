@@ -2,7 +2,8 @@ import { type NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
-import { CircleService } from '@/lib/services/circle-service';
+import { CircleJoinError, CircleService } from '@/lib/services/circle-service';
+import { safeParseLenient, validationMessage } from '@/lib/validation/lenient-parse';
 
 const idSchema = z.string().uuid();
 
@@ -15,16 +16,24 @@ const bodySchema = z
 
 /**
  * POST /api/mobile/circles/[id]/join
- * Join a circle by ID.
  *
- * - If the circle is public: no invite code needed.
- * - If the circle is private/invite_only: caller must include the matching
- *   invite code in the body. (Goal collection happens later via the
- *   circle's set-personal-goal flow rather than at join time, so v1 of
- *   this endpoint is goal-less.)
+ * Two ways to join through this route:
  *
- * Body: { inviteCode?: string }
- * Response: { success: true, data: <FitCircle> } on success.
+ * 1. Public join (no invite code in the body): the path id is the circle.
+ *    The circle must be public.
+ *
+ * 2. Invite-code join (`invite_code` or `inviteCode` in the body): the circle is
+ *    found from the CODE. iOS 1.0 posts the code here with a random uuid in the
+ *    path (CirclesListFeature.joinWithCode -> joinFitCircle(UUID(), request)), so
+ *    a path id that names no circle is ignored. A path id that names a real
+ *    circle must be the circle the code belongs to.
+ *
+ * Goal collection happens later via the circle's set-personal-goal flow, so
+ * neither way takes a goal. `POST /api/mobile/circles/join` (code + optional
+ * goal, used by Android) is a separate route and is not affected.
+ *
+ * Body: { invite_code?: string } | { inviteCode?: string }
+ * Response: { success: true, data: <FitCircle> } (201) on success.
  */
 export async function POST(
   request: NextRequest,
@@ -33,27 +42,34 @@ export async function POST(
   try {
     const user = await requireMobileAuth(request);
     const { id } = await params;
-    const circleId = idSchema.parse(id);
 
     // Body is optional — null/empty for public joins.
     let inviteCode: string | undefined;
     try {
       const text = await request.text();
       if (text) {
-        const parsed = bodySchema.parse(JSON.parse(text));
-        inviteCode = parsed.inviteCode ?? parsed.invite_code ?? undefined;
+        const parsed = safeParseLenient(bodySchema, JSON.parse(text));
+        if (parsed.success) {
+          const candidate = parsed.data.inviteCode ?? parsed.data.invite_code ?? undefined;
+          inviteCode = candidate?.trim() ? candidate : undefined;
+        }
       }
     } catch {
       // No body or unparseable body — treat as a public-join attempt.
     }
 
     if (inviteCode) {
-      // Existing invite-code path lives in the legacy /circles/join handler;
-      // delegate to the same service method so behaviour stays consistent.
-      // We don't have goal info at this entry point, so this path currently
-      // requires the caller to set a goal afterwards.
-      throw new Error('Invite-code joins must POST to /api/mobile/circles/join with the goal payload.');
+      const circle = await CircleService.joinByInviteCode(user.id, inviteCode, {
+        pathCircleId: id,
+      });
+
+      return NextResponse.json(
+        { success: true, data: circle, error: null },
+        { status: 201 }
+      );
     }
+
+    const circleId = idSchema.parse(id);
 
     await CircleService.joinPublicCircle(user.id, circleId);
     const circle = await CircleService.getCircle(circleId);
@@ -72,7 +88,14 @@ export async function POST(
 
     if (error instanceof z.ZodError) {
       return NextResponse.json(
-        { success: false, data: null, error: { code: 'VALIDATION_ERROR', message: 'Invalid request', details: error.errors } },
+        { success: false, data: null, error: { code: 'VALIDATION_ERROR', message: validationMessage(error), details: error.errors } },
+        { status: 400 }
+      );
+    }
+
+    if (error instanceof CircleJoinError) {
+      return NextResponse.json(
+        { success: false, data: null, error: { code: 'INVALID_JOIN', message: error.message } },
         { status: 400 }
       );
     }
@@ -88,8 +111,7 @@ export async function POST(
       if (
         msg === 'Circle is not public — invite code required' ||
         msg === 'Circle is no longer joinable' ||
-        msg === 'You are already a member of this circle' ||
-        msg.startsWith('Invite-code joins must POST')
+        msg === 'You are already a member of this circle'
       ) {
         return NextResponse.json(
           { success: false, data: null, error: { code: 'INVALID_JOIN', message: msg } },

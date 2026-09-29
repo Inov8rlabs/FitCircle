@@ -249,10 +249,42 @@ export const bodyCompImportRequestSchema = z.object({
 });
 export type BodyCompImportRequest = z.infer<typeof bodyCompImportRequestSchema>;
 
+/** Why one imported sample did not land in a log row. */
+export type BodyCompImportSkipReason =
+  | 'invalid_item'        // externalId / measuredAt missing or malformed
+  | 'no_valid_metric'     // no metric, or every metric was out of range
+  | 'already_imported'    // externalId already stored
+  | 'deleted_by_user'     // the user deleted this imported entry (tombstone)
+  | 'no_counted_metric'   // cluster holds only lean mass / BMR and no row to merge into yet
+  | 'unchanged'           // re-sent sample, the stored row already has these values
+  | 'rejected_by_storage'; // the database refused the values (constraint / range)
+
+/** Per-sample outcome, aligned by index with the items passed to importBatch. */
+export interface BodyCompImportItemOutcome {
+  externalId: string;
+  imported: boolean;
+  reason?: BodyCompImportSkipReason;
+}
+
 export interface BodyCompImportResult {
   received: number;
   imported: number; // landed in a log row (new row or merged into a same-window row)
   skipped: number;  // externalId already imported, or item carried no metrics
+  /** Additive (service-level): one outcome per item, same order as the request. */
+  outcomes?: BodyCompImportItemOutcome[];
+}
+
+/** Additive wire fields of POST /body-comp/import (older clients ignore them). */
+export interface BodyCompImportSkippedItem {
+  index: number; // position in the request's `items`
+  externalId?: string;
+  reason: BodyCompImportSkipReason;
+}
+
+export interface BodyCompImportDroppedMetric {
+  index: number;
+  externalId: string;
+  fields: string[]; // metric keys that were out of range and ignored; the rest imported
 }
 
 // ============================================================================

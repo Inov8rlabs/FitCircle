@@ -4,12 +4,18 @@ import { z } from 'zod';
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { BodyCompositionService } from '@/lib/services/body-composition-service';
 import { EntitlementService } from '@/lib/services/entitlement-service';
-import { type BodyCompImportItem, bodyCompImportItemSchema } from '@/lib/types/body-composition';
+import {
+  type BodyCompImportDroppedMetric,
+  type BodyCompImportItem,
+  type BodyCompImportSkippedItem,
+  bodyCompImportItemSchema,
+} from '@/lib/types/body-composition';
+import { parseLenient, validationMessage } from '@/lib/validation/lenient-parse';
 
 /**
  * POST /api/mobile/body-comp/import — idempotent HealthKit / Health Connect batch import.
  * Dedup by source_external_id; samples within 10 minutes collapse into one log row.
- * → { received, imported, skipped }. Feature gate: body_comp_logging.
+ * → { received, imported, skipped, skippedItems, droppedMetrics }. Feature gate: body_comp_logging.
  *
  * Validation is tolerant PER ITEM (contract §2): platform data is dirty — a flaky
  * smart scale or third-party app can write a 1.5% body-fat or 0 kg sample, and the
@@ -18,6 +24,10 @@ import { type BodyCompImportItem, bodyCompImportItemSchema } from '@/lib/types/b
  * subsequent sync window). Only the envelope is strict; invalid items are skipped
  * (counted in `skipped`), and an out-of-range metric on an otherwise-valid item is
  * dropped field-wise so its remaining metrics still import.
+ *
+ * `received` / `imported` / `skipped` are the counts every released client decodes.
+ * `skippedItems` ([{ index, externalId?, reason }]) and `droppedMetrics`
+ * ([{ index, externalId, fields }]) are additive detail for newer clients.
  * BODY_COMP_BUILD_CONTRACT §2.
  */
 
@@ -36,6 +46,12 @@ const importItemIdentitySchema = z.object({
 
 const IMPORT_METRIC_KEYS = ['weightKg', 'bodyFatPct', 'leanBodyMassKg', 'bmrKcal'] as const;
 
+interface SanitizedImportItem {
+  item: BodyCompImportItem;
+  /** Metric keys that were present but out of range / mistyped, and ignored. */
+  dropped: string[];
+}
+
 /**
  * One platform sample → a valid BodyCompImportItem, or null when its identity is
  * malformed. Metric fields are validated against the contract ranges independently
@@ -43,20 +59,24 @@ const IMPORT_METRIC_KEYS = ['weightKg', 'bodyFatPct', 'leanBodyMassKg', 'bmrKcal
  * out-of-range values are dropped, not fatal. An item left with no metrics flows
  * through to the service, whose ≥1-metric filter counts it as skipped.
  */
-function sanitizeImportItem(raw: unknown): BodyCompImportItem | null {
+function sanitizeImportItem(raw: unknown): SanitizedImportItem | null {
   const strict = bodyCompImportItemSchema.safeParse(raw);
-  if (strict.success) return strict.data;
+  if (strict.success) return { item: strict.data, dropped: [] };
 
   const identity = importItemIdentitySchema.safeParse(raw);
   if (!identity.success) return null;
 
   const record = raw as Record<string, unknown>;
   const item: BodyCompImportItem = identity.data;
+  const dropped: string[] = [];
   for (const key of IMPORT_METRIC_KEYS) {
-    const parsed = bodyCompImportItemSchema.shape[key].safeParse(record[key]);
+    const value = record[key];
+    if (value === undefined || value === null) continue; // absent / explicit null = not sent
+    const parsed = bodyCompImportItemSchema.shape[key].safeParse(value);
     if (parsed.success && parsed.data !== undefined) item[key] = parsed.data;
+    else dropped.push(key);
   }
-  return item;
+  return { item, dropped };
 }
 
 export async function POST(request: NextRequest) {
@@ -65,23 +85,52 @@ export async function POST(request: NextRequest) {
     const user = await requireMobileAuth(request);
     await EntitlementService.requireFeature(user.id, 'body_comp_logging');
     const body = await request.json();
-    const envelope = importEnvelopeSchema.parse(body);
+    const envelope = parseLenient(importEnvelopeSchema, body);
 
     const received = envelope.items.length;
-    const items = envelope.items
-      .map(sanitizeImportItem)
-      .filter((item): item is BodyCompImportItem => item !== null);
+    const skippedItems: BodyCompImportSkippedItem[] = [];
+    const droppedMetrics: BodyCompImportDroppedMetric[] = [];
+
+    // Position of each sanitized item in the RAW batch, so outcomes can be reported
+    // against the index the client sent.
+    const rawIndexes: number[] = [];
+    const items: BodyCompImportItem[] = [];
+    envelope.items.forEach((raw, index) => {
+      const sanitized = sanitizeImportItem(raw);
+      if (!sanitized) {
+        skippedItems.push({ index, reason: 'invalid_item' });
+        return;
+      }
+      if (sanitized.dropped.length > 0) {
+        droppedMetrics.push({ index, externalId: sanitized.item.externalId, fields: sanitized.dropped });
+      }
+      rawIndexes.push(index);
+      items.push(sanitized.item);
+    });
 
     const result = await BodyCompositionService.importBatch(user.id, {
       platform: envelope.platform,
       items,
     });
+
+    (result.outcomes ?? []).forEach((outcome, position) => {
+      if (outcome.imported) return;
+      skippedItems.push({
+        index: rawIndexes[position],
+        externalId: outcome.externalId,
+        reason: outcome.reason ?? 'invalid_item',
+      });
+    });
+    skippedItems.sort((a, b) => a.index - b.index);
+
     // Recount against the RAW batch so identity-malformed items land in `skipped`
     // and { received, imported, skipped } stays truthful.
     const data = {
       received,
       imported: result.imported,
       skipped: received - result.imported,
+      skippedItems,
+      droppedMetrics,
     };
     return NextResponse.json({ success: true, data, meta: { requestTime: Date.now() - startTime }, error: null });
   } catch (error: any) {
@@ -104,7 +153,7 @@ function mapError(error: any) {
   }
   if (error instanceof z.ZodError) {
     return NextResponse.json(
-      { success: false, data: null, error: { code: 'VALIDATION_ERROR', message: 'Invalid input', details: error.errors.reduce((a: any, e) => { a[e.path.join('.')] = e.message; return a; }, {}), timestamp: new Date().toISOString() }, meta: null },
+      { success: false, data: null, error: { code: 'VALIDATION_ERROR', message: validationMessage(error), details: error.errors.reduce((a: any, e) => { a[e.path.join('.')] = e.message; return a; }, {}), timestamp: new Date().toISOString() }, meta: null },
       { status: 400 }
     );
   }

@@ -13,12 +13,14 @@
 import { type SupabaseClient } from '@supabase/supabase-js';
 import { localToday } from '../streaks/streak-calculator';
 import { workoutCountsForStreak } from '../streaks/workout-claim-policy';
+import { isMissingColumnError } from '../validators/exercise-source';
 import { StreakClaimingService } from './streak-claiming-service';
 import type { AutoClaimResult } from '../types/streak-claiming';
 
 import type {
   ExerciseLog,
   ExerciseLogCreateInput,
+  ExerciseSourcePlatform,
   ExerciseBulkSyncInput,
   ExerciseBulkSyncResponse,
   ExerciseSyncResult,
@@ -142,6 +144,32 @@ const DEFAULT_BODY_AREAS: Record<string, string[]> = {
 
 export class ExerciseService {
   /**
+   * Insert one exercise_logs row.
+   *
+   * `source_platform` (migration 092) is only sent when the client declared a
+   * platform, so every request a released client makes today produces exactly the
+   * insert it always did. If the column does not exist yet (migration not applied),
+   * the insert is retried without it: the workout is saved, only the origin tag is lost.
+   */
+  private static async insertExerciseRow(
+    supabase: SupabaseClient,
+    row: Record<string, unknown>,
+    sourcePlatform: ExerciseSourcePlatform | null,
+    columns: string
+  ): Promise<{ data: any; error: { code?: string; message: string } | null }> {
+    const attempt = async (payload: Record<string, unknown>) =>
+      supabase.from('exercise_logs').insert(payload).select(columns).single();
+
+    if (!sourcePlatform) return attempt(row);
+
+    const tagged = await attempt({ ...row, source_platform: sourcePlatform });
+    if (tagged.error && isMissingColumnError(tagged.error, 'source_platform')) {
+      return attempt(row);
+    }
+    return tagged;
+  }
+
+  /**
    * Create a single exercise log (manual entry)
    */
   static async createExercise(
@@ -181,36 +209,38 @@ export class ExerciseService {
       // Any workout >= 10 min counts as a check-in
       const countsAsCheckin = data.duration_minutes >= 10;
 
-      const { data: exercise, error } = await supabase
-        .from('exercise_logs')
-        .insert({
-          user_id: userId,
-          exercise_type: data.exercise_type,
-          category: data.category,
-          duration_minutes: data.duration_minutes,
-          calories_burned: caloriesBurned,
-          calories_estimated: caloriesEstimated,
-          exercise_date: exerciseDate,
-          started_at: data.started_at || null,
-          source,
-          distance_meters: data.distance_meters ?? null,
-          avg_heart_rate: data.avg_heart_rate ?? null,
-          effort_level: data.effort_level ?? null,
-          location_type: data.location_type ?? null,
-          workout_companion: data.workout_companion ?? null,
-          body_areas: bodyAreas,
-          is_indoor: data.is_indoor ?? null,
-          notes: data.notes ?? null,
-          healthkit_workout_id: data.healthkit_workout_id ?? null,
-          source_device_name: data.source_device_name ?? null,
-          is_public: true,
-          counts_as_checkin: countsAsCheckin,
-        })
-        .select()
-        .single();
+      const insertRow: Record<string, unknown> = {
+        user_id: userId,
+        exercise_type: data.exercise_type,
+        category: data.category,
+        duration_minutes: data.duration_minutes,
+        calories_burned: caloriesBurned,
+        calories_estimated: caloriesEstimated,
+        exercise_date: exerciseDate,
+        started_at: data.started_at || null,
+        source,
+        distance_meters: data.distance_meters ?? null,
+        avg_heart_rate: data.avg_heart_rate ?? null,
+        effort_level: data.effort_level ?? null,
+        location_type: data.location_type ?? null,
+        workout_companion: data.workout_companion ?? null,
+        body_areas: bodyAreas,
+        is_indoor: data.is_indoor ?? null,
+        notes: data.notes ?? null,
+        healthkit_workout_id: data.healthkit_workout_id ?? null,
+        source_device_name: data.source_device_name ?? null,
+        is_public: true,
+        counts_as_checkin: countsAsCheckin,
+      };
+      const { data: exercise, error } = await this.insertExerciseRow(
+        supabase,
+        insertRow,
+        data.source_platform ?? null,
+        '*'
+      );
 
-      if (error) {
-        return { data: null, error: new Error(error.message) };
+      if (error || !exercise) {
+        return { data: null, error: new Error(error?.message ?? 'Failed to create exercise') };
       }
 
       // Persist the optional nested structured exercise log (workout_exercises + exercise_sets),
@@ -370,9 +400,12 @@ export class ExerciseService {
           const bodyAreas = DEFAULT_BODY_AREAS[exercise.exercise_type] || ['fullBody'];
           const countsAsCheckin = exercise.duration_minutes >= 10;
 
-          const { data: inserted, error: insertError } = await supabase
-            .from('exercise_logs')
-            .insert({
+          // Stored source is always 'healthkit' ("synced from a health platform") so
+          // released clients keep the synced badge + edit lock; a declared Health
+          // Connect / Google Fit origin goes in source_platform (migration 092).
+          const { data: inserted, error: insertError } = await this.insertExerciseRow(
+            supabase,
+            {
               user_id: userId,
               exercise_type: exercise.exercise_type,
               category: exercise.category,
@@ -394,9 +427,10 @@ export class ExerciseService {
               source_device_name: exercise.source_device_name ?? null,
               is_public: true,
               counts_as_checkin: countsAsCheckin,
-            })
-            .select('id')
-            .single();
+            },
+            exercise.source_platform ?? null,
+            'id'
+          );
 
           if (insertError) {
             // Handle unique constraint violation gracefully

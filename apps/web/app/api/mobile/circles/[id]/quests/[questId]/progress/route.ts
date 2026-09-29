@@ -3,6 +3,7 @@ import { z } from 'zod';
 
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { CircleQuestService } from '@/lib/services/circle-quest-service';
+import { parseLenient, validationMessage } from '@/lib/validation/lenient-parse';
 
 const progressSchema = z.object({
   amount: z.number().positive('Amount must be greater than 0'),
@@ -21,7 +22,7 @@ export async function POST(
     const { questId } = await params;
     const body = await request.json();
 
-    const validated = progressSchema.parse(body);
+    const validated = parseLenient(progressSchema, body);
 
     const result = await CircleQuestService.updateProgress(
       questId,
@@ -43,7 +44,7 @@ export async function POST(
     }
     if (error instanceof z.ZodError) {
       return NextResponse.json(
-        { success: false, data: null, error: { code: 'VALIDATION_ERROR', message: 'Invalid input', details: error.errors } },
+        { success: false, data: null, error: { code: 'VALIDATION_ERROR', message: validationMessage(error), details: error.errors } },
         { status: 400 }
       );
     }

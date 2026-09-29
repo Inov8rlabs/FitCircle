@@ -86,12 +86,45 @@ export interface PendingGroupMealTagDTO {
 // ============================================================================
 // Service inputs (validated at the route).
 // ============================================================================
+// Each macro is individually optional / nullable: the columns are nullable, and the
+// mobile composers let the user fill in only some of them (e.g. calories alone).
+// A full `{calories, proteinG, carbsG, fatG}` object validates exactly as before.
 export const macrosInputSchema = z.object({
-  calories: z.number().nonnegative(),
-  proteinG: z.number().nonnegative(),
-  carbsG: z.number().nonnegative(),
-  fatG: z.number().nonnegative(),
+  calories: z.number().nonnegative().nullish(),
+  proteinG: z.number().nonnegative().nullish(),
+  carbsG: z.number().nonnegative().nullish(),
+  fatG: z.number().nonnegative().nullish(),
 });
+
+const FLAT_MACRO_KEYS = ['calories', 'proteinG', 'carbsG', 'fatG'] as const;
+
+/**
+ * Flat-macro alias for `POST /api/mobile/group-meals`.
+ *
+ * iOS (`CreateGroupMealRequest`) and Android builds before 2026-09-28 send the macros
+ * as FLAT top-level keys (`calories`, `proteinG`, `carbsG`, `fatG`). The schema reads a
+ * nested `macros` object and zod strips unknown keys, so those macros were silently
+ * lost. When `macros` is absent (or null), usable flat values are folded into it.
+ *
+ * Tolerant by design: only finite, non-negative numbers are taken — anything else is
+ * ignored exactly as it was before (the request used to succeed without macros, so it
+ * must not start failing). A nested `macros` object always wins.
+ */
+export function normalizeGroupMealBody(body: unknown): unknown {
+  if (typeof body !== 'object' || body === null || Array.isArray(body)) return body;
+  const input = body as Record<string, unknown>;
+  if (input.macros !== undefined && input.macros !== null) return body;
+
+  const macros: Record<string, number> = {};
+  for (const key of FLAT_MACRO_KEYS) {
+    const value = input[key];
+    if (typeof value === 'number' && Number.isFinite(value) && value >= 0) {
+      macros[key] = value;
+    }
+  }
+  if (Object.keys(macros).length === 0) return body;
+  return { ...input, macros };
+}
 
 export const createGroupMealSchema = z.object({
   fitcircleId: z.string().uuid(),

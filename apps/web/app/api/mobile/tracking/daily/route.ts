@@ -4,6 +4,8 @@ import { z } from 'zod';
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { DailyGoalService } from '@/lib/services/daily-goals';
 import { MobileAPIService } from '@/lib/services/mobile-api-service';
+import { parseLenient, validationMessage } from '@/lib/validation/lenient-parse';
+import { stepsSourceSchema } from '@/lib/validators/steps-source';
 
 // Validation schema for POST
 const trackingSchema = z.object({
@@ -14,7 +16,8 @@ const trackingSchema = z.object({
   energyLevel: z.number().int().min(1).max(10).optional(),
   notes: z.string().optional(),
   // HealthKit integration fields
-  stepsSource: z.enum(['manual', 'healthkit', 'google_fit']).optional(),
+  // Also accepts the aliases apple_health (→ healthkit) and health_connect (→ google_fit).
+  stepsSource: stepsSourceSchema.optional(),
   stepsSyncedAt: z.string().datetime().optional(),
   isOverride: z.boolean().optional(),
   // When false, this is auto-synced data that should NOT count toward streaks
@@ -129,7 +132,7 @@ export async function POST(request: NextRequest) {
 
     // Parse and validate request body
     const body = await request.json();
-    const validatedData = trackingSchema.parse(body);
+    const validatedData = parseLenient(trackingSchema, body);
 
     // Import timezone utilities
     const { getUserTimezone, getTodayInTimezone, isWithinLastNDays, normalizeDateString } = await import('@/lib/utils/timezone');
@@ -256,7 +259,7 @@ export async function POST(request: NextRequest) {
           data: null,
           error: {
             code: 'VALIDATION_ERROR',
-            message: 'Invalid input data',
+            message: validationMessage(error),
             details: error.errors.reduce((acc: any, err) => {
               acc[err.path.join('.')] = err.message;
               return acc;

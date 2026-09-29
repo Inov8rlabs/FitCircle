@@ -10,6 +10,9 @@ const idSchema = z.string().uuid();
  * POST /api/mobile/challenges/daily/[id]/join
  * Join a daily challenge. Idempotent — joining an already-joined challenge
  * returns the existing participant row.
+ *
+ * `data` is the participant row plus three additional keys:
+ * `challenge_id`, `joined: true` and `participant_count`.
  */
 export async function POST(
   _request: NextRequest,
@@ -22,8 +25,23 @@ export async function POST(
 
     const participant = await DailyChallengeService.joinChallenge(user.id, challengeId);
 
+    // Exact count from the participant rows (the denormalized counter on the
+    // challenge is updated in the background and may lag). Never fails the join.
+    const participantCount = await DailyChallengeService.countParticipants(challengeId).catch(
+      () => 1
+    );
+
     return NextResponse.json(
-      { success: true, data: participant, error: null },
+      {
+        success: true,
+        data: {
+          ...participant,
+          challenge_id: challengeId,
+          joined: true,
+          participant_count: Math.max(participantCount, 1),
+        },
+        error: null,
+      },
       { status: 201 }
     );
   } catch (error: unknown) {

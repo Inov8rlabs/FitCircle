@@ -5,6 +5,7 @@ import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { NutritionIntelligenceService } from '@/lib/services/nutrition-intelligence-service';
 import { UpgradeRequiredError } from '@/lib/services/usage-service';
 import { PHOTO_PARSE_MAX_IMAGES, PHOTO_PARSE_MAX_NOTE_CHARS } from '@/lib/types/nutrition';
+import { readParseFallbackOptions } from '@/lib/validation/nutrition-parse-options';
 
 // The vision parse routinely takes 20-40s. Without this, the function is killed at
 // the platform default (~10s) and the request appears to "time out". 60s is the max
@@ -20,6 +21,11 @@ export const maxDuration = 60;
  * the meal, which is fed to the model as context (and preserved if the parse fails). Returns a
  * draft the client shows on a "tap to fix" card; it does NOT create a food log entry. The user
  * confirms, then the existing POST /api/mobile/food-log (or PATCH) commits the entry.
+ *
+ * Optional form fields `skip_fallback_save` ("true") and `existing_entry_id` (uuid) switch
+ * off the Option-B fallback save for re-analysis of a saved entry / "add photo to this
+ * meal" / form prefill — see lib/validation/nutrition-parse-options.ts. Without them the
+ * route behaves exactly as before.
  *
  * Thin route: all nutrition logic lives in NutritionIntelligenceService (§7.2.1).
  */
@@ -42,6 +48,8 @@ export async function POST(request: NextRequest) {
     // (non-string) is ignored rather than crashing the request.
     const rawNote = formData.get('note');
     const note = typeof rawNote === 'string' ? rawNote.trim().slice(0, MAX_NOTE_CHARS) || null : null;
+    // Both absent (every shipped client today) → the Option-B save below is unchanged.
+    const fallback = readParseFallbackOptions((key) => formData.get(key));
 
     if (files.length === 0) {
       return NextResponse.json(
@@ -144,16 +152,28 @@ export async function POST(request: NextRequest) {
       }
 
       let saved: { entryId: string } | null = null;
-      try {
-        saved = await NutritionIntelligenceService.saveUnparsedPhoto(user.id, note);
-        // Attach the photos AFTER responding: a failed parse has already burned up to
-        // ~50s of the 60s budget, and image processing/upload for up to 5 photos would
-        // blow past maxDuration mid-loop. The entry (with savedEntryId) is what the
-        // client needs now; the images land moments later.
-        const entryId = saved.entryId;
-        after(() => NutritionIntelligenceService.attachFallbackImages(entryId, user.id, files));
-      } catch (saveError) {
-        console.error('[Mobile API] Photo parse fallback save failed:', saveError);
+      if (fallback.skipFallbackSave) {
+        // The client is working on an entry that already exists (or on a form it will
+        // save itself): creating a fallback entry would only leave a duplicate behind.
+        // Echo the existing id ONLY when it really is this user's entry.
+        if (
+          fallback.existingEntryId &&
+          (await NutritionIntelligenceService.ownsFoodLogEntry(user.id, fallback.existingEntryId))
+        ) {
+          saved = { entryId: fallback.existingEntryId };
+        }
+      } else {
+        try {
+          saved = await NutritionIntelligenceService.saveUnparsedPhoto(user.id, note);
+          // Attach the photos AFTER responding: a failed parse has already burned up to
+          // ~50s of the 60s budget, and image processing/upload for up to 5 photos would
+          // blow past maxDuration mid-loop. The entry (with savedEntryId) is what the
+          // client needs now; the images land moments later.
+          const entryId = saved.entryId;
+          after(() => NutritionIntelligenceService.attachFallbackImages(entryId, user.id, files));
+        } catch (saveError) {
+          console.error('[Mobile API] Photo parse fallback save failed:', saveError);
+        }
       }
 
       // Route-level correlation log for a real analysis failure (rate-limits are
@@ -172,11 +192,25 @@ export async function POST(request: NextRequest) {
             fileBytes: files.reduce((a, f) => a + f.size, 0),
             hasNote: !!note,
             requestMs: Date.now() - startTime,
-            fallbackSaved: !!saved,
+            fallbackSaved: !!saved && !fallback.skipFallbackSave,
+            fallbackSkipped: fallback.skipFallbackSave,
             savedEntryId: saved?.entryId ?? null,
           })
         );
       }
+
+      // Nothing was saved when the fallback is skipped, so the copy must not claim it was.
+      const message = fallback.skipFallbackSave
+        ? isUpgrade
+          ? `You've used your ${parseError.limit} free AI scans today — go Pro for unlimited.`
+          : isRate
+            ? "You've reached today's photo-estimate limit — you can add the details yourself."
+            : "Couldn't auto-detect the food — you can add the details yourself."
+        : isUpgrade
+          ? `You've used your ${parseError.limit} free AI scans today — go Pro for unlimited. We saved your photo so you can add the details.`
+          : isRate
+            ? "You've reached today's photo-estimate limit — we saved your photo so you can add the details."
+            : "Couldn't auto-detect the food — we saved your photo so you can add the details.";
 
       return NextResponse.json(
         {
@@ -184,13 +218,12 @@ export async function POST(request: NextRequest) {
           data: null,
           error: {
             code: isUpgrade ? 'UPGRADE_REQUIRED' : isRate ? 'RATE_LIMITED' : 'PARSE_FAILED',
-            message: isUpgrade
-              ? `You've used your ${(parseError as UpgradeRequiredError).limit} free AI scans today — go Pro for unlimited. We saved your photo so you can add the details.`
-              : isRate
-                ? "You've reached today's photo-estimate limit — we saved your photo so you can add the details."
-                : "Couldn't auto-detect the food — we saved your photo so you can add the details.",
+            message,
             details: {
               ...(saved ? { savedEntryId: saved.entryId, imageUrls: [] } : {}),
+              // Only present when the client asked for the fallback to be skipped:
+              // tells it that `savedEntryId` (if any) is ITS OWN entry, not a new copy.
+              ...(fallback.skipFallbackSave ? { fallbackSaved: false } : {}),
               ...(isUpgrade
                 ? {
                     feature: (parseError as UpgradeRequiredError).feature,

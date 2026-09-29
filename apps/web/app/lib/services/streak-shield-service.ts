@@ -19,7 +19,12 @@
 
 import { createAdminSupabase } from '../supabase-admin';
 import { StreakClaimError, CLAIM_ERROR_CODES } from '../types/streak-claiming';
-import { MILESTONES, SHIELD_RULES, type StreakMilestoneDef } from '../streaks/streak-config';
+import {
+  MILESTONES,
+  SHIELD_RULES,
+  shieldXpPrice,
+  type StreakMilestoneDef,
+} from '../streaks/streak-config';
 import { addDays, localToday } from '../streaks/streak-calculator';
 import { normalizeTier } from './entitlement-service';
 
@@ -53,6 +58,64 @@ export interface ConsumeResult {
   consumedType: ShieldType | 'pro_unlimited';
   remaining: number;
   unlimited: boolean;
+}
+
+export const SHIELD_PURCHASE_ERROR_CODES = {
+  /** No XP price is configured (STREAK_SHIELD_XP_PRICE switched it off). */
+  PRICE_NOT_CONFIGURED: 'PRICE_NOT_CONFIGURED',
+  /** Migration 095 (engagement_streaks.points_spent) has not been applied. */
+  XP_LEDGER_UNAVAILABLE: 'XP_LEDGER_UNAVAILABLE',
+  /** Pro users have unlimited shields; there is nothing to buy. */
+  SHIELDS_UNLIMITED: 'SHIELDS_UNLIMITED',
+  MAX_SHIELDS_REACHED: 'MAX_SHIELDS_REACHED',
+  INSUFFICIENT_BALANCE: 'INSUFFICIENT_BALANCE',
+  /** Another purchase for the same user settled first (double tap). */
+  PURCHASE_IN_PROGRESS: 'PURCHASE_IN_PROGRESS',
+  /** Any payment method other than XP: there is no verified payment to settle. */
+  PAYMENT_NOT_SUPPORTED: 'PAYMENT_NOT_SUPPORTED',
+} as const;
+
+export type ShieldPurchaseErrorCode =
+  (typeof SHIELD_PURCHASE_ERROR_CODES)[keyof typeof SHIELD_PURCHASE_ERROR_CODES];
+
+export class ShieldPurchaseError extends Error {
+  constructor(
+    message: string,
+    public code: ShieldPurchaseErrorCode,
+    public status: number,
+    public details: Record<string, unknown> = {}
+  ) {
+    super(message);
+    this.name = 'ShieldPurchaseError';
+  }
+}
+
+export interface ShieldPurchaseResult {
+  payment_method: 'xp';
+  /** XP charged for this purchase. */
+  xp_spent: number;
+  /** Spendable XP left: total earned minus total spent. */
+  xp_remaining: number;
+  /** Shields the user holds after the purchase. */
+  new_freeze_count: number;
+}
+
+/** Spendable XP for a user. */
+export interface XpBalance {
+  /** Lifetime XP earned (engagement_streaks.total_points). */
+  earned: number;
+  /** Lifetime XP spent (engagement_streaks.points_spent, migration 095). */
+  spent: number;
+  balance: number;
+}
+
+const OPTIMISTIC_RETRIES = 3;
+
+/** PostgREST / Postgres errors that mean "this column does not exist (yet)". */
+function isMissingColumnError(error: { code?: string; message?: string } | null | undefined): boolean {
+  if (!error) return false;
+  if (error.code === '42703' || error.code === 'PGRST204') return true;
+  return /points_spent/.test(error.message || '') && /does not exist|schema cache/i.test(error.message || '');
 }
 
 export class StreakShieldService {
@@ -328,7 +391,224 @@ export class StreakShieldService {
     console.error(`[StreakShieldService.refund] gave up refunding ${type} for ${userId} after a race`);
   }
 
-  /** Credit purchased shields (IAP / promo). Also capped. */
+  // ==========================================================================
+  // XP PURCHASE
+  // ==========================================================================
+
+  /**
+   * Spendable XP = total_points (earned, only ever grows) - points_spent.
+   * Spending is tracked in its own column so the check-in's
+   * read-modify-write of total_points can never undo a charge.
+   *
+   * Throws XP_LEDGER_UNAVAILABLE while migration 095 is not applied.
+   */
+  static async getXpBalance(userId: string): Promise<XpBalance> {
+    const supabase = createAdminSupabase();
+    const { data, error } = await supabase
+      .from('engagement_streaks')
+      .select('total_points, points_spent')
+      .eq('user_id', userId)
+      .maybeSingle();
+
+    if (error) {
+      if (isMissingColumnError(error)) {
+        throw new ShieldPurchaseError(
+          'Buying shields with XP is not available yet',
+          SHIELD_PURCHASE_ERROR_CODES.XP_LEDGER_UNAVAILABLE,
+          503
+        );
+      }
+      throw error;
+    }
+
+    const earned = Math.max(0, Number(data?.total_points) || 0);
+    const spent = Math.max(0, Number(data?.points_spent) || 0);
+    return { earned, spent, balance: Math.max(0, earned - spent) };
+  }
+
+  /**
+   * Buy one shield with XP: check the balance, charge, grant.
+   *
+   * The charge is a conditional UPDATE guarded by the `points_spent` value
+   * that was read, and the number of affected rows is checked. Two requests
+   * racing (a double tap) read the same value, only one UPDATE matches a row,
+   * and the loser is refused with PURCHASE_IN_PROGRESS without granting
+   * anything. If the grant fails after a successful charge the XP is refunded.
+   *
+   * Never grants a shield without a successful charge.
+   */
+  static async purchaseWithXp(userId: string): Promise<ShieldPurchaseResult> {
+    const price = shieldXpPrice();
+    if (price === null) {
+      throw new ShieldPurchaseError(
+        'Buying shields with XP is not available: no price is configured',
+        SHIELD_PURCHASE_ERROR_CODES.PRICE_NOT_CONFIGURED,
+        503
+      );
+    }
+
+    const inventory = await this.getInventory(userId);
+    if (inventory.unlimited) {
+      throw new ShieldPurchaseError(
+        'Pro members already have unlimited shields',
+        SHIELD_PURCHASE_ERROR_CODES.SHIELDS_UNLIMITED,
+        400
+      );
+    }
+    if (inventory.available >= SHIELD_RULES.MAX_SHIELD_BALANCE) {
+      throw new ShieldPurchaseError(
+        'You already have the maximum number of shields',
+        SHIELD_PURCHASE_ERROR_CODES.MAX_SHIELDS_REACHED,
+        400,
+        { cap: SHIELD_RULES.MAX_SHIELD_BALANCE, available: inventory.available }
+      );
+    }
+
+    const xp = await this.getXpBalance(userId);
+    if (xp.balance < price) {
+      throw new ShieldPurchaseError(
+        `Not enough XP: a shield costs ${price} XP and you have ${xp.balance}`,
+        SHIELD_PURCHASE_ERROR_CODES.INSUFFICIENT_BALANCE,
+        400,
+        { price, xp_balance: xp.balance, xp_missing: price - xp.balance }
+      );
+    }
+
+    // CHARGE — applies only if nobody spent XP since the balance was read.
+    const supabase = createAdminSupabase();
+    const { data: charged, error: chargeError } = await supabase
+      .from('engagement_streaks')
+      .update({ points_spent: xp.spent + price })
+      .eq('user_id', userId)
+      .eq('points_spent', xp.spent)
+      .gte('total_points', xp.spent + price)
+      .select('total_points, points_spent');
+
+    if (chargeError) {
+      if (isMissingColumnError(chargeError)) {
+        throw new ShieldPurchaseError(
+          'Buying shields with XP is not available yet',
+          SHIELD_PURCHASE_ERROR_CODES.XP_LEDGER_UNAVAILABLE,
+          503
+        );
+      }
+      throw chargeError;
+    }
+    if (!charged || charged.length === 0) {
+      throw new ShieldPurchaseError(
+        'Another purchase is already being processed. Check your shields and try again.',
+        SHIELD_PURCHASE_ERROR_CODES.PURCHASE_IN_PROGRESS,
+        409
+      );
+    }
+
+    // GRANT — refund the charge if the shield cannot be banked.
+    let newCount: number | null = null;
+    try {
+      newCount = await this.grantOnePurchased(userId);
+    } catch (grantError) {
+      await this.refundXp(userId, price);
+      throw grantError;
+    }
+    if (newCount === null) {
+      await this.refundXp(userId, price);
+      throw new ShieldPurchaseError(
+        'You already have the maximum number of shields',
+        SHIELD_PURCHASE_ERROR_CODES.MAX_SHIELDS_REACHED,
+        400,
+        { cap: SHIELD_RULES.MAX_SHIELD_BALANCE }
+      );
+    }
+
+    const earnedNow = Math.max(0, Number(charged[0]?.total_points) || xp.earned);
+    return {
+      payment_method: 'xp',
+      xp_spent: price,
+      xp_remaining: Math.max(0, earnedNow - (xp.spent + price)),
+      new_freeze_count: newCount,
+    };
+  }
+
+  /**
+   * Bank exactly one purchased shield with an optimistic-concurrency UPDATE.
+   * Returns the new total, or null when the bank is full.
+   */
+  private static async grantOnePurchased(userId: string): Promise<number | null> {
+    const supabase = createAdminSupabase();
+
+    for (let attempt = 0; attempt < OPTIMISTIC_RETRIES; attempt++) {
+      const inventory = await this.getInventory(userId);
+      if (inventory.available >= SHIELD_RULES.MAX_SHIELD_BALANCE) return null;
+      const seen = inventory.breakdown.purchased;
+
+      const { data: updated, error } = await supabase
+        .from('streak_shields')
+        .update({ available_count: seen + 1 })
+        .eq('user_id', userId)
+        .eq('shield_type', 'purchased')
+        .eq('available_count', seen)
+        .select('available_count');
+      if (error) throw error;
+
+      if (updated && updated.length > 0) {
+        const total = inventory.available + 1;
+        await this.mirrorLegacyBalance(userId, total);
+        return total;
+      }
+
+      if (seen === 0) {
+        // The user has shield rows but no 'purchased' row yet: create it. A
+        // concurrent insert loses on the unique key and the loop re-reads.
+        const { error: insertError } = await supabase
+          .from('streak_shields')
+          .insert({ user_id: userId, shield_type: 'purchased', available_count: 1 });
+        if (!insertError) {
+          const total = inventory.available + 1;
+          await this.mirrorLegacyBalance(userId, total);
+          return total;
+        }
+        if (insertError.code !== '23505') throw insertError;
+      }
+      // Lost a race on the row — re-read and try again.
+    }
+
+    throw new Error('Could not bank the purchased shield after several attempts');
+  }
+
+  /** Give back XP charged for a shield that could not be granted. */
+  private static async refundXp(userId: string, amount: number): Promise<void> {
+    const supabase = createAdminSupabase();
+    try {
+      for (let attempt = 0; attempt < OPTIMISTIC_RETRIES; attempt++) {
+        const { data: row, error: readError } = await supabase
+          .from('engagement_streaks')
+          .select('points_spent')
+          .eq('user_id', userId)
+          .maybeSingle();
+        if (readError) throw readError;
+        const seen = Math.max(0, Number(row?.points_spent) || 0);
+
+        const { data: updated, error } = await supabase
+          .from('engagement_streaks')
+          .update({ points_spent: Math.max(0, seen - amount) })
+          .eq('user_id', userId)
+          .eq('points_spent', seen)
+          .select('points_spent');
+        if (error) throw error;
+        if (updated && updated.length > 0) return;
+      }
+      console.error(`[StreakShieldService.refundXp] gave up refunding ${amount} XP for ${userId} after a race`);
+    } catch (e) {
+      // Needs a manual correction: the user was charged and got no shield.
+      console.error(`[StreakShieldService.refundXp] FAILED to refund ${amount} XP for ${userId}:`, e);
+    }
+  }
+
+  /**
+   * Credit shields for a purchase that was ALREADY settled and verified by the
+   * caller (IAP receipt / promo). Also capped. This method charges nothing:
+   * never call it from a route on the strength of a client's say-so.
+   */
   static async creditPurchased(userId: string, count: number): Promise<number> {
     if (count <= 0) return 0;
     const supabase = createAdminSupabase();

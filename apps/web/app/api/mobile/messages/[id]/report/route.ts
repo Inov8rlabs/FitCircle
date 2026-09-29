@@ -1,8 +1,10 @@
 import { type NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 
+import { readJsonBody } from '@/lib/http/lenient-json-body';
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { CircleChatService } from '@/lib/services/circle-chat-service';
+import { parseLenient, validationMessage } from '@/lib/validation/lenient-parse';
 
 // Validation schema for POST
 const reportSchema = z.object({
@@ -27,8 +29,9 @@ export async function POST(
     const { id } = await params;
 
     // Parse and validate request body
-    const body = await request.json();
-    const { reason } = reportSchema.parse(body);
+    // `reason` is the only field and it is optional: no body at all is a valid report.
+    const body = await readJsonBody(request);
+    const { reason } = parseLenient(reportSchema, body);
 
     const result = await CircleChatService.reportMessage(id, user.id, reason ?? null);
 
@@ -108,7 +111,7 @@ export async function POST(
           data: null,
           error: {
             code: 'VALIDATION_ERROR',
-            message: 'Invalid input data',
+            message: validationMessage(error),
             details: error.errors.reduce((acc: any, err) => {
               acc[err.path.join('.')] = err.message;
               return acc;

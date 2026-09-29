@@ -3,6 +3,7 @@ import { z } from 'zod';
 
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { HealthNutritionService } from '@/lib/services/health-nutrition-service';
+import { parseLenient, validationMessage } from '@/lib/validation/lenient-parse';
 
 /**
  * GET  /api/mobile/health/nutrition-sync — all platforms' sync state for the user.
@@ -30,7 +31,7 @@ export async function POST(request: NextRequest) {
   try {
     const user = await requireMobileAuth(request);
     const body = await request.json();
-    const { platform, enabled } = toggleSchema.parse(body);
+    const { platform, enabled } = parseLenient(toggleSchema, body);
     const state = await HealthNutritionService.setEnabled(user.id, platform, enabled);
     return NextResponse.json({ success: true, data: state, meta: { requestTime: Date.now() - startTime }, error: null });
   } catch (error: any) {
@@ -47,7 +48,7 @@ function mapError(error: any) {
   }
   if (error instanceof z.ZodError) {
     return NextResponse.json(
-      { success: false, data: null, error: { code: 'VALIDATION_ERROR', message: 'Invalid input', details: error.errors.reduce((a: any, e) => { a[e.path.join('.')] = e.message; return a; }, {}), timestamp: new Date().toISOString() }, meta: null },
+      { success: false, data: null, error: { code: 'VALIDATION_ERROR', message: validationMessage(error), details: error.errors.reduce((a: any, e) => { a[e.path.join('.')] = e.message; return a; }, {}), timestamp: new Date().toISOString() }, meta: null },
       { status: 400 }
     );
   }

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 
 import { REACTION_KINDS } from '@/lib/types/food-feed';
+import { validationMessage } from '@/lib/validation/lenient-parse';
 
 /**
  * Shared error→HTTP mapper for the food-log reaction routes (§6.3).
@@ -45,7 +46,7 @@ export function mapReactionError(error: any, label: string) {
           }, {})
         : { reaction: `Expected one of: ${REACTION_KINDS.join(', ')}` };
     return NextResponse.json(
-      { success: false, data: null, error: { code: 'VALIDATION_ERROR', message: 'Invalid input data', details, timestamp: new Date().toISOString() }, meta: null },
+      { success: false, data: null, error: { code: 'VALIDATION_ERROR', message: error instanceof z.ZodError ? validationMessage(error) : 'Invalid input data', details, timestamp: new Date().toISOString() }, meta: null },
       { status: 400 }
     );
   }

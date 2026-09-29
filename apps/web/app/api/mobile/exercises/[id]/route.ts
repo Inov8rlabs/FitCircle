@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { ExerciseService } from '@/lib/services/exercise-service';
 import type { ExerciseLogCreateInput } from '@/lib/types/exercise';
+import { parseLenient, validationMessage } from '@/lib/validation/lenient-parse';
 import {
   exercisesArraySchema,
   mapExercisesToInput,
@@ -78,7 +79,7 @@ export async function PUT(
     const user = await requireMobileAuth(request);
     const { id } = await params;
     const body = await request.json();
-    const validated = updateExerciseSchema.parse(body);
+    const validated = parseLenient(updateExerciseSchema, body);
 
     const supabaseAdmin = createAdminSupabase();
 
@@ -127,6 +128,7 @@ export async function PUT(
           success: false,
           error: {
             code: 'VALIDATION_ERROR',
+            message: validationMessage(error),
             details: error.errors.reduce(
               (acc: Record<string, string>, err) => {
                 acc[err.path.join('.')] = err.message;

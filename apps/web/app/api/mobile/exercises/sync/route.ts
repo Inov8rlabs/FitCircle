@@ -5,6 +5,8 @@ import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { ExerciseService } from '@/lib/services/exercise-service';
 import { createAdminSupabase } from '@/lib/supabase-admin';
 import { resolveClientTimezone } from '@/lib/streaks/client-timezone';
+import { parseLenient, validationMessage } from '@/lib/validation/lenient-parse';
+import { exerciseSourceInputSchema, resolveExerciseSource } from '@/lib/validators/exercise-source';
 
 const exerciseItemSchema = z.object({
   exerciseType: z.string().min(1).max(50),
@@ -22,7 +24,9 @@ const exerciseItemSchema = z.object({
   startedAt: z.string().datetime().optional(),
   healthkitWorkoutId: z.string().max(100),
   sourceDeviceName: z.string().max(100).optional(),
-  source: z.enum(['manual', 'healthkit']).optional().default('healthkit'),
+  // Accepts health_connect / google_fit too; the row is stored as 'healthkit' and the
+  // declared origin goes in source_platform (lib/validators/exercise-source.ts).
+  source: exerciseSourceInputSchema.optional().default('healthkit'),
 });
 
 const bulkSyncSchema = z.object({
@@ -41,28 +45,32 @@ export async function POST(request: NextRequest) {
   try {
     const user = await requireMobileAuth(request);
     const body = await request.json();
-    const validated = bulkSyncSchema.parse(body);
+    const validated = parseLenient(bulkSyncSchema, body);
 
     const supabaseAdmin = createAdminSupabase();
 
-    const exercises = validated.exercises.map((e) => ({
-      exercise_type: e.exerciseType,
-      category: e.category,
-      duration_minutes: e.durationMinutes,
-      calories_burned: e.caloriesBurned,
-      distance_meters: e.distanceMeters,
-      avg_heart_rate: e.avgHeartRate,
-      effort_level: e.effortLevel,
-      location_type: e.locationType,
-      workout_companion: e.workoutCompanion,
-      is_indoor: e.isIndoor,
-      notes: e.notes,
-      date: e.date,
-      started_at: e.startedAt,
-      healthkit_workout_id: e.healthkitWorkoutId,
-      source_device_name: e.sourceDeviceName,
-      source: e.source,
-    }));
+    const exercises = validated.exercises.map((e) => {
+      const { source, sourcePlatform } = resolveExerciseSource(e.source, 'healthkit');
+      return {
+        exercise_type: e.exerciseType,
+        category: e.category,
+        duration_minutes: e.durationMinutes,
+        calories_burned: e.caloriesBurned,
+        distance_meters: e.distanceMeters,
+        avg_heart_rate: e.avgHeartRate,
+        effort_level: e.effortLevel,
+        location_type: e.locationType,
+        workout_companion: e.workoutCompanion,
+        is_indoor: e.isIndoor,
+        notes: e.notes,
+        date: e.date,
+        started_at: e.startedAt,
+        healthkit_workout_id: e.healthkitWorkoutId,
+        source_device_name: e.sourceDeviceName,
+        source,
+        source_platform: sourcePlatform,
+      };
+    });
 
     // Synced workouts of >= 10 min claim their streak day (workout-claim-policy);
     // the outcome rides back in meta.streak so the client can refresh the card.
@@ -99,6 +107,7 @@ export async function POST(request: NextRequest) {
           success: false,
           error: {
             code: 'VALIDATION_ERROR',
+            message: validationMessage(error),
             details: error.errors.reduce(
               (acc: Record<string, string>, err) => {
                 acc[err.path.join('.')] = err.message;

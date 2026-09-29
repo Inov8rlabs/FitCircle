@@ -5,6 +5,7 @@ import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { BodyCompositionService, stripSegmentalData } from '@/lib/services/body-composition-service';
 import { EntitlementService } from '@/lib/services/entitlement-service';
 import { bodyCompUpdateSchema } from '@/lib/types/body-composition';
+import { parseLenient, validationMessage } from '@/lib/validation/lenient-parse';
 
 /**
  * PUT    /api/mobile/body-comp/{id} — partial update → BodyCompLog.
@@ -22,7 +23,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     const { id } = await params;
     const logId = idSchema.parse(id);
     const body = await request.json();
-    const patch = bodyCompUpdateSchema.parse(body);
+    const patch = parseLenient(bodyCompUpdateSchema, body);
     const canSegmental = await EntitlementService.isFeatureAllowed(user.id, 'body_comp_segmental');
     if (!canSegmental) delete patch.segmental;
     const log = await BodyCompositionService.updateLog(user.id, logId, patch);
@@ -84,7 +85,7 @@ function mapError(error: any) {
   }
   if (error instanceof z.ZodError) {
     return NextResponse.json(
-      { success: false, data: null, error: { code: 'VALIDATION_ERROR', message: 'Invalid input', details: error.errors.reduce((a: any, e) => { a[e.path.join('.')] = e.message; return a; }, {}), timestamp: new Date().toISOString() }, meta: null },
+      { success: false, data: null, error: { code: 'VALIDATION_ERROR', message: validationMessage(error), details: error.errors.reduce((a: any, e) => { a[e.path.join('.')] = e.message; return a; }, {}), timestamp: new Date().toISOString() }, meta: null },
       { status: 400 }
     );
   }

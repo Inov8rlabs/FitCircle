@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { NutritionIntelligenceService } from '@/lib/services/nutrition-intelligence-service';
 import { UpgradeRequiredError } from '@/lib/services/usage-service';
+import { safeParseLenient } from '@/lib/validation/lenient-parse';
 
 // LLM parse can exceed the platform default function timeout; give it room.
 export const maxDuration = 60;
@@ -50,7 +51,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const parsed = bodySchema.safeParse(json);
+    const parsed = safeParseLenient(bodySchema, json);
     if (!parsed.success) {
       return NextResponse.json(
         {

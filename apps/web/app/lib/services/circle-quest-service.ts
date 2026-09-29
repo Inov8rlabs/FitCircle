@@ -43,6 +43,48 @@ export interface QuestWithProgress {
   completion_pct: number;
 }
 
+/** circle_quests.status (CHECK circle_quests_status_check). */
+export const QUEST_STATUSES = ['pending', 'active', 'completed', 'expired'] as const;
+export type QuestStatus = (typeof QUEST_STATUSES)[number];
+
+/** What the quest list has always returned when no filter is given. */
+export const DEFAULT_QUEST_STATUSES: readonly QuestStatus[] = ['active', 'pending'];
+
+const QUEST_STATUS_ALIASES: Record<string, readonly QuestStatus[]> = {
+  pending: ['pending'],
+  upcoming: ['pending'], // the apps call a pending quest "upcoming"
+  active: ['active'],
+  completed: ['completed'],
+  expired: ['expired'],
+  current: DEFAULT_QUEST_STATUSES,
+  open: DEFAULT_QUEST_STATUSES,
+  ended: ['completed', 'expired'],
+  past: ['completed', 'expired'],
+  all: QUEST_STATUSES,
+};
+
+/**
+ * Turn the `status` query value of the quest list into the statuses to return.
+ *
+ * Accepts one value or a comma-separated list (`completed,expired`), in any
+ * case. Absent, empty or entirely unknown values give the default
+ * (active + pending), so a request without the parameter behaves exactly as it
+ * always did and a typo can never turn into an error.
+ */
+export function resolveQuestStatuses(raw: string | null | undefined): QuestStatus[] {
+  if (!raw) return [...DEFAULT_QUEST_STATUSES];
+
+  const wanted = new Set<QuestStatus>();
+  for (const token of raw.split(',')) {
+    const statuses = QUEST_STATUS_ALIASES[token.trim().toLowerCase()];
+    statuses?.forEach((status) => wanted.add(status));
+  }
+
+  if (wanted.size === 0) return [...DEFAULT_QUEST_STATUSES];
+  // Stable order, independent of how the query was written.
+  return QUEST_STATUSES.filter((status) => wanted.has(status));
+}
+
 export interface QuestLeaderboardEntry {
   rank: number;
   user_id: string;
@@ -151,6 +193,18 @@ export class CircleQuestService {
     fitcircleId: string,
     userId: string
   ): Promise<QuestWithProgress[]> {
+    return this.getQuests(fitcircleId, userId, DEFAULT_QUEST_STATUSES);
+  }
+
+  /**
+   * List a circle's quests in the given statuses (default: active + pending),
+   * newest first, enriched with user progress and participant count.
+   */
+  static async getQuests(
+    fitcircleId: string,
+    userId: string,
+    statuses: readonly QuestStatus[] = DEFAULT_QUEST_STATUSES
+  ): Promise<QuestWithProgress[]> {
     const supabaseAdmin = createAdminSupabase();
 
     // Verify membership
@@ -160,7 +214,7 @@ export class CircleQuestService {
       .from('circle_quests')
       .select('*')
       .eq('fitcircle_id', fitcircleId)
-      .in('status', ['active', 'pending'])
+      .in('status', statuses.length > 0 ? [...statuses] : [...DEFAULT_QUEST_STATUSES])
       .order('created_at', { ascending: false });
 
     if (error) throw error;

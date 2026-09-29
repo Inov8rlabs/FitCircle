@@ -49,6 +49,36 @@ export interface LeaderboardEntry {
   progress: number;
   is_completed: boolean;
   completed_at: string | null;
+  /**
+   * 1-based competition rank: 1 + the number of participants with strictly
+   * more progress, so ties share a rank. Same rule as the progress route.
+   */
+  rank: number;
+}
+
+export interface LeaderboardWithViewer {
+  entries: LeaderboardEntry[];
+  /** The requesting user's own row, even when it is outside the top `limit`. Null until they join. */
+  user_entry: LeaderboardEntry | null;
+  /** Same as `user_entry.rank`; null until the user joins. */
+  user_rank: number | null;
+  total_participants: number;
+}
+
+export interface DailyChallengeUserProgress {
+  challenge_id: string;
+  /** Absolute units of the challenge (`goal_amount` / `unit`), never a 0-1 fraction. */
+  user_progress: number;
+  is_completed: boolean;
+  /** 0 when the user has not joined. */
+  rank: number;
+  user_joined: boolean;
+}
+
+/** PostgREST returns `numeric` as a number, but tolerate a string just in case. */
+function toNumber(value: unknown): number {
+  const n = typeof value === 'number' ? value : Number(value);
+  return Number.isFinite(n) ? n : 0;
 }
 
 // ============================================================================
@@ -269,7 +299,14 @@ export class DailyChallengeService {
     userId: string,
     challengeId: string,
     progress: number
-  ): Promise<{ progress: number; is_completed: boolean; completed_at: string | null }> {
+  ): Promise<{
+    progress: number;
+    is_completed: boolean;
+    completed_at: string | null;
+    challenge_id: string;
+    user_progress: number;
+    rank: number;
+  }> {
     const supabaseAdmin = createAdminSupabase();
 
     console.log(`[DailyChallengeService.updateProgress] User ${userId}, challenge ${challengeId}, progress: ${progress}`);
@@ -278,11 +315,18 @@ export class DailyChallengeService {
     const challenge = await this.getChallengeById(challengeId);
     if (!challenge) throw new Error('Challenge not found');
 
+    const existing = await this.getParticipant(challengeId, userId);
+    if (!existing) throw new Error('Not a participant');
+
     const goalAmount = challenge.goal_amount;
 
-    // Check auto-completion
+    // Check auto-completion. A user who was already complete keeps the
+    // original completion time when they post progress again.
+    const wasCompleted = existing.is_completed === true;
     const isCompleted = progress >= goalAmount;
-    const completedAt = isCompleted ? new Date().toISOString() : null;
+    const completedAt = isCompleted
+      ? (wasCompleted && existing.completed_at) || new Date().toISOString()
+      : null;
 
     const { data, error } = await supabaseAdmin
       .from('daily_challenge_participants')
@@ -301,9 +345,10 @@ export class DailyChallengeService {
       throw error;
     }
 
-    // If just completed, increment completion count
-    if (isCompleted && !data.completed_at) {
-      this.updateCompletionCount(challengeId, 1).catch((err) =>
+    // Keep the challenge's completion counter in step with the transition.
+    // (It used to compare against the row AFTER the update, so it never moved.)
+    if (isCompleted !== wasCompleted) {
+      this.updateCompletionCount(challengeId, isCompleted ? 1 : -1).catch((err) =>
         console.error('[DailyChallengeService.updateProgress] Completion count error:', err)
       );
     }
@@ -312,7 +357,77 @@ export class DailyChallengeService {
       progress: data.progress,
       is_completed: data.is_completed,
       completed_at: data.completed_at,
+      // Additional fields (same names as GET .../progress) so a client can
+      // decode both responses with one model.
+      challenge_id: challengeId,
+      user_progress: toNumber(data.progress),
+      // The write already succeeded; a failed rank lookup must not fail it.
+      rank: await this.getRankForProgress(challengeId, toNumber(data.progress)).catch((err) => {
+        console.error('[DailyChallengeService.updateProgress] Rank lookup error:', err);
+        return 0;
+      }),
     };
+  }
+
+  // ============================================================================
+  // READ PROGRESS
+  // ============================================================================
+
+  /**
+   * The user's own progress and rank on a challenge. A user who has not
+   * joined gets zeros (never a 404) so clients can render a default state.
+   */
+  static async getUserProgress(
+    userId: string,
+    challengeId: string
+  ): Promise<DailyChallengeUserProgress> {
+    const participant = await this.getParticipant(challengeId, userId);
+
+    if (!participant) {
+      return {
+        challenge_id: challengeId,
+        user_progress: 0,
+        is_completed: false,
+        rank: 0,
+        user_joined: false,
+      };
+    }
+
+    const progress = toNumber(participant.progress);
+    return {
+      challenge_id: challengeId,
+      user_progress: progress,
+      is_completed: participant.is_completed === true,
+      rank: await this.getRankForProgress(challengeId, progress),
+      user_joined: true,
+    };
+  }
+
+  /** Number of users who joined the challenge (exact, from the participant rows). */
+  static async countParticipants(challengeId: string): Promise<number> {
+    const supabaseAdmin = createAdminSupabase();
+
+    const { count, error } = await supabaseAdmin
+      .from('daily_challenge_participants')
+      .select('user_id', { count: 'exact', head: true })
+      .eq('daily_challenge_id', challengeId);
+
+    if (error) throw error;
+    return count ?? 0;
+  }
+
+  /** 1 + the number of participants with strictly more progress. */
+  static async getRankForProgress(challengeId: string, progress: number): Promise<number> {
+    const supabaseAdmin = createAdminSupabase();
+
+    const { count, error } = await supabaseAdmin
+      .from('daily_challenge_participants')
+      .select('user_id', { count: 'exact', head: true })
+      .eq('daily_challenge_id', challengeId)
+      .gt('progress', progress);
+
+    if (error) throw error;
+    return (count ?? 0) + 1;
   }
 
   // ============================================================================
@@ -320,7 +435,8 @@ export class DailyChallengeService {
   // ============================================================================
 
   /**
-   * Get today's challenge participants ranked by progress.
+   * Get today's challenge participants ranked by progress. Every row carries
+   * its `rank` (ties share a rank).
    */
   static async getLeaderboard(challengeId: string, limit: number = 20): Promise<LeaderboardEntry[]> {
     const supabaseAdmin = createAdminSupabase();
@@ -343,8 +459,17 @@ export class DailyChallengeService {
       throw error;
     }
 
-    return (data || []).map((row: Record<string, unknown>) => {
+    // The list starts at the top, so the competition rank of a row is the
+    // rank of the previous row when they tie, otherwise its 1-based position.
+    let previousProgress: number | null = null;
+    let previousRank = 0;
+
+    return (data || []).map((row: Record<string, unknown>, index: number) => {
       const profile = row.profiles as Record<string, unknown>;
+      const progress = toNumber(row.progress);
+      const rank = previousProgress !== null && progress === previousProgress ? previousRank : index + 1;
+      previousProgress = progress;
+      previousRank = rank;
       return {
         user_id: row.user_id as string,
         display_name: (profile?.display_name as string) || 'Anonymous',
@@ -352,8 +477,68 @@ export class DailyChallengeService {
         progress: row.progress as number,
         is_completed: row.is_completed as boolean,
         completed_at: row.completed_at as string | null,
+        rank,
       };
     });
+  }
+
+  /**
+   * Leaderboard plus the requesting user's own row and rank, which a client
+   * needs when the user is outside the top `limit`.
+   */
+  static async getLeaderboardWithViewer(
+    challengeId: string,
+    limit: number,
+    viewerId: string
+  ): Promise<LeaderboardWithViewer> {
+    const supabaseAdmin = createAdminSupabase();
+
+    const [entries, participant, totalParticipants] = await Promise.all([
+      this.getLeaderboard(challengeId, limit),
+      this.getParticipant(challengeId, viewerId),
+      this.countParticipants(challengeId).catch(() => 0),
+    ]);
+
+    if (!participant) {
+      return { entries, user_entry: null, user_rank: null, total_participants: totalParticipants };
+    }
+
+    const inList = entries.find((entry) => entry.user_id === viewerId);
+    if (inList) {
+      return {
+        entries,
+        user_entry: inList,
+        user_rank: inList.rank,
+        total_participants: totalParticipants,
+      };
+    }
+
+    const [rank, profileResult] = await Promise.all([
+      this.getRankForProgress(challengeId, toNumber(participant.progress)),
+      supabaseAdmin
+        .from('profiles')
+        .select('display_name, avatar_url')
+        .eq('id', viewerId)
+        .maybeSingle(),
+    ]);
+
+    const profile = profileResult.data as { display_name?: string | null; avatar_url?: string | null } | null;
+    const userEntry: LeaderboardEntry = {
+      user_id: viewerId,
+      display_name: profile?.display_name || 'Anonymous',
+      avatar_url: profile?.avatar_url || null,
+      progress: participant.progress,
+      is_completed: participant.is_completed,
+      completed_at: participant.completed_at,
+      rank,
+    };
+
+    return {
+      entries,
+      user_entry: userEntry,
+      user_rank: rank,
+      total_participants: totalParticipants,
+    };
   }
 
   // ============================================================================

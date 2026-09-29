@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { addAutoRefreshHeaders } from '@/lib/middleware/mobile-auto-refresh';
 import { createAdminSupabase } from '@/lib/supabase-admin';
+import { parseLenient, validationMessage } from '@/lib/validation/lenient-parse';
 
 /**
  * Validation schema for profile settings
@@ -38,7 +39,7 @@ export async function PUT(request: NextRequest) {
     const body = await request.json();
 
     // Validate input
-    const validatedData = settingsSchema.parse(body);
+    const validatedData = parseLenient(settingsSchema, body);
 
     // Additional validation: Check age if date_of_birth provided
     if (validatedData.date_of_birth) {
@@ -116,7 +117,7 @@ export async function PUT(request: NextRequest) {
           data: null,
           error: {
             code: 'VALIDATION_ERROR',
-            message: 'Invalid input data',
+            message: validationMessage(error),
             details: error.errors,
             timestamp: new Date().toISOString(),
           },

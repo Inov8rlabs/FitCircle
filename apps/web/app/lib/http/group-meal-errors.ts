@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 
+import { validationMessage } from '@/lib/validation/lenient-parse';
+
 /**
  * Shared error → envelope mapper for the group-meal mobile routes (PRD §6.12).
  * Matches the envelope convention used across /api/mobile (success/data/error/meta).
@@ -35,7 +37,7 @@ export function groupMealErrorResponse(error: any, startTime: number): NextRespo
         data: null,
         error: {
           code: 'VALIDATION_ERROR',
-          message: 'Invalid input data',
+          message: validationMessage(error),
           details: error.errors.reduce((acc: Record<string, string>, err) => {
             acc[err.path.join('.')] = err.message;
             return acc;

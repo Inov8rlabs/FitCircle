@@ -2,7 +2,12 @@ import { type NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
-import { CircleQuestService, type CreateQuestInput } from '@/lib/services/circle-quest-service';
+import {
+  CircleQuestService,
+  resolveQuestStatuses,
+  type CreateQuestInput,
+} from '@/lib/services/circle-quest-service';
+import { parseLenient, validationMessage } from '@/lib/validation/lenient-parse';
 
 const createQuestSchema = z.object({
   quest_name: z.string().min(3).max(100),
@@ -20,7 +25,13 @@ const createQuestSchema = z.object({
 
 /**
  * GET /api/mobile/circles/[id]/quests
- * List active quests for a circle
+ * List quests for a circle.
+ *
+ * Query params:
+ * - status (optional): `active`, `pending` (alias `upcoming`), `completed`,
+ *   `expired`, `ended` (completed + expired), `all`, or a comma-separated list.
+ *   Default, and the fallback for unknown values: active + pending, which is
+ *   what this route returned before the parameter existed.
  */
 export async function GET(
   request: NextRequest,
@@ -30,7 +41,8 @@ export async function GET(
     const user = await requireMobileAuth(request);
     const { id: circleId } = await params;
 
-    const quests = await CircleQuestService.getActiveQuests(circleId, user.id);
+    const statuses = resolveQuestStatuses(new URL(request.url).searchParams.get('status'));
+    const quests = await CircleQuestService.getQuests(circleId, user.id, statuses);
 
     return NextResponse.json({
       success: true,
@@ -70,7 +82,7 @@ export async function POST(
     const { id: circleId } = await params;
     const body = await request.json();
 
-    const validated = createQuestSchema.parse(body);
+    const validated = parseLenient(createQuestSchema, body);
 
     const quest = await CircleQuestService.createQuest(
       circleId,
@@ -92,7 +104,7 @@ export async function POST(
     }
     if (error instanceof z.ZodError) {
       return NextResponse.json(
-        { success: false, data: null, error: { code: 'VALIDATION_ERROR', message: 'Invalid input', details: error.errors } },
+        { success: false, data: null, error: { code: 'VALIDATION_ERROR', message: validationMessage(error), details: error.errors } },
         { status: 400 }
       );
     }

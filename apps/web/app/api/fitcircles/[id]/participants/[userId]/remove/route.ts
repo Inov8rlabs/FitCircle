@@ -1,8 +1,15 @@
 import { type NextRequest, NextResponse } from 'next/server';
 
-import { createAdminSupabase } from '@/lib/supabase-admin';
+import { CircleService } from '@/lib/services/circle-service';
 import { createServerSupabase } from '@/lib/supabase-server';
 
+/**
+ * POST /api/fitcircles/[id]/participants/[userId]/remove (cookie auth, web).
+ *
+ * The rules live in CircleService.removeParticipant, shared with the mobile
+ * route DELETE /api/mobile/circles/[id]/participants/[userId]. Status codes and
+ * bodies are the ones this route always returned.
+ */
 export async function POST(
   request: NextRequest,
   context: { params: Promise<{ id: string; userId: string }> }
@@ -18,39 +25,31 @@ export async function POST(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Get the challenge to verify ownership
-    const { data: challenge, error: fetchError } = await supabase
-      .from('fitcircles')
-      .select('creator_id')
-      .eq('id', challengeId)
-      .single();
-
-    if (fetchError || !challenge) {
-      return NextResponse.json({ error: 'Challenge not found' }, { status: 404 });
-    }
-
-    // Only creator can remove participants
-    if (challenge.creator_id !== user.id) {
-      return NextResponse.json({ error: 'Only the creator can remove participants' }, { status: 403 });
-    }
-
-    // Cannot remove the creator
-    if (participantId === challenge.creator_id) {
-      return NextResponse.json({ error: 'Cannot remove the creator' }, { status: 400 });
-    }
-
-    // Use admin client to actually delete the participant (bypasses RLS)
-    const supabaseAdmin = createAdminSupabase();
-
-    const { error: deleteError } = await supabaseAdmin
-      .from('fitcircle_members')
-      .delete()
-      .eq('fitcircle_id', challengeId)
-      .eq('user_id', participantId);
-
-    if (deleteError) {
-      console.error('Error removing participant:', deleteError);
+    let result;
+    try {
+      // As before: the circle is read through the cookie (RLS) client, and
+      // removing someone who is not (or no longer) in the circle answers success.
+      result = await CircleService.removeParticipant(user.id, challengeId, participantId, {
+        requireMembership: false,
+        circleClient: supabase,
+      });
+    } catch (removeError) {
+      console.error('Error removing participant:', removeError);
       return NextResponse.json({ error: 'Failed to remove participant' }, { status: 500 });
+    }
+
+    if (!result.ok) {
+      switch (result.reason) {
+        case 'CIRCLE_NOT_FOUND':
+          return NextResponse.json({ error: 'Challenge not found' }, { status: 404 });
+        case 'NOT_CREATOR':
+          return NextResponse.json({ error: 'Only the creator can remove participants' }, { status: 403 });
+        case 'CANNOT_REMOVE_CREATOR':
+        case 'CANNOT_REMOVE_SELF':
+          return NextResponse.json({ error: 'Cannot remove the creator' }, { status: 400 });
+        case 'NOT_A_MEMBER':
+          return NextResponse.json({ error: 'Failed to remove participant' }, { status: 500 });
+      }
     }
 
     return NextResponse.json({ success: true, message: 'Participant removed successfully' });

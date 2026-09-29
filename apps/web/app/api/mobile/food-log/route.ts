@@ -13,7 +13,12 @@ import { FoodLogService } from '@/lib/services/food-log-service';
 import { StreakClaimingService } from '@/lib/services/streak-claiming-service';
 import { resolveClientTimezone } from '@/lib/streaks/client-timezone';
 import { createAdminSupabase } from '@/lib/supabase-admin';
-import { CreateFoodLogEntrySchema, FoodLogQuerySchema } from '@/lib/validation/food-log-validation';
+import {
+  CreateFoodLogEntrySchema,
+  FoodLogQuerySchema,
+  normalizeFoodLogEntryAliases,
+} from '@/lib/validation/food-log-validation';
+import { parseLenient, validationMessage } from '@/lib/validation/lenient-parse';
 
 /**
  * GET /api/mobile/food-log
@@ -242,8 +247,14 @@ export async function POST(request: NextRequest) {
     }
 
     // Parse and validate request body
+    // Tolerant parse: `entry_type: "snack"` is an alias for food + meal_type snack
+    // (iOS 1.0 sends it), and an explicit JSON null on an optional field is treated
+    // as "not sent" instead of a 400.
     const body = await request.json();
-    const validatedData = CreateFoodLogEntrySchema.parse(body);
+    const validatedData = parseLenient(
+      CreateFoodLogEntrySchema,
+      normalizeFoodLogEntryAliases(body)
+    );
 
     // Create entry
     const result = await FoodLogService.createEntry(user.id, validatedData, supabase);
@@ -305,7 +316,7 @@ export async function POST(request: NextRequest) {
           data: null,
           error: {
             code: 'VALIDATION_ERROR',
-            message: 'Invalid input data',
+            message: validationMessage(error),
             details: error.errors.reduce((acc: any, err) => {
               acc[err.path.join('.')] = err.message;
               return acc;

@@ -6,11 +6,13 @@ import { ExerciseService } from '@/lib/services/exercise-service';
 import { StreakClaimingService } from '@/lib/services/streak-claiming-service';
 import { resolveClientTimezone } from '@/lib/streaks/client-timezone';
 import { workoutCountsForStreak } from '@/lib/streaks/workout-claim-policy';
+import { parseLenient, validationMessage } from '@/lib/validation/lenient-parse';
 import {
   exercisesArraySchema,
   mapExercisesToInput,
 } from '@/lib/validators/exercise-nested';
 import { createAdminSupabase } from '@/lib/supabase-admin';
+import { exerciseSourceInputSchema, resolveExerciseSource } from '@/lib/validators/exercise-source';
 
 const createExerciseSchema = z.object({
   exerciseType: z.string().min(1).max(50),
@@ -28,7 +30,9 @@ const createExerciseSchema = z.object({
   startedAt: z.string().datetime().optional(),
   healthkitWorkoutId: z.string().max(100).optional(),
   sourceDeviceName: z.string().max(100).optional(),
-  source: z.enum(['manual', 'healthkit']).optional().default('manual'),
+  // Accepts health_connect / google_fit too; stored as 'healthkit' + source_platform
+  // (see lib/validators/exercise-source.ts for why the stored value never changes).
+  source: exerciseSourceInputSchema.optional().default('manual'),
   autoClaimStreak: z.boolean().optional(),
   exercises: exercisesArraySchema.optional(),
 });
@@ -43,7 +47,8 @@ export async function POST(request: NextRequest) {
   try {
     const user = await requireMobileAuth(request);
     const body = await request.json();
-    const validated = createExerciseSchema.parse(body);
+    const validated = parseLenient(createExerciseSchema, body);
+    const { source, sourcePlatform } = resolveExerciseSource(validated.source, 'manual');
 
     const supabaseAdmin = createAdminSupabase();
     const timezone = resolveClientTimezone(request, body?.timezone);
@@ -67,7 +72,8 @@ export async function POST(request: NextRequest) {
         started_at: validated.startedAt,
         healthkit_workout_id: validated.healthkitWorkoutId,
         source_device_name: validated.sourceDeviceName,
-        source: validated.source,
+        source,
+        source_platform: sourcePlatform,
         auto_claim_streak: validated.autoClaimStreak,
         exercises: validated.exercises ? mapExercisesToInput(validated.exercises) : undefined,
       },
@@ -86,7 +92,7 @@ export async function POST(request: NextRequest) {
     // is real effort, however it was recorded). The request's legacy
     // `autoClaimStreak` flag no longer decides — the policy lives server-side
     // in workout-claim-policy so all clients behave identically.
-    const countsForStreak = workoutCountsForStreak(validated.durationMinutes, validated.source ?? 'manual');
+    const countsForStreak = workoutCountsForStreak(validated.durationMinutes, source);
     const streak = countsForStreak
       ? await StreakClaimingService.autoClaimForManualLog(user.id, {
           occurredAt: result.data?.exercise?.exercise_date ?? validated.date ?? validated.startedAt ?? null,
@@ -118,6 +124,7 @@ export async function POST(request: NextRequest) {
           success: false,
           error: {
             code: 'VALIDATION_ERROR',
+            message: validationMessage(error),
             details: error.errors.reduce(
               (acc: Record<string, string>, err) => {
                 acc[err.path.join('.')] = err.message;

@@ -3,6 +3,7 @@ import { z } from 'zod';
 
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { AssessmentService } from '@/lib/services/assessment-service';
+import { parseLenient, validationMessage } from '@/lib/validation/lenient-parse';
 
 const assessmentSchema = z.object({
   exercise_frequency: z.enum(['never', '1-2x_week', '3-4x_week', 'daily']),
@@ -25,7 +26,7 @@ export async function POST(request: NextRequest) {
     const user = await requireMobileAuth(request);
 
     const body = await request.json();
-    const responses = assessmentSchema.parse(body);
+    const responses = parseLenient(assessmentSchema, body);
 
     const result = await AssessmentService.submitAssessment(user.id, responses);
 
@@ -64,7 +65,7 @@ export async function POST(request: NextRequest) {
           data: null,
           error: {
             code: 'VALIDATION_ERROR',
-            message: 'Invalid assessment data',
+            message: validationMessage(error),
             details: error.errors.reduce((acc: any, err: any) => {
               acc[err.path.join('.')] = err.message;
               return acc;

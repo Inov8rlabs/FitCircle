@@ -24,17 +24,33 @@ export const BeverageCategoryEnum = z.enum([
 ]);
 
 /**
- * Temperature options
+ * Customisation enums — TWO spellings are accepted on input.
+ *
+ * The mobile apps are the only clients that set size / temperature / milk, and both
+ * encode AND decode the camelCase spellings: iOS `BeverageCustomizations.BeverageSize`
+ * (`extraLarge`), `.Temperature` (`room`), `.MilkType` (`cream`) are strict
+ * `String`-backed `Codable` enums, Android uses the same `@SerialName`s. The schema
+ * used to accept only `extra_large` / `room_temp` and had no `cream`, so choosing
+ * XL, Room Temp or Heavy Cream was a 400 on both platforms.
+ *
+ * The value that is STORED and RETURNED is always the client spelling
+ * (see `toClientBeverageCustomizations`): iOS cannot decode `extra_large` /
+ * `room_temp` at all (one such row fails the whole list, and a failed decode of
+ * the create response makes iOS re-post the drink).
  */
-export const TemperatureEnum = z.enum(['hot', 'cold', 'iced', 'room_temp']);
 
 /**
- * Size options
+ * Temperature options (`room` is the client spelling of `room_temp`)
  */
-export const SizeEnum = z.enum(['small', 'medium', 'large', 'extra_large']);
+export const TemperatureEnum = z.enum(['hot', 'cold', 'iced', 'room_temp', 'room']);
 
 /**
- * Milk type options
+ * Size options (`extraLarge` is the client spelling of `extra_large`)
+ */
+export const SizeEnum = z.enum(['small', 'medium', 'large', 'extra_large', 'extraLarge']);
+
+/**
+ * Milk type options (`cream` = heavy cream, sent by both mobile apps)
  */
 export const MilkTypeEnum = z.enum([
   'whole',
@@ -45,7 +61,53 @@ export const MilkTypeEnum = z.enum([
   'soy',
   'coconut',
   'none',
+  'cream',
 ]);
+
+/** Backend spelling → the spelling both mobile clients encode and decode. */
+const CLIENT_SIZE_SPELLING: Record<string, string> = { extra_large: 'extraLarge' };
+const CLIENT_TEMPERATURE_SPELLING: Record<string, string> = { room_temp: 'room' };
+
+/**
+ * Return `customizations` with `size` / `temperature` in the spelling the mobile
+ * clients decode. Used on write (so new rows are stored in that spelling) and on
+ * read (so rows stored with the old backend spelling still decode on iOS).
+ * Every other key and value is passed through untouched; non-objects are returned as-is.
+ */
+export function toClientBeverageCustomizations<T>(customizations: T): T {
+  if (
+    typeof customizations !== 'object' ||
+    customizations === null ||
+    Array.isArray(customizations)
+  ) {
+    return customizations;
+  }
+  const source = customizations as Record<string, unknown>;
+  const size = typeof source.size === 'string' ? CLIENT_SIZE_SPELLING[source.size] : undefined;
+  const temperature =
+    typeof source.temperature === 'string'
+      ? CLIENT_TEMPERATURE_SPELLING[source.temperature]
+      : undefined;
+  if (size === undefined && temperature === undefined) return customizations;
+  return {
+    ...source,
+    ...(size !== undefined ? { size } : {}),
+    ...(temperature !== undefined ? { temperature } : {}),
+  } as T;
+}
+
+/**
+ * A `beverage_logs` row as returned to clients: same row, customizations in the
+ * client spelling. Null / undefined rows are returned unchanged.
+ */
+export function toClientBeverageEntry<T>(entry: T): T {
+  if (typeof entry !== 'object' || entry === null) return entry;
+  const row = entry as Record<string, unknown>;
+  if (!('customizations' in row)) return entry;
+  const customizations = toClientBeverageCustomizations(row.customizations);
+  if (customizations === row.customizations) return entry;
+  return { ...row, customizations } as T;
+}
 
 /**
  * Beverage source

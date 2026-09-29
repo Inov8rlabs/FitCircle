@@ -4,6 +4,8 @@ import { z } from 'zod';
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { NutritionIntelligenceService } from '@/lib/services/nutrition-intelligence-service';
 import { UpgradeRequiredError } from '@/lib/services/usage-service';
+import { safeParseLenient } from '@/lib/validation/lenient-parse';
+import { readParseFallbackOptionsFromJson } from '@/lib/validation/nutrition-parse-options';
 
 // LLM parse can exceed the platform default function timeout; give it room.
 export const maxDuration = 60;
@@ -17,6 +19,10 @@ export const maxDuration = 60;
  * as photo-parse. JSON body `{ transcript: string }`. Returns a draft the client shows on a
  * "tap to fix" card; it does NOT create a food log entry. The user confirms, then the existing
  * POST /api/mobile/food-log (or PATCH) commits the entry with the draft's values.
+ *
+ * Optional body fields `skip_fallback_save` (true) and `existing_entry_id` (uuid) switch off
+ * the Option-B fallback save for form prefill / re-analysis of a saved entry — see
+ * lib/validation/nutrition-parse-options.ts. Without them the route behaves exactly as before.
  *
  * Thin route: all nutrition logic lives in NutritionIntelligenceService (§7.2.1).
  */
@@ -46,7 +52,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const parsed = bodySchema.safeParse(json);
+    const parsed = safeParseLenient(bodySchema, json);
+    // Both absent (every shipped client today) → the Option-B save below is unchanged.
+    const fallback = readParseFallbackOptionsFromJson(json);
     if (!parsed.success) {
       return NextResponse.json(
         {
@@ -84,10 +92,22 @@ export async function POST(request: NextRequest) {
       }
 
       let saved: { entryId: string } | null = null;
-      try {
-        saved = await NutritionIntelligenceService.saveUnparsedVoice(user.id, parsed.data.transcript);
-      } catch (saveError) {
-        console.error('[Mobile API] Voice parse fallback save failed:', saveError);
+      if (fallback.skipFallbackSave) {
+        // The client is prefilling a form it saves itself, or re-running the AI on an
+        // entry that already exists: a fallback entry would only be a duplicate.
+        // Echo the existing id ONLY when it really is this user's entry.
+        if (
+          fallback.existingEntryId &&
+          (await NutritionIntelligenceService.ownsFoodLogEntry(user.id, fallback.existingEntryId))
+        ) {
+          saved = { entryId: fallback.existingEntryId };
+        }
+      } else {
+        try {
+          saved = await NutritionIntelligenceService.saveUnparsedVoice(user.id, parsed.data.transcript);
+        } catch (saveError) {
+          console.error('[Mobile API] Voice parse fallback save failed:', saveError);
+        }
       }
 
       // Route-level correlation log for a real analysis failure (rate-limits skipped).
@@ -102,11 +122,25 @@ export async function POST(request: NextRequest) {
             code: 'PARSE_FAILED',
             transcriptLength: parsed.data.transcript.length,
             requestMs: Date.now() - startTime,
-            fallbackSaved: !!saved,
+            fallbackSaved: !!saved && !fallback.skipFallbackSave,
+            fallbackSkipped: fallback.skipFallbackSave,
             savedEntryId: saved?.entryId ?? null,
           })
         );
       }
+
+      // Nothing was saved when the fallback is skipped, so the copy must not claim it was.
+      const message = fallback.skipFallbackSave
+        ? isUpgrade
+          ? `You've used your ${parseError.limit} free AI logs today — go Pro for unlimited.`
+          : isRate
+            ? "You've reached today's voice-estimate limit — you can add the details yourself."
+            : "Couldn't understand that — you can add the details yourself."
+        : isUpgrade
+          ? `You've used your ${parseError.limit} free AI logs today — go Pro for unlimited. We saved your note so you can add the details.`
+          : isRate
+            ? "You've reached today's voice-estimate limit — we saved your note so you can add the details."
+            : "Couldn't understand that — we saved your note so you can add the details.";
 
       return NextResponse.json(
         {
@@ -114,13 +148,12 @@ export async function POST(request: NextRequest) {
           data: null,
           error: {
             code: isUpgrade ? 'UPGRADE_REQUIRED' : isRate ? 'RATE_LIMITED' : 'PARSE_FAILED',
-            message: isUpgrade
-              ? `You've used your ${(parseError as UpgradeRequiredError).limit} free AI logs today — go Pro for unlimited. We saved your note so you can add the details.`
-              : isRate
-                ? "You've reached today's voice-estimate limit — we saved your note so you can add the details."
-                : "Couldn't understand that — we saved your note so you can add the details.",
+            message,
             details: {
               ...(saved ? { savedEntryId: saved.entryId } : {}),
+              // Only present when the client asked for the fallback to be skipped:
+              // tells it that `savedEntryId` (if any) is ITS OWN entry, not a new copy.
+              ...(fallback.skipFallbackSave ? { fallbackSaved: false } : {}),
               ...(isUpgrade
                 ? {
                     feature: (parseError as UpgradeRequiredError).feature,

@@ -555,6 +555,56 @@ export class StreakClaimingService {
     return { shieldType: consumed.consumedType, remaining, unlimited: consumed.unlimited };
   }
 
+  /**
+   * The day a shield should go to when the client names none: the most recent
+   * day before the user's local today that has no claim, inside the shieldable
+   * window. That is yesterday whenever yesterday was missed. Null when every
+   * day in the window is already claimed or protected.
+   */
+  static async findMostRecentMissedDay(userId: string, timezone?: string): Promise<string | null> {
+    const supabaseAdmin = createAdminSupabase();
+    const tz = timezone || (await this.getLastKnownTimezone(userId)) || 'UTC';
+    const todayStr = localToday(tz);
+    const oldest = addDays(todayStr, -(CLAIMING_CONSTANTS.RETROACTIVE_WINDOW_DAYS - 1));
+
+    const { data: claims, error } = await supabaseAdmin
+      .from('streak_claims')
+      .select('claim_date')
+      .eq('user_id', userId)
+      .gte('claim_date', oldest)
+      .lt('claim_date', todayStr);
+    if (error) throw error;
+
+    const claimed = new Set((claims || []).map(c => c.claim_date));
+    for (let day = addDays(todayStr, -1); day >= oldest; day = addDays(day, -1)) {
+      if (isWithinRetroactiveWindow(day, todayStr) && !claimed.has(day)) return day;
+    }
+    return null;
+  }
+
+  /**
+   * Shield the day that needs it when the client did not name one (see
+   * findMostRecentMissedDay). Same rules and errors as activateFreeze; when
+   * there is nothing to protect it throws ALREADY_CLAIMED so that no shield is
+   * spent.
+   */
+  static async activateFreezeForMostRecentMissedDay(
+    userId: string,
+    timezone?: string
+  ): Promise<{ date: string; shieldType: string; remaining: number; unlimited: boolean }> {
+    const tz = timezone || (await this.getLastKnownTimezone(userId)) || 'UTC';
+    const date = await this.findMostRecentMissedDay(userId, tz);
+    if (!date) {
+      throw new StreakClaimError(
+        'No missed day to protect: every recent day is already claimed or protected',
+        CLAIM_ERROR_CODES.ALREADY_CLAIMED,
+        { reason: 'NO_MISSED_DAY' }
+      );
+    }
+    const result = await this.activateFreeze(userId, date, tz);
+    return { date, ...result };
+  }
+
   // ==========================================================================
   // DAILY CRON — protect or break
   // ==========================================================================

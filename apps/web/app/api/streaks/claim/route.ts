@@ -5,11 +5,16 @@ import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { StreakClaimingService } from '@/lib/services/streak-claiming-service';
 import { StreakClaimError, CLAIM_ERROR_CODES } from '@/lib/types/streak-claiming';
 import { localToday } from '@/lib/streaks/streak-calculator';
+import { readJsonBody } from '@/lib/streaks/request-body';
+import { parseLenient, validationMessage } from '@/lib/validation/lenient-parse';
 
 // Validation schema
+// `timezone` used to be required. It is optional now: without it the route
+// falls back to the X-Client-Timezone header, then to the zone of the user's
+// last claim, then to UTC.
 const claimStreakSchema = z.object({
   claimDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
-  timezone: z.string().min(1),
+  timezone: z.string().min(1).optional(),
 });
 
 /**
@@ -41,8 +46,17 @@ export async function POST(request: NextRequest) {
     const user = await requireMobileAuth(request);
 
     // 2. Parse and validate request body
-    const body = await request.json();
-    const { claimDate, timezone } = claimStreakSchema.parse(body);
+    // `claimDate: null` means "today": Android sent it on every claim until
+    // 2026-09 and the strict parse rejected it.
+    const body = await readJsonBody(request);
+    const parsed = parseLenient(claimStreakSchema, body);
+    const claimDate = parsed.claimDate;
+    const timezone =
+      parsed.timezone ??
+      (await StreakClaimingService.resolveTimezone(
+        user.id,
+        request.headers.get('x-client-timezone')
+      ));
 
     // 3. Determine claim date — defaults to the USER'S local today, and the
     //    explicit/retroactive distinction is made against the user's local
@@ -103,7 +117,7 @@ export async function POST(request: NextRequest) {
           success: false,
           error: {
             code: 'VALIDATION_ERROR',
-            message: 'Invalid input data',
+            message: validationMessage(error),
             details: error.errors.reduce((acc: any, err) => {
               acc[err.path.join('.')] = err.message;
               return acc;

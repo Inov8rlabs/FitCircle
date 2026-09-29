@@ -2,6 +2,7 @@ import { type NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 
 import { MobileAPIService } from '@/lib/services/mobile-api-service';
+import { parseLenient, validationMessage } from '@/lib/validation/lenient-parse';
 
 // Validation schema
 const refreshSchema = z.object({
@@ -12,7 +13,7 @@ export async function POST(request: NextRequest) {
   try {
     // Parse and validate request body
     const body = await request.json();
-    const validatedData = refreshSchema.parse(body);
+    const validatedData = parseLenient(refreshSchema, body);
 
     // Refresh the access token
     const tokens = await MobileAPIService.refreshAccessToken(validatedData.refresh_token);
@@ -38,7 +39,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         {
           error: 'Validation error',
-          message: 'Invalid input data',
+          message: validationMessage(error),
           details: error.errors,
         },
         { status: 400 }

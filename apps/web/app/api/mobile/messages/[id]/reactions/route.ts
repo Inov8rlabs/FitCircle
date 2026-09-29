@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { CircleChatService } from '@/lib/services/circle-chat-service';
 import { REACTION_KINDS, type ReactionKind } from '@/lib/types/circle-chat';
+import { parseLenient, validationMessage } from '@/lib/validation/lenient-parse';
 
 // Validation schema for POST body
 const addReactionSchema = z.object({
@@ -29,7 +30,7 @@ export async function POST(
 
     // Parse and validate request body
     const body = await request.json();
-    const { reaction } = addReactionSchema.parse(body);
+    const { reaction } = parseLenient(addReactionSchema, body);
 
     // zod validated `reaction` against REACTION_KINDS at runtime; the enum cast above
     // widens the static type to string, so narrow it back to ReactionKind here.
@@ -126,7 +127,7 @@ export async function POST(
           data: null,
           error: {
             code: 'VALIDATION_ERROR',
-            message: 'Invalid input data',
+            message: validationMessage(error),
             details: error.errors.reduce((acc: any, err) => {
               acc[err.path.join('.')] = err.message;
               return acc;

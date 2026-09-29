@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { CircleChatService } from '@/lib/services/circle-chat-service';
 import { MESSAGE_EDIT_BODY_MAX_LENGTH } from '@/lib/types/circle-chat';
+import { parseLenient, validationMessage } from '@/lib/validation/lenient-parse';
 
 // Validation schema for PATCH body (trimmed, 1..2000 chars per the
 // cross-platform edit contract; the service re-enforces this server-side).
@@ -30,7 +31,7 @@ export async function PATCH(
 
     // Parse and validate request body
     const json = await request.json();
-    const { body } = editMessageSchema.parse(json);
+    const { body } = parseLenient(editMessageSchema, json);
 
     const message = await CircleChatService.editMessage(user.id, id, body);
 
@@ -188,7 +189,7 @@ function mapMessageError(error: any) {
         data: null,
         error: {
           code: 'VALIDATION_ERROR',
-          message: 'Invalid input data',
+          message: validationMessage(error),
           details: error.errors.reduce((acc: any, err) => {
             acc[err.path.join('.')] = err.message;
             return acc;

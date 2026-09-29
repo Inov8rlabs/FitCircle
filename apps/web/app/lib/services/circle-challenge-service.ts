@@ -12,12 +12,59 @@ import {
   type LogActivityInput,
   MAX_LOGS_PER_DAY,
   MAX_LOG_AMOUNT,
-  MIN_LOG_AMOUNT,
   DUPLICATE_DETECTION_WINDOW_MS,
-  STREAK_GRACE_HOURS,
-  MILESTONES,
-  type MilestoneThreshold,
 } from '../types/circle-challenge';
+
+import {
+  MIN_STORABLE_LOG_AMOUNT,
+  computeProgress,
+  normalizeLogAmount,
+  normalizeLogNote,
+  presentCategory,
+  reconcileMilestones,
+  toNumber,
+  utcDay,
+  type ProgressLogRow,
+} from './circle-challenge-progress';
+
+/**
+ * A failure of the activity-log operations that the route can turn into a precise
+ * HTTP status + `error.code`. (The older methods of this service still throw plain
+ * `Error`s, which their routes answer with 400 `ERROR`.)
+ */
+export class ChallengeError extends Error {
+  constructor(
+    public readonly code: string,
+    message: string,
+    public readonly status: number
+  ) {
+    super(message);
+    this.name = 'ChallengeError';
+  }
+}
+
+/** Columns a creator may change through PATCH; everything else is ignored. */
+const UPDATABLE_CHALLENGE_FIELDS = [
+  'name',
+  'description',
+  'is_open',
+  'starts_at',
+  'ends_at',
+  'goal_amount',
+] as const;
+
+/**
+ * uuids compare case-insensitively: Postgres returns them lowercase while the iOS
+ * client puts them UPPERCASE in the URL.
+ */
+function sameId(a: string | null | undefined, b: string | null | undefined): boolean {
+  return typeof a === 'string' && typeof b === 'string' && a.toLowerCase() === b.toLowerCase();
+}
+
+/** PostgREST caps a response at 1000 rows; logs are read in pages of this size. */
+const LOG_PAGE_SIZE = 1000;
+/** 20 logs/day x 90 days is 1800 rows; this bound only stops a runaway loop. */
+const MAX_LOG_PAGES = 20;
 
 export class ChallengeService {
   // ============================================================================
@@ -142,9 +189,17 @@ export class ChallengeService {
       throw new Error('Can only update challenges that have not started');
     }
 
+    // The body comes straight from the request: copy only the editable columns so a
+    // creator cannot overwrite status, creator_id, winner_user_id, fitcircle_id ...
+    const allowed: Record<string, unknown> = {};
+    const source = (updates ?? {}) as Record<string, unknown>;
+    for (const field of UPDATABLE_CHALLENGE_FIELDS) {
+      if (source[field] !== undefined) allowed[field] = source[field];
+    }
+
     const { data: updated, error } = await supabaseAdmin
       .from('challenges')
-      .update({ ...updates, updated_at: new Date().toISOString() })
+      .update({ ...allowed, updated_at: new Date().toISOString() })
       .eq('id', challengeId)
       .select()
       .single();
@@ -295,71 +350,119 @@ export class ChallengeService {
   // ACTIVITY LOGGING
   // ============================================================================
 
+  /**
+   * Record activity toward a challenge and return the log plus the caller's new
+   * standing. `circleId` is the circle from the URL; when given, the challenge must
+   * belong to it.
+   *
+   * Only an active member of the circle who is an active participant of the
+   * challenge may log. The server assigns the day (UTC) and the timestamp; the
+   * client cannot backdate.
+   */
   static async logActivity(
     challengeId: string,
     userId: string,
-    input: LogActivityInput
+    input: LogActivityInput,
+    circleId?: string
   ): Promise<LogActivityResponse> {
     const supabaseAdmin = createAdminSupabase();
 
-    // Get challenge
-    const challenge = await this.getRawChallenge(challengeId);
+    const challenge = await this.requireChallengeInCircle(challengeId, circleId);
+    await this.requireCircleMember(userId, challenge.fitcircle_id);
 
-    // Validate challenge is active
+    const amount = normalizeLogAmount(input?.amount);
+    if (amount === null) {
+      throw new ChallengeError(
+        'VALIDATION_ERROR',
+        `Amount must be between ${MIN_STORABLE_LOG_AMOUNT} and ${MAX_LOG_AMOUNT}`,
+        400
+      );
+    }
+    const note = normalizeLogNote(input?.note);
+
+    const now = new Date();
+    const today = utcDay(now);
+
+    if (challenge.status === 'cancelled') {
+      throw new ChallengeError('CHALLENGE_NOT_ACTIVE', 'This challenge was cancelled', 400);
+    }
+    if (challenge.status === 'completed' || now >= new Date(challenge.ends_at)) {
+      throw new ChallengeError(
+        'CHALLENGE_ENDED',
+        'This challenge has ended. Final results are locked.',
+        400
+      );
+    }
     if (challenge.status !== 'active') {
-      throw new Error('Can only log activity for active challenges');
+      if (now < new Date(challenge.starts_at)) {
+        throw new ChallengeError(
+          'CHALLENGE_NOT_STARTED',
+          'Can only log activity for active challenges',
+          400
+        );
+      }
+      // The start time has passed but the daily cron has not flipped the status
+      // yet: do the same transition now instead of refusing a valid log.
+      const { error: activateError } = await supabaseAdmin
+        .from('challenges')
+        .update({ status: 'active', updated_at: now.toISOString() })
+        .eq('id', challengeId)
+        .eq('status', 'scheduled');
+      if (activateError) throw activateError;
     }
 
-    // Check if challenge has ended
-    if (new Date() > new Date(challenge.ends_at)) {
-      throw new Error('This challenge has ended. Final results are locked.');
-    }
-
-    // Validate amount
-    if (input.amount <= 0 || input.amount > MAX_LOG_AMOUNT) {
-      throw new Error(`Amount must be between ${MIN_LOG_AMOUNT} and ${MAX_LOG_AMOUNT}`);
-    }
-
-    // Get participant record
     const { data: participant, error: pError } = await supabaseAdmin
       .from('challenge_participants')
       .select('*')
       .eq('challenge_id', challengeId)
       .eq('user_id', userId)
       .eq('status', 'active')
-      .single();
+      .maybeSingle();
 
-    if (pError || !participant) {
-      throw new Error('You are not an active participant in this challenge');
+    if (pError) throw pError;
+    if (!participant) {
+      throw new ChallengeError(
+        'NOT_A_PARTICIPANT',
+        'You are not an active participant in this challenge',
+        403
+      );
     }
 
-    const today = new Date().toISOString().split('T')[0];
-
-    // Check daily log limit
-    const { count: todayLogCount } = await supabaseAdmin
+    // Daily log limit
+    const { count: todayLogCount, error: countError } = await supabaseAdmin
       .from('challenge_logs')
       .select('*', { count: 'exact', head: true })
       .eq('participant_id', participant.id)
       .eq('log_date', today);
 
+    if (countError) throw countError;
     if ((todayLogCount || 0) >= MAX_LOGS_PER_DAY) {
-      throw new Error(`Maximum ${MAX_LOGS_PER_DAY} logs per day reached`);
+      throw new ChallengeError(
+        'DAILY_LIMIT_REACHED',
+        `Maximum ${MAX_LOGS_PER_DAY} logs per day reached`,
+        400
+      );
     }
 
-    // Duplicate detection
-    const duplicateWindow = new Date(Date.now() - DUPLICATE_DETECTION_WINDOW_MS).toISOString();
-    const { data: recentLogs } = await supabaseAdmin
+    // Duplicate detection: same amount + same note within the window
+    const duplicateWindow = new Date(now.getTime() - DUPLICATE_DETECTION_WINDOW_MS).toISOString();
+    const { data: recentLogs, error: recentError } = await supabaseAdmin
       .from('challenge_logs')
       .select('amount, note')
       .eq('participant_id', participant.id)
       .gte('logged_at', duplicateWindow);
 
+    if (recentError) throw recentError;
     const isDuplicate = (recentLogs || []).some(
-      log => log.amount === input.amount && log.note === (input.note || null)
+      (log: { amount: unknown; note: string | null }) =>
+        toNumber(log.amount) === amount && (log.note ?? null) === note
     );
-
     if (isDuplicate) {
-      throw new Error('DUPLICATE_DETECTED');
+      throw new ChallengeError(
+        'DUPLICATE_DETECTED',
+        'Looks like a duplicate — try adding a note to distinguish it',
+        409
+      );
     }
 
     // Insert the log
@@ -370,8 +473,9 @@ export class ChallengeService {
         participant_id: participant.id,
         user_id: userId,
         fitcircle_id: challenge.fitcircle_id,
-        amount: input.amount,
-        note: input.note?.trim().slice(0, 80) || null,
+        amount,
+        note,
+        logged_at: now.toISOString(),
         log_date: today,
       })
       .select()
@@ -379,63 +483,33 @@ export class ChallengeService {
 
     if (logError) throw logError;
 
-    // Update participant totals
-    const oldRank = participant.rank;
-
-    // Reset today_total if it's a new day
-    const isNewDay = participant.today_date !== today;
-    const newTodayTotal = isNewDay ? input.amount : (participant.today_total || 0) + input.amount;
-    const newCumulativeTotal = (participant.cumulative_total || 0) + input.amount;
-    const newLogCount = (participant.log_count || 0) + 1;
-    const goalCompletionPct = Math.min(
-      (newCumulativeTotal / challenge.goal_amount) * 100,
-      100
+    // Derive the participant's progress from ALL of their logs
+    const logs = await this.getParticipantLogs(participant.id);
+    const progress = computeProgress(logs, toNumber(challenge.goal_amount), today);
+    const { milestones, reached } = reconcileMilestones(
+      participant.milestones_achieved,
+      toNumber(participant.goal_completion_pct),
+      progress.goal_completion_pct
     );
-
-    // Calculate streak
-    const { current_streak, longest_streak } = this.calculateStreak(
-      participant,
-      today,
-      isNewDay
-    );
-
-    // Check milestones
-    const oldPct = participant.goal_completion_pct || 0;
-    const milestoneReached = this.detectMilestone(
-      oldPct,
-      goalCompletionPct,
-      participant.milestones_achieved || {}
-    );
-
-    // Update milestones_achieved
-    const updatedMilestones = { ...(participant.milestones_achieved || {}) };
-    if (milestoneReached) {
-      updatedMilestones[`milestone_${milestoneReached}`] = true;
-    }
 
     const { error: updateError } = await supabaseAdmin
       .from('challenge_participants')
       .update({
-        cumulative_total: newCumulativeTotal,
-        today_total: newTodayTotal,
+        ...progress,
         today_date: today,
-        current_streak,
-        longest_streak,
-        last_logged_at: new Date().toISOString(),
-        log_count: newLogCount,
-        goal_completion_pct: Math.round(goalCompletionPct * 100) / 100,
-        milestones_achieved: updatedMilestones,
-        updated_at: new Date().toISOString(),
+        milestones_achieved: milestones,
+        updated_at: now.toISOString(),
       })
       .eq('id', participant.id);
 
     if (updateError) throw updateError;
 
     // Recalculate ranks for all participants
+    const oldRank: number | null = participant.rank ?? null;
     const rankResults = await this.recalculateRanks(challengeId);
     const newRank = rankResults.find(r => r.user_id === userId)?.rank || 1;
 
-    // Determine who was passed
+    // Who the caller overtook with this log
     const passedUsers = rankResults
       .filter(r => {
         if (!oldRank) return false;
@@ -445,76 +519,107 @@ export class ChallengeService {
       .map(r => r.user_id);
 
     return {
-      log,
+      log: this.presentLog(log),
       updated_participant: {
-        cumulative_total: newCumulativeTotal,
-        today_total: newTodayTotal,
+        cumulative_total: progress.cumulative_total,
+        today_total: progress.today_total,
         rank: newRank,
-        goal_completion_pct: Math.round(goalCompletionPct * 100) / 100,
-        current_streak,
+        goal_completion_pct: progress.goal_completion_pct,
+        current_streak: progress.current_streak,
       },
       rank_changed: oldRank !== newRank,
       old_rank: oldRank,
       new_rank: newRank,
-      milestone_reached: milestoneReached ? `${milestoneReached}%` : null,
+      milestone_reached: reached ? `${reached}%` : null,
       passed_users: passedUsers,
     };
   }
 
+  /**
+   * Delete one of the caller's own logs from today (UTC) and re-derive their
+   * progress and everyone's rank. `scope` carries the ids from the URL; when given,
+   * the log must belong to that challenge and circle.
+   */
   static async deleteLog(
     logId: string,
-    userId: string
+    userId: string,
+    scope: { circleId?: string; challengeId?: string } = {}
   ): Promise<void> {
     const supabaseAdmin = createAdminSupabase();
 
-    const today = new Date().toISOString().split('T')[0];
+    const now = new Date();
+    const today = utcDay(now);
 
-    // Get the log to verify ownership and date
     const { data: log, error: logError } = await supabaseAdmin
       .from('challenge_logs')
       .select('*')
       .eq('id', logId)
-      .eq('user_id', userId)
-      .single();
+      .maybeSingle();
 
-    if (logError || !log) {
-      throw new Error('Log not found or you do not have permission to delete it');
+    // 22P02 = the id in the URL is not a uuid: that log does not exist.
+    if (logError && logError.code !== '22P02') throw logError;
+    if (
+      !log ||
+      (scope.challengeId && !sameId(log.challenge_id, scope.challengeId)) ||
+      (scope.circleId && !sameId(log.fitcircle_id, scope.circleId))
+    ) {
+      throw new ChallengeError('NOT_FOUND', 'Log not found', 404);
+    }
+    if (!sameId(log.user_id, userId)) {
+      throw new ChallengeError('FORBIDDEN', 'You can only delete your own logs', 403);
+    }
+
+    await this.requireCircleMember(userId, log.fitcircle_id);
+
+    const challenge = await this.requireChallengeInCircle(log.challenge_id, scope.circleId);
+    if (
+      challenge.status === 'completed' ||
+      challenge.status === 'cancelled' ||
+      now >= new Date(challenge.ends_at)
+    ) {
+      throw new ChallengeError(
+        'CHALLENGE_ENDED',
+        'This challenge has ended. Final results are locked.',
+        400
+      );
     }
 
     if (log.log_date !== today) {
-      throw new Error('Can only delete today\'s logs');
+      throw new ChallengeError('LOG_LOCKED', "Can only delete today's logs", 400);
     }
 
-    // Delete the log
     const { error: deleteError } = await supabaseAdmin
       .from('challenge_logs')
       .delete()
-      .eq('id', logId);
+      .eq('id', logId)
+      .eq('user_id', userId);
 
     if (deleteError) throw deleteError;
 
-    // Recalculate participant totals
-    const { data: allLogs } = await supabaseAdmin
-      .from('challenge_logs')
-      .select('amount, log_date')
-      .eq('participant_id', log.participant_id);
+    const { data: participant, error: pError } = await supabaseAdmin
+      .from('challenge_participants')
+      .select('*')
+      .eq('id', log.participant_id)
+      .maybeSingle();
 
-    const newCumulative = (allLogs || []).reduce((sum, l) => sum + l.amount, 0);
-    const newToday = (allLogs || [])
-      .filter(l => l.log_date === today)
-      .reduce((sum, l) => sum + l.amount, 0);
+    if (pError) throw pError;
+    if (!participant) return; // participant row is gone; nothing to re-derive
 
-    // Get challenge for goal_amount
-    const challenge = await this.getRawChallenge(log.challenge_id);
+    const logs = await this.getParticipantLogs(log.participant_id);
+    const progress = computeProgress(logs, toNumber(challenge.goal_amount), today);
+    const { milestones } = reconcileMilestones(
+      participant.milestones_achieved,
+      toNumber(participant.goal_completion_pct),
+      progress.goal_completion_pct
+    );
 
     const { error: updateError } = await supabaseAdmin
       .from('challenge_participants')
       .update({
-        cumulative_total: newCumulative,
-        today_total: newToday,
-        log_count: (allLogs || []).length,
-        goal_completion_pct: Math.min((newCumulative / challenge.goal_amount) * 100, 100),
-        updated_at: new Date().toISOString(),
+        ...progress,
+        today_date: today,
+        milestones_achieved: milestones,
+        updated_at: now.toISOString(),
       })
       .eq('id', log.participant_id);
 
@@ -523,13 +628,22 @@ export class ChallengeService {
     await this.recalculateRanks(log.challenge_id);
   }
 
+  /**
+   * The caller's own logs for a challenge, newest first. A circle member who has
+   * not joined the challenge gets an empty list (the clients load this for every
+   * challenge they open), a non-member is refused.
+   */
   static async getMyLogs(
     challengeId: string,
     userId: string,
     limit = 50,
-    offset = 0
+    offset = 0,
+    circleId?: string
   ): Promise<CircleChallengeLog[]> {
     const supabaseAdmin = createAdminSupabase();
+
+    const challenge = await this.requireChallengeInCircle(challengeId, circleId);
+    await this.requireCircleMember(userId, challenge.fitcircle_id);
 
     const { data, error } = await supabaseAdmin
       .from('challenge_logs')
@@ -540,7 +654,7 @@ export class ChallengeService {
       .range(offset, offset + limit - 1);
 
     if (error) throw error;
-    return data || [];
+    return (data || []).map((row: CircleChallengeLog) => this.presentLog(row));
   }
 
   // ============================================================================
@@ -855,47 +969,88 @@ export class ChallengeService {
     return results;
   }
 
-  private static calculateStreak(
-    participant: CircleChallengeParticipant,
-    today: string,
-    isNewDay: boolean
-  ): { current_streak: number; longest_streak: number } {
-    let currentStreak = participant.current_streak || 0;
-    let longestStreak = participant.longest_streak || 0;
+  /**
+   * The challenge, or NOT_FOUND when it does not exist or does not belong to the
+   * circle named in the URL.
+   */
+  private static async requireChallengeInCircle(
+    challengeId: string,
+    circleId?: string
+  ): Promise<CircleChallenge> {
+    const supabaseAdmin = createAdminSupabase();
 
-    if (!participant.last_logged_at) {
-      // First log ever
-      currentStreak = 1;
-    } else if (isNewDay) {
-      const lastLoggedDate = new Date(participant.last_logged_at);
-      const now = new Date();
-      const hoursSinceLastLog = (now.getTime() - lastLoggedDate.getTime()) / (1000 * 60 * 60);
+    const { data, error } = await supabaseAdmin
+      .from('challenges')
+      .select('*')
+      .eq('id', challengeId)
+      .maybeSingle();
 
-      if (hoursSinceLastLog <= STREAK_GRACE_HOURS) {
-        currentStreak += 1;
-      } else {
-        currentStreak = 1; // streak broken, restart
-      }
+    if (error) {
+      // 22P02 = the id in the URL is not a uuid: that challenge does not exist.
+      if (error.code === '22P02') throw new ChallengeError('NOT_FOUND', 'Challenge not found', 404);
+      throw error;
     }
-    // If same day and already logged, streak doesn't change
-
-    longestStreak = Math.max(longestStreak, currentStreak);
-
-    return { current_streak: currentStreak, longest_streak: longestStreak };
+    if (!data || (circleId && !sameId(data.fitcircle_id, circleId))) {
+      throw new ChallengeError('NOT_FOUND', 'Challenge not found', 404);
+    }
+    return data;
   }
 
-  private static detectMilestone(
-    oldPct: number,
-    newPct: number,
-    achieved: Record<string, boolean>
-  ): MilestoneThreshold | null {
-    for (const milestone of MILESTONES) {
-      const key = `milestone_${milestone}`;
-      if (!achieved[key] && oldPct < milestone && newPct >= milestone) {
-        return milestone;
-      }
+  private static async requireCircleMember(userId: string, circleId: string): Promise<void> {
+    const supabaseAdmin = createAdminSupabase();
+
+    const { count, error } = await supabaseAdmin
+      .from('fitcircle_members')
+      .select('*', { count: 'exact', head: true })
+      .eq('fitcircle_id', circleId)
+      .eq('user_id', userId)
+      .eq('status', 'active');
+
+    if (error) throw error;
+    if (!count || count === 0) {
+      throw new ChallengeError('FORBIDDEN', 'You must be an active member of this circle', 403);
     }
-    return null;
+  }
+
+  /** Every log of one participant, read in pages (PostgREST caps a page at 1000). */
+  private static async getParticipantLogs(participantId: string): Promise<ProgressLogRow[]> {
+    const supabaseAdmin = createAdminSupabase();
+    const rows: ProgressLogRow[] = [];
+
+    for (let page = 0; page < MAX_LOG_PAGES; page++) {
+      const from = page * LOG_PAGE_SIZE;
+      const { data, error } = await supabaseAdmin
+        .from('challenge_logs')
+        .select('id, amount, log_date, logged_at')
+        .eq('participant_id', participantId)
+        .order('logged_at', { ascending: true })
+        .order('id', { ascending: true })
+        .range(from, from + LOG_PAGE_SIZE - 1);
+
+      if (error) throw error;
+      rows.push(...((data || []) as ProgressLogRow[]));
+      if (!data || data.length < LOG_PAGE_SIZE) break;
+    }
+
+    return rows;
+  }
+
+  /**
+   * The caller's participation as shown to them. `today_total` is only stored when
+   * the participant logs, so on a later day it still holds the last active day's
+   * sum; it is presented as 0 then, exactly like the leaderboard does.
+   */
+  private static presentParticipation(
+    participation: CircleChallengeParticipant | null | undefined
+  ): CircleChallengeParticipant | null {
+    if (!participation) return null;
+    if (participation.today_date === utcDay()) return participation;
+    return { ...participation, today_total: 0 };
+  }
+
+  /** A log row as the clients decode it: `amount` is always a JSON number. */
+  private static presentLog(row: CircleChallengeLog): CircleChallengeLog {
+    return { ...row, amount: toNumber(row.amount) };
   }
 
   private static async enrichChallenge(
@@ -930,9 +1085,14 @@ export class ChallengeService {
 
     return {
       ...challenge,
+      // Old clients decode `category` with a strict enum (one unknown value fails
+      // the whole list), so it is always one of the five known values; the stored
+      // value is kept next to it.
+      category: presentCategory(challenge.category),
+      category_raw: (challenge.category as string | null) ?? null,
       creator_name: creator?.display_name || 'Unknown',
       creator_avatar: creator?.avatar_url || undefined,
-      my_participation: myParticipation || null,
+      my_participation: this.presentParticipation(myParticipation),
       duration_days: durationDays,
       days_remaining: daysRemaining,
       template: template || null,

@@ -3,6 +3,7 @@ import { z } from 'zod';
 
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { ChallengeService } from '@/lib/services/circle-challenge-service';
+import { parseLenient, validationMessage } from '@/lib/validation/lenient-parse';
 
 const highFiveSchema = z.object({
   to_user_id: z.string().uuid(),
@@ -20,7 +21,7 @@ export async function POST(
     const user = await requireMobileAuth(request);
     const { challengeId } = await params;
     const body = await request.json();
-    const validated = highFiveSchema.parse(body);
+    const validated = parseLenient(highFiveSchema, body);
 
     await ChallengeService.sendHighFive(challengeId, user.id, validated.to_user_id);
 
@@ -34,6 +35,14 @@ export async function POST(
       return NextResponse.json(
         { success: false, data: null, error: { code: 'UNAUTHORIZED', message: 'Invalid or expired token' } },
         { status: 401 }
+      );
+    }
+    if (error instanceof z.ZodError) {
+      // Same status (400) as before; the message is now readable instead of the
+      // raw JSON dump of the zod issues.
+      return NextResponse.json(
+        { success: false, data: null, error: { code: 'VALIDATION_ERROR', message: validationMessage(error), details: error.errors } },
+        { status: 400 }
       );
     }
     return NextResponse.json(

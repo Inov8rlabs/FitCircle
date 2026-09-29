@@ -5,10 +5,14 @@ import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { WorkoutLoggingService } from '@/lib/services/workout-logging-service';
 import { StreakClaimingService } from '@/lib/services/streak-claiming-service';
 import { resolveClientTimezone } from '@/lib/streaks/client-timezone';
+import { parseLenient, validationMessage } from '@/lib/validation/lenient-parse';
+import { quickLogCategorySchema } from '@/lib/validators/quick-log';
 
 const quickLogSchema = z.object({
   brand: z.string().min(1).max(50),
-  category: z.enum(['cardio', 'strength', 'flexibility', 'sports', 'outdoor', 'other']),
+  // The six stored categories pass through; anything else (iOS sends hiit / cycling /
+  // general) is mapped to the closest stored one instead of a 400.
+  category: quickLogCategorySchema,
   duration_minutes: z.number().int().min(1).max(1440),
   notes: z.string().max(500).optional(),
 });
@@ -23,7 +27,7 @@ export async function POST(request: NextRequest) {
   try {
     const user = await requireMobileAuth(request);
     const body = await request.json();
-    const validated = quickLogSchema.parse(body);
+    const validated = parseLenient(quickLogSchema, body);
 
     const timezone = resolveClientTimezone(request, body?.timezone);
     const result = await WorkoutLoggingService.quickLog(user.id, {
@@ -48,6 +52,15 @@ export async function POST(request: NextRequest) {
         exercise: result.exercise,
         momentum: result.momentum,
         counts_as_checkin: validated.duration_minutes >= 10,
+        // Additive: the keys the iOS QuickLogResponse model decodes
+        // (exercise_log with logged_at, momentum_updated, new_momentum_day).
+        exercise_log: {
+          ...result.exercise,
+          brand: (result.exercise?.brand as string | null | undefined) ?? validated.brand,
+          logged_at: result.exercise?.created_at ?? new Date().toISOString(),
+        },
+        momentum_updated: result.momentum != null,
+        new_momentum_day: Number(result.momentum?.new_momentum ?? 0) || 0,
       },
       meta: { requestTime: Date.now() - startTime, streak },
       error: null,
@@ -67,6 +80,7 @@ export async function POST(request: NextRequest) {
           data: null,
           error: {
             code: 'VALIDATION_ERROR',
+            message: validationMessage(error),
             details: error.errors.reduce(
               (acc: Record<string, string>, err) => {
                 acc[err.path.join('.')] = err.message;

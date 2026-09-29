@@ -72,6 +72,19 @@ const BRAND_EXERCISE_TYPE: Record<string, string> = {
   swimming: 'swimming',
   boxing: 'boxing',
   other: 'other',
+  // Brand ids used by the mobile clients' own brand tables (iOS WorkoutBrand.allBrands,
+  // mirrored by Android). Not part of the /exercises/brands catalog; they only make
+  // the exercise_type meaningful instead of falling back to 'other'.
+  yoga: 'yoga',
+  run: 'running',
+  walk: 'walking',
+  swim: 'swimming',
+  gym: 'strengthTraining',
+  hiit: 'hiit',
+  dance: 'cardioDance',
+  stretch: 'stretching',
+  sports: 'other',
+  home: 'other',
 };
 
 // ============================================================================

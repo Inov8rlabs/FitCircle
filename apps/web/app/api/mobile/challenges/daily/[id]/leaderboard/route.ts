@@ -6,28 +6,52 @@ import { DailyChallengeService } from '@/lib/services/daily-challenge-service';
 
 const idSchema = z.string().uuid();
 
+const DEFAULT_LIMIT = 20;
+const MAX_LIMIT = 100;
+
+/** `?limit=` as a whole number in 1..100; anything unreadable falls back to 20. */
+function parseLimit(raw: string | null): number {
+  const parsed = raw === null ? NaN : parseInt(raw, 10);
+  if (!Number.isFinite(parsed) || parsed < 1) return DEFAULT_LIMIT;
+  return Math.min(parsed, MAX_LIMIT);
+}
+
 /**
  * GET /api/mobile/challenges/daily/[id]/leaderboard?limit=20
  * Top participants for a daily challenge, ordered by progress desc.
+ *
+ * `data` is the list of rows, each with its `rank`. Next to `data` the
+ * response also carries the requesting user's own position, which is needed
+ * when they are outside the top `limit`:
+ *   user_entry          the user's row (same shape as a list row) or null
+ *   user_rank           the user's rank or null (not joined)
+ *   total_participants  number of users who joined
  */
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    await requireMobileAuth(request);
+    const user = await requireMobileAuth(request);
     const { id } = await params;
     const challengeId = idSchema.parse(id);
 
     const { searchParams } = new URL(request.url);
-    const limit = Math.min(parseInt(searchParams.get('limit') || '20'), 100);
+    const limit = parseLimit(searchParams.get('limit'));
 
-    const leaderboard = await DailyChallengeService.getLeaderboard(challengeId, limit);
+    const leaderboard = await DailyChallengeService.getLeaderboardWithViewer(
+      challengeId,
+      limit,
+      user.id
+    );
 
     const response = NextResponse.json({
       success: true,
-      data: leaderboard,
+      data: leaderboard.entries,
       error: null,
+      user_entry: leaderboard.user_entry,
+      user_rank: leaderboard.user_rank,
+      total_participants: leaderboard.total_participants,
     });
     response.headers.set('Cache-Control', 'private, no-store');
     return response;

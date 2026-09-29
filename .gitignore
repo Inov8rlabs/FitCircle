@@ -40,6 +40,9 @@ yarn-error.log*
 lerna-debug.log*
 .pnpm-debug.log*
 logs
+# `logs` is also an API route segment (challenge activity logs). Without this
+# exception the route files are silently left out of every commit and deploy.
+!apps/web/app/**/logs/
 *.log
 
 # OS files

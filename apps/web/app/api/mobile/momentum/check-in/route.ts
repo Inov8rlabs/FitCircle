@@ -7,6 +7,10 @@ import { MomentumService } from '@/lib/services/momentum-service';
  * POST /api/mobile/momentum/check-in
  * Manual momentum check-in. Also auto-triggered by exercise logging.
  * Idempotent: duplicate same-day check-ins return current state.
+ *
+ * `data` is the check-in result (`new_momentum`, `milestone_achieved`, ...)
+ * plus, as additional keys, every field of GET /api/mobile/momentum/status, so
+ * a client that decodes the status model from this response can.
  */
 export async function POST(request: NextRequest) {
   try {
@@ -14,9 +18,18 @@ export async function POST(request: NextRequest) {
 
     const result = await MomentumService.checkIn(user.id);
 
+    // The check-in already succeeded; a failed status read must not fail it.
+    let status: Record<string, unknown> = {};
+    try {
+      status = { ...(await MomentumService.getStatus(user.id)) };
+    } catch (statusError) {
+      console.error('[POST /api/mobile/momentum/check-in] status read error:', statusError);
+    }
+
     return NextResponse.json({
       success: true,
-      data: result,
+      // Result keys win where both objects have one (they describe the same state).
+      data: { ...status, ...result },
       error: null,
       meta: {
         timestamp: new Date().toISOString(),

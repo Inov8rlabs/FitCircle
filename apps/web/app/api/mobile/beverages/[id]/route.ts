@@ -13,6 +13,7 @@ import { BeverageLogImageService } from '@/lib/services/beverage-log-image-servi
 import { BeverageLogService } from '@/lib/services/beverage-log-service';
 import { createAdminSupabase } from '@/lib/supabase-admin';
 import { UpdateBeverageLogSchema } from '@/lib/validation/beverage-log-validation';
+import { parseLenient, validationMessage } from '@/lib/validation/lenient-parse';
 
 /**
  * GET /api/mobile/beverages/[id]
@@ -130,7 +131,7 @@ export async function PATCH(
 
     // Parse and validate request body
     const body = await request.json();
-    const validatedData = UpdateBeverageLogSchema.parse(body);
+    const validatedData = parseLenient(UpdateBeverageLogSchema, body);
 
     // Update entry
     const result = await BeverageLogService.updateEntry(entryId, user.id, validatedData, supabase);
@@ -189,7 +190,7 @@ export async function PATCH(
           data: null,
           error: {
             code: 'VALIDATION_ERROR',
-            message: 'Invalid input data',
+            message: validationMessage(error),
             details: error.errors.reduce((acc: any, err) => {
               acc[err.path.join('.')] = err.message;
               return acc;

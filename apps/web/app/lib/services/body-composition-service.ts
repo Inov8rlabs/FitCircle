@@ -5,6 +5,7 @@ import {
   type BodyCompCreate,
   type BodyCompDerivedFlags,
   type BodyCompImportItem,
+  type BodyCompImportItemOutcome,
   type BodyCompImportRequest,
   type BodyCompImportResult,
   type BodyCompListQuery,
@@ -35,6 +36,63 @@ import {
  */
 
 const IMPORT_GROUP_WINDOW_MINUTES = 10;
+
+/** Sources whose rows come from a platform import (the only ones that get tombstones). */
+const PLATFORM_IMPORT_SOURCES: readonly BodyCompSource[] = ['healthkit', 'health_connect'];
+
+const TOMBSTONE_TABLE = 'body_comp_import_tombstones';
+/** A user deletes a handful of imported entries, not thousands. */
+const TOMBSTONE_FETCH_LIMIT = 2000;
+/** Keeps the `source_external_id=in.(...)` filter well inside URL length limits. */
+const EXTERNAL_ID_LOOKUP_CHUNK = 100;
+
+interface DbError {
+  code?: string | null;
+  message?: string | null;
+}
+
+/**
+ * True when the database refused the VALUES (class 22 data exception, class 23
+ * integrity violation) — a property of the sample, so retrying can never succeed.
+ * Anything else (connection, timeout, permission) is an infrastructure failure and
+ * must still fail the request so the client retries instead of advancing its cursor.
+ */
+export function isSampleRejection(error: DbError | null | undefined): boolean {
+  const code = error?.code ?? '';
+  return code.startsWith('22') || code.startsWith('23');
+}
+
+/** Relation missing = migration 093 not applied yet (PostgREST PGRST205 / Postgres 42P01). */
+function isMissingRelation(error: DbError | null | undefined): boolean {
+  const code = error?.code ?? '';
+  return code === 'PGRST205' || code === '42P01';
+}
+
+export interface ImportTombstone {
+  externalId: string;
+  measuredAtMs: number;
+}
+
+/**
+ * Is this sample covered by a deletion? Either its own external id was the deleted
+ * row's dedupe key, or it falls inside the deleted measurement's grouping window —
+ * a log row stores only the FIRST external id of its cluster, so the sibling samples
+ * (body fat, BMR written by the same weigh-in) are recognised by time.
+ */
+export function isTombstoned(
+  item: { externalId: string; measuredAt: string },
+  tombstones: ImportTombstone[],
+  windowMinutes: number = IMPORT_GROUP_WINDOW_MINUTES
+): boolean {
+  if (tombstones.length === 0) return false;
+  const windowMs = windowMinutes * 60_000;
+  const t = Date.parse(item.measuredAt);
+  return tombstones.some(
+    (stone) =>
+      stone.externalId === item.externalId ||
+      (Number.isFinite(t) && Math.abs(t - stone.measuredAtMs) <= windowMs)
+  );
+}
 
 interface BodyCompRow {
   id: string;
@@ -414,7 +472,11 @@ export class BodyCompositionService {
     return toBodyCompLog(savedRow);
   }
 
-  /** Delete a log (DELETE /body-comp/{id}). Throws NOT_FOUND when nothing matched. */
+  /**
+   * Delete a log (DELETE /body-comp/{id}). Throws NOT_FOUND when nothing matched.
+   * Deleting a platform-imported entry also records a tombstone so the next import
+   * (reinstall, second device) does not bring it back.
+   */
   static async deleteLog(userId: string, id: string): Promise<{ deleted: true }> {
     const supabase = createAdminSupabase();
     const { data, error } = await supabase
@@ -422,50 +484,167 @@ export class BodyCompositionService {
       .delete()
       .eq('id', id)
       .eq('user_id', userId)
-      .select('id');
+      .select('id, source, source_external_id, measured_at');
     if (error) throw new Error(`body-comp delete failed: ${error.message}`);
     if (!data || data.length === 0) throw new Error('NOT_FOUND');
+
+    for (const row of data as Pick<BodyCompRow, 'id' | 'source' | 'source_external_id' | 'measured_at'>[]) {
+      await this.recordImportTombstone(userId, row, supabase);
+    }
     return { deleted: true };
+  }
+
+  /**
+   * Remember that the user deleted an imported entry (migration 093). Best-effort:
+   * the delete has already happened and must not be reported as failed because the
+   * tombstone could not be written (e.g. the migration is not applied yet).
+   */
+  private static async recordImportTombstone(
+    userId: string,
+    row: Pick<BodyCompRow, 'source' | 'source_external_id' | 'measured_at'>,
+    supabase: SupabaseClient
+  ): Promise<void> {
+    if (!PLATFORM_IMPORT_SOURCES.includes(row.source)) return;
+    try {
+      const { error } = await supabase.from(TOMBSTONE_TABLE).upsert(
+        {
+          user_id: userId,
+          source: row.source,
+          // Rows created by an import always carry the external id; a platform-sourced
+          // row without one is keyed by its timestamp so the window match still applies.
+          source_external_id: row.source_external_id ?? `at:${new Date(row.measured_at).toISOString()}`,
+          measured_at: row.measured_at,
+          deleted_at: new Date().toISOString(),
+        },
+        { onConflict: 'user_id,source,source_external_id' }
+      );
+      if (error && !isMissingRelation(error)) {
+        console.error('[BodyComposition] import tombstone write failed:', error.code ?? error.message);
+      }
+    } catch (error: any) {
+      console.error('[BodyComposition] import tombstone write failed:', error?.message);
+    }
+  }
+
+  /** Deletions of imported entries for this user + platform; empty when 093 is not applied. */
+  private static async loadImportTombstones(
+    userId: string,
+    source: BodyCompSource,
+    supabase: SupabaseClient
+  ): Promise<ImportTombstone[]> {
+    try {
+      const { data, error } = await supabase
+        .from(TOMBSTONE_TABLE)
+        .select('source_external_id, measured_at')
+        .eq('user_id', userId)
+        .eq('source', source)
+        .order('deleted_at', { ascending: false })
+        .limit(TOMBSTONE_FETCH_LIMIT);
+      if (error) {
+        if (!isMissingRelation(error)) {
+          console.error('[BodyComposition] import tombstone read failed:', error.code ?? error.message);
+        }
+        return [];
+      }
+      return (data ?? []).map((r: any) => ({
+        externalId: r.source_external_id as string,
+        measuredAtMs: Date.parse(r.measured_at as string),
+      }));
+    } catch (error: any) {
+      console.error('[BodyComposition] import tombstone read failed:', error?.message);
+      return [];
+    }
   }
 
   /**
    * Idempotent platform import (POST /body-comp/import). Dedup by
    * (user, source, source_external_id); remaining samples are grouped into 10-minute
    * clusters, each merged into an existing same-window row or inserted as a new one.
+   *
+   * Per-sample, never all-or-nothing: a sample the user deleted (tombstone), a cluster
+   * with no counted metric, or a cluster the database refuses is skipped and reported
+   * in `outcomes`; the rest of the batch still imports. Only an infrastructure failure
+   * (database unreachable) fails the request, so the client retries the whole batch.
    */
   static async importBatch(userId: string, req: BodyCompImportRequest): Promise<BodyCompImportResult> {
     const supabase = createAdminSupabase();
     const source: BodyCompSource = req.platform;
     const received = req.items.length;
+    const windowMs = IMPORT_GROUP_WINDOW_MINUTES * 60_000;
+
+    // One outcome per item, same order as the request. Default: not imported yet.
+    const outcomes: BodyCompImportItemOutcome[] = req.items.map((i) => ({
+      externalId: i.externalId,
+      imported: false,
+    }));
+    const skip = (index: number, reason: BodyCompImportItemOutcome['reason']) => {
+      outcomes[index] = { externalId: req.items[index].externalId, imported: false, reason };
+    };
+
+    const indexed = req.items.map((item, index) => ({ item, index }));
 
     // Samples with no metric payload can never satisfy the ≥1-metric constraint.
-    const usable = req.items.filter(
-      (i) => i.weightKg != null || i.bodyFatPct != null || i.leanBodyMassKg != null || i.bmrKcal != null
-    );
+    const usable = indexed.filter(({ item, index }) => {
+      const hasMetric =
+        item.weightKg != null || item.bodyFatPct != null || item.leanBodyMassKg != null || item.bmrKcal != null;
+      if (!hasMetric) skip(index, 'no_valid_metric');
+      return hasMetric;
+    });
 
     // Already-imported external ids → skip.
-    let seen = new Set<string>();
-    if (usable.length > 0) {
+    const seen = new Set<string>();
+    const ids = [...new Set(usable.map(({ item }) => item.externalId))];
+    for (let i = 0; i < ids.length; i += EXTERNAL_ID_LOOKUP_CHUNK) {
       const { data: existing, error } = await supabase
         .from('body_composition_logs')
         .select('source_external_id')
         .eq('user_id', userId)
         .eq('source', source)
-        .in(
-          'source_external_id',
-          usable.map((i) => i.externalId)
-        );
+        .in('source_external_id', ids.slice(i, i + EXTERNAL_ID_LOOKUP_CHUNK));
       if (error) throw new Error(`body-comp import failed: ${error.message}`);
-      seen = new Set((existing ?? []).map((r) => r.source_external_id as string));
+      for (const r of existing ?? []) seen.add(r.source_external_id as string);
     }
-    const fresh = usable.filter((i) => !seen.has(i.externalId));
 
-    const groups = groupImportItems(fresh);
-    const windowMs = IMPORT_GROUP_WINDOW_MINUTES * 60_000;
-    let imported = 0;
+    // Entries the user deleted stay deleted (migration 093).
+    const tombstones = usable.length > 0 ? await this.loadImportTombstones(userId, source, supabase) : [];
 
-    for (const group of groups) {
-      const groupTime = Date.parse(group.measuredAt);
+    const fresh = usable.filter(({ item, index }) => {
+      if (seen.has(item.externalId)) {
+        skip(index, 'already_imported');
+        return false;
+      }
+      if (isTombstoned(item, tombstones)) {
+        skip(index, 'deleted_by_user');
+        return false;
+      }
+      return true;
+    });
+
+    const groups = groupImportItems(fresh.map(({ item }) => item));
+    // Groups never overlap (a new one starts only > window after the previous anchor),
+    // so each sample belongs to the last group whose anchor is not after it.
+    const groupStarts = groups.map((g) => Date.parse(g.measuredAt));
+    const memberIndexes: number[][] = groups.map(() => []);
+    for (const { item, index } of fresh) {
+      const t = Date.parse(item.measuredAt);
+      let owner = -1;
+      for (let g = 0; g < groupStarts.length; g++) {
+        if (groupStarts[g] <= t) owner = g;
+        else break;
+      }
+      if (owner >= 0) memberIndexes[owner].push(index);
+    }
+    const settle = (groupIndex: number, reason?: BodyCompImportItemOutcome['reason']) => {
+      for (const index of memberIndexes[groupIndex]) {
+        outcomes[index] = reason
+          ? { externalId: req.items[index].externalId, imported: false, reason }
+          : { externalId: req.items[index].externalId, imported: true };
+      }
+    };
+
+    for (let g = 0; g < groups.length; g++) {
+      const group = groups[g];
+      const groupTime = groupStarts[g];
 
       // A sample can arrive in a later sync than its siblings (e.g. BF% written after
       // weight): merge into an existing row of the same source within the window.
@@ -514,7 +693,10 @@ export class BodyCompositionService {
           !numEquals(fatMassKg, near.fat_mass_kg) ||
           !numEquals(leanBodyMassKg, near.lean_body_mass_kg) ||
           !numEquals(mergedBmr, near.bmr_kcal);
-        if (!changed) continue;
+        if (!changed) {
+          settle(g, 'unchanged');
+          continue;
+        }
 
         const { error } = await supabase
           .from('body_composition_logs')
@@ -526,8 +708,12 @@ export class BodyCompositionService {
             bmr_kcal: mergedBmr,
           })
           .eq('id', near.id);
-        if (error) throw new Error(`body-comp import failed: ${error.message}`);
-        imported += group.externalIds.length;
+        if (error) {
+          if (!isSampleRejection(error)) throw new Error(`body-comp import failed: ${error.message}`);
+          settle(g, 'rejected_by_storage');
+          continue;
+        }
+        settle(g);
 
         if (mergedWeight != null) {
           // group.measuredAt (same 10-min window as the row) keeps the client's UTC
@@ -540,7 +726,10 @@ export class BodyCompositionService {
         // with no same-window row to merge into cannot be stored yet. Leave it
         // unimported (counted skipped); a later sync merges it once a sibling
         // weight/BF% row exists.
-        if (group.weightKg == null && group.bodyFatPct == null) continue;
+        if (group.weightKg == null && group.bodyFatPct == null) {
+          settle(g, 'no_counted_metric');
+          continue;
+        }
 
         const { fatMassKg, leanBodyMassKg } = deriveBodyCompMetrics({
           weightKg: group.weightKg,
@@ -562,8 +751,13 @@ export class BodyCompositionService {
           },
           { onConflict: 'user_id,measured_at,source' }
         );
-        if (error) throw new Error(`body-comp import failed: ${error.message}`);
-        imported += group.externalIds.length;
+        if (error) {
+          if (!isSampleRejection(error)) throw new Error(`body-comp import failed: ${error.message}`);
+          // 23505 here is the external-id unique index: a concurrent sync stored it first.
+          settle(g, error.code === '23505' ? 'already_imported' : 'rejected_by_storage');
+          continue;
+        }
+        settle(g);
 
         if (group.weightKg != null) {
           await this.syncDailyWeight(userId, group.measuredAt, group.weightKg, supabase);
@@ -571,7 +765,12 @@ export class BodyCompositionService {
       }
     }
 
-    return { received, imported, skipped: received - imported };
+    // Every skipped sample carries a reason (defensive: nothing should reach here without one).
+    for (const outcome of outcomes) {
+      if (!outcome.imported && !outcome.reason) outcome.reason = 'invalid_item';
+    }
+    const imported = outcomes.filter((o) => o.imported).length;
+    return { received, imported, skipped: received - imported, outcomes };
   }
 
   /**

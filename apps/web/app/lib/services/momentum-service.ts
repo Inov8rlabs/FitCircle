@@ -11,12 +11,22 @@ export interface MomentumStatus {
   flame_label: string;
   grace_day_available: boolean;
   grace_day_used_this_week: boolean;
-  next_milestone: MomentumMilestone | null;
+  next_milestone: NextMomentumMilestone | null;
   days_to_next_milestone: number | null;
   last_check_in_date: string | null;
   checked_in_today: boolean;
+  /**
+   * Additional field: the milestones the user has unlocked, ascending by
+   * `days`. Same entries as GET /api/mobile/momentum/milestones.
+   */
+  recent_milestones: MomentumMilestone[];
 }
 
+/**
+ * A milestone is sent under two sets of keys with identical values:
+ * `days` / `badge` (the original keys, read by Android and the web app) and
+ * `day_threshold` / `badge_emoji` (the keys the iOS model reads). Keep both.
+ */
 export interface MomentumMilestone {
   days: number;
   name: string;
@@ -24,6 +34,15 @@ export interface MomentumMilestone {
   badge: string;
   unlocked: boolean;
   unlocked_at?: string;
+  /** Same value as `days`. */
+  day_threshold: number;
+  /** Same value as `badge`. */
+  badge_emoji: string;
+}
+
+export interface NextMomentumMilestone extends MomentumMilestone {
+  /** Same value as the status' `days_to_next_milestone`. */
+  days_away: number;
 }
 
 export interface MomentumCheckInResult {
@@ -40,7 +59,7 @@ export interface MomentumCheckInResult {
 // CONSTANTS
 // ============================================================================
 
-const MILESTONES: Omit<MomentumMilestone, 'unlocked' | 'unlocked_at'>[] = [
+const MILESTONES: Pick<MomentumMilestone, 'days' | 'name' | 'description' | 'badge'>[] = [
   { days: 3, name: '3-Day Spark', description: 'Your momentum is building!', badge: '🔥' },
   { days: 7, name: '1-Week Flame', description: 'One week of momentum!', badge: '💪' },
   { days: 14, name: '2-Week Blaze', description: 'Two weeks strong!', badge: '🏆' },
@@ -317,7 +336,8 @@ export class MomentumService {
 
     // Reset grace tracking for display if it's a new week
     const mondayOfThisWeek = this.getMondayOfWeek(new Date());
-    let graceUsedThisWeek = streakRecord.grace_day_used_this_week;
+    // The column is nullable; the response field is a boolean.
+    let graceUsedThisWeek: boolean = streakRecord.grace_day_used_this_week === true;
     if (
       !streakRecord.grace_day_week_start ||
       streakRecord.grace_day_week_start !== this.formatDate(mondayOfThisWeek)
@@ -331,28 +351,45 @@ export class MomentumService {
       ? nextMilestone.days - streakRecord.current_streak
       : null;
 
+    // Best-effort: the status is still complete without the unlocked list.
+    let recentMilestones: MomentumMilestone[] = [];
+    try {
+      recentMilestones = await this.getMilestones(userId, streakRecord);
+    } catch (milestoneError) {
+      console.error('[MomentumService.getStatus] milestones error (sending none):', milestoneError);
+    }
+
     return {
       current_momentum: streakRecord.current_streak,
-      best_momentum: streakRecord.best_momentum,
+      best_momentum: streakRecord.best_momentum ?? 0,
       flame_level: flameInfo.level,
       flame_label: flameInfo.label,
       grace_day_available: !graceUsedThisWeek,
       grace_day_used_this_week: graceUsedThisWeek,
-      next_milestone: nextMilestone
-        ? { ...nextMilestone, unlocked: false }
-        : null,
+      next_milestone:
+        nextMilestone && daysToNext !== null
+          ? { ...this.withAliases(nextMilestone, false), days_away: daysToNext }
+          : null,
       days_to_next_milestone: daysToNext,
       last_check_in_date: streakRecord.last_engagement_date,
       checked_in_today: checkedInToday,
+      recent_milestones: recentMilestones,
     };
   }
 
   /**
    * Get unlocked milestones for a user with unlock dates.
+   * `record` lets a caller that already holds the streak row skip the read.
    */
-  static async getMilestones(userId: string): Promise<MomentumMilestone[]> {
-    const streakRecord = await this.getOrCreateStreakRecord(userId);
-    const bestMomentum = streakRecord.best_momentum;
+  static async getMilestones(
+    userId: string,
+    record?: { best_momentum?: number | null }
+  ): Promise<MomentumMilestone[]> {
+    const streakRecord = record ?? (await this.getOrCreateStreakRecord(userId));
+    const bestMomentum = streakRecord.best_momentum ?? 0;
+
+    const unlocked = MILESTONES.filter(m => bestMomentum >= m.days);
+    if (unlocked.length === 0) return [];
 
     // Get check-in history to determine unlock dates
     const supabaseAdmin = createAdminSupabase();
@@ -364,20 +401,14 @@ export class MomentumService {
 
     const claimDates = (claims || []).map((c: { claim_date: string }) => c.claim_date);
 
-    return MILESTONES
-      .filter(m => bestMomentum >= m.days)
-      .map(m => {
-        // Approximate unlock date: the Nth claim date
-        const unlockDate = claimDates.length >= m.days
-          ? claimDates[m.days - 1]
-          : null;
+    return unlocked.map(m => {
+      // Approximate unlock date: the Nth claim date
+      const unlockDate = claimDates.length >= m.days
+        ? claimDates[m.days - 1]
+        : null;
 
-        return {
-          ...m,
-          unlocked: true,
-          unlocked_at: unlockDate || undefined,
-        };
-      });
+      return this.withAliases(m, true, unlockDate || undefined);
+    });
   }
 
   // ============================================================================
@@ -414,7 +445,22 @@ export class MomentumService {
   private static checkMilestoneAchieved(newMomentum: number): MomentumMilestone | null {
     const milestone = MILESTONES.find(m => m.days === newMomentum);
     if (!milestone) return null;
-    return { ...milestone, unlocked: true, unlocked_at: new Date().toISOString() };
+    return this.withAliases(milestone, true, new Date().toISOString());
+  }
+
+  /** A milestone under both key sets (see MomentumMilestone). */
+  private static withAliases(
+    milestone: Pick<MomentumMilestone, 'days' | 'name' | 'description' | 'badge'>,
+    unlocked: boolean,
+    unlockedAt?: string
+  ): MomentumMilestone {
+    return {
+      ...milestone,
+      unlocked,
+      ...(unlockedAt ? { unlocked_at: unlockedAt } : {}),
+      day_threshold: milestone.days,
+      badge_emoji: milestone.badge,
+    };
   }
 
   /**

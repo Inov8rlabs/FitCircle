@@ -41,6 +41,52 @@ export function randomInviteSuffix(length: number): string {
 
 export const INVITE_CODE_PATTERN = /^FIT-?[A-Z0-9]{6}$/;
 
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * The spellings of an invite code worth looking up: what the user typed
+ * (upper-cased, no spaces) plus, for well-formed codes, the same code with and
+ * without the hyphen, because both `FITABC123` and `FIT-ABC123` are valid stored
+ * formats.
+ */
+export function inviteCodeCandidates(raw: unknown): string[] {
+  if (typeof raw !== 'string') return [];
+  const code = raw.toUpperCase().replace(/\s+/g, '');
+  if (!code) return [];
+
+  const candidates = new Set<string>([code]);
+  if (INVITE_CODE_PATTERN.test(code)) {
+    const suffix = code.replace(/^FIT-?/, '');
+    candidates.add(`FIT${suffix}`);
+    candidates.add(`FIT-${suffix}`);
+  }
+  return [...candidates];
+}
+
+/** A join that was refused for a reason the user can act on (not a server fault). */
+export class CircleJoinError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'CircleJoinError';
+  }
+}
+
+export type RemoveParticipantFailure =
+  | 'CIRCLE_NOT_FOUND'
+  | 'NOT_CREATOR'
+  | 'CANNOT_REMOVE_CREATOR'
+  | 'CANNOT_REMOVE_SELF'
+  | 'NOT_A_MEMBER';
+
+export type RemoveParticipantResult =
+  | { ok: true; circleId: string; userId: string }
+  | { ok: false; reason: RemoveParticipantFailure };
+
+/** The part of a Supabase client removeParticipant needs to read a circle. */
+export interface CircleReader {
+  from(table: string): any;
+}
+
 export class CircleService {
   // ============================================================================
   // CIRCLE MANAGEMENT
@@ -81,6 +127,9 @@ export class CircleService {
         late_join_deadline: data.late_join_deadline ?? 3,
         participant_count: 1,
         status: this.getCircleStatus(data.start_date, data.end_date),
+        // Only written when the caller chose one; otherwise the column default
+        // applies, exactly as before `visibility` was read at all.
+        ...(data.visibility ? { visibility: data.visibility } : {}),
       })
       .select()
       .single();
@@ -573,6 +622,207 @@ export class CircleService {
       .eq('id', circleId);
 
     console.log(`[CircleService.joinPublicCircle] Done.`);
+  }
+
+  /**
+   * Join a circle from its invite code alone (no goal; the member sets one
+   * later). Used by `POST /api/mobile/circles/[id]/join` when the body carries
+   * an invite code: iOS 1.0 posts the code to that route with a RANDOM uuid in
+   * the path, so the circle has to be found from the code.
+   *
+   * `pathCircleId` is only a cross-check: when it names a real circle, the code
+   * must belong to that circle; when it names nothing, it is ignored.
+   *
+   * Throws `CircleJoinError` for every "cannot join" reason and rethrows
+   * database errors unchanged.
+   */
+  static async joinByInviteCode(
+    userId: string,
+    inviteCode: string,
+    options: { pathCircleId?: string | null } = {}
+  ): Promise<CircleWithDetails> {
+    const supabaseAdmin = createAdminSupabase();
+
+    const candidates = inviteCodeCandidates(inviteCode);
+    if (candidates.length === 0) {
+      throw new CircleJoinError('Invalid invite code');
+    }
+
+    const { data: matches, error: lookupError } = await supabaseAdmin
+      .from('fitcircles')
+      .select('id, creator_id, invite_code, participant_count')
+      .in('invite_code', candidates)
+      .limit(1);
+
+    if (lookupError) throw lookupError;
+    const circle = matches?.[0] ?? null;
+
+    const pathCircleId = options.pathCircleId?.trim().toLowerCase() || null;
+    if (pathCircleId && UUID_PATTERN.test(pathCircleId) && circle?.id !== pathCircleId) {
+      const { data: pathCircle } = await supabaseAdmin
+        .from('fitcircles')
+        .select('id')
+        .eq('id', pathCircleId)
+        .maybeSingle();
+
+      if (pathCircle) {
+        throw new CircleJoinError('Invalid invite code for this circle');
+      }
+    }
+
+    if (!circle) {
+      throw new CircleJoinError('Invalid invite code');
+    }
+
+    // Same joinability rules as POST /api/mobile/circles/join (ended circles,
+    // late-join window).
+    const invite = await this.getInviteByCode(circle.invite_code);
+    if (!invite.valid) {
+      throw new CircleJoinError(invite.error_reason || 'Invalid invite code');
+    }
+
+    const { data: existing } = await supabaseAdmin
+      .from('fitcircle_members')
+      .select('id')
+      .eq('fitcircle_id', circle.id)
+      .eq('user_id', userId)
+      .limit(1);
+
+    if (existing && existing.length > 0) {
+      throw new CircleJoinError('You are already a member of this circle');
+    }
+
+    await this.acceptInvite(circle.invite_code, userId);
+    await this.addMemberToCircle(userId, circle.id, circle.creator_id);
+
+    const { error: countError } = await supabaseAdmin
+      .from('fitcircles')
+      .update({ participant_count: (circle.participant_count ?? 0) + 1 })
+      .eq('id', circle.id);
+
+    if (countError) {
+      // The member row exists; a stale cached count must not fail the join.
+      console.error('[CircleService.joinByInviteCode] Failed to update participant count:', countError);
+    }
+
+    try {
+      const { DailyGoalService } = await import('./daily-goals');
+      await DailyGoalService.createDailyGoalsForChallenge(userId, circle.id, supabaseAdmin);
+    } catch (goalError) {
+      console.error('[CircleService.joinByInviteCode] Failed to create daily goals:', goalError);
+    }
+
+    return this.getCircle(circle.id);
+  }
+
+  /**
+   * Remove a member from a circle. Shared by the cookie-auth web route
+   * (`POST /api/fitcircles/[id]/participants/[userId]/remove`) and the
+   * bearer-auth mobile route
+   * (`DELETE /api/mobile/circles/[id]/participants/[userId]`).
+   *
+   * Rules: only the circle creator may remove; the creator can never be removed
+   * (so nobody removes themselves here; members use "leave").
+   *
+   * Options:
+   * - `requireMembership` (mobile): "the target is not in this circle" is a
+   *   failure. Without it (web) that case stays what it always was there, a
+   *   delete that matches nothing and still answers success.
+   * - `circleClient` (web): the client that reads the circle. The web route
+   *   passes its cookie (RLS) client, as it always has; by default the
+   *   service-role client is used.
+   *
+   * The caller must have authenticated `requesterId`; it is never read from a
+   * request body. Database errors are thrown.
+   */
+  static async removeParticipant(
+    requesterId: string,
+    circleId: string,
+    targetUserId: string,
+    options: { requireMembership?: boolean; circleClient?: CircleReader } = {}
+  ): Promise<RemoveParticipantResult> {
+    const supabaseAdmin = createAdminSupabase();
+
+    // Path ids from iOS are uppercase (UUID.uuidString); compare in one case.
+    const requester = requesterId.trim().toLowerCase();
+    const circle_id = circleId.trim().toLowerCase();
+    const target = targetUserId.trim().toLowerCase();
+
+    const reader: CircleReader = options.circleClient ?? supabaseAdmin;
+    const { data: circle, error: circleError } = await reader
+      .from('fitcircles')
+      .select('creator_id')
+      .eq('id', circle_id)
+      .single();
+
+    if (circleError || !circle) {
+      // "No row" is PGRST116. Any other error is a fault, except through a
+      // caller-supplied client, where the web route has always said "not found".
+      if (circleError && circleError.code !== 'PGRST116' && !options.circleClient) {
+        throw circleError;
+      }
+      return { ok: false, reason: 'CIRCLE_NOT_FOUND' };
+    }
+
+    const creator = String(circle.creator_id ?? '').toLowerCase();
+
+    if (creator !== requester) {
+      return { ok: false, reason: 'NOT_CREATOR' };
+    }
+    if (target === creator) {
+      return { ok: false, reason: 'CANNOT_REMOVE_CREATOR' };
+    }
+    if (target === requester) {
+      return { ok: false, reason: 'CANNOT_REMOVE_SELF' };
+    }
+
+    if (options.requireMembership) {
+      const { data: memberships, error: memberError } = await supabaseAdmin
+        .from('fitcircle_members')
+        .select('id')
+        .eq('fitcircle_id', circle_id)
+        .eq('user_id', target)
+        .limit(1);
+
+      if (memberError) throw memberError;
+      if (!memberships || memberships.length === 0) {
+        return { ok: false, reason: 'NOT_A_MEMBER' };
+      }
+    }
+
+    const { error: deleteError } = await supabaseAdmin
+      .from('fitcircle_members')
+      .delete()
+      .eq('fitcircle_id', circle_id)
+      .eq('user_id', target);
+
+    if (deleteError) throw deleteError;
+
+    // Keep the cached count in step with the real roster. Best effort: the read
+    // paths recount active members themselves.
+    try {
+      const { count } = await supabaseAdmin
+        .from('fitcircle_members')
+        .select('*', { count: 'exact', head: true })
+        .eq('fitcircle_id', circle_id)
+        .eq('status', 'active');
+
+      if (typeof count === 'number') {
+        await supabaseAdmin
+          .from('fitcircles')
+          .update({ participant_count: count })
+          .eq('id', circle_id);
+      }
+    } catch (countError) {
+      console.error(
+        '[CircleService.removeParticipant] Failed to update participant count:',
+        countError instanceof Error ? countError.message : countError
+      );
+    }
+
+    console.log(`[CircleService.removeParticipant] Creator ${requester} removed a member from circle ${circle_id}`);
+
+    return { ok: true, circleId: circle_id, userId: target };
   }
 
   /**

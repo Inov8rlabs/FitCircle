@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { addAutoRefreshHeaders } from '@/lib/middleware/mobile-auto-refresh';
 import { createAdminSupabase } from '@/lib/supabase-admin';
+import { parseLenient, validationMessage } from '@/lib/validation/lenient-parse';
 
 /**
  * Preferences Schema - matches iOS UserPreferences structure
@@ -22,6 +23,10 @@ const preferencesSchema = z.object({
       profile_visibility: z.enum(['public', 'friends', 'private']).optional(),
       show_weight: z.boolean().optional(),
       show_progress: z.boolean().optional(),
+      // Sent by iOS and Android (PrivacyPreferences), read back by both from
+      // `preferences.privacy` of the profile responses under these same names.
+      allow_team_invites: z.boolean().optional(),
+      allow_challenge_invites: z.boolean().optional(),
     })
     .optional(),
   display: z
@@ -37,6 +42,54 @@ const preferencesSchema = z.object({
     })
     .optional(),
 });
+
+/**
+ * Older web code stored some privacy settings in camelCase, and the profile
+ * responses read a camelCase key before its snake_case twin. When a client
+ * saves a snake_case key, keep an EXISTING camelCase twin in step so the saved
+ * value is the one every reader returns. No new camelCase key is ever created.
+ */
+const PRIVACY_CAMEL_TWINS: Record<string, string> = {
+  profile_visibility: 'profileVisibility',
+  show_weight: 'showWeight',
+  show_progress: 'showProgress',
+  allow_team_invites: 'allowTeamInvites',
+  allow_challenge_invites: 'allowChallengeInvites',
+};
+
+function mergePrivacy(
+  current: Record<string, unknown>,
+  incoming: Record<string, unknown>
+): Record<string, unknown> {
+  const merged = { ...current, ...incoming };
+  for (const [key, value] of Object.entries(incoming)) {
+    const twin = PRIVACY_CAMEL_TWINS[key];
+    if (twin && value !== undefined && twin in current) merged[twin] = value;
+  }
+  return merged;
+}
+
+/**
+ * The web app stores the unit system as top-level `unitSystem` (+ `units`), and
+ * the auth responses read it before `display.units`. When a client saves
+ * `display.units`, keep those EXISTING keys in step. They are never created here.
+ */
+function syncUnitSystem(
+  current: Record<string, any>,
+  units: 'metric' | 'imperial' | undefined
+): Record<string, unknown> {
+  if (!units) return {};
+  const synced: Record<string, unknown> = {};
+  if ('unitSystem' in current) synced.unitSystem = units;
+  if (current.units && typeof current.units === 'object' && !Array.isArray(current.units)) {
+    synced.units = {
+      ...current.units,
+      weight: units === 'imperial' ? 'lbs' : 'kg',
+      height: units === 'imperial' ? 'inches' : 'cm',
+    };
+  }
+  return synced;
+}
 
 /**
  * GET /api/mobile/settings/preferences
@@ -76,6 +129,12 @@ export async function GET(request: NextRequest) {
         profile_visibility: preferences.privacy?.profile_visibility || 'public',
         show_weight: preferences.privacy?.show_weight ?? true,
         show_progress: preferences.privacy?.show_progress ?? true,
+        allow_team_invites:
+          preferences.privacy?.allow_team_invites ?? preferences.privacy?.allowTeamInvites ?? true,
+        allow_challenge_invites:
+          preferences.privacy?.allow_challenge_invites ??
+          preferences.privacy?.allowChallengeInvites ??
+          true,
       },
       display: {
         theme: preferences.display?.theme || 'dark',
@@ -154,8 +213,9 @@ export async function PUT(request: NextRequest) {
     const user = await requireMobileAuth(request);
     const body = await request.json();
 
-    // Validate input
-    const validatedData = preferencesSchema.parse(body);
+    // Validate input. parseLenient: an explicit JSON null on an optional field
+    // (or section) means "not sent".
+    const validatedData = parseLenient(preferencesSchema, body);
 
     const supabaseAdmin = createAdminSupabase();
 
@@ -170,17 +230,18 @@ export async function PUT(request: NextRequest) {
       throw fetchError;
     }
 
-    // Deep merge preferences
+    // Deep merge preferences. Everything else stored in profiles.preferences
+    // (hydration goal, unitSystem, units, ...) is kept: this route owns four
+    // sections, not the whole object.
     const currentPreferences = profile?.preferences || {};
     const updatedPreferences = {
+      ...currentPreferences,
+      ...syncUnitSystem(currentPreferences, validatedData.display?.units),
       notifications: {
         ...(currentPreferences.notifications || {}),
         ...(validatedData.notifications || {}),
       },
-      privacy: {
-        ...(currentPreferences.privacy || {}),
-        ...(validatedData.privacy || {}),
-      },
+      privacy: mergePrivacy(currentPreferences.privacy || {}, validatedData.privacy || {}),
       display: {
         ...(currentPreferences.display || {}),
         ...(validatedData.display || {}),
@@ -227,7 +288,7 @@ export async function PUT(request: NextRequest) {
           data: null,
           error: {
             code: 'VALIDATION_ERROR',
-            message: 'Invalid input data',
+            message: validationMessage(error),
             details: error.errors,
             timestamp: new Date().toISOString(),
           },

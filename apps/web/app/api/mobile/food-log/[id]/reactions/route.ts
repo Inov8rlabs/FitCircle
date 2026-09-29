@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { CircleFoodFeedService } from '@/lib/services/circle-food-feed-service';
 import { REACTION_KINDS, type ReactionKind } from '@/lib/types/food-feed';
+import { parseLenient } from '@/lib/validation/lenient-parse';
 
 import { mapReactionError } from './reaction-errors';
 
@@ -27,7 +28,7 @@ export async function POST(
     const { id } = await params;
 
     const body = await request.json();
-    const { reaction } = addReactionSchema.parse(body);
+    const { reaction } = parseLenient(addReactionSchema, body);
 
     // zod validated `reaction` at runtime; narrow the widened string back to ReactionKind.
     const reactions = await CircleFoodFeedService.addReaction(

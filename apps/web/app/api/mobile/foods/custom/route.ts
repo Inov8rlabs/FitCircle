@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { FoodsService } from '@/lib/services/foods-service';
 import { createCustomFoodSchema } from '@/lib/types/foods';
+import { parseLenient, validationMessage } from '@/lib/validation/lenient-parse';
 
 /**
  * GET  /api/mobile/foods/custom  — list the user's saved custom foods + recipes.
@@ -26,7 +27,7 @@ export async function POST(request: NextRequest) {
   try {
     const user = await requireMobileAuth(request);
     const body = await request.json();
-    const input = createCustomFoodSchema.parse(body);
+    const input = parseLenient(createCustomFoodSchema, body);
     const food = await FoodsService.createCustomFood(user.id, input);
     return NextResponse.json({ success: true, data: food, meta: { requestTime: Date.now() - startTime }, error: null }, { status: 201 });
   } catch (error: any) {
@@ -48,7 +49,7 @@ function errorResponse(error: any) {
         data: null,
         error: {
           code: 'VALIDATION_ERROR',
-          message: 'Invalid input data',
+          message: validationMessage(error),
           details: error.errors.reduce((acc: any, e) => { acc[e.path.join('.')] = e.message; return acc; }, {}),
           timestamp: new Date().toISOString(),
         },

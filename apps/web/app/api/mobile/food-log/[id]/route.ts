@@ -12,7 +12,11 @@ import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { FoodLogImageService } from '@/lib/services/food-log-image-service';
 import { FoodLogService } from '@/lib/services/food-log-service';
 import { createAdminSupabase } from '@/lib/supabase-admin';
-import { UpdateFoodLogEntrySchema } from '@/lib/validation/food-log-validation';
+import {
+  UpdateFoodLogEntrySchema,
+  normalizeFoodLogEntryAliases,
+} from '@/lib/validation/food-log-validation';
+import { parseLenient, validationMessage } from '@/lib/validation/lenient-parse';
 
 /**
  * GET /api/mobile/food-log/[id]
@@ -134,8 +138,14 @@ export async function PATCH(
     const supabase = createAdminSupabase();
 
     // Parse and validate request body
+    // Tolerant parse: `entry_type: "snack"` means "this is a snack" (meal_type snack
+    // unless another meal_type was sent); explicit nulls on optional fields are
+    // treated as "not sent".
     const body = await request.json();
-    const validatedData = UpdateFoodLogEntrySchema.parse(body);
+    const validatedData = parseLenient(
+      UpdateFoodLogEntrySchema,
+      normalizeFoodLogEntryAliases(body)
+    );
 
     // Update entry
     const result = await FoodLogService.updateEntry(entryId, user.id, validatedData, supabase);
@@ -194,7 +204,7 @@ export async function PATCH(
           data: null,
           error: {
             code: 'VALIDATION_ERROR',
-            message: 'Invalid input data',
+            message: validationMessage(error),
             details: error.errors.reduce((acc: any, err) => {
               acc[err.path.join('.')] = err.message;
               return acc;

@@ -5,6 +5,7 @@ import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { NutritionCoachService } from '@/lib/services/nutrition-coach-service';
 import { UpgradeRequiredError } from '@/lib/services/usage-service';
 import type { CoachResponse } from '@/lib/types/nutrition-coach';
+import { safeParseLenient } from '@/lib/validation/lenient-parse';
 
 /**
  * POST /api/mobile/nutrition-coach
@@ -36,7 +37,7 @@ export async function POST(request: NextRequest) {
       body = null;
     }
 
-    const parsed = requestSchema.safeParse(body);
+    const parsed = safeParseLenient(requestSchema, body);
     if (!parsed.success) {
       return NextResponse.json(
         {

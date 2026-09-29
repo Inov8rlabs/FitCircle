@@ -4,6 +4,8 @@ import { z } from 'zod';
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { addAutoRefreshHeaders } from '@/lib/middleware/mobile-auto-refresh';
 import { createAdminSupabase } from '@/lib/supabase-admin';
+import { safeParseLenient, validationMessage } from '@/lib/validation/lenient-parse';
+import { normalizeUpdateGoalBody } from '@/lib/validators/daily-goals';
 
 /**
  * Validation schema for updating daily goal
@@ -33,7 +35,8 @@ export async function PATCH(
     console.log(`[Mobile Daily Goals] Updating goal ${goalId} for user: ${user.id}`);
 
     // Validate input
-    const validationResult = updateGoalSchema.safeParse(body);
+    // snake_case is the contract; camelCase keys and explicit nulls are tolerated.
+    const validationResult = safeParseLenient(updateGoalSchema, normalizeUpdateGoalBody(body));
 
     if (!validationResult.success) {
       return NextResponse.json(
@@ -42,7 +45,7 @@ export async function PATCH(
           data: null,
           error: {
             code: 'VALIDATION_ERROR',
-            message: 'Invalid request data',
+            message: validationMessage(validationResult.error),
             details: validationResult.error.errors,
             timestamp: new Date().toISOString(),
           },

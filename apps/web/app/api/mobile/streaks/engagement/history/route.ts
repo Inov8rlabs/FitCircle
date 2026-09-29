@@ -14,7 +14,9 @@ export async function GET(request: NextRequest) {
 
     // Get days parameter from query string (default 90)
     const { searchParams } = new URL(request.url);
-    const days = parseInt(searchParams.get('days') || '90', 10);
+    const requestedDays = parseInt(searchParams.get('days') || '90', 10);
+    // An unreadable value (`?days=abc`) falls back to the default instead of a 500.
+    const days = Number.isFinite(requestedDays) ? requestedDays : 90;
 
     // Validate days parameter
     if (days < 1 || days > 365) {
@@ -26,8 +28,11 @@ export async function GET(request: NextRequest) {
 
     console.log(`[GET /api/mobile/streaks/engagement/history] Fetching ${days} days for user:`, user.id);
 
+    // Honour the device's local timezone for the "paused until today" days.
+    const timezone = request.headers.get('x-client-timezone') || undefined;
+
     // Get engagement history
-    const history = await EngagementStreakService.getEngagementHistory(user.id, days);
+    const history = await EngagementStreakService.getEngagementHistory(user.id, days, timezone);
 
     return NextResponse.json({ success: true, data: history });
 

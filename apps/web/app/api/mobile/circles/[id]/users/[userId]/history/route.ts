@@ -3,10 +3,15 @@ import { type NextRequest, NextResponse } from 'next/server';
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { addAutoRefreshHeaders } from '@/lib/middleware/mobile-auto-refresh';
 import { UserService } from '@/lib/services/user-service';
+import { normalizeId } from '@/lib/validation/circle-validation';
 
 /**
  * GET /api/mobile/circles/[id]/users/[userId]/history
  * Get user check-in history within circle context
+ *
+ * Privacy: when the owner hides their progress the answer is 200 with
+ * `can_view: false` and no entries. It used to be an empty list with
+ * `can_view: true`, which the apps showed as "no check-ins yet".
  *
  * Query params:
  * - limit: number (default: 30, max: 100)
@@ -18,7 +23,9 @@ export async function GET(
 ) {
   try {
     const user = await requireMobileAuth(request);
-    const { id: circleId, userId } = await params;
+    const { id: circleId, userId: rawUserId } = await params;
+    // iOS sends uppercase uuids in the path; the owner check compares strings.
+    const userId = normalizeId(rawUserId);
 
     // Get query params
     const { searchParams } = new URL(request.url);
@@ -28,18 +35,21 @@ export async function GET(
     console.log(`[Circle User History] User ${user.id} viewing history ${userId} in circle ${circleId} (limit: ${limit}, offset: ${offset})`);
 
     // Get user history with circle context
-    const history = await UserService.getUserHistory(userId, user.id, {
-      circleId,
-      limit,
-      offset,
-    });
+    const { can_view_history: canView } = await UserService.getSectionVisibility(userId, user.id);
+    const history = canView
+      ? await UserService.getUserHistory(userId, user.id, {
+          circleId,
+          limit,
+          offset,
+        })
+      : { entries: [], total_count: 0, has_more: false };
 
     const response = NextResponse.json(
       {
         success: true,
         data: {
           ...history,
-          can_view: true,
+          can_view: canView,
         },
         error: null,
         meta: {

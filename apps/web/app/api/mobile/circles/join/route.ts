@@ -5,6 +5,7 @@ import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { CircleService } from '@/lib/services/circle-service';
 import { DailyGoalService } from '@/lib/services/daily-goals';
 import { createAdminSupabase } from '@/lib/supabase-admin';
+import { parseLenient } from '@/lib/validation/lenient-parse';
 
 // Validation schema
 const joinCircleSchema = z.object({
@@ -31,7 +32,8 @@ export async function POST(request: NextRequest) {
 
     // Parse and validate request body
     const body = await request.json();
-    const validatedData = joinCircleSchema.parse(body);
+    // An explicit JSON null on an optional field (e.g. `goal: null`) means "not sent".
+    const validatedData = parseLenient(joinCircleSchema, body);
 
     // Normalize invite code
     const inviteCode = validatedData.inviteCode.toUpperCase().trim();
@@ -52,9 +54,11 @@ export async function POST(request: NextRequest) {
     // Find the circle
     const supabaseAdmin = createAdminSupabase();
 
+    // `creator_id` is the column; this used to select `created_by`, which does
+    // not exist on fitcircles, so the lookup failed and every join answered 404.
     const { data: circle, error: circleError } = await supabaseAdmin
       .from('fitcircles')
-      .select('id, created_by, start_date')
+      .select('id, creator_id, start_date')
       .eq('invite_code', inviteCode)
       .single();
 
@@ -97,7 +101,7 @@ export async function POST(request: NextRequest) {
       const { error: memberError } = await supabaseAdmin.from('fitcircle_members').insert({
         fitcircle_id: circle.id,
         user_id: user.id,
-        invited_by: circle.created_by,
+        invited_by: circle.creator_id,
         status: 'active',
       });
 

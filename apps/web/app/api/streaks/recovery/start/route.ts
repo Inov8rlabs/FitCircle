@@ -4,6 +4,8 @@ import { z } from 'zod';
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { StreakClaimingService } from '@/lib/services/streak-claiming-service';
 import { StreakClaimError } from '@/lib/types/streak-claiming';
+import { readJsonBody } from '@/lib/streaks/request-body';
+import { parseLenient, validationMessage } from '@/lib/validation/lenient-parse';
 
 // Validation schema
 const startRecoverySchema = z.object({
@@ -36,8 +38,8 @@ export async function POST(request: NextRequest) {
     const user = await requireMobileAuth(request);
 
     // 2. Parse and validate request body
-    const body = await request.json();
-    const { brokenDate, recoveryType } = startRecoverySchema.parse(body);
+    const body = await readJsonBody(request);
+    const { brokenDate, recoveryType } = parseLenient(startRecoverySchema, body);
 
     // 3. Start recovery
     const targetDate = new Date(brokenDate);
@@ -90,7 +92,7 @@ export async function POST(request: NextRequest) {
           success: false,
           error: {
             code: 'VALIDATION_ERROR',
-            message: 'Invalid input data',
+            message: validationMessage(error),
             details: error.errors.reduce((acc: any, err) => {
               acc[err.path.join('.')] = err.message;
               return acc;

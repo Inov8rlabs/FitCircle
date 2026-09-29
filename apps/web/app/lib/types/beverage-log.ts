@@ -26,11 +26,23 @@ export interface BeverageType {
 
 export type BeverageSource = 'manual' | 'import' | 'api' | 'ios' | 'android' | 'web';
 
-export type Temperature = 'hot' | 'cold' | 'iced' | 'room_temp';
+// `room`, `extraLarge` and `cream` are the spellings the mobile apps send and decode;
+// they are what is stored and returned (see beverage-log-validation.ts). The
+// snake_case spellings are still accepted on input.
+export type Temperature = 'hot' | 'cold' | 'iced' | 'room_temp' | 'room';
 
-export type Size = 'small' | 'medium' | 'large' | 'extra_large';
+export type Size = 'small' | 'medium' | 'large' | 'extra_large' | 'extraLarge';
 
-export type MilkType = 'whole' | 'skim' | '2_percent' | 'oat' | 'almond' | 'soy' | 'coconut' | 'none';
+export type MilkType =
+  | 'whole'
+  | 'skim'
+  | '2_percent'
+  | 'oat'
+  | 'almond'
+  | 'soy'
+  | 'coconut'
+  | 'none'
+  | 'cream';
 
 /**
  * Flexible customizations for beverages

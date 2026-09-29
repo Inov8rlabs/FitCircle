@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { addAutoRefreshHeaders } from '@/lib/middleware/mobile-auto-refresh';
 import { CircleService } from '@/lib/services/circle-service';
+import { parseLenient, validationMessage } from '@/lib/validation/lenient-parse';
 
 /**
  * Validation schema for circle check-in
@@ -48,7 +49,7 @@ export async function POST(
     const body = await request.json();
 
     // Validate input
-    const validatedData = checkInSchema.parse(body);
+    const validatedData = parseLenient(checkInSchema, body);
 
     // Submit check-in via CircleService
     const result = await CircleService.submitCheckIn(user.id, circleId, {
@@ -93,7 +94,7 @@ export async function POST(
           data: null,
           error: {
             code: 'VALIDATION_ERROR',
-            message: 'Invalid input data',
+            message: validationMessage(error),
             details: error.errors,
             timestamp: new Date().toISOString(),
           },

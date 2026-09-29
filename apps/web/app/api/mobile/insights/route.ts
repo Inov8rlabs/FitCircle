@@ -4,6 +4,7 @@ import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { CrossSignalService } from '@/lib/services/cross-signal-service';
 import { UsageService } from '@/lib/services/usage-service';
 import { DEFAULT_LOOKBACK_DAYS } from '@/lib/types/cross-signal';
+import { toClientInsights } from '@/lib/validation/insight-response';
 
 /**
  * GET /api/mobile/insights?lookbackDays=
@@ -26,7 +27,11 @@ export async function GET(request: NextRequest) {
     const clamped = Number.isFinite(windowDays) && lookbackDays > windowDays;
     if (clamped) lookbackDays = windowDays as number;
 
-    const insights = await CrossSignalService.getInsights(user.id, lookbackDays);
+    // Guarantee the fields the mobile models treat as required (additive defaults
+    // only — a well-formed insight is returned unchanged).
+    const insights = toClientInsights(
+      await CrossSignalService.getInsights(user.id, lookbackDays)
+    );
 
     return NextResponse.json({
       success: true,

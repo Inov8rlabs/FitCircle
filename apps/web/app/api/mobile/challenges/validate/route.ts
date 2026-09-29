@@ -10,9 +10,16 @@ import { CustomChallengeService, type CustomChallengeInput } from '@/lib/service
 export async function POST(request: NextRequest) {
   try {
     await requireMobileAuth(request);
-    const body = await request.json();
+    const raw: unknown = await request.json();
 
-    const result = CustomChallengeService.validateChallenge(body as CustomChallengeInput);
+    // This dry run has no schema (its job is to REPORT what is wrong), so explicit
+    // nulls are dropped by hand: a null field reads as a missing field.
+    const body =
+      raw && typeof raw === 'object' && !Array.isArray(raw)
+        ? Object.fromEntries(Object.entries(raw).filter(([, value]) => value !== null))
+        : {};
+
+    const result = CustomChallengeService.validateChallenge(body as unknown as CustomChallengeInput);
 
     return NextResponse.json({
       success: true,

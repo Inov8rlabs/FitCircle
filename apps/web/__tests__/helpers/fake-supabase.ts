@@ -7,6 +7,8 @@
  *   from(t).insert(row|rows) [.select().single()]
  *   from(t).update(patch).eq(...)... [.select(...)]
  *   from(t).upsert(row|rows, {onConflict}) — honours unique keys
+ *   from(t).select(cols, {count: 'exact', head: true}) — resolves {count}
+ *   .not(col, 'is', null) / .in(col, values)
  *
  * Unique constraints are declared per table so duplicate inserts produce
  * Postgres-style 23505 errors, which the services rely on.
@@ -54,15 +56,19 @@ class FakeQuery {
   private orderBy: { column: string; ascending: boolean } | null = null;
   private limitN: number | null = null;
   private returnRows = false;
+  private countMode = false;
+  private headOnly = false;
 
   constructor(private table: TableDef) {}
 
-  select(_cols?: string) {
+  select(_cols?: string, opts?: { count?: string; head?: boolean }) {
     if (this.op === 'insert' || this.op === 'update' || this.op === 'upsert') {
       this.returnRows = true;
       return this;
     }
     this.op = 'select';
+    if (opts?.count) this.countMode = true;
+    if (opts?.head) this.headOnly = true;
     return this;
   }
 
@@ -98,6 +104,23 @@ class FakeQuery {
 
   neq(column: string, value: any) {
     this.filters.push(r => r[column] !== value);
+    return this;
+  }
+
+  /** PostgREST `.not(col, 'is', null)` / `.not(col, 'eq', value)`. */
+  not(column: string, operator: string, value: any) {
+    if (operator === 'is') {
+      this.filters.push(r => (value === null ? r[column] != null : r[column] !== value));
+    } else if (operator === 'eq') {
+      this.filters.push(r => r[column] !== value);
+    } else {
+      throw new Error(`FakeSupabase: unsupported not(${operator})`);
+    }
+    return this;
+  }
+
+  in(column: string, values: any[]) {
+    this.filters.push(r => values.includes(r[column]));
     return this;
   }
 
@@ -222,8 +245,15 @@ class FakeQuery {
 
   // Thenable: `await query` resolves with {data, error}. Mutations return
   // affected rows in data only when .select() was chained (like Supabase).
-  then<T>(resolve: (value: { data: any; error: any }) => T, reject?: (e: any) => T): Promise<T> {
+  then<T>(
+    resolve: (value: { data: any; error: any; count?: number | null }) => T,
+    reject?: (e: any) => T
+  ): Promise<T> {
     const { data, error } = this.execute();
+    if (this.op === 'select' && this.countMode) {
+      const count = Array.isArray(data) ? data.length : 0;
+      return Promise.resolve({ data: this.headOnly ? null : data, error, count }).then(resolve, reject);
+    }
     const value =
       this.op === 'select' || this.returnRows ? { data, error } : { data: null, error };
     return Promise.resolve(value).then(resolve, reject);

@@ -5,6 +5,7 @@ import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { FitzyService } from '@/lib/services/fitzy-service';
 import { UpgradeRequiredError } from '@/lib/services/usage-service';
 import type { FitzyChatResponse } from '@/lib/types/fitzy';
+import { safeParseLenient } from '@/lib/validation/lenient-parse';
 
 /**
  * POST /api/mobile/fitzy/chat
@@ -42,7 +43,7 @@ export async function POST(request: NextRequest) {
       body = null;
     }
 
-    const parsed = requestSchema.safeParse(body);
+    const parsed = safeParseLenient(requestSchema, body);
     if (!parsed.success) {
       return NextResponse.json(
         {

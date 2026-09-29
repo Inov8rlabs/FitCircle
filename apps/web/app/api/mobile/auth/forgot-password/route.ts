@@ -3,6 +3,7 @@ import { type NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 
 import { createRateLimiter, getIdentifier, applyRateLimit } from '@/lib/middleware/rate-limit';
+import { parseLenient } from '@/lib/validation/lenient-parse';
 
 const forgotPasswordSchema = z.object({
   email: z.string().email(),
@@ -17,7 +18,7 @@ const forgotPasswordRateLimiter = createRateLimiter({
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { email } = forgotPasswordSchema.parse(body);
+    const { email } = parseLenient(forgotPasswordSchema, body);
 
     const identifier = getIdentifier(request);
     const rateLimitResponse = await applyRateLimit(request, forgotPasswordRateLimiter, `forgot:${identifier}:${email}`);

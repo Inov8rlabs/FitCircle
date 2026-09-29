@@ -94,7 +94,24 @@ export interface EngagementStreakResponse {
   shields_unlimited?: boolean;
   paused: boolean;
   pause_end_date: string | null;
+  /** First paused day (YYYY-MM-DD) while the streak is paused, otherwise null. Additional field. */
+  pause_start_date?: string | null;
   last_engagement_date: string | null;
+  /** Additional field (apply-freeze only): the day the shield was applied to. */
+  protected_date?: string;
+  /** Additional field: XP price of one shield, null when XP purchases are off. */
+  shield_price_xp?: number | null;
+  /** Additional field: spendable XP, null while the spent ledger is unavailable. */
+  xp_balance?: number | null;
+}
+
+/** One day of a metric's 30-day trend. */
+export interface MetricTrendPoint {
+  /** YYYY-MM-DD, user-local. */
+  date: string;
+  logged: boolean;
+  /** weight: kg, steps: count, mood: score. Null when nothing was logged. */
+  value: number | null;
 }
 
 export interface MetricStreakResponse {
@@ -104,6 +121,10 @@ export interface MetricStreakResponse {
   last_log_date: string | null;
   grace_days_available: number;
   grace_days_used: number;
+  /** Additional field: number of days with a log for this metric (all time). */
+  total_logs_count?: number;
+  /** Additional field: the last 30 days, oldest first, one entry per day. */
+  trend?: MetricTrendPoint[];
 }
 
 export interface AllMetricStreaksResponse {
@@ -132,6 +153,11 @@ export interface EngagementHistoryResponse {
   entries: EngagementHistoryEntry[];
   total_days: number;
   total_activities: number;
+  /**
+   * Additional field: the days (YYYY-MM-DD, ascending) inside the requested
+   * window on which the streak was paused, past pauses and the current one.
+   */
+  paused_days?: string[];
 }
 
 // ============================================================================

@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { authRateLimiter, getIdentifier, applyRateLimit } from '@/lib/middleware/rate-limit';
 import { MobileAPIService } from '@/lib/services/mobile-api-service';
 import { SocialAuthError, findOrCreateSocialUser } from '@/lib/services/social-auth-service';
+import { parseLenient, validationMessage } from '@/lib/validation/lenient-parse';
 
 import { toIosAuthUser } from '../apple/ios-auth-user';
 
@@ -69,7 +70,7 @@ export async function POST(request: NextRequest) {
     if (rateLimitResponse) return rateLimitResponse;
 
     const body = await request.json();
-    const parsed = googleAuthSchema.parse(body);
+    const parsed = parseLenient(googleAuthSchema, body);
     const idToken = parsed.googleIdToken || parsed.idToken!;
 
     const googleUser = await verifyGoogleIdToken(idToken);
@@ -166,7 +167,7 @@ export async function POST(request: NextRequest) {
           data: null,
           error: {
             code: 'VALIDATION_ERROR',
-            message: 'Invalid request data',
+            message: validationMessage(error),
             details: error.errors,
             timestamp: new Date().toISOString(),
           },

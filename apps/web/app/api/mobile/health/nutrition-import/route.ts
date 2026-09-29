@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { HealthNutritionService } from '@/lib/services/health-nutrition-service';
 import { importNutritionRequestSchema } from '@/lib/types/health-nutrition';
+import { parseLenient, validationMessage } from '@/lib/validation/lenient-parse';
 
 /**
  * POST /api/mobile/health/nutrition-import — idempotent batch import of platform nutrition
@@ -15,7 +16,7 @@ export async function POST(request: NextRequest) {
   try {
     const user = await requireMobileAuth(request);
     const body = await request.json();
-    const req = importNutritionRequestSchema.parse(body);
+    const req = parseLenient(importNutritionRequestSchema, body);
     const result = await HealthNutritionService.importBatch(user.id, req);
     return NextResponse.json({ success: true, data: result, meta: { requestTime: Date.now() - startTime }, error: null });
   } catch (error: any) {
@@ -27,7 +28,7 @@ export async function POST(request: NextRequest) {
     }
     if (error instanceof z.ZodError) {
       return NextResponse.json(
-        { success: false, data: null, error: { code: 'VALIDATION_ERROR', message: 'Invalid import payload', details: error.errors.reduce((a: any, e) => { a[e.path.join('.')] = e.message; return a; }, {}), timestamp: new Date().toISOString() }, meta: null },
+        { success: false, data: null, error: { code: 'VALIDATION_ERROR', message: validationMessage(error), details: error.errors.reduce((a: any, e) => { a[e.path.join('.')] = e.message; return a; }, {}), timestamp: new Date().toISOString() }, meta: null },
         { status: 400 }
       );
     }

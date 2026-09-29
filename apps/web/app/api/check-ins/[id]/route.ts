@@ -16,9 +16,61 @@ import {
   deleteCheckIn,
   isUserInChallenge,
 } from '@/lib/services/check-in-service';
+import { MobileAPIService } from '@/lib/services/mobile-api-service';
 
-// Helper function to get authenticated user
+/**
+ * PATCH body keys. The web app sends snake_case; the mobile clients send the
+ * camelCase names of the mobile tracking contract. Both are accepted; when a request
+ * carries both spellings of a field, snake_case (the original contract) wins.
+ */
+const PATCH_FIELDS = [
+  { column: 'weight_kg', alias: 'weightKg' },
+  { column: 'steps', alias: 'steps' },
+  { column: 'notes', alias: 'notes' },
+  { column: 'mood_score', alias: 'moodScore' },
+  { column: 'energy_level', alias: 'energyLevel' },
+] as const;
+
+function readPatchFields(body: unknown): Record<string, unknown> {
+  // A body that is not a JSON object carries no fields (same as `{}`).
+  const source: Record<string, unknown> =
+    typeof body === 'object' && body !== null && !Array.isArray(body) ? (body as Record<string, unknown>) : {};
+  const fields: Record<string, unknown> = {};
+  for (const { column, alias } of PATCH_FIELDS) {
+    if (source[column] !== undefined) fields[column] = source[column];
+    else if (source[alias] !== undefined) fields[column] = source[alias];
+  }
+  return fields;
+}
+
+/**
+ * Mobile clients call this route with `Authorization: Bearer <mobile access token>`
+ * (iOS: check-in edit, per-metric clear, delete). The token is verified exactly as on
+ * /api/mobile/* routes (MobileAPIService.authenticateWithToken → signature + expiry +
+ * profile lookup). Only consulted when there is no web session cookie, so the web
+ * app's behaviour is unchanged.
+ */
+async function getBearerUser(request: NextRequest): Promise<{ id: string } | null> {
+  const authHeader = request.headers.get('Authorization');
+  if (!authHeader || !authHeader.startsWith('Bearer ')) return null;
+  const token = authHeader.substring(7).trim();
+  if (!token) return null;
+  try {
+    const profile = await MobileAPIService.authenticateWithToken(token);
+    return profile?.id ? profile : null;
+  } catch {
+    return null;
+  }
+}
+
+// Helper function to get authenticated user (web cookie first, then mobile Bearer)
 async function getAuthenticatedUser(request: NextRequest) {
+  const cookieUser = await getCookieUser();
+  if (cookieUser) return cookieUser;
+  return getBearerUser(request);
+}
+
+async function getCookieUser() {
   const cookieStore = await cookies();
   const accessToken = cookieStore.get('sb-access-token')?.value;
 
@@ -95,6 +147,9 @@ export async function GET(
       return NextResponse.json({
         checkIn,
         canEdit: true,
+        // Additive: the mobile envelope ({ success, data }) alongside the web keys.
+        success: true,
+        data: checkIn,
       });
     }
 
@@ -146,6 +201,9 @@ export async function GET(
     return NextResponse.json({
       checkIn,
       canEdit: false,
+      // Additive: the mobile envelope ({ success, data }) alongside the web keys.
+      success: true,
+      data: checkIn,
     });
 
   } catch (error) {
@@ -178,7 +236,11 @@ export async function PATCH(
 
     const { id: checkInId } = await params;
     const body = await request.json();
-    const { weight_kg, steps, notes, mood_score, energy_level } = body;
+    // snake_case (web) or camelCase (mobile); undefined = leave unchanged, null = clear.
+    const { weight_kg, steps, notes, mood_score, energy_level } = readPatchFields(body) as Record<
+      string,
+      any
+    >;
 
     // Validate weight if provided
     if (weight_kg !== undefined && weight_kg !== null) {

@@ -66,6 +66,121 @@ export interface ShareCardRow {
 }
 
 // ============================================================================
+// CARD DATA NORMALISATION
+// ============================================================================
+
+/**
+ * The mobile apps send `card_data` as a flat map of snake_case keys with STRING
+ * values (`{ "milestone_name": "Week Warrior", "days": "7" }`), while the card
+ * types above (and the renderer) are camelCase with numbers. Extra spellings a
+ * client uses for a canonical field, per card type.
+ */
+const CARD_DATA_ALIASES: Record<ShareCardType, Record<string, string>> = {
+  milestone: { days: 'dayCount', badge: 'badgeEmoji' },
+  streak_milestone: { days: 'streakDays', badgeEmoji: 'badge' },
+  challenge_complete: { goalLabel: 'goal', durationDays: 'duration' },
+  perfect_week: {},
+  momentum_flame: { level: 'flameLevel', momentum: 'currentMomentum' },
+  circle_boost: { checkedIn: 'checkedInCount', total: 'totalMembers' },
+};
+
+/** Canonical fields that are numbers. Everything else is left as sent. */
+const NUMERIC_CARD_FIELDS = new Set([
+  'dayCount',
+  'currentStreak',
+  'streakDays',
+  'goalAmount',
+  'duration',
+  'rank',
+  'weekNumber',
+  'currentMomentum',
+  'flameLevel',
+  'bestMomentum',
+  'multiplier',
+  'checkedInCount',
+  'totalMembers',
+]);
+
+function snakeToCamel(key: string): string {
+  return key.replace(/[_-]+([a-zA-Z0-9])/g, (_match, char: string) => char.toUpperCase());
+}
+
+/**
+ * "7" -> 7, "2.0x" -> 2, "1,250" -> 1250. Anything that is not clearly a number
+ * (with an optional short unit suffix) comes back undefined.
+ */
+function toNumber(value: unknown): number | undefined {
+  if (typeof value === 'number') return Number.isFinite(value) ? value : undefined;
+  if (typeof value !== 'string') return undefined;
+  const match = value.trim().match(/^(-?\d{1,3}(?:,\d{3})+(?:\.\d+)?|-?\d+(?:\.\d+)?)\s*[a-zA-Z%×]{0,3}$/);
+  if (!match) return undefined;
+  const parsed = Number(match[1].replace(/,/g, ''));
+  return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+/**
+ * Card data as the renderer needs it: every key the client sent is kept as it
+ * was, and the canonical camelCase fields are added next to them (numbers
+ * coerced from numeric strings). A canonical key the client already sent wins
+ * over an alias.
+ *
+ * Used ONLY to build the rendered image. The stored `card_data` (and therefore
+ * the API response) stays exactly what the client sent: iOS decodes it as
+ * `[String: String]` and reads its own snake_case keys back out of it.
+ */
+export function normalizeShareCardData(
+  cardType: ShareCardType,
+  raw: unknown
+): Record<string, unknown> {
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return {};
+  const source = raw as Record<string, unknown>;
+  const aliases = CARD_DATA_ALIASES[cardType] ?? {};
+
+  const canonical: Record<string, unknown> = {};
+  const put = (key: string, value: unknown, override: boolean) => {
+    if (value === undefined || value === null) return;
+    if (!override && canonical[key] !== undefined) return;
+    canonical[key] = NUMERIC_CARD_FIELDS.has(key) ? (toNumber(value) ?? value) : value;
+  };
+
+  // 1. Aliases and snake_case spellings fill the canonical key...
+  for (const [key, value] of Object.entries(source)) {
+    const camel = snakeToCamel(key);
+    put(aliases[camel] ?? aliases[key] ?? camel, value, false);
+  }
+  // 2. ...but a key that already IS canonical has the last word.
+  for (const [key, value] of Object.entries(source)) {
+    if (snakeToCamel(key) === key && !aliases[key]) put(key, value, true);
+  }
+
+  // "50 reps" -> goalAmount 50 + unit "reps" (the apps send one label).
+  if (cardType === 'challenge_complete' && typeof canonical.goal === 'string') {
+    const label = canonical.goal.trim().match(/^(\d+(?:[.,]\d+)?)\s*(.*)$/);
+    if (label) {
+      if (canonical.goalAmount === undefined) {
+        const amount = Number(label[1].replace(',', '.'));
+        if (Number.isFinite(amount)) canonical.goalAmount = amount;
+      }
+      if (canonical.unit === undefined && label[2]) canonical.unit = label[2];
+    }
+  }
+
+  // The day count of a momentum milestone doubles as the streak when the
+  // client sent only one of them.
+  if (cardType === 'milestone') {
+    if (canonical.dayCount === undefined && canonical.currentStreak !== undefined) {
+      canonical.dayCount = canonical.currentStreak;
+    }
+    if (canonical.dayCount === undefined && canonical.currentMomentum !== undefined) {
+      canonical.dayCount = toNumber(canonical.currentMomentum) ?? canonical.currentMomentum;
+    }
+  }
+
+  // Original keys first so nothing a renderer already reads goes missing.
+  return { ...source, ...canonical };
+}
+
+// ============================================================================
 // TEMPLATE CONFIG
 // ============================================================================
 
@@ -94,7 +209,7 @@ export class ShareCardService {
   static async generateCard(
     userId: string,
     cardType: ShareCardType,
-    cardData: ShareCardData
+    cardData: ShareCardData | Record<string, unknown>
   ): Promise<ShareCardRow> {
     const supabaseAdmin = createAdminSupabase();
 
@@ -105,8 +220,9 @@ export class ShareCardService {
       throw new Error(`Unknown card type: ${cardType}`);
     }
 
-    // Generate the card image URL (OG-image style endpoint)
-    const imageUrl = this.buildCardImageUrl(cardType, cardData);
+    // Generate the card image URL (OG-image style endpoint). The renderer gets
+    // the normalised data; `card_data` below is stored exactly as it was sent.
+    const imageUrl = this.buildCardImageUrl(cardType, normalizeShareCardData(cardType, cardData));
 
     const { data, error } = await supabaseAdmin
       .from('share_cards')
@@ -254,7 +370,7 @@ export class ShareCardService {
    */
   private static buildCardImageUrl(
     cardType: ShareCardType,
-    cardData: ShareCardData
+    cardData: ShareCardData | Record<string, unknown>
   ): string {
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://fitcircle.app';
     const params = new URLSearchParams({

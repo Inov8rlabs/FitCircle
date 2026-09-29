@@ -129,6 +129,11 @@ export interface LogActivityInput {
 // ============================================================================
 
 export interface CircleChallengeWithDetails extends CircleChallenge {
+  /**
+   * The stored category. `category` itself is always one of the five values every
+   * client can decode; this carries the true value when the two differ.
+   */
+  category_raw?: string | null;
   creator_name?: string;
   creator_avatar?: string;
   my_participation?: CircleChallengeParticipant | null;

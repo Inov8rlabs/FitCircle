@@ -5,15 +5,13 @@ import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { addAutoRefreshHeaders } from '@/lib/middleware/mobile-auto-refresh';
 import { CircleService } from '@/lib/services/circle-service';
 import { createAdminSupabase } from '@/lib/supabase-admin';
-
-/**
- * Validation schema for circle updates
- */
-const updateCircleSchema = z.object({
-  name: z.string().min(3).max(100).optional(),
-  description: z.string().max(500).optional(),
-  end_date: z.string().datetime().optional(),
-});
+import {
+  isSameMoment,
+  normalizeUpdateCircleBody,
+  toEpochMillis,
+  updateCircleSchema,
+} from '@/lib/validation/circle-validation';
+import { parseLenient, validationMessage } from '@/lib/validation/lenient-parse';
 
 /**
  * GET /api/mobile/circles/[id]
@@ -126,15 +124,21 @@ export async function GET(
  * PUT /api/mobile/circles/[id]
  * Update circle details (creator only)
  *
- * Body:
+ * Body (snake_case; `startDate` / `endDate` are accepted as aliases):
  * - name?: string (3-100 chars)
- * - description?: string (max 500 chars)
- * - end_date?: string (ISO datetime, only if circle hasn't started)
+ * - description?: string (max 500 chars); '' clears it, null = not sent
+ * - start_date?: string (YYYY-MM-DD or ISO datetime)
+ * - end_date?: string (YYYY-MM-DD or ISO datetime)
  *
  * Permissions: Only creator can update
- * Restrictions:
- * - Cannot change start_date if circle already started
- * - Cannot change end_date if circle is active or completed
+ * Dates:
+ * - A date equal to the stored one is not a change (iOS 1.0 always sends both
+ *   dates, even when only the name was edited).
+ * - end_date can only CHANGE while the circle has not started (400 otherwise).
+ * - start_date can only CHANGE while the circle has not started. After that a
+ *   different start_date is ignored, not rejected: the field used to be dropped
+ *   silently, so rejecting it now would fail requests that used to succeed.
+ *   `meta.ignored_fields` names what was ignored.
  */
 export async function PUT(
   request: NextRequest,
@@ -145,8 +149,8 @@ export async function PUT(
     const { id: circleId } = await params;
     const body = await request.json();
 
-    // Validate input
-    const validatedData = updateCircleSchema.parse(body);
+    // Validate input (explicit nulls on optional fields are treated as "not sent")
+    const validatedData = parseLenient(updateCircleSchema, normalizeUpdateCircleBody(body));
 
     const supabaseAdmin = createAdminSupabase();
 
@@ -201,7 +205,16 @@ export async function PUT(
     const startDate = new Date(circle.start_date);
     const hasStarted = now >= startDate;
 
-    if (validatedData.end_date && hasStarted) {
+    // Only a date that differs from the stored one counts as a change.
+    const endChanged =
+      validatedData.end_date !== undefined && !isSameMoment(validatedData.end_date, circle.end_date);
+    const startChanged =
+      validatedData.start_date !== undefined &&
+      !isSameMoment(validatedData.start_date, circle.start_date);
+    const applyStart = startChanged && !hasStarted;
+    const ignoredFields = startChanged && hasStarted ? ['start_date'] : [];
+
+    if (endChanged && hasStarted) {
       return NextResponse.json(
         {
           success: false,
@@ -218,13 +231,62 @@ export async function PUT(
       );
     }
 
+    // The resulting range must still be valid (the table has CHECK end_date > start_date,
+    // which would otherwise surface as a 500).
+    if (applyStart || endChanged) {
+      const effectiveStart = applyStart
+        ? toEpochMillis(validatedData.start_date)
+        : toEpochMillis(circle.start_date);
+      const effectiveEnd = endChanged
+        ? toEpochMillis(validatedData.end_date)
+        : toEpochMillis(circle.end_date);
+
+      if (effectiveStart !== null && effectiveEnd !== null && effectiveEnd <= effectiveStart) {
+        return NextResponse.json(
+          {
+            success: false,
+            data: null,
+            error: {
+              code: 'VALIDATION_ERROR',
+              message: 'End date must be after start date',
+              details: {},
+              timestamp: new Date().toISOString(),
+            },
+            meta: null,
+          },
+          { status: 400 }
+        );
+      }
+    }
+
+    // '' (or whitespace only) clears the description; undefined leaves it alone.
+    const descriptionUpdate =
+      validatedData.description === undefined
+        ? {}
+        : { description: validatedData.description.trim() === '' ? null : validatedData.description };
+
+    // Moving the start date can move the circle out of "upcoming"; keep the
+    // stored status in step with the dates (same rule as CircleService.getCircleStatus).
+    let statusUpdate: { status?: 'upcoming' | 'active' | 'completed' } = {};
+    if (applyStart) {
+      const newStart = toEpochMillis(validatedData.start_date);
+      const newEnd = toEpochMillis(endChanged ? validatedData.end_date : circle.end_date);
+      if (newStart !== null) {
+        if (now.getTime() < newStart) statusUpdate = { status: 'upcoming' };
+        else if (newEnd !== null && now.getTime() > newEnd) statusUpdate = { status: 'completed' };
+        else statusUpdate = { status: 'active' };
+      }
+    }
+
     // Update circle
     const { data: updated, error: updateError } = await supabaseAdmin
       .from('fitcircles')
       .update({
         ...(validatedData.name && { name: validatedData.name }),
-        ...(validatedData.description && { description: validatedData.description }),
-        ...(validatedData.end_date && { end_date: validatedData.end_date }),
+        ...descriptionUpdate,
+        ...(applyStart && { start_date: validatedData.start_date }),
+        ...(endChanged && { end_date: validatedData.end_date }),
+        ...statusUpdate,
         updated_at: new Date().toISOString(),
       })
       .eq('id', circleId)
@@ -241,7 +303,8 @@ export async function PUT(
       success: true,
       data: updated,
       error: null,
-      meta: null,
+      // null as before, unless a field had to be ignored.
+      meta: ignoredFields.length > 0 ? { ignored_fields: ignoredFields } : null,
     });
 
     return await addAutoRefreshHeaders(request, response, user);
@@ -255,7 +318,7 @@ export async function PUT(
           data: null,
           error: {
             code: 'VALIDATION_ERROR',
-            message: 'Invalid input data',
+            message: validationMessage(error),
             details: error.errors,
             timestamp: new Date().toISOString(),
           },

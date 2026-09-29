@@ -3,6 +3,7 @@ import { type NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 
 import { createRateLimiter, getIdentifier, applyRateLimit } from '@/lib/middleware/rate-limit';
+import { parseLenient } from '@/lib/validation/lenient-parse';
 
 const resendConfirmationSchema = z.object({
   email: z.string().email(),
@@ -17,7 +18,7 @@ const resendRateLimiter = createRateLimiter({
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { email } = resendConfirmationSchema.parse(body);
+    const { email } = parseLenient(resendConfirmationSchema, body);
 
     const identifier = getIdentifier(request);
     const rateLimitResponse = await applyRateLimit(request, resendRateLimiter, `resend:${identifier}:${email}`);

@@ -232,6 +232,41 @@ export class UserService {
   }
 
   /**
+   * What `requesterId` may see of `userId`'s weight card and check-in history.
+   * The owner always sees both. For anyone else the owner's `show_weight` /
+   * `show_progress` preferences decide, the same two switches getUserProgress
+   * and getUserHistory apply.
+   *
+   * getUserHistory answers a private history with an EMPTY list, which a caller
+   * cannot tell apart from "no check-ins yet"; this is how a route finds out.
+   */
+  static async getSectionVisibility(
+    userId: string,
+    requesterId: string
+  ): Promise<{ can_view_weight: boolean; can_view_history: boolean }> {
+    if (userId === requesterId) {
+      return { can_view_weight: true, can_view_history: true };
+    }
+
+    const supabaseAdmin = createAdminSupabase();
+    const { data: profile, error } = await supabaseAdmin
+      .from('profiles')
+      .select('preferences')
+      .eq('id', userId)
+      .single();
+
+    if (error || !profile) {
+      throw new Error('User not found');
+    }
+
+    const privacy = this.parsePrivacySettings(profile.preferences);
+    return {
+      can_view_weight: privacy.show_weight,
+      can_view_history: privacy.show_progress,
+    };
+  }
+
+  /**
    * Get user progress data for a specific circle
    * Respects privacy settings
    */

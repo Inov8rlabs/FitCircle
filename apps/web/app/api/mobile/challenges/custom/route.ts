@@ -3,6 +3,7 @@ import { z } from 'zod';
 
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { CustomChallengeService, type CustomChallengeInput } from '@/lib/services/custom-challenge-service';
+import { parseLenient, validationMessage } from '@/lib/validation/lenient-parse';
 
 const customChallengeSchema = z.object({
   name: z.string().min(3).max(100),
@@ -24,7 +25,7 @@ export async function POST(request: NextRequest) {
     const user = await requireMobileAuth(request);
     const body = await request.json();
 
-    const validated = customChallengeSchema.parse(body);
+    const validated = parseLenient(customChallengeSchema, body);
 
     const challenge = await CustomChallengeService.createCustomChallenge(
       user.id,
@@ -45,7 +46,7 @@ export async function POST(request: NextRequest) {
     }
     if (error instanceof z.ZodError) {
       return NextResponse.json(
-        { success: false, data: null, error: { code: 'VALIDATION_ERROR', message: 'Invalid input', details: error.errors } },
+        { success: false, data: null, error: { code: 'VALIDATION_ERROR', message: validationMessage(error), details: error.errors } },
         { status: 400 }
       );
     }

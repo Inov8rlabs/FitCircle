@@ -2,17 +2,22 @@ import { type NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
+import { DailyTrackingClearService, splitTrackingClears } from '@/lib/services/daily-tracking-clear';
 import { MobileAPIService } from '@/lib/services/mobile-api-service';
 import { StreakClaimingService } from '@/lib/services/streak-claiming-service';
 import { createAdminSupabase } from '@/lib/supabase-admin';
+import { parseLenient, validationMessage } from '@/lib/validation/lenient-parse';
 
-// Validation schema for PUT
+// Validation schema for PUT.
+// The five metrics are `.nullable()`: an explicit JSON null means "clear this value
+// from the day"; an absent key means "leave it unchanged". Every other field is
+// merely optional, so a null there is ignored (parseLenient).
 const updateTrackingSchema = z.object({
-  weightKg: z.number().positive().optional(),
-  steps: z.number().int().min(0).optional(),
-  moodScore: z.number().int().min(1).max(10).optional(),
-  energyLevel: z.number().int().min(1).max(10).optional(),
-  notes: z.string().optional(),
+  weightKg: z.number().positive().nullable().optional(),
+  steps: z.number().int().min(0).nullable().optional(),
+  moodScore: z.number().int().min(1).max(10).nullable().optional(),
+  energyLevel: z.number().int().min(1).max(10).nullable().optional(),
+  notes: z.string().nullable().optional(),
   timezone: z.string().optional(), // For automatic streak claiming
   autoClaimStreak: z.boolean().optional().default(true), // Auto-claim by default
   // Privacy flag: true = visible to circle members, false = private (owner only)
@@ -124,23 +129,66 @@ export async function PUT(
 
     // Parse and validate request body
     const body = await request.json();
-    const validatedData = updateTrackingSchema.parse(body);
+    const validatedData = parseLenient(updateTrackingSchema, body);
+
+    // Explicit nulls are clears. A request that ONLY clears is not a log: it must not
+    // create a row, record activity or claim a streak day.
+    const { clears, hasValues } = splitTrackingClears(validatedData);
+    const isClearOnly = clears.length > 0 && !hasValues && validatedData.isPublic === undefined;
+
+    if (isClearOnly) {
+      const cleared = await DailyTrackingClearService.clearMetrics(
+        createAdminSupabase(),
+        user.id,
+        date,
+        clears
+      );
+      if (!cleared) {
+        return NextResponse.json(
+          {
+            success: false,
+            data: null,
+            // New response (nulls used to be a 400), so it uses the standard mobile
+            // envelope both clients can decode.
+            error: { code: 'NOT_FOUND', message: 'No tracking data for this date' },
+            message: 'No tracking data for this date',
+          },
+          { status: 404 }
+        );
+      }
+      return NextResponse.json({
+        success: true,
+        data: cleared,
+        streak: { claimed: false },
+        cleared: clears,
+      });
+    }
 
     // Determine if this is auto-synced data
     const isAutoSync = validatedData.autoClaimStreak === false;
 
-    // Upsert tracking data
-    const trackingEntry = await MobileAPIService.upsertDailyTracking(user.id, date, {
-      weight_kg: validatedData.weightKg,
-      steps: validatedData.steps,
-      mood_score: validatedData.moodScore,
-      energy_level: validatedData.energyLevel,
-      notes: validatedData.notes,
+    // Upsert tracking data (values only — nulls are applied as clears afterwards)
+    let trackingEntry = await MobileAPIService.upsertDailyTracking(user.id, date, {
+      weight_kg: validatedData.weightKg ?? undefined,
+      steps: validatedData.steps ?? undefined,
+      mood_score: validatedData.moodScore ?? undefined,
+      energy_level: validatedData.energyLevel ?? undefined,
+      notes: validatedData.notes ?? undefined,
       is_override: !isAutoSync, // Only manual entries are overrides
       skip_streak_tracking: isAutoSync, // Auto-synced data must NOT count toward streaks
       is_public: validatedData.isPublic, // Only changes when explicitly provided
       timezone: validatedData.timezone || request.headers.get('x-client-timezone') || undefined,
     });
+
+    if (clears.length > 0) {
+      const cleared = await DailyTrackingClearService.clearMetrics(
+        createAdminSupabase(),
+        user.id,
+        date,
+        clears
+      );
+      if (cleared) trackingEntry = cleared;
+    }
 
     // Automatically claim streak if data was manually entered
     let streakClaimed = false;
@@ -183,6 +231,7 @@ export async function PUT(
         claimed: streakClaimed,
         count: streakCount,
       },
+      ...(clears.length > 0 ? { cleared: clears } : {}),
     });
   } catch (error: any) {
     console.error('Update tracking by date error:', error);
@@ -201,7 +250,7 @@ export async function PUT(
       return NextResponse.json(
         {
           error: 'Validation error',
-          message: 'Invalid input data',
+          message: validationMessage(error),
           details: error.errors,
         },
         { status: 400 }

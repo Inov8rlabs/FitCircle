@@ -5,6 +5,18 @@ import { createAdminSupabase } from '../supabase-admin';
 import { EngagementStreakService } from './engagement-streak-service';
 import { StreakClaimingService } from './streak-claiming-service';
 import { MetricStreakService } from './metric-streak-service';
+import { safeGender } from './mobile-profile-response';
+import { isValidUsername } from './username-service';
+
+/**
+ * True when PostgREST / Postgres rejected a statement because `column` does not
+ * exist: PGRST204 (not in the schema cache) or 42703 (undefined_column).
+ */
+function isMissingColumnError(error: { code?: string; message?: string } | null, column: string): boolean {
+  if (!error) return false;
+  if (error.code !== 'PGRST204' && error.code !== '42703') return false;
+  return typeof error.message === 'string' && error.message.includes(column);
+}
 
 // ============================================================================
 // JWT SECRET VALIDATION
@@ -865,6 +877,9 @@ export class MobileAPIService {
 
     return {
       ...profile,
+      // profiles.gender exists once migration 088 is applied. iOS decodes it as
+      // a closed enum, so only the known values (or null) may go out.
+      ...('gender' in profile ? { gender: safeGender(profile.gender) } : {}),
       stats: {
         totalPoints: profile.total_points || 0,
         currentStreak,
@@ -916,6 +931,8 @@ export class MobileAPIService {
       weight_kg?: number;
       date_of_birth?: string;
       fitness_level?: string;
+      /** One of PROFILE_GENDER_VALUES (validated in the route layer). */
+      gender?: string;
     }
   ): Promise<any> {
     const supabaseAdmin = createAdminSupabase();
@@ -931,7 +948,12 @@ export class MobileAPIService {
       sanitizedUpdates.display_name = sanitizeDisplayName(updates.display_name);
     }
     if (updates.username !== undefined) {
-      sanitizedUpdates.username = sanitizeUsername(updates.username);
+      // A username that satisfies the shared rule (username-service.ts) is
+      // stored lowercased with its periods. For the letters/digits/underscore
+      // names accepted before, this is exactly what sanitizeUsername() stores.
+      sanitizedUpdates.username = isValidUsername(updates.username)
+        ? updates.username.toLowerCase()
+        : sanitizeUsername(updates.username);
     }
     if (updates.bio !== undefined) {
       sanitizedUpdates.bio = sanitizeBio(updates.bio);
@@ -953,16 +975,30 @@ export class MobileAPIService {
     if (updates.fitness_level !== undefined) {
       sanitizedUpdates.fitness_level = updates.fitness_level;
     }
+    if (updates.gender !== undefined) {
+      sanitizedUpdates.gender = updates.gender;
+    }
 
-    const { data, error } = await supabaseAdmin
-      .from('profiles')
-      .update({
-        ...sanitizedUpdates,
-        updated_at: new Date().toISOString(),
-      })
-      .eq('id', userId)
-      .select()
-      .single();
+    const save = (fields: Record<string, unknown>) =>
+      supabaseAdmin
+        .from('profiles')
+        .update({
+          ...fields,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', userId)
+        .select()
+        .single();
+
+    let { data, error } = await save(sanitizedUpdates);
+
+    // profiles.gender is added by migration 088. Until it is applied the column
+    // does not exist: save everything else instead of failing the whole update.
+    if (error && 'gender' in sanitizedUpdates && isMissingColumnError(error, 'gender')) {
+      const { gender: _gender, ...withoutGender } = sanitizedUpdates;
+      console.warn('[updateUserProfile] profiles.gender missing (migration 088 not applied); gender not saved');
+      ({ data, error } = await save(withoutGender));
+    }
 
     if (error) throw error;
     return data;

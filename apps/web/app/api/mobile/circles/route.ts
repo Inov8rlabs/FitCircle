@@ -2,39 +2,16 @@ import { type NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
-import type { CircleType } from '@/lib/types/circle';
 import { CircleService } from '@/lib/services/circle-service';
 import { UsageService } from '@/lib/services/usage-service';
-
-// Validation schema for POST
-// fitcircles.type is a NOT NULL enum (weight_loss | step_count | workout_minutes | custom).
-// iOS also sends its legacy ChallengeType raw values; map them onto the DB enum.
-const CIRCLE_TYPE_ALIASES: Record<string, CircleType> = {
-  weight_loss: 'weight_loss',
-  weight: 'weight_loss',
-  step_count: 'step_count',
-  steps: 'step_count',
-  workout_minutes: 'workout_minutes',
-  exercise: 'workout_minutes',
-  check_in: 'custom',
-  custom: 'custom',
-};
-
-const createCircleSchema = z.object({
-  name: z.string().min(1, 'Circle name is required').max(100),
-  description: z.string().optional(),
-  type: z
-    .string()
-    .transform((value) => CIRCLE_TYPE_ALIASES[value])
-    .refine((value): value is CircleType => value !== undefined, {
-      message: 'type must be one of weight_loss, step_count, workout_minutes, custom',
-    })
-    .optional(),
-  startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Invalid date format (YYYY-MM-DD)'),
-  endDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Invalid date format (YYYY-MM-DD)'),
-  allowLateJoin: z.boolean().optional(),
-  lateJoinDeadline: z.number().int().min(1).max(30).optional(),
-});
+import { resolveClientTimezone } from '@/lib/streaks/client-timezone';
+import {
+  createCircleSchema,
+  normalizeCreateCircleBody,
+  normalizeVisibility,
+  toCalendarDate,
+} from '@/lib/validation/circle-validation';
+import { parseLenient, validationMessage } from '@/lib/validation/lenient-parse';
 
 /**
  * GET /api/mobile/circles
@@ -164,9 +141,23 @@ export async function POST(request: NextRequest) {
     // Verify authentication
     const user = await requireMobileAuth(request);
 
-    // Parse and validate request body
+    // Parse and validate request body.
+    // Two shapes are accepted (see lib/validation/circle-validation.ts):
+    //   Android / original contract: camelCase keys, YYYY-MM-DD dates
+    //   iOS 1.0: snake_case keys, ISO-8601 datetimes
+    // An explicit JSON null on an optional field is treated as "not sent".
     const body = await request.json();
-    const validatedData = createCircleSchema.parse(body);
+    const parsed = parseLenient(createCircleSchema, normalizeCreateCircleBody(body));
+
+    // Circles start and end on calendar days. A datetime is reduced to the day
+    // it falls on for the client (x-client-timezone), else to its date part.
+    const clientTimezone = resolveClientTimezone(request);
+    const validatedData = {
+      ...parsed,
+      startDate: toCalendarDate(parsed.startDate, clientTimezone),
+      endDate: toCalendarDate(parsed.endDate, clientTimezone),
+    };
+    const visibility = normalizeVisibility(parsed.visibility);
 
     // Free tier caps active created circles once the circles_unlimited gate is live.
     const circleCap = await UsageService.checkCircleCreation(user.id);
@@ -220,6 +211,8 @@ export async function POST(request: NextRequest) {
       end_date: validatedData.endDate,
       allow_late_join: validatedData.allowLateJoin,
       late_join_deadline: validatedData.lateJoinDeadline,
+      // Stored only when the client sent one; otherwise the column default applies.
+      ...(visibility ? { visibility } : {}),
     });
 
     // Get invite code
@@ -229,6 +222,11 @@ export async function POST(request: NextRequest) {
       {
         success: true,
         data: {
+          // iOS 1.0 decodes `data` as the circle itself (APIResponse<FitCircle>),
+          // Android and the original contract read `data.circle` / `data.inviteCode`.
+          // Both are served: the circle's own fields at the top level, plus the
+          // two original keys (which win if a column is ever named the same).
+          ...circle,
           circle,
           inviteCode,
         },
@@ -270,7 +268,7 @@ export async function POST(request: NextRequest) {
           data: null,
           error: {
             code: 'VALIDATION_ERROR',
-            message: 'Invalid input data',
+            message: validationMessage(error),
             details: error.errors.reduce((acc: any, err) => {
               acc[err.path.join('.')] = err.message;
               return acc;

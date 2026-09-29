@@ -1,8 +1,10 @@
 import { createAdminSupabase } from '../supabase-admin';
+import { addDays, localToday } from '../streaks/streak-calculator';
 import {
   type MetricStreak,
   type MetricType,
   type MetricStreakResponse,
+  type MetricTrendPoint,
   type AllMetricStreaksResponse,
   type MetricFrequencyConfig,
   METRIC_FREQUENCY_CONFIG,
@@ -10,6 +12,24 @@ import {
   StreakError,
   STREAK_ERROR_CODES,
 } from '../types/streak';
+
+/** Length of the per-metric trend series, in days (today included). */
+export const METRIC_TREND_DAYS = 30;
+
+/** daily_tracking column that holds each daily metric. */
+const METRIC_COLUMNS = {
+  weight: 'weight_kg',
+  steps: 'steps',
+  mood: 'mood_score',
+} as const;
+
+type TrackedMetric = keyof typeof METRIC_COLUMNS;
+const TRACKED_METRICS = Object.keys(METRIC_COLUMNS) as TrackedMetric[];
+
+interface MetricExtras {
+  total_logs_count: number;
+  trend: MetricTrendPoint[];
+}
 
 /**
  * MetricStreakService
@@ -107,9 +127,16 @@ export class MetricStreakService {
   }
 
   /**
-   * Get all metric streaks for user
+   * Get all metric streaks for user.
+   *
+   * The response stays an object keyed by metric (null until that metric has
+   * a streak record). Each non-null metric additionally carries
+   * `total_logs_count` and a 30-day `trend`.
    */
-  static async getMetricStreaks(userId: string): Promise<AllMetricStreaksResponse> {
+  static async getMetricStreaks(
+    userId: string,
+    timezone?: string
+  ): Promise<AllMetricStreaksResponse> {
     const supabaseAdmin = createAdminSupabase();
 
     console.log(`[MetricStreakService.getMetricStreaks] Fetching all metric streaks for user ${userId}`);
@@ -127,24 +154,102 @@ export class MetricStreakService {
       streakMap.set(streak.metric_type as MetricType, streak);
     }
 
+    // Additional fields are best-effort: the streaks themselves must still be
+    // returned if the history cannot be read.
+    let extras: Partial<Record<MetricType, MetricExtras>> = {};
+    if (streakMap.size > 0) {
+      try {
+        extras = await this.getMetricExtras(userId, timezone);
+      } catch (extrasError) {
+        console.error('[MetricStreakService.getMetricStreaks] extras error (omitted):', extrasError);
+      }
+    }
+
+    const format = (metricType: MetricType): MetricStreakResponse | null => {
+      const record = streakMap.get(metricType);
+      if (!record) return null;
+      return {
+        ...this.formatMetricStreakResponse(record, METRIC_FREQUENCY_CONFIG[metricType]),
+        ...(extras[metricType] ?? {}),
+      };
+    };
+
     // Return all metrics (null if not tracked yet)
     return {
-      weight: streakMap.has('weight')
-        ? this.formatMetricStreakResponse(streakMap.get('weight')!, METRIC_FREQUENCY_CONFIG.weight)
-        : null,
-      steps: streakMap.has('steps')
-        ? this.formatMetricStreakResponse(streakMap.get('steps')!, METRIC_FREQUENCY_CONFIG.steps)
-        : null,
-      mood: streakMap.has('mood')
-        ? this.formatMetricStreakResponse(streakMap.get('mood')!, METRIC_FREQUENCY_CONFIG.mood)
-        : null,
-      measurements: streakMap.has('measurements')
-        ? this.formatMetricStreakResponse(streakMap.get('measurements')!, METRIC_FREQUENCY_CONFIG.measurements)
-        : null,
-      photos: streakMap.has('photos')
-        ? this.formatMetricStreakResponse(streakMap.get('photos')!, METRIC_FREQUENCY_CONFIG.photos)
-        : null,
+      weight: format('weight'),
+      steps: format('steps'),
+      mood: format('mood'),
+      measurements: format('measurements'),
+      photos: format('photos'),
     };
+  }
+
+  /**
+   * `total_logs_count` and the 30-day `trend` for every metric.
+   *
+   * weight / steps / mood come from daily_tracking, using the same "a value is
+   * present" rule as the streak calculation. measurements and photos have no
+   * log table yet (see getMetricLogs), so they honestly report zero logs.
+   */
+  static async getMetricExtras(
+    userId: string,
+    timezone?: string
+  ): Promise<Record<MetricType, MetricExtras>> {
+    const supabaseAdmin = createAdminSupabase();
+    const today = localToday(timezone);
+    const start = addDays(today, -(METRIC_TREND_DAYS - 1));
+
+    const [recent, ...counts] = await Promise.all([
+      supabaseAdmin
+        .from('daily_tracking')
+        .select('tracking_date, weight_kg, steps, mood_score')
+        .eq('user_id', userId)
+        .gte('tracking_date', start)
+        .lte('tracking_date', today),
+      ...TRACKED_METRICS.map((metric) =>
+        supabaseAdmin
+          .from('daily_tracking')
+          .select('tracking_date', { count: 'exact', head: true })
+          .eq('user_id', userId)
+          .not(METRIC_COLUMNS[metric], 'is', null)
+      ),
+    ]);
+
+    if (recent.error) throw recent.error;
+
+    const byDate = new Map<string, Record<string, unknown>>();
+    for (const row of (recent.data || []) as Record<string, unknown>[]) {
+      byDate.set(String(row.tracking_date), row);
+    }
+
+    const days: string[] = [];
+    for (let offset = METRIC_TREND_DAYS - 1; offset >= 0; offset--) {
+      days.push(addDays(today, -offset));
+    }
+
+    const trendFor = (metric: TrackedMetric | null): MetricTrendPoint[] =>
+      days.map((date) => {
+        const raw = metric ? byDate.get(date)?.[METRIC_COLUMNS[metric]] : null;
+        if (raw === null || raw === undefined) return { date, logged: false, value: null };
+        const value = Number(raw);
+        return { date, logged: true, value: Number.isFinite(value) ? value : null };
+      });
+
+    const result = {
+      measurements: { total_logs_count: 0, trend: trendFor(null) },
+      photos: { total_logs_count: 0, trend: trendFor(null) },
+    } as Record<MetricType, MetricExtras>;
+
+    TRACKED_METRICS.forEach((metric, index) => {
+      const countResult = counts[index];
+      if (countResult.error) throw countResult.error;
+      result[metric] = {
+        total_logs_count: countResult.count ?? 0,
+        trend: trendFor(metric),
+      };
+    });
+
+    return result;
   }
 
   /**

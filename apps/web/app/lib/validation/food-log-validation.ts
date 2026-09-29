@@ -24,6 +24,35 @@ const nutritionDataSchema = z
   })
   .passthrough();
 
+/**
+ * `entry_type: "snack"` alias (create + update).
+ *
+ * The backend models a snack as `entry_type: "food"` + `meal_type: "snack"` (the
+ * `food_log_entries_entry_type_check` constraint only allows food|water|supplement),
+ * but shipped clients send `entry_type: "snack"` for the manual Snack card: iOS 1.0
+ * (`FoodCategory.snack`, sent with NO meal_type) and older Android builds. That was a
+ * 400, and iOS kept the entry locally with a "Sync failed" badge forever.
+ *
+ * Rewrites ONLY that one value, before validation:
+ *   entry_type "snack" → "food", and `meal_type` becomes "snack" unless the client
+ *   sent another meal_type.
+ * Every other body is returned untouched, so requests accepted before behave the same.
+ * The stored / returned value is always `food` — a value every client decodes.
+ */
+export function normalizeFoodLogEntryAliases(body: unknown): unknown {
+  if (typeof body !== 'object' || body === null || Array.isArray(body)) return body;
+  const input = body as Record<string, unknown>;
+  if (input.entry_type !== 'snack') return body;
+
+  const mealType = input.meal_type;
+  const hasMealType = typeof mealType === 'string' && mealType.trim().length > 0;
+  return {
+    ...input,
+    entry_type: 'food',
+    meal_type: hasMealType ? mealType : 'snack',
+  };
+}
+
 export const CreateFoodLogEntrySchema = z.object({
   entry_type: z.enum(['food', 'water', 'supplement']),
   logged_at: z.string().datetime().optional(),

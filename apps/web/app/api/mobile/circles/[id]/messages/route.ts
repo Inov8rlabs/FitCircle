@@ -8,6 +8,7 @@ import {
   type ListMessagesParams,
   type SendMessageInput,
 } from '@/lib/types/circle-chat';
+import { parseLenient, validationMessage } from '@/lib/validation/lenient-parse';
 
 /**
  * Validation schema for POST (send member message).
@@ -169,7 +170,7 @@ export async function POST(
 
     // Parse and validate request body
     const body = await request.json();
-    const validatedData = sendMessageSchema.parse(body);
+    const validatedData = parseLenient(sendMessageSchema, body);
 
     const input: SendMessageInput = {
       kind: validatedData.kind,
@@ -256,7 +257,7 @@ export async function POST(
           data: null,
           error: {
             code: 'VALIDATION_ERROR',
-            message: 'Invalid input data',
+            message: validationMessage(error),
             details: error.errors.reduce((acc: any, err) => {
               acc[err.path.join('.')] = err.message;
               return acc;

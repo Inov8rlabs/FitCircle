@@ -4,6 +4,7 @@ import { z } from 'zod';
 
 import { authRateLimiter, getIdentifier, applyRateLimit } from '@/lib/middleware/rate-limit';
 import { MobileAPIService } from '@/lib/services/mobile-api-service';
+import { parseLenient, validationMessage } from '@/lib/validation/lenient-parse';
 
 // Validation schema
 const loginSchema = z.object({
@@ -19,7 +20,7 @@ export async function POST(request: NextRequest) {
     if (rateLimitResponse) return rateLimitResponse;
     // Parse and validate request body
     const body = await request.json();
-    const validatedData = loginSchema.parse(body);
+    const validatedData = parseLenient(loginSchema, body);
 
     // Create Supabase client
     const supabase = createClient(
@@ -209,7 +210,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         {
           error: 'Validation error',
-          message: 'Invalid input data',
+          message: validationMessage(error),
           details: error.errors,
         },
         { status: 400 }

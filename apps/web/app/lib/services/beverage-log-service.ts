@@ -20,6 +20,10 @@ import type {
   FavoriteBeverage,
   BeverageCategory,
 } from '@/lib/types/beverage-log';
+import {
+  toClientBeverageCustomizations,
+  toClientBeverageEntry,
+} from '@/lib/validation/beverage-log-validation';
 
 export class BeverageLogService {
   /**
@@ -37,7 +41,8 @@ export class BeverageLogService {
           user_id: userId,
           category: data.category,
           beverage_type: data.beverage_type,
-          customizations: data.customizations || {},
+          // Stored in the spelling the mobile clients decode (extraLarge / room).
+          customizations: toClientBeverageCustomizations(data.customizations || {}),
           volume_ml: data.volume_ml,
           calories: data.calories,
           caffeine_mg: data.caffeine_mg,
@@ -57,7 +62,7 @@ export class BeverageLogService {
         return { data: null, error: new Error(error.message) };
       }
 
-      return { data: entry, error: null };
+      return { data: toClientBeverageEntry(entry), error: null };
     } catch (error) {
       return {
         data: null,
@@ -126,7 +131,10 @@ export class BeverageLogService {
 
       const hasMore = count ? count > offset + limit : false;
 
-      return { data: data || [], total: count || 0, hasMore, error: null };
+      // Rows written with the old backend spelling must still decode on iOS.
+      const rows = (data || []).map((row) => toClientBeverageEntry(row));
+
+      return { data: rows, total: count || 0, hasMore, error: null };
     } catch (error) {
       return {
         data: [],
@@ -158,7 +166,7 @@ export class BeverageLogService {
         return { data: null, error: new Error(error.message) };
       }
 
-      return { data: entry, error: null };
+      return { data: toClientBeverageEntry(entry), error: null };
     } catch (error) {
       return {
         data: null,
@@ -195,7 +203,9 @@ export class BeverageLogService {
       };
 
       if (data.beverage_type !== undefined) updateData.beverage_type = data.beverage_type;
-      if (data.customizations !== undefined) updateData.customizations = data.customizations;
+      if (data.customizations !== undefined) {
+        updateData.customizations = toClientBeverageCustomizations(data.customizations);
+      }
       if (data.volume_ml !== undefined) updateData.volume_ml = data.volume_ml;
       if (data.calories !== undefined) updateData.calories = data.calories;
       if (data.caffeine_mg !== undefined) updateData.caffeine_mg = data.caffeine_mg;
@@ -220,7 +230,7 @@ export class BeverageLogService {
         return { data: null, error: new Error(error.message) };
       }
 
-      return { data: updated, error: null };
+      return { data: toClientBeverageEntry(updated), error: null };
     } catch (error) {
       return {
         data: null,
@@ -295,7 +305,7 @@ export class BeverageLogService {
         favorite_name: fav.favorite_name,
         category: fav.category,
         beverage_type: fav.beverage_type,
-        customizations: fav.customizations,
+        customizations: toClientBeverageCustomizations(fav.customizations),
         volume_ml: fav.volume_ml,
         calories: fav.calories,
         caffeine_mg: fav.caffeine_mg,

@@ -6,6 +6,9 @@ import { EngagementStreakService } from '@/lib/services/engagement-streak-servic
 /**
  * POST /api/mobile/streaks/engagement/resume
  * Resume paused engagement streak
+ *
+ * Response: `success` and `message` as before, plus `data` with the refreshed
+ * streak (same shape as GET /api/mobile/streaks/engagement).
  */
 export async function POST(request: NextRequest) {
   try {
@@ -14,10 +17,25 @@ export async function POST(request: NextRequest) {
 
     console.log('[POST /api/mobile/streaks/engagement/resume] User:', user.id);
 
-    // Resume streak
-    await EngagementStreakService.resumeStreak(user.id);
+    // Honour the device's local timezone so the paused gap ends on the user's yesterday.
+    const timezone = request.headers.get('x-client-timezone') || undefined;
 
-    return NextResponse.json({ success: true, message: 'Streak resumed successfully' });
+    // Resume streak
+    await EngagementStreakService.resumeStreak(user.id, timezone);
+
+    // The resume already succeeded; a failed read must not turn it into an error.
+    let streak: unknown = null;
+    try {
+      streak = await EngagementStreakService.getEngagementStreak(user.id, timezone);
+    } catch (readError) {
+      console.error('[POST /api/mobile/streaks/engagement/resume] streak read error:', readError);
+    }
+
+    return NextResponse.json({
+      success: true,
+      message: 'Streak resumed successfully',
+      data: streak,
+    });
 
   } catch (error: any) {
     console.error('[POST /api/mobile/streaks/engagement/resume] Error:', error);

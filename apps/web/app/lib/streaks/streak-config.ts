@@ -63,7 +63,33 @@ export const SHIELD_RULES = {
   STARTER_SHIELDS: 1,
   /** Only auto-protect this many consecutive missed days before the streak breaks (free users). */
   MAX_CONSECUTIVE_AUTO_PROTECTS: 2,
+  /**
+   * XP price of one purchased shield. Source: docs/DAILY-STREAK-CHECKIN-SPEC.md
+   * ("Purchase Additional Freezes": "$0.99 per freeze or 100 XP", and
+   * "Alternative Currency": "Streak Freeze: 100 XP"); both mobile purchase
+   * sheets show "100 XP". Read it through shieldXpPrice(), never directly.
+   */
+  PURCHASE_PRICE_XP: 100,
 } as const;
+
+/**
+ * The XP price of one shield, or null when XP purchases are not configured
+ * (the purchase route then refuses instead of guessing a price).
+ *
+ * `STREAK_SHIELD_XP_PRICE` overrides the spec price without a deploy of new
+ * code: a whole number > 0 sets the price, anything else (`0`, `off`, junk)
+ * switches XP purchases off.
+ */
+export function shieldXpPrice(): number | null {
+  const override = process.env.STREAK_SHIELD_XP_PRICE;
+  if (override === undefined || override.trim() === '') {
+    return SHIELD_RULES.PURCHASE_PRICE_XP;
+  }
+  const trimmed = override.trim();
+  if (!/^\d+$/.test(trimmed)) return null;
+  const parsed = parseInt(trimmed, 10);
+  return parsed > 0 ? parsed : null;
+}
 
 /** Retroactive claiming window (days back from the user's local today). */
 export const RETROACTIVE_WINDOW_DAYS = 7;

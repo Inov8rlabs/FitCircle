@@ -16,9 +16,16 @@ export type LocationType = 'home' | 'gym' | 'outdoor' | 'studio';
 export type WorkoutCompanion = 'solo' | 'group' | 'trainer' | 'virtual_class';
 
 /**
- * Data source for the exercise log
+ * Data source for the exercise log (stored + returned). 'healthkit' means "synced
+ * from a health platform"; see ExerciseSourcePlatform for the true origin.
  */
 export type ExerciseSource = 'manual' | 'healthkit';
+
+/**
+ * True origin of a synced workout when the client declared a non-Apple platform
+ * (exercise_logs.source_platform, migration 092). NULL/absent = not declared.
+ */
+export type ExerciseSourcePlatform = 'health_connect' | 'google_fit';
 
 /**
  * How an exercise's sets are tracked (drives which set fields are relevant)
@@ -181,6 +188,8 @@ export interface ExerciseLog {
   // HealthKit metadata
   healthkit_workout_id: string | null;
   source_device_name: string | null;
+  /** Present once migration 092 is applied; null unless the client declared the platform. */
+  source_platform?: ExerciseSourcePlatform | null;
 
   // Visibility & status
   is_public: boolean;
@@ -220,6 +229,8 @@ export interface ExerciseLogCreateInput {
   notes?: string;
   healthkit_workout_id?: string;
   source_device_name?: string;
+  /** True origin when the client declared Health Connect / Google Fit (stored source stays 'healthkit'). */
+  source_platform?: ExerciseSourcePlatform | null;
   /** @deprecated Ignored — whether a workout claims the streak is decided server-side (workout-claim-policy). */
   auto_claim_streak?: boolean;
   /** Client IANA timezone; anchors the default `date` on the user's local today. */

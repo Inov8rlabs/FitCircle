@@ -3,6 +3,7 @@ import { z } from 'zod';
 
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { ExerciseService } from '@/lib/services/exercise-service';
+import { parseLenient, validationMessage } from '@/lib/validation/lenient-parse';
 import { trackingTypeEnum } from '@/lib/validators/exercise-nested';
 import { createAdminSupabase } from '@/lib/supabase-admin';
 
@@ -80,7 +81,7 @@ export async function POST(request: NextRequest) {
   try {
     const user = await requireMobileAuth(request);
     const body = await request.json();
-    const validated = createCustomSchema.parse(body);
+    const validated = parseLenient(createCustomSchema, body);
 
     const supabaseAdmin = createAdminSupabase();
 
@@ -122,6 +123,7 @@ export async function POST(request: NextRequest) {
           success: false,
           error: {
             code: 'VALIDATION_ERROR',
+            message: validationMessage(error),
             details: error.errors.reduce(
               (acc: Record<string, string>, err) => {
                 acc[err.path.join('.')] = err.message;

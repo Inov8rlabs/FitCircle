@@ -4,6 +4,8 @@ import { z } from 'zod';
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { MobileAPIService } from '@/lib/services/mobile-api-service';
 import type { BulkSyncResult } from '@/lib/types/tracking';
+import { parseLenient, validationMessage } from '@/lib/validation/lenient-parse';
+import { platformStepsSourceSchema } from '@/lib/validators/steps-source';
 
 // Validation schema for bulk sync
 const bulkSyncSchema = z.object({
@@ -17,7 +19,8 @@ const bulkSyncSchema = z.object({
     )
     .min(1, 'At least one entry required')
     .max(30, 'Maximum 30 days of data allowed'),
-  source: z.enum(['healthkit', 'google_fit']),
+  // Also accepts the aliases apple_health (→ healthkit) and health_connect (→ google_fit).
+  source: platformStepsSourceSchema,
 });
 
 /**
@@ -66,7 +69,7 @@ export async function POST(request: NextRequest) {
 
     // Parse and validate request body
     const body = await request.json();
-    const validatedData = bulkSyncSchema.parse(body);
+    const validatedData = parseLenient(bulkSyncSchema, body);
 
     const syncedAt = new Date().toISOString();
     const results: BulkSyncResult[] = [];
@@ -177,7 +180,7 @@ export async function POST(request: NextRequest) {
           success: false,
           error: {
             code: 'VALIDATION_ERROR',
-            message: 'Invalid input data',
+            message: validationMessage(error),
             details: error.errors.reduce((acc: any, err) => {
               acc[err.path.join('.')] = err.message;
               return acc;

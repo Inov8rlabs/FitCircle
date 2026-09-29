@@ -3,6 +3,7 @@ import { z } from 'zod';
 
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { CircleChatService } from '@/lib/services/circle-chat-service';
+import { parseLenient, validationMessage } from '@/lib/validation/lenient-parse';
 
 // Validation schema for POST
 const muteSchema = z.object({
@@ -28,7 +29,7 @@ export async function POST(
 
     // Parse and validate request body
     const body = await request.json();
-    const { muted } = muteSchema.parse(body);
+    const { muted } = parseLenient(muteSchema, body);
 
     const result = await CircleChatService.setMute(id, user.id, muted);
 
@@ -105,7 +106,7 @@ export async function POST(
           data: null,
           error: {
             code: 'VALIDATION_ERROR',
-            message: 'Invalid input data',
+            message: validationMessage(error),
             details: error.errors.reduce((acc: any, err) => {
               acc[err.path.join('.')] = err.message;
               return acc;

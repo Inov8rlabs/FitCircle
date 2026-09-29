@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { FoodPrivacyService } from '@/lib/services/food-privacy-service';
 import { FOOD_PRIVACY_TIERS } from '@/lib/types/food-privacy';
+import { safeParseLenient } from '@/lib/validation/lenient-parse';
 
 /**
  * Per-circle food privacy tier for the AUTHENTICATED user (PRD §6.4).
@@ -66,7 +67,7 @@ export async function POST(
     const { id: circleId } = await params;
     const body = await request.json();
 
-    const parsed = setTierSchema.safeParse(body);
+    const parsed = safeParseLenient(setTierSchema, body);
     if (!parsed.success) {
       return NextResponse.json(
         { success: false, data: null, error: { code: 'VALIDATION_ERROR', message: 'tier must be one of: full, summary, private', details: parsed.error.errors, timestamp: new Date().toISOString() }, meta: null },

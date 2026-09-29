@@ -3,6 +3,7 @@ import { z } from 'zod';
 
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { MobileAPIService } from '@/lib/services/mobile-api-service';
+import { parseLenient, validationMessage } from '@/lib/validation/lenient-parse';
 
 // Validation schema for PUT
 // The canonical profiles.goals[] element — the shape every client decodes
@@ -30,7 +31,7 @@ export async function PUT(request: NextRequest) {
 
     // Parse and validate request body
     const body = await request.json();
-    const validatedData = updateGoalsSchema.parse(body);
+    const validatedData = parseLenient(updateGoalsSchema, body);
 
     // Update goals
     const result = await MobileAPIService.updateUserGoals(user.id, validatedData.goals);
@@ -56,7 +57,7 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json(
         {
           error: 'Validation error',
-          message: 'Invalid input data',
+          message: validationMessage(error),
           details: error.errors,
         },
         { status: 400 }

@@ -7,6 +7,7 @@ import {
   type NutritionChallengeResponseDTO,
   NUTRITION_METRIC_TYPES,
 } from '@/lib/types/nutrition-challenge';
+import { parseLenient, validationMessage } from '@/lib/validation/lenient-parse';
 
 /**
  * Nutrition-driven challenge metrics (PRD v4 §6.5).
@@ -49,7 +50,7 @@ function errorResponse(error: any, fallbackStatus = 500) {
   }
   if (error?.message === 'BadRequest' || error instanceof z.ZodError) {
     return NextResponse.json(
-      { success: false, data: null, error: { code: 'VALIDATION_ERROR', message: 'Invalid input', details: error instanceof z.ZodError ? error.errors : {}, timestamp: new Date().toISOString() }, meta: null },
+      { success: false, data: null, error: { code: 'VALIDATION_ERROR', message: error instanceof z.ZodError ? validationMessage(error) : 'Invalid input', details: error instanceof z.ZodError ? error.errors : {}, timestamp: new Date().toISOString() }, meta: null },
       { status: 400 }
     );
   }
@@ -96,7 +97,7 @@ export async function POST(
     const user = await requireMobileAuth(request);
     const { id } = await params;
     const body = await request.json();
-    const validated = setConfigSchema.parse(body);
+    const validated = parseLenient(setConfigSchema, body);
 
     const config = await NutritionChallengeService.setConfig(
       id,

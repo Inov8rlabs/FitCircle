@@ -15,7 +15,7 @@
 
 import { type SupabaseClient } from '@supabase/supabase-js';
 
-import { milestoneCrossed, nextMilestone, streakColor } from '../streaks/streak-config';
+import { MILESTONES, milestoneCrossed, nextMilestone, streakColor } from '../streaks/streak-config';
 import { localToday, addDays, calculateStreak } from '../streaks/streak-calculator';
 import { StreakClaimError, CLAIM_ERROR_CODES } from '../types/streak-claiming';
 
@@ -47,6 +47,11 @@ export interface DailyCheckInResponse {
     name: string;
     description: string;
     badge: string;
+    /** Additional keys (the iOS milestone model requires them). */
+    id: number;
+    /** Same value as `name`. */
+    title: string;
+    is_achieved: boolean;
   };
   pointsEarned: number;
   totalPoints: number;
@@ -69,7 +74,12 @@ export interface StreakStatusResponse {
   daysUntilNextMilestone: number | null;
   canCheckInAgain: boolean;
   streakColor: string;
+  /** XP earned so far. Spending never lowers it; see `pointsBalance`. */
   totalPoints: number;
+  /** Additional field: XP spent (shield purchases). Absent while the spent ledger is unavailable. */
+  pointsSpent?: number;
+  /** Additional field: spendable XP = totalPoints - pointsSpent. Absent while the spent ledger is unavailable. */
+  pointsBalance?: number;
 }
 
 export interface UseFreezeResponse {
@@ -197,6 +207,10 @@ export async function performDailyCheckIn(
         name: crossed.name,
         description: crossed.description,
         badge: crossed.badge,
+        // 1-based position in the milestone table, like the clients' own lists.
+        id: MILESTONES.findIndex(m => m.days === crossed.days) + 1,
+        title: crossed.name,
+        is_achieved: true,
       };
       pointsEarned += XP_MILESTONE_BONUS;
 
@@ -410,6 +424,12 @@ export async function getStreakStatus(
     canCheckInAgain: true, // Can always update mood/energy/weight
     streakColor: streakColor(currentStreak),
     totalPoints: streak.total_points || 0,
+    ...(typeof streak.points_spent === 'number'
+      ? {
+          pointsSpent: streak.points_spent,
+          pointsBalance: Math.max(0, (streak.total_points || 0) - streak.points_spent),
+        }
+      : {}),
   };
 }
 

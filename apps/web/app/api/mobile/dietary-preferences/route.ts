@@ -3,6 +3,7 @@ import { type NextRequest, NextResponse } from 'next/server';
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { DietaryPreferencesService } from '@/lib/services/dietary-preferences-service';
 import { setDietaryPreferencesSchema } from '@/lib/types/dietary-prefs';
+import { safeParseLenient } from '@/lib/validation/lenient-parse';
 
 /**
  * Dietary preferences / allergens + units (PRD v4 §6.15).
@@ -69,7 +70,7 @@ export async function POST(request: NextRequest) {
       body = null;
     }
 
-    const parsed = setDietaryPreferencesSchema.safeParse(body);
+    const parsed = safeParseLenient(setDietaryPreferencesSchema, body);
     if (!parsed.success) {
       return NextResponse.json(
         {

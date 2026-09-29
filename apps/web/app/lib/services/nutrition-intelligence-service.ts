@@ -442,6 +442,28 @@ export class NutritionIntelligenceService {
   }
 
   /**
+   * True when `entryId` is a live (not deleted) food-log entry owned by `userId`.
+   * Used by the parse routes before they echo a client-supplied `existing_entry_id`
+   * back as `savedEntryId`: an id that is unknown, deleted or someone else's is never
+   * confirmed. Fail-closed — any lookup error reads as "not owned".
+   */
+  static async ownsFoodLogEntry(userId: string, entryId: string): Promise<boolean> {
+    try {
+      const supabase = createAdminSupabase();
+      const { data, error } = await supabase
+        .from('food_log_entries')
+        .select('id')
+        .eq('id', entryId)
+        .eq('user_id', userId)
+        .is('deleted_at', null)
+        .maybeSingle();
+      return !error && !!data;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
    * Attach the photos of a failed parse to its fallback entry. Runs AFTER the route has
    * responded (via `after()`): a failed parse has already spent most of the function
    * budget, and processing/uploading up to 5 images must not push the response past

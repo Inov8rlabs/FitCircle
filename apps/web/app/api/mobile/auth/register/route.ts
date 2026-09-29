@@ -10,6 +10,7 @@ import {
   deriveUsernameBase,
   ensureUniqueUsername,
 } from '@/lib/services/username-service';
+import { parseLenient } from '@/lib/validation/lenient-parse';
 
 // Validation schema
 const registerSchema = z.object({
@@ -30,7 +31,7 @@ export async function POST(request: NextRequest) {
     if (rateLimitResponse) return rateLimitResponse;
     // Parse and validate request body
     const body = await request.json();
-    const validatedData = registerSchema.parse(body);
+    const validatedData = parseLenient(registerSchema, body);
 
     // Create Supabase client
     const supabase = createClient(

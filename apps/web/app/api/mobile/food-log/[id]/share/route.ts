@@ -12,6 +12,7 @@ import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { FoodLogService } from '@/lib/services/food-log-service';
 import { createAdminSupabase } from '@/lib/supabase-admin';
 import { ShareFoodLogSchema } from '@/lib/validation/food-log-validation';
+import { parseLenient, validationMessage } from '@/lib/validation/lenient-parse';
 
 /**
  * POST /api/mobile/food-log/[id]/share
@@ -32,7 +33,7 @@ export async function POST(
 
     // Parse and validate request body
     const body = await request.json();
-    const validatedData = ShareFoodLogSchema.parse(body);
+    const validatedData = parseLenient(ShareFoodLogSchema, body);
 
     // Share entry
     const result = await FoodLogService.shareEntry(entryId, user.id, validatedData, supabase);
@@ -96,7 +97,7 @@ export async function POST(
           data: null,
           error: {
             code: 'VALIDATION_ERROR',
-            message: 'Invalid input data',
+            message: validationMessage(error),
             details: error.errors.reduce((acc: any, err) => {
               acc[err.path.join('.')] = err.message;
               return acc;

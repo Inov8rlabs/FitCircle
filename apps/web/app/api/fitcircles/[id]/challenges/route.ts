@@ -3,6 +3,7 @@ import { z } from 'zod';
 
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { ChallengeService } from '@/lib/services/circle-challenge-service';
+import { parseLenient, validationMessage } from '@/lib/validation/lenient-parse';
 
 const createChallengeSchema = z.object({
   template_id: z.string().optional(),
@@ -63,7 +64,7 @@ export async function POST(
     const user = await requireMobileAuth(request);
     const { id: circleId } = await params;
     const body = await request.json();
-    const validated = createChallengeSchema.parse(body);
+    const validated = parseLenient(createChallengeSchema, body);
 
     const challenge = await ChallengeService.createChallenge(user.id, {
       ...validated,
@@ -84,7 +85,7 @@ export async function POST(
     }
     if (error instanceof z.ZodError) {
       return NextResponse.json(
-        { success: false, data: null, error: { code: 'VALIDATION_ERROR', message: 'Invalid data', details: error.errors } },
+        { success: false, data: null, error: { code: 'VALIDATION_ERROR', message: validationMessage(error), details: error.errors } },
         { status: 400 }
       );
     }
