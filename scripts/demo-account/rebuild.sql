@@ -141,7 +141,10 @@ begin
 
   -- 6. Demo circle: keep it running and keep the chat recent.
   update fitcircles
-     set end_date = greatest(end_date, (t + 60)::timestamptz), name = 'Step-Up Circle'
+     set end_date = greatest(end_date, (t + 60)::timestamptz), name = 'Step-Up Circle',
+         -- App Review joins with the invite code from a second account, long
+         -- after the circle's start date.
+         allow_late_join = true, late_join_deadline = 3650
    where id = circle;
   update circle_messages set deleted_at = now()
    where fitcircle_id = circle and deleted_at is null and body = 'api probe (ignore)';
