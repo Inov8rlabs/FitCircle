@@ -19,7 +19,7 @@ describe('Terms of Service Page', () => {
 
     it('should display correct effective date', () => {
       render(<TermsPage />);
-      expect(screen.getByText('Effective Date: October 9, 2025')).toBeInTheDocument();
+      expect(screen.getByText('Effective Date: September 29, 2026')).toBeInTheDocument();
     });
 
     it('should have back to home button', () => {
@@ -38,8 +38,11 @@ describe('Terms of Service Page', () => {
 
     it('should have mailto link for support email', () => {
       render(<TermsPage />);
-      const emailLink = screen.getByRole('link', { name: /support@fitcircle\.ai/i });
-      expect(emailLink).toHaveAttribute('href', 'mailto:support@fitcircle.ai');
+      const emailLinks = screen.getAllByRole('link', { name: /support@fitcircle\.ai/i });
+      expect(emailLinks.length).toBeGreaterThan(0);
+      for (const link of emailLinks) {
+        expect(link).toHaveAttribute('href', 'mailto:support@fitcircle.ai');
+      }
     });
 
     it('should not display physical address', () => {
@@ -82,24 +85,39 @@ describe('Terms of Service Page', () => {
   });
 
   describe('Challenge-Specific Content', () => {
-    it('should mention weight loss challenges', () => {
+    it('should describe challenges as activity and habit based', () => {
       render(<TermsPage />);
-      expect(screen.getByText(/Weight loss challenges with monetary stakes and prize pools/i)).toBeInTheDocument();
+      expect(screen.getByText(/Friendly fitness challenges based on activity and healthy habits/i)).toBeInTheDocument();
+    });
+
+    // App Store guidelines 5.3 / 3.1.1: the app has no real-money features, so
+    // the Terms must never describe stakes, entry fees or prizes as something
+    // users pay or win.
+    it('should state that challenges involve no money', () => {
+      render(<TermsPage />);
+      expect(screen.getByText('5.2 No Money Involved')).toBeInTheDocument();
+      expect(screen.getByText(/do not involve entry fees, wagers, or monetary stakes/i)).toBeInTheDocument();
+    });
+
+    it('should not describe prize pools, payouts or platform fees', () => {
+      const { container } = render(<TermsPage />);
+      const text = container.textContent ?? '';
+      expect(text).not.toMatch(/prize pool/i);
+      expect(text).not.toMatch(/prize distribution/i);
+      expect(text).not.toMatch(/platform fee/i);
+      expect(text).not.toMatch(/forfeit/i);
+    });
+
+    it('should include community standards with report, block and review time', () => {
+      render(<TermsPage />);
+      expect(screen.getByText('7.1 Community Standards')).toBeInTheDocument();
+      expect(screen.getByText(/no tolerance for objectionable content or abusive users/i)).toBeInTheDocument();
+      expect(screen.getByText(/We review reports within 24 hours/i)).toBeInTheDocument();
     });
 
     it('should include Fair Play section', () => {
       render(<TermsPage />);
       expect(screen.getByText('5.3 Fair Play and Integrity')).toBeInTheDocument();
-    });
-
-    it('should mention prize pool distribution', () => {
-      render(<TermsPage />);
-      expect(screen.getByText(/Prize pools are distributed to winners according to challenge rules/i)).toBeInTheDocument();
-    });
-
-    it('should state prize distribution timeline', () => {
-      render(<TermsPage />);
-      expect(screen.getByText(/Prizes are distributed within 14 days of challenge completion/i)).toBeInTheDocument();
     });
 
     it('should mention FitCircles feature', () => {
@@ -151,24 +169,9 @@ describe('Terms of Service Page', () => {
       expect(screen.getByText('11.2 Subscriptions')).toBeInTheDocument();
     });
 
-    it('should include Challenge Entry Fees subsection', () => {
-      render(<TermsPage />);
-      expect(screen.getByText('11.3 Challenge Entry Fees')).toBeInTheDocument();
-    });
-
-    it('should include Prize Distribution subsection', () => {
-      render(<TermsPage />);
-      expect(screen.getByText('11.4 Prize Distribution')).toBeInTheDocument();
-    });
-
     it('should include Refund Policy subsection', () => {
       render(<TermsPage />);
-      expect(screen.getByText('11.5 Refund Policy')).toBeInTheDocument();
-    });
-
-    it('should state entry fees are non-refundable', () => {
-      render(<TermsPage />);
-      expect(screen.getByText(/Entry fees are non-refundable once a challenge begins/i)).toBeInTheDocument();
+      expect(screen.getByText('11.3 Refund Policy')).toBeInTheDocument();
     });
   });
 
@@ -276,7 +279,7 @@ describe('Terms of Service Page', () => {
   describe('Page Footer', () => {
     it('should display copyright notice', () => {
       render(<TermsPage />);
-      expect(screen.getByText('© 2025 FitCircle. All rights reserved.')).toBeInTheDocument();
+      expect(screen.getByText('© 2026 FitCircle. All rights reserved.')).toBeInTheDocument();
     });
   });
 

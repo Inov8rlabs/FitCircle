@@ -18,7 +18,7 @@ export default function TermsPage() {
 
         <div className="prose prose-neutral dark:prose-invert max-w-none">
           <p className="text-muted-foreground mb-6">
-            Effective Date: October 9, 2025
+            Effective Date: September 29, 2026
           </p>
 
           <section className="mb-8">
@@ -37,12 +37,12 @@ export default function TermsPage() {
           <section className="mb-8">
             <h2 className="text-2xl font-semibold mb-4">2. Description of Service</h2>
             <p className="mb-4">
-              FitCircle is a social weight loss and fitness platform that enables users to participate in
-              accountability-based challenges and competitions. Our Service provides:
+              FitCircle is a social fitness and nutrition tracking platform that helps users build healthy habits
+              together with friends. Our Service provides:
             </p>
             <ul className="list-disc pl-6 space-y-2">
-              <li>Weight loss challenges with monetary stakes and prize pools</li>
-              <li>Team-based fitness competitions</li>
+              <li>Friendly fitness challenges based on activity and healthy habits</li>
+              <li>Food, water, and workout logging, including AI-assisted nutrition estimates</li>
               <li>Daily progress tracking (weight, steps, mood, energy)</li>
               <li>Social features including FitCircles (friend groups with shared goals)</li>
               <li>Leaderboards, achievement systems, and gamification</li>
@@ -98,22 +98,16 @@ export default function TermsPage() {
               <li>Abide by the specific rules and requirements of that challenge</li>
               <li>Provide accurate and truthful data for all check-ins and submissions</li>
               <li>Complete required check-ins by the specified deadlines</li>
-              <li>Pay any entry fees or stakes associated with the challenge</li>
               <li>Accept the challenge creator&apos;s decisions regarding rule interpretation</li>
             </ul>
 
-            <h3 className="text-xl font-semibold mb-3 mt-6">5.2 Challenge Stakes and Prize Pools</h3>
+            <h3 className="text-xl font-semibold mb-3 mt-6">5.2 No Money Involved</h3>
             <p className="mb-4">
-              Some challenges involve monetary stakes where participants contribute to a prize pool:
+              FitCircle challenges exist for motivation and accountability only. Joining a challenge is free.
+              Challenges do not involve entry fees, wagers, or monetary stakes, and they do not award cash or
+              any other prize of monetary value. Leaderboard positions, streaks, badges, and similar
+              achievements have no monetary value and cannot be exchanged for money, goods, or services.
             </p>
-            <ul className="list-disc pl-6 space-y-2">
-              <li>Stakes are collected at the time of joining the challenge</li>
-              <li>Prize pools are distributed to winners according to challenge rules</li>
-              <li>Entry fees are non-refundable once a challenge begins</li>
-              <li>FitCircle may charge a platform fee (clearly disclosed before joining)</li>
-              <li>Prize distribution occurs within 14 days of challenge completion</li>
-              <li>Winners must have valid payment information on file to receive prizes</li>
-            </ul>
 
             <h3 className="text-xl font-semibold mb-3 mt-6">5.3 Fair Play and Integrity</h3>
             <p className="mb-4">
@@ -127,9 +121,9 @@ export default function TermsPage() {
               <li>Employ any artificial means to gain unfair advantage</li>
             </ul>
             <p className="mt-4">
-              Violations may result in disqualification, forfeiture of stakes and prizes, account suspension,
-              and legal action. FitCircle reserves the right to investigate suspected violations and make
-              final determinations regarding fair play.
+              Violations may result in disqualification, removal from challenges and FitCircles, and account
+              suspension or termination. FitCircle reserves the right to investigate suspected violations and
+              make final determinations regarding fair play.
             </p>
 
             <h3 className="text-xl font-semibold mb-3 mt-6">5.4 Challenge Cancellation</h3>
@@ -142,9 +136,6 @@ export default function TermsPage() {
               <li>Violations of fair play are detected</li>
               <li>Required by law or regulation</li>
             </ul>
-            <p className="mt-4">
-              In the event of cancellation, entry fees will be refunded to participants.
-            </p>
           </section>
 
           <section className="mb-8">
@@ -185,6 +176,24 @@ export default function TermsPage() {
             <p className="mt-4">
               FitCircle reserves the right to remove any User Content that violates these Terms or that we deem
               inappropriate, offensive, or harmful.
+            </p>
+
+            <h3 className="text-xl font-semibold mb-3 mt-6">7.1 Community Standards</h3>
+            <p className="mb-4">
+              FitCircle has no tolerance for objectionable content or abusive users. Content that is hateful,
+              harassing, threatening, sexually explicit, violent, or that promotes self-harm, disordered eating,
+              or illegal activity is not allowed anywhere on the Service, including chat messages, photos,
+              profile names and bios, and FitCircle or challenge names.
+            </p>
+            <ul className="list-disc pl-6 space-y-2">
+              <li>You can report any message, photo, or user from within the app</li>
+              <li>You can block any user, which hides their content from you</li>
+              <li>We review reports within 24 hours</li>
+              <li>We remove content that violates these Terms and suspend or remove the users who posted it</li>
+            </ul>
+            <p className="mt-4">
+              To report a concern directly, email{' '}
+              <a href="mailto:support@fitcircle.ai" className="text-primary hover:underline">support@fitcircle.ai</a>.
             </p>
           </section>
 
@@ -234,7 +243,13 @@ export default function TermsPage() {
               <li>Injuries or health complications arising from challenge participation</li>
               <li>The accuracy or completeness of any health-related information on the Service</li>
               <li>Any advice, recommendations, or suggestions provided by other users</li>
+              <li>Nutrition values, scores, and replies produced by artificial intelligence features</li>
             </ul>
+            <p className="mt-4 mb-4">
+              Calorie, macronutrient, and body composition values produced by FitCircle&apos;s AI features are
+              estimates and may be inaccurate. Replies from the Fitzy assistant are generated by artificial
+              intelligence, are for general wellness information only, and are not medical or dietary advice.
+            </p>
             <p className="mt-4">
               <strong>If you experience any adverse health effects while using FitCircle, discontinue use immediately
               and consult a healthcare professional.</strong>
@@ -259,9 +274,9 @@ export default function TermsPage() {
 
             <h3 className="text-xl font-semibold mb-3 mt-6">11.1 Payment Methods</h3>
             <p className="mb-4">
-              You must provide valid payment information to participate in challenges with monetary stakes or to
-              purchase subscriptions. By providing payment information, you authorize FitCircle to charge your
-              payment method for applicable fees.
+              FitCircle is free to use. Payment is required only for optional FitCircle Pro purchases. By
+              making a purchase, you authorize the applicable payment processor to charge your payment method
+              for the price shown at the time of purchase.
             </p>
 
             <h3 className="text-xl font-semibold mb-3 mt-6">11.2 Subscriptions</h3>
@@ -277,37 +292,11 @@ export default function TermsPage() {
               <li>We will notify you at least 30 days in advance of any price changes</li>
             </ul>
 
-            <h3 className="text-xl font-semibold mb-3 mt-6">11.3 Challenge Entry Fees</h3>
+            <h3 className="text-xl font-semibold mb-3 mt-6">11.3 Refund Policy</h3>
             <p className="mb-4">
-              Entry fees for challenges are:
+              Fees are non-refundable except as required by applicable law or by the refund policy of the
+              store through which you made the purchase.
             </p>
-            <ul className="list-disc pl-6 space-y-2">
-              <li>Non-refundable once the challenge begins</li>
-              <li>Clearly displayed before joining</li>
-              <li>Collected immediately upon joining</li>
-              <li>Subject to FitCircle&apos;s platform fee (disclosed before payment)</li>
-            </ul>
-
-            <h3 className="text-xl font-semibold mb-3 mt-6">11.4 Prize Distribution</h3>
-            <p className="mb-4">
-              Prize winnings are distributed according to challenge rules and the following conditions:
-            </p>
-            <ul className="list-disc pl-6 space-y-2">
-              <li>Winners must have valid payment information on file</li>
-              <li>Prizes are distributed within 14 days of challenge completion</li>
-              <li>Tax obligations are the responsibility of prize recipients</li>
-              <li>FitCircle may withhold prizes if fraud or violations are suspected</li>
-            </ul>
-
-            <h3 className="text-xl font-semibold mb-3 mt-6">11.5 Refund Policy</h3>
-            <p className="mb-4">
-              All fees are non-refundable except in the following circumstances:
-            </p>
-            <ul className="list-disc pl-6 space-y-2">
-              <li>Challenge is cancelled by FitCircle before it begins</li>
-              <li>Technical errors prevent you from participating</li>
-              <li>As required by applicable law</li>
-            </ul>
           </section>
 
           <section className="mb-8">
@@ -411,8 +400,8 @@ export default function TermsPage() {
             <ul className="list-disc pl-6 space-y-2">
               <li>You will lose access to the Service</li>
               <li>Your data may be deleted (subject to legal retention requirements)</li>
-              <li>You will remain responsible for completing any active challenges</li>
-              <li>No refunds will be provided for subscription fees or challenge entry fees</li>
+              <li>You will be removed from any active challenges and FitCircles</li>
+              <li>No refunds will be provided for subscription fees, except as required by law</li>
             </ul>
 
             <h3 className="text-xl font-semibold mb-3 mt-6">17.2 Termination by FitCircle</h3>
@@ -428,7 +417,7 @@ export default function TermsPage() {
               <li>Any reason we deem necessary to protect the Service or our users</li>
             </ul>
             <p className="mt-4">
-              Upon termination for violations, you may forfeit any prizes, stakes, or subscription benefits.
+              Upon termination for violations, you may lose access to any remaining subscription benefits.
             </p>
           </section>
 
@@ -521,7 +510,7 @@ export default function TermsPage() {
 
         <div className="mt-12 pt-8 border-t">
           <p className="text-sm text-muted-foreground text-center">
-            © 2025 FitCircle. All rights reserved.
+            © 2026 FitCircle. All rights reserved.
           </p>
         </div>
       </div>

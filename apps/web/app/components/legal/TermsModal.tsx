@@ -85,8 +85,8 @@ export function TermsModal({ open, onClose }: TermsModalProps) {
             <section>
               <h3 className="text-lg font-semibold text-white mb-3">7. Payments & Subscriptions</h3>
               <p className="text-sm leading-relaxed">
-                Subscription fees are billed in advance. Challenge entry fees are non-refundable once
-                the challenge begins. We reserve the right to modify pricing with 30 days notice.
+                Subscription fees are billed in advance. Challenges are free to join and never involve
+                entry fees, stakes, or prizes. We reserve the right to modify pricing with 30 days notice.
               </p>
             </section>
 
