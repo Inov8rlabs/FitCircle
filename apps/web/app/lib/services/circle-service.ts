@@ -491,12 +491,15 @@ export class CircleService {
     // Check if already a member (using challenge_participants table)
     const { data: existing } = await supabaseAdmin
       .from('fitcircle_members')
-      .select('id')
+      .select('id, status')
       .eq('fitcircle_id', circleId)
       .eq('user_id', userId)
       .single();
 
-    if (existing) {
+    // Someone who left (status 'dropped') may join again: their old row is
+    // reactivated instead of treated as a current membership.
+    const rejoining = existing?.status === 'dropped';
+    if (existing && !rejoining) {
       console.log(`[CircleService.joinCircle] User is already a member`);
       throw new Error('You are already a member of this circle');
     }
@@ -507,8 +510,12 @@ export class CircleService {
     // Accept the invite
     await this.acceptInvite(inviteCode, userId);
 
-    // Add member with goal
-    await this.addMemberToCircle(userId, circleId, circle.creator_id, goal);
+    if (rejoining) {
+      await this.reactivateDroppedMember(existing.id);
+    } else {
+      // Add member with goal
+      await this.addMemberToCircle(userId, circleId, circle.creator_id, goal);
+    }
 
     // Update participant count - using direct update instead of RPC
     const { data: circleData } = await supabaseAdmin
@@ -602,18 +609,23 @@ export class CircleService {
     // Already a member?
     const { data: existing } = await supabaseAdmin
       .from('fitcircle_members')
-      .select('id')
+      .select('id, status')
       .eq('fitcircle_id', circleId)
       .eq('user_id', userId)
       .maybeSingle();
 
-    if (existing) {
+    if (existing && existing.status !== 'dropped') {
       throw new Error('You are already a member of this circle');
     }
 
-    // Add membership without a personal goal — v1 of public-join keeps it
-    // simple. The user can set a goal later from the circle's detail screen.
-    await this.addMemberToCircle(userId, circleId, circle.creator_id);
+    if (existing) {
+      // They left earlier; bring the same membership back.
+      await this.reactivateDroppedMember(existing.id);
+    } else {
+      // Add membership without a personal goal — v1 of public-join keeps it
+      // simple. The user can set a goal later from the circle's detail screen.
+      await this.addMemberToCircle(userId, circleId, circle.creator_id);
+    }
 
     // Bump participant count.
     await supabaseAdmin
@@ -622,6 +634,19 @@ export class CircleService {
       .eq('id', circleId);
 
     console.log(`[CircleService.joinPublicCircle] Done.`);
+  }
+
+  /**
+   * Reactivate the membership row of someone who left (status 'dropped').
+   */
+  private static async reactivateDroppedMember(memberId: string): Promise<void> {
+    const supabaseAdmin = createAdminSupabase();
+    const now = new Date().toISOString();
+    const { error } = await supabaseAdmin
+      .from('fitcircle_members')
+      .update({ status: 'active', dropped_at: null, joined_at: now, updated_at: now })
+      .eq('id', memberId);
+    if (error) throw error;
   }
 
   /**
@@ -683,17 +708,22 @@ export class CircleService {
 
     const { data: existing } = await supabaseAdmin
       .from('fitcircle_members')
-      .select('id')
+      .select('id, status')
       .eq('fitcircle_id', circle.id)
       .eq('user_id', userId)
       .limit(1);
 
-    if (existing && existing.length > 0) {
+    const previous = existing?.[0];
+    if (previous && previous.status !== 'dropped') {
       throw new CircleJoinError('You are already a member of this circle');
     }
 
     await this.acceptInvite(circle.invite_code, userId);
-    await this.addMemberToCircle(userId, circle.id, circle.creator_id);
+    if (previous) {
+      await this.reactivateDroppedMember(previous.id);
+    } else {
+      await this.addMemberToCircle(userId, circle.id, circle.creator_id);
+    }
 
     const { error: countError } = await supabaseAdmin
       .from('fitcircles')

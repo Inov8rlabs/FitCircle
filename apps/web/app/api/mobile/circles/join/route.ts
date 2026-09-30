@@ -75,12 +75,14 @@ export async function POST(request: NextRequest) {
     // Check if already a member
     const { data: existing } = await supabaseAdmin
       .from('fitcircle_members')
-      .select('id')
+      .select('id, status')
       .eq('fitcircle_id', circle.id)
       .eq('user_id', user.id)
       .single();
 
-    if (existing) {
+    // A member who left (status 'dropped') may join again.
+    const rejoining = existing?.status === 'dropped';
+    if (existing && !rejoining) {
       return NextResponse.json(
         {
           error: 'Already a member',
@@ -97,13 +99,18 @@ export async function POST(request: NextRequest) {
       // Accept invite without goal (for now)
       await CircleService.acceptInvite(inviteCode, user.id);
 
-      // Add as member without goal
-      const { error: memberError } = await supabaseAdmin.from('fitcircle_members').insert({
-        fitcircle_id: circle.id,
-        user_id: user.id,
-        invited_by: circle.creator_id,
-        status: 'active',
-      });
+      // Add as member without goal (or reactivate the row of a member who left)
+      const { error: memberError } = rejoining
+        ? await supabaseAdmin
+            .from('fitcircle_members')
+            .update({ status: 'active', dropped_at: null, joined_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+            .eq('id', existing!.id)
+        : await supabaseAdmin.from('fitcircle_members').insert({
+            fitcircle_id: circle.id,
+            user_id: user.id,
+            invited_by: circle.creator_id,
+            status: 'active',
+          });
 
       if (memberError) throw memberError;
 

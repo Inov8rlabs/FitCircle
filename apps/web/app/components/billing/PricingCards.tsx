@@ -10,8 +10,8 @@ import { Card, CardContent } from '@/components/ui/card';
 type Plan = 'monthly' | 'annual' | 'lifetime';
 
 const PRICE_MONTHLY = 9.99;
-const PRICE_ANNUAL = 59.99;
-const PRICE_LIFETIME = 149.99;
+const PRICE_ANNUAL = 29.99;
+const PRICE_LIFETIME = 179.99;
 
 /**
  * Launch promo display: set NEXT_PUBLIC_LAUNCH_PROMO_ANNUAL (e.g. "39.99") to

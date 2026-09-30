@@ -10,7 +10,9 @@ import { createAdminSupabase } from '@/lib/supabase-admin';
  *
  * Permissions: Any member except creator
  * Actions:
- * - Sets left_at timestamp on challenge_participants
+ * - Marks the membership as dropped (status 'dropped', dropped_at). fitcircle_members has
+ *   no left_at column and its status CHECK has no 'left' value; the response still reports
+ *   `left_at` for clients that read it.
  * - Decrements participant_count on challenges table
  */
 export async function POST(
@@ -72,7 +74,7 @@ export async function POST(
     // Get member record
     const { data: member, error: memberError } = await supabaseAdmin
       .from('fitcircle_members')
-      .select('id, status, left_at')
+      .select('id, status, dropped_at')
       .eq('fitcircle_id', circleId)
       .eq('user_id', user.id)
       .single();
@@ -99,7 +101,7 @@ export async function POST(
     }
 
     // Check if already left
-    if (member.left_at) {
+    if (member.status === 'dropped') {
       return NextResponse.json(
         {
           success: false,
@@ -107,7 +109,7 @@ export async function POST(
           error: {
             code: 'VALIDATION_ERROR',
             message: 'You have already left this circle',
-            details: { left_at: member.left_at },
+            details: { left_at: member.dropped_at },
             timestamp: new Date().toISOString(),
           },
           meta: null,
@@ -120,8 +122,8 @@ export async function POST(
     const { error: updateError } = await supabaseAdmin
       .from('fitcircle_members')
       .update({
-        left_at: new Date().toISOString(),
-        status: 'left',
+        dropped_at: new Date().toISOString(),
+        status: 'dropped',
         updated_at: new Date().toISOString(),
       })
       .eq('id', member.id);
