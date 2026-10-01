@@ -4,6 +4,7 @@
  * GET /api/mobile/food-log - Get user's food log entries (paginated)
  */
 
+import { resolveEntryDate } from '@/lib/utils/entry-date';
 import { type NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 
@@ -256,6 +257,14 @@ export async function POST(request: NextRequest) {
       normalizeFoodLogEntryAliases(body)
     );
 
+    // File the entry under the day it was eaten in the person's timezone.
+    validatedData.entry_date = await resolveEntryDate(
+      request,
+      { entry_date: validatedData.entry_date, logged_at: validatedData.logged_at, timezone: body?.timezone },
+      user.id,
+      supabase
+    );
+
     // Create entry
     const result = await FoodLogService.createEntry(user.id, validatedData, supabase);
 
@@ -267,7 +276,8 @@ export async function POST(request: NextRequest) {
     // was eaten on (server-side, so every client and the offline sync queue
     // get identical behaviour). Never fails the create.
     const streak = await StreakClaimingService.autoClaimForManualLog(user.id, {
-      occurredAt: result.data?.logged_at ?? validatedData.entry_date ?? null,
+      // Claim the day the entry was filed under, so the two can never disagree.
+      occurredAt: validatedData.entry_date ?? result.data?.logged_at ?? null,
       timezone: resolveClientTimezone(request, body?.timezone),
       source: 'food_log',
       referenceId: result.data?.id,

@@ -48,6 +48,7 @@ export interface EntryLike {
   is_private?: boolean | null;
   title?: string | null;
   description?: string | null;
+  notes?: string | null;
   meal_type?: string | null;
   logged_at: string;
   calories?: number | null;
@@ -100,9 +101,30 @@ export class CircleMealPostService {
   static titleOf(entry: EntryLike): string {
     const title = (entry.title ?? '').trim();
     if (title) return title;
-    const description = (entry.description ?? '').trim();
-    if (description) return description.split('\n')[0].replace(/^•\s*/, '').slice(0, 80);
+    // A meal logged with only a note ("Apple with peanut butter") uses the note.
+    for (const text of [entry.description, entry.notes]) {
+      const first = (text ?? '').trim();
+      // Item lines read "• 170 g Greek yogurt (164.9 kcal)"; the card shows calories itself.
+      if (first) {
+        return first.split('\n')[0]
+          .replace(/^•\s*/, '')
+          .replace(/\s*\(\s*[\d.,]+\s*kcal\s*\)\s*$/i, '')
+          .trim()
+          .slice(0, 80);
+      }
+    }
     return '';
+  }
+
+  /** Card heading when the meal has no title of its own: "Snack", "Breakfast", "Meal". */
+  static slotTitle(mealType: string | null | undefined): string {
+    switch (mealType) {
+      case 'breakfast': return 'Breakfast';
+      case 'lunch': return 'Lunch';
+      case 'dinner': return 'Dinner';
+      case 'snack': return 'Snack';
+      default: return 'Meal';
+    }
   }
 
   static photoPath(imageId: string | null): string | null {
@@ -114,7 +136,7 @@ export class CircleMealPostService {
       typeof v === 'number' && Number.isFinite(v) ? Math.round(v) : null;
     return {
       entry_id: entry.id,
-      title: this.titleOf(entry) || this.slotLabel(entry.meal_type),
+      title: this.titleOf(entry) || this.slotTitle(entry.meal_type),
       meal_type: entry.meal_type ?? null,
       logged_at: entry.logged_at,
       calories: num(entry.calories),

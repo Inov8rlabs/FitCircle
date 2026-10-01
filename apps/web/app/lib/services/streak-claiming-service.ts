@@ -50,6 +50,8 @@ function toDayStr(date: Date | string): string {
   return date.toISOString().split('T')[0];
 }
 
+const BEFORE_JOINED_REASON = 'Before you joined FitCircle';
+
 export class StreakClaimingService {
   // ==========================================================================
   // CORE CLAIMING
@@ -277,6 +279,23 @@ export class StreakClaimingService {
     return isValidTimezone(lastKnown) ? lastKnown : 'UTC';
   }
 
+  /**
+   * The user's first local day (the day their account was created, in `timezone`),
+   * or null if it can't be read — in which case no extra restriction applies.
+   */
+  static async firstLocalDay(userId: string, timezone: string): Promise<string | null> {
+    try {
+      const { data } = await createAdminSupabase()
+        .from('profiles')
+        .select('created_at')
+        .eq('id', userId)
+        .maybeSingle();
+      return data?.created_at ? localDayOf(data.created_at, timezone) : null;
+    } catch {
+      return null;
+    }
+  }
+
   /** Can the user claim `date`? All checks are in the user's timezone. */
   static async canClaimStreak(
     userId: string,
@@ -302,6 +321,13 @@ export class StreakClaimingService {
         alreadyClaimed: false,
         reason: `Date is outside ${CLAIMING_CONSTANTS.RETROACTIVE_WINDOW_DAYS}-day retroactive claiming window`,
       };
+    }
+
+    // 2b. Days before the account existed can't be claimed (a new user must not
+    //     be able to backfill a streak for the week before they signed up).
+    const firstDay = await this.firstLocalDay(userId, timezone);
+    if (firstDay && dateStr < firstDay) {
+      return { canClaim: false, alreadyClaimed: false, reason: BEFORE_JOINED_REASON };
     }
 
     // 3. Already claimed?
@@ -368,6 +394,7 @@ export class StreakClaimingService {
     const todayStr = localToday(timezone);
     const windowStart = addDays(todayStr, -CLAIMING_CONSTANTS.RETROACTIVE_WINDOW_DAYS);
 
+    const firstDay = await this.firstLocalDay(userId, timezone);
     const [{ data: claims }, { data: tracking }, { data: foods }, { data: beverages }, { data: exercises }] =
       await Promise.all([
         supabaseAdmin
@@ -413,12 +440,13 @@ export class StreakClaimingService {
     for (let i = 0; i <= CLAIMING_CONSTANTS.RETROACTIVE_WINDOW_DAYS; i++) {
       const dateStr = addDays(todayStr, -i);
       const claimed = claimedDates.has(dateStr);
+      const beforeJoined = !claimed && firstDay !== null && dateStr < firstDay;
       days.push({
         date: dateStr,
         claimed,
         hasHealthData: healthByDate.get(dateStr) || false,
-        canClaim: !claimed && isWithinRetroactiveWindow(dateStr, todayStr),
-        reason: claimed ? 'Already claimed for this date' : undefined,
+        canClaim: !claimed && !beforeJoined && isWithinRetroactiveWindow(dateStr, todayStr),
+        reason: claimed ? 'Already claimed for this date' : beforeJoined ? BEFORE_JOINED_REASON : undefined,
         claimMethod: claimed ? methodByDate.get(dateStr) : undefined,
       });
     }
@@ -482,6 +510,10 @@ export class StreakClaimingService {
       throw new StreakClaimError('Day is outside the shieldable window', CLAIM_ERROR_CODES.TOO_OLD, {
         date: dateStr,
       });
+    }
+    const firstDay = await this.firstLocalDay(userId, tz);
+    if (firstDay && dateStr < firstDay) {
+      throw new StreakClaimError(BEFORE_JOINED_REASON, 'CLAIM_NOT_ALLOWED', { date: dateStr });
     }
 
     // Already claimed/protected? Nothing to do — don't burn a shield.

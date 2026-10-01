@@ -127,6 +127,11 @@ export async function POST(request: NextRequest) {
           participant_count: (currentCircle?.participant_count || 0) + 1,
         })
         .eq('id', circle.id);
+
+      // This path bypasses CircleService.addMemberToCircle, which is what normally
+      // posts the "just joined — say hi" chat update. Fire-and-forget; never throws.
+      const { ChatActivityHooks } = await import('@/lib/services/chat-activity-hooks');
+      ChatActivityHooks.onMemberJoined(circle.id, user.id).catch(() => {});
     }
 
     // Create daily goals for the user based on the challenge

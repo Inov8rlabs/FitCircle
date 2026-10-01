@@ -100,10 +100,11 @@ describe('POST /api/mobile/food-log', () => {
     };
     const res = await post(body);
     expect(res.status).toBe(201);
-    expect(calls.create[0]).toEqual(body);
+    // The only addition: the day it was eaten, resolved on the server (UTC here: no timezone in the test).
+    expect(calls.create[0]).toEqual({ ...body, entry_date: '2026-09-28' });
 
     await post({ entry_type: 'water', water_ml: 250 });
-    expect(calls.create[1]).toEqual({ entry_type: 'water', water_ml: 250 });
+    expect(calls.create[1]).toEqual({ entry_type: 'water', water_ml: 250, entry_date: expect.any(String) });
   });
 
   it('accepts explicit nulls on optional fields', async () => {
@@ -115,7 +116,7 @@ describe('POST /api/mobile/food-log', () => {
       nutrition_data: null,
     });
     expect(res.status).toBe(201);
-    expect(calls.create[0]).toEqual({ entry_type: 'water', water_ml: 330 });
+    expect(calls.create[0]).toEqual({ entry_type: 'water', water_ml: 330, entry_date: expect.any(String) });
   });
 
   it('validation errors keep code + details and carry a readable message', async () => {

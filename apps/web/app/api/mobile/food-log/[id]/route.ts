@@ -5,6 +5,7 @@
  * DELETE /api/mobile/food-log/[id] - Delete entry
  */
 
+import { resolveEntryDate } from '@/lib/utils/entry-date';
 import { type NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 
@@ -146,6 +147,16 @@ export async function PATCH(
       UpdateFoodLogEntrySchema,
       normalizeFoodLogEntryAliases(body)
     );
+
+    // Re-timing a meal moves it to the day of its new time (local to the person).
+    if (validatedData.logged_at && !validatedData.entry_date) {
+      validatedData.entry_date = await resolveEntryDate(
+        request,
+        { logged_at: validatedData.logged_at, timezone: body?.timezone },
+        user.id,
+        supabase
+      );
+    }
 
     // Update entry
     const result = await FoodLogService.updateEntry(entryId, user.id, validatedData, supabase);

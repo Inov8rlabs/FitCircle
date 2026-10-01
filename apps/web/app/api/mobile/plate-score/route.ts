@@ -2,9 +2,11 @@ import { type NextRequest, NextResponse } from 'next/server';
 
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { PlateScoreService } from '@/lib/services/plate-score-service';
+import { resolveClientTimezone } from '@/lib/streaks/client-timezone';
+import { localToday } from '@/lib/streaks/streak-calculator';
 
 /**
- * GET /api/mobile/plate-score?date=YYYY-MM-DD  (defaults to today, UTC)
+ * GET /api/mobile/plate-score?date=YYYY-MM-DD  (defaults to today in the caller's timezone)
  * PRD §6.8 — single glanceable 0–100 daily nutrition score. Reads the cached
  * score for the day, computing + caching it if missing. Thin route; logic lives
  * in PlateScoreService.
@@ -14,7 +16,7 @@ export async function GET(request: NextRequest) {
   try {
     const user = await requireMobileAuth(request);
     const { searchParams } = new URL(request.url);
-    const date = normalizeDate(searchParams.get('date'));
+    const date = normalizeDate(searchParams.get('date'), resolveClientTimezone(request, null));
     if (!date) {
       return badRequest('date must be in YYYY-MM-DD format');
     }
@@ -53,9 +55,9 @@ function mapError(error: any, label: string) {
   );
 }
 
-/** Validate YYYY-MM-DD; default to today (UTC) when missing. Returns null if invalid. */
-function normalizeDate(raw: string | null): string | null {
-  if (!raw) return new Date().toISOString().slice(0, 10);
+/** Validate YYYY-MM-DD; default to the caller's local today (UTC if unknown). Returns null if invalid. */
+function normalizeDate(raw: string | null, timezone: string | null): string | null {
+  if (!raw) return localToday(timezone);
   const m = /^\d{4}-\d{2}-\d{2}$/.test(raw);
   if (!m) return null;
   const d = new Date(`${raw}T00:00:00Z`);

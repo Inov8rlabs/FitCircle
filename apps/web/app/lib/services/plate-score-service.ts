@@ -158,16 +158,21 @@ export class PlateScoreService {
 
   /** Return the cached score for the day, computing + caching it if missing. */
   static async getForDay(userId: string, date: string): Promise<PlateScoreDTO> {
-    const supabase = createAdminSupabase();
-    const { data } = await supabase
-      .from('plate_scores')
-      .select('*')
-      .eq('user_id', userId)
-      .eq('score_date', date)
-      .maybeSingle();
-
-    if (data) return this.toDTO(data);
-    return this.computeForDay(userId, date);
+    // Always recompute: the stored row is a snapshot from whenever the day was
+    // first scored, so returning it froze the score after the first meal of the
+    // day. Recomputing reads only that day's entries and refreshes the row.
+    try {
+      return await this.computeForDay(userId, date);
+    } catch (err) {
+      const { data } = await createAdminSupabase()
+        .from('plate_scores')
+        .select('*')
+        .eq('user_id', userId)
+        .eq('score_date', date)
+        .maybeSingle();
+      if (data) return this.toDTO(data);
+      throw err;
+    }
   }
 
   /** List scores for an inclusive ISO date range, newest first. */

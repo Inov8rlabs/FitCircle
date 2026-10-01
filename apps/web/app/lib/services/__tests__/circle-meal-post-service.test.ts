@@ -50,6 +50,25 @@ describe('CircleMealPostService copy + payload', () => {
     );
   });
 
+  it('uses the note of a meal logged with only a note', () => {
+    expect(CircleMealPostService.titleOf({ ...meal, title: '', description: '', notes: 'Apple with peanut butter' })).toBe(
+      'Apple with peanut butter'
+    );
+  });
+
+  it('drops the per-item calorie suffix from an itemised note', () => {
+    const notes = '• 170 g Greek yogurt, plain (Fage) (164.9 kcal)\n\nTotal: 165 kcal';
+    expect(CircleMealPostService.titleOf({ ...meal, title: '', description: '', notes })).toBe(
+      '170 g Greek yogurt, plain (Fage)'
+    );
+  });
+
+  it('heads an untitled card with the meal slot, never "a snack"', () => {
+    const untitled = { ...meal, title: '', description: '', notes: '', meal_type: 'snack' };
+    expect(CircleMealPostService.buildPayload(untitled, null).title).toBe('Snack');
+    expect(CircleMealPostService.buildPayload({ ...untitled, meal_type: undefined }, null).title).toBe('Meal');
+  });
+
   it('builds a rounded snake_case payload with the proxy photo path', () => {
     expect(CircleMealPostService.buildPayload(meal, 'img-1')).toEqual({
       entry_id: 'e1',

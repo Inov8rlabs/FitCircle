@@ -4,6 +4,7 @@
  * GET /api/mobile/beverages - Get user's beverage log entries (paginated)
  */
 
+import { resolveEntryDate } from '@/lib/utils/entry-date';
 import { type NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 
@@ -194,6 +195,13 @@ export async function POST(request: NextRequest) {
     const validatedData = parseLenient(CreateBeverageLogSchema, body);
 
     // Create entry
+    // File the drink under the day it was logged in the person's timezone.
+    validatedData.entry_date = await resolveEntryDate(
+      request,
+      { entry_date: validatedData.entry_date, logged_at: validatedData.logged_at, timezone: (body as { timezone?: unknown })?.timezone },
+      user.id,
+      supabase
+    );
     const result = await BeverageLogService.createEntry(user.id, validatedData, supabase);
 
     if (result.error) {
@@ -202,7 +210,8 @@ export async function POST(request: NextRequest) {
 
     // Manual log → server-side streak auto-claim for the day it was drunk.
     const streak = await StreakClaimingService.autoClaimForManualLog(user.id, {
-      occurredAt: result.data?.logged_at ?? validatedData.entry_date ?? null,
+      // Claim the day the entry was filed under, so the two can never disagree.
+      occurredAt: validatedData.entry_date ?? result.data?.logged_at ?? null,
       timezone: resolveClientTimezone(request, body?.timezone),
       source: 'beverage_log',
       referenceId: result.data?.id,

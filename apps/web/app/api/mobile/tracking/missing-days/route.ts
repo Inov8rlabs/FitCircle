@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from 'next/server';
 
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
+import { localDayOf } from '@/lib/streaks/streak-calculator';
 import { createAdminSupabase } from '@/lib/supabase-admin';
 import { getUserTimezone, getLastNDays } from '@/lib/utils/timezone';
 
@@ -84,8 +85,19 @@ export async function GET(request: NextRequest) {
     console.log(`[Missing Days] Existing check-ins: ${Array.from(loggedDates).join(', ')}`);
     console.log(`[Missing Days] Checking dates: ${last7Days.join(', ')}`);
 
+    // Days before the account existed were never "missed": a brand-new account
+    // must not open to a list of missing check-ins.
+    const { data: profile } = await supabaseAdmin
+      .from('profiles')
+      .select('created_at')
+      .eq('id', user.id)
+      .maybeSingle();
+    const firstDay = profile?.created_at ? localDayOf(profile.created_at, userTimezone) : null;
+
     // Find missing dates
-    const missingDates = last7Days.filter(date => !loggedDates.has(date));
+    const missingDates = last7Days.filter(
+      date => !loggedDates.has(date) && (!firstDay || date >= firstDay)
+    );
 
     console.log(`[Missing Days] Found ${missingDates.length} missing days: ${missingDates.join(', ')}`);
 

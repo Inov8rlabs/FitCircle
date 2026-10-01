@@ -76,6 +76,8 @@ describe('PATCH /api/mobile/food-log/[id]', () => {
       is_private: true,
       logged_at: '2026-09-28T19:00:00Z',
       nutrition_data: { calories: 610, protein_g: 42, carbs_g: 30, fat_g: 33 },
+      // Re-timing a meal moves its day with it (UTC here: no timezone in the test).
+      entry_date: '2026-09-28',
     });
   });
 
