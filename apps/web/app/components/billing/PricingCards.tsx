@@ -126,7 +126,7 @@ export function PricingCards() {
         onClick={startCheckout}
         className="w-full rounded-xl bg-purple-500 py-3.5 font-bold text-white transition-colors hover:bg-purple-600 disabled:opacity-60"
       >
-        {busy ? 'Opening checkout…' : selected === 'lifetime' ? 'Get Pro forever' : 'Start my free week'}
+        {busy ? 'Opening checkout…' : selected === 'lifetime' ? 'Get Pro forever' : 'Continue to checkout'}
       </motion.button>
       <p className="text-center text-[11px] leading-relaxed text-muted-foreground">
         Subscriptions renew automatically until cancelled. Manage or cancel anytime in
