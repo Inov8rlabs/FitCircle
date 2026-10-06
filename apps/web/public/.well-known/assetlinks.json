@@ -1,0 +1,16 @@
+[
+  {
+    "relation": [
+      "delegate_permission/common.handle_all_urls"
+    ],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.inov8rlabs.apps.fitcircle",
+      "sha256_cert_fingerprints": [
+        "79:98:1B:82:56:AB:DF:8D:00:6F:59:FC:FC:12:36:8D:6F:4C:B7:D9:5B:22:55:2D:91:08:CB:6D:7D:89:54:8D",
+        "5C:6E:0B:14:41:8B:A9:E7:8E:C1:F8:A1:91:E3:A7:47:21:31:92:24:A4:D4:FC:8E:39:AB:7F:CD:FE:DB:70:F6",
+        "A1:5F:46:A8:FE:B7:CA:E0:DB:4E:E6:E6:1A:57:0F:3B:84:DE:CC:A4:30:A6:B9:9A:6A:23:E1:13:D2:2D:DE:5C"
+      ]
+    }
+  }
+]

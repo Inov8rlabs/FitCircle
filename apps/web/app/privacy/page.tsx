@@ -9,8 +9,8 @@ export const metadata: Metadata = {
 
 // Update this date whenever the policy text changes. It must never be computed
 // at render time: a policy that always shows today's date is misleading.
-const LAST_UPDATED = 'September 29, 2026';
-const POLICY_VERSION = '1.1';
+const LAST_UPDATED = 'October 5, 2026';
+const POLICY_VERSION = '1.2';
 
 function ThirdParty({
   name,
@@ -118,8 +118,11 @@ export default function PrivacyPolicyPage() {
               <ul className="text-slate-300 space-y-2 list-disc list-inside">
                 <li>Photos you take or choose: meal photos, body composition reports, and chat photos</li>
                 <li>
-                  Voice logging: your speech is transcribed on your device or by your device&apos;s speech service
-                  (Apple on iOS). We receive the resulting text, not the audio recording.
+                  Voice logging: speech is transcribed using your device&apos;s speech recognition service
+                  (Apple on iOS; the configured speech provider on Android). Depending on your device and
+                  provider, audio may be processed on the device or sent to that provider&apos;s servers.
+                  FitCircle receives the resulting transcript, not the audio recording. You can type a meal
+                  instead of using voice logging.
                 </li>
                 <li>Messages and reactions you post in FitCircle chats</li>
                 <li>Messages you send to the Fitzy assistant</li>
@@ -131,8 +134,8 @@ export default function PrivacyPolicyPage() {
                 <li>Device and app information (model, operating system, app version, language)</li>
                 <li>Device identifiers, including a push notification token if you allow notifications</li>
                 <li>
-                  The advertising identifier of your device, only if you allow tracking when the app asks
-                  (see section 5)
+                  Advertising identifiers and other device identifiers used by our advertising providers,
+                  subject to your device settings and applicable consent choices (see section 5)
                 </li>
                 <li>Usage data (screens viewed, features used) and crash and performance diagnostics</li>
                 <li>On the website: browser type and cookie identifiers</li>
@@ -217,6 +220,14 @@ export default function PrivacyPolicyPage() {
                   &amp; Security → Tracking).
                 </li>
                 <li>
+                  On Android, AdMob may collect and share advertising and other device identifiers, IP
+                  addresses (which can indicate approximate location), ad and app interactions, and
+                  diagnostic information to serve ads, measure performance, and prevent fraud. Collection
+                  and personalization depend on your device settings and applicable consent choices. You
+                  can reset or delete your advertising ID in Android settings and revisit available
+                  consent choices under Privacy &amp; Ad Choices in FitCircle.
+                </li>
+                <li>
                   Where required by law, the app asks for your advertising consent choices through
                   Google&apos;s consent form before any ad is requested.
                 </li>
@@ -247,10 +258,11 @@ export default function PrivacyPolicyPage() {
                 <ThirdParty name="Anthropic" purpose="AI models" href="https://www.anthropic.com/legal/privacy">
                   Processes the content described in section 4 to produce nutrition estimates and Fitzy replies.
                 </ThirdParty>
-                <ThirdParty name="Google" purpose="AI models, ads, sign-in, push notifications" href="https://policies.google.com/privacy">
+                <ThirdParty name="Google" purpose="AI models, ads, sign-in, purchases, push notifications, speech" href="https://policies.google.com/privacy">
                   Gemini models process the content described in section 4. AdMob serves ads in the free mobile
                   apps (section 5). Google Sign-In authenticates you if you choose it. Firebase Cloud Messaging
-                  delivers push notifications.
+                  delivers push notifications. Google Play processes Android purchases. If Google is your
+                  configured Android speech provider, it also processes speech for voice logging.
                 </ThirdParty>
                 <ThirdParty name="Apple" purpose="sign-in, purchases, push notifications, speech" href="https://www.apple.com/legal/privacy/">
                   Sign in with Apple authenticates you if you choose it. App Store purchases are processed by
@@ -366,7 +378,7 @@ export default function PrivacyPolicyPage() {
               <ul className="text-slate-300 space-y-2 list-disc list-inside">
                 <li><strong className="text-white">Active Account Data:</strong> Retained while your account is active</li>
                 <li><strong className="text-white">Deleted Account Data:</strong> Erased within 30 days of deletion request</li>
-                <li><strong className="text-white">Consent Records:</strong> Retained for 5 years (compliance requirement)</li>
+                <li><strong className="text-white">Consent Records:</strong> Retained while your account is active and removed as part of account deletion</li>
                 <li><strong className="text-white">Aggregate Analytics:</strong> Anonymized data may be retained indefinitely</li>
               </ul>
               <p className="text-slate-300 leading-relaxed mt-4">

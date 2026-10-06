@@ -3,6 +3,18 @@ import { withSentryConfig } from '@sentry/nextjs';
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
+  async redirects() {
+    return [
+      {
+        // Android must fetch Digital Asset Links directly from each declared
+        // host. Keep the existing apex-to-www redirect for every other path.
+        source: '/:path((?!\\.well-known/assetlinks\\.json$).*)',
+        has: [{ type: 'host', value: 'fitcircle.ai' }],
+        destination: 'https://www.fitcircle.ai/:path',
+        permanent: false,
+      },
+    ];
+  },
   eslint: {
     // Temporarily ignore ESLint errors during builds
     // TODO: Fix all ESLint errors and remove this
