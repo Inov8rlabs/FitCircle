@@ -13,6 +13,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog';
+import { trackedPhotoParse } from '@/lib/analytics/meal';
 import { nutritionClient, PHOTO_PARSE_MAX_IMAGES, type NutritionDraft, type NutritionDraftItem } from '@/lib/api/nutrition-client';
 import { compressImagesForUpload } from '@/lib/utils/image-compression';
 import { cn } from '@/lib/utils';
@@ -101,7 +102,10 @@ export function NutritionDetailDialog({ entry, children }: { entry: any; childre
     setAddError(null);
     try {
       // One request, one vision call — the server analyzes all photos together.
-      const merged = await nutritionClient.photoParse(files);
+      const merged = await trackedPhotoParse(() => nutritionClient.photoParse(files), {
+        imageCount: files.length,
+        source: 'meal_detail_add_photo',
+      });
       const newItems = merged.items.filter((i) => i.name.trim());
       if (dropped > 0) {
         setAddError(`Only ${PHOTO_PARSE_MAX_IMAGES} photos can be analyzed at once — ${dropped} ${dropped === 1 ? 'photo was' : 'photos were'} skipped.`);
@@ -165,6 +169,7 @@ export function NutritionDetailDialog({ entry, children }: { entry: any; childre
             </DialogHeader>
             <NutritionConfirm
               draft={seedDraft}
+              method="photo_library"
               initialImages={addFiles}
               editEntry={{ id: entry.id, mealType: entry?.meal_type as MealType | undefined }}
               onCommitted={() => {

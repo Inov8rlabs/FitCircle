@@ -27,6 +27,8 @@ import { Avatar } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { AnalyticsEvents, analytics, toErrorKind } from '@/lib/analytics';
+import { useTrackOnce } from '@/lib/analytics/react';
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/stores/auth-store';
 
@@ -60,6 +62,9 @@ export default function JoinCirclePage() {
   const [isAlreadyMember, setIsAlreadyMember] = useState(false);
   const [canJoin, setCanJoin] = useState(true);
   const [joinError, setJoinError] = useState('');
+
+  // Top of the viral loop: the invite landing page was opened.
+  useTrackOnce(AnalyticsEvents.inviteLinkOpened({ signed_in: Boolean(user) }), true, inviteCode);
 
   useEffect(() => {
     if (inviteCode) {
@@ -150,6 +155,7 @@ export default function JoinCirclePage() {
       // Redirect to login/signup with return URL
       void router.push(`/login?returnUrl=/join/${inviteCode}`);
     } else {
+      analytics.track(AnalyticsEvents.fitCircleJoinStarted({ source: 'invite_link' }));
       setShowGoalSetting(true);
     }
   };
@@ -200,10 +206,12 @@ export default function JoinCirclePage() {
 
       if (participantError) throw participantError;
 
+      analytics.track(AnalyticsEvents.fitCircleJoined({ source: 'invite_link' }));
       toast.success('Successfully joined the FitCircle!');
       void router.push(`/fitcircles/${circleDetails.id}`);
     } catch (error: any) {
       console.error('Error joining circle:', error);
+      analytics.track(AnalyticsEvents.fitCircleJoinFailed({ source: 'invite_link', error_kind: toErrorKind(error) }));
       toast.error(error.message || 'Failed to join circle');
     } finally {
       setIsJoining(false);

@@ -4,6 +4,8 @@ import { Sparkles } from 'lucide-react';
 import Link from 'next/link';
 
 import { useEntitlements } from '@/hooks/useEntitlements';
+import { AnalyticsEvents, analytics } from '@/lib/analytics';
+import { useTrackOnce } from '@/lib/analytics/react';
 
 /**
  * Reusable contextual paywall prompt — render wherever an API response comes
@@ -14,12 +16,17 @@ import { useEntitlements } from '@/hooks/useEntitlements';
 export function UpgradePrompt({
   message,
   compact = false,
+  source = 'upgrade_prompt',
 }: {
   message: string;
   compact?: boolean;
+  /** Card placement for Pro Card Shown/Tapped. The paywall itself is opened with source=pro_card. */
+  source?: string;
 }) {
   const { entitlements } = useEntitlements();
-  if (entitlements?.subscriptionsEnabled !== true) return null;
+  const visible = entitlements?.subscriptionsEnabled === true;
+  useTrackOnce(AnalyticsEvents.proCardShown({ source }), visible);
+  if (!visible) return null;
 
   return (
     <div
@@ -30,7 +37,8 @@ export function UpgradePrompt({
       <Sparkles className="h-5 w-5 shrink-0 text-purple-400" />
       <p className="flex-1 text-sm">{message}</p>
       <Link
-        href="/upgrade"
+        href="/upgrade?source=pro_card"
+        onClick={() => analytics.track(AnalyticsEvents.proCardTapped({ source }))}
         className="shrink-0 rounded-lg bg-purple-500 px-3 py-1.5 text-sm font-semibold text-white hover:bg-purple-600"
       >
         Go Pro

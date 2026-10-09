@@ -15,7 +15,7 @@ import {
   Loader2
 } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { useState, Suspense } from 'react';
+import { useEffect, useState, Suspense } from 'react';
 import { toast } from 'sonner';
 
 import Celebration from '@/components/Celebration';
@@ -25,6 +25,8 @@ import { DatePicker } from '@/components/ui/date-picker';
 import { Input } from '@/components/ui/input';
 import { Progress } from '@/components/ui/progress';
 import { useProfile } from '@/hooks/useProfile';
+import { AnalyticsEvents, analytics } from '@/lib/analytics';
+import { useTrackOnce } from '@/lib/analytics/react';
 import { useAuthStore } from '@/stores/auth-store';
 
 
@@ -54,6 +56,12 @@ const steps = [
     icon: Calendar,
   }
 ];
+
+/**
+ * Analytics step ids, index-aligned with `steps`. Stable ids shared with iOS/Android
+ * (profile, goals, questionnaire, ...); `preferences` is web-only.
+ */
+const ONBOARDING_STEP_IDS = ['profile', 'goals', 'questionnaire', 'preferences'] as const;
 
 const activityLevels = [
   { value: 'sedentary', label: 'Sedentary', description: 'Little to no exercise' },
@@ -108,8 +116,24 @@ function OnboardingForm() {
 
   const progress = ((currentStep + 1) / steps.length) * 100;
 
+  useTrackOnce(AnalyticsEvents.onboardingStarted());
+  useEffect(() => {
+    analytics.track(
+      AnalyticsEvents.onboardingStepViewed({ step_name: ONBOARDING_STEP_IDS[currentStep], step_number: currentStep + 1 })
+    );
+  }, [currentStep]);
+
+  const trackStepCompleted = () =>
+    analytics.track(
+      AnalyticsEvents.onboardingStepCompleted({
+        step_name: ONBOARDING_STEP_IDS[currentStep],
+        step_number: currentStep + 1,
+      })
+    );
+
   const handleNext = async () => {
     if (currentStep < steps.length - 1) {
+      trackStepCompleted();
       setCurrentStep(currentStep + 1);
     } else {
       // Complete onboarding - save to database
@@ -158,6 +182,13 @@ function OnboardingForm() {
         const success = await updateProfile(profileData);
 
         if (success) {
+          trackStepCompleted();
+          analytics.setUserProperties({
+            onboarding_completed: true,
+            units_system: formData.units === 'metric' ? 'metric' : 'imperial',
+            ...(formData.goals[0] ? { primary_goal: formData.goals[0] } : {}),
+          });
+          analytics.track(AnalyticsEvents.onboardingCompleted({ joined_circle: false }));
           setShowCelebration(true);
         } else {
           toast.error('Failed to save profile. Please try again.');

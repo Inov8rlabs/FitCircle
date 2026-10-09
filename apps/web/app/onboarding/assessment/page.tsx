@@ -21,6 +21,7 @@ import Celebration from '@/components/Celebration';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
+import { AnalyticsEvents, analytics, toErrorKind } from '@/lib/analytics';
 import {
   type AssessmentResponses,
   type CircleRecommendation,
@@ -168,6 +169,7 @@ export default function OnboardingAssessmentPage() {
       try {
         const recs = await onboardingClient.getRecommendations();
         setRecommendations(recs.data.recommendations);
+        analytics.track(AnalyticsEvents.recommendedCirclesViewed({ count: recs.data.recommendations.length }));
       } catch (e) {
         console.warn('Recommendations load failed', e);
       } finally {
@@ -181,11 +183,14 @@ export default function OnboardingAssessmentPage() {
 
   const joinCircle = async (circleId: string) => {
     setJoiningIds(s => new Set(s).add(circleId));
+    analytics.track(AnalyticsEvents.fitCircleJoinStarted({ source: 'recommendation' }));
     try {
       await onboardingClient.joinRecommendedCircle(circleId);
+      analytics.track(AnalyticsEvents.fitCircleJoined({ source: 'recommendation' }));
       setJoinedIds(s => new Set(s).add(circleId));
       toast.success('Joined circle!');
     } catch (e: any) {
+      analytics.track(AnalyticsEvents.fitCircleJoinFailed({ source: 'recommendation', error_kind: toErrorKind(e) }));
       toast.error(e?.message ?? 'Could not join');
     } finally {
       setJoiningIds(s => {
@@ -262,7 +267,15 @@ export default function OnboardingAssessmentPage() {
               joiningIds={joiningIds}
               onJoin={joinCircle}
               onContinue={goToCompletion}
-              onSkip={goToCompletion}
+              onSkip={() => {
+                analytics.track(
+                  AnalyticsEvents.onboardingStepSkipped({
+                    step_name: 'circle_recommendations',
+                    step_number: QUESTIONS.length + 1,
+                  })
+                );
+                goToCompletion();
+              }}
             />
           )}
 

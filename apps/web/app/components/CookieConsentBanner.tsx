@@ -6,7 +6,7 @@ import { useState, useEffect } from 'react';
 
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
-import { initializeAmplitude } from '@/lib/amplitude';
+import { analytics } from '@/lib/analytics';
 import { createBrowserSupabase } from '@/lib/supabase';
 
 interface ConsentPreferences {
@@ -50,28 +50,19 @@ export function CookieConsentBanner() {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
-    console.log('🍪 CookieConsentBanner: Checking consent status...');
-
     // Check if user has already made a choice
     const consentCookie = getCookie(COOKIE_NAME);
-    console.log('🍪 Existing consent cookie:', consentCookie || 'none');
 
     // Check for Global Privacy Control (GPC)
     const gpcEnabled = (navigator as any).globalPrivacyControl === true;
-    if (gpcEnabled) {
-      console.log('🛡️ Global Privacy Control (GPC) enabled');
-    }
 
     if (!consentCookie) {
       if (gpcEnabled) {
         // Honor GPC signal - automatically reject non-essential cookies
-        console.log('🚫 GPC detected - auto-rejecting non-essential cookies');
         handleRejectAll(true);
       } else {
         // First visit - show banner
-        console.log('✅ No consent found - showing banner in 500ms');
         setTimeout(() => {
-          console.log('🎉 Displaying cookie consent banner');
           setShowBanner(true);
         }, 500);
       }
@@ -79,12 +70,11 @@ export function CookieConsentBanner() {
       // Load preferences from cookie
       try {
         const saved = JSON.parse(decodeURIComponent(consentCookie));
-        console.log('📋 Loaded consent preferences:', saved);
         setPreferences(saved);
         initializeScripts(saved);
       } catch (e) {
         // Invalid cookie, show banner
-        console.error('❌ Invalid consent cookie, showing banner:', e);
+        console.error('Invalid consent cookie, showing banner:', e);
         setShowBanner(true);
       }
     }
@@ -101,11 +91,6 @@ export function CookieConsentBanner() {
       // Save to cookie (client-side, immediate)
       const cookieValue = encodeURIComponent(JSON.stringify(prefs));
       setCookie(COOKIE_NAME, cookieValue, COOKIE_EXPIRY_DAYS);
-      console.log('💾 Saved consent to cookie:', prefs);
-
-      // Verify cookie was saved
-      const savedCookie = getCookie(COOKIE_NAME);
-      console.log('✅ Cookie verification:', savedCookie ? 'saved successfully' : '❌ failed to save');
 
       // Save to database (server-side, audit trail)
       const supabase = createBrowserSupabase();
@@ -149,17 +134,8 @@ export function CookieConsentBanner() {
   };
 
   const initializeScripts = (prefs: ConsentPreferences) => {
-    if (prefs.analytics) {
-      // Initialize Amplitude with user consent
-      try {
-        initializeAmplitude();
-        console.log('✅ Analytics enabled - Amplitude initialized');
-      } catch (error) {
-        console.error('❌ Failed to initialize analytics:', error);
-      }
-    } else {
-      console.log('❌ Analytics disabled by user consent');
-    }
+    // Analytics providers start only on consent; revoking opts them all out.
+    analytics.setOptOut(!prefs.analytics);
     // Future: Load marketing scripts if prefs.marketing
   };
 

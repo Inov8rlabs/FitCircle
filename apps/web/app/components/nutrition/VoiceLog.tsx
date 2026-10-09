@@ -3,6 +3,7 @@
 import { Loader2, Mic, Square } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 
+import { AnalyticsEvents, analytics, isUpgradeRequired, toErrorKind } from '@/lib/analytics';
 import { nutritionClient, ApiError, type NutritionDraft } from '@/lib/api/nutrition-client';
 
 import { NutritionConfirm } from './NutritionConfirm';
@@ -27,6 +28,8 @@ function getRecognitionCtor(): (new () => SpeechRecognitionLike) | null {
 
 interface VoiceLogProps {
   onLogged?: () => void;
+  /** Analytics placement (Meal Log Started.surface). */
+  surface?: string;
 }
 
 /**
@@ -34,7 +37,7 @@ interface VoiceLogProps {
  * /food/voice-parse, then shows the draft in NutritionConfirm. Feature-detected:
  * renders nothing when the browser has no SpeechRecognition.
  */
-export function VoiceLog({ onLogged }: VoiceLogProps) {
+export function VoiceLog({ onLogged, surface = 'food_log' }: VoiceLogProps) {
   const [supported, setSupported] = useState(false);
   const [listening, setListening] = useState(false);
   const [transcript, setTranscript] = useState('');
@@ -56,9 +59,17 @@ export function VoiceLog({ onLogged }: VoiceLogProps) {
     setError(null);
     try {
       const result = await nutritionClient.voiceParse(t);
+      analytics.track(AnalyticsEvents.mealVoiceParsed({ item_count: result.items.length }));
       setDraft(result);
       setShowConfirm(true);
     } catch (err) {
+      const upgrade = isUpgradeRequired(err);
+      analytics.track(
+        AnalyticsEvents.mealVoiceParseFailed({ error_kind: toErrorKind(err), upgrade_required: upgrade })
+      );
+      if (upgrade) {
+        analytics.track(AnalyticsEvents.aiLimitReached({ feature: 'voice_log', source: surface }));
+      }
       // Option B: parse failed/rate-limited, but the server saved the transcript as a
       // food-log entry so it's not lost. Show the friendly note and refresh so it appears.
       if (err instanceof ApiError && err.details?.savedEntryId) {
@@ -75,6 +86,7 @@ export function VoiceLog({ onLogged }: VoiceLogProps) {
   const start = () => {
     const Ctor = getRecognitionCtor();
     if (!Ctor) return;
+    analytics.track(AnalyticsEvents.mealLogStarted({ method: 'voice', surface }));
     const rec = new Ctor();
     rec.lang = navigator.language || 'en-US';
     rec.interimResults = true;
@@ -118,6 +130,7 @@ export function VoiceLog({ onLogged }: VoiceLogProps) {
     return (
       <NutritionConfirm
         draft={draft}
+        method="voice"
         onCommitted={() => {
           reset();
           onLogged?.();

@@ -16,6 +16,7 @@ import { Navbar } from '@/components/layout/navbar';
 import { Card, CardContent } from '@/components/ui/card';
 import { ProBadge } from '@/components/billing/ProBadge';
 import { useEntitlements } from '@/hooks/useEntitlements';
+import { AnalyticsEvents, analytics } from '@/lib/analytics';
 
 const PLATFORM_LABELS: Record<string, string> = {
   app_store: 'the App Store',
@@ -41,10 +42,12 @@ export default function BillingSettingsPage() {
       const res = await fetch('/api/billing/portal', { method: 'POST' });
       const body = await res.json();
       if (body?.url) {
+        analytics.track(AnalyticsEvents.subscriptionManaged());
         window.location.assign(body.url);
         return;
       }
       if (body?.platform && body.platform !== 'stripe') {
+        analytics.track(AnalyticsEvents.subscriptionManaged());
         toast.info(`Manage your subscription in ${PLATFORM_LABELS[body.platform] ?? 'your app store'}.`);
         return;
       }
@@ -114,7 +117,7 @@ export default function BillingSettingsPage() {
                   history, and up to 2 circles of your own.
                 </p>
                 <Link
-                  href="/upgrade"
+                  href="/upgrade?source=settings"
                   className="block w-full rounded-lg bg-purple-500 py-2.5 text-center text-sm font-bold text-white hover:bg-purple-600"
                 >
                   Upgrade to Pro

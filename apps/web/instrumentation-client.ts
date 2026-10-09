@@ -1,6 +1,7 @@
 // Sentry initialization for the browser (web frontend). Next.js loads this on the
-// client automatically. Session Replay is intentionally NOT enabled — Amplitude
-// already provides replay, so this avoids duplicate cost and bundle weight.
+// client automatically. Session Replay is intentionally NOT enabled here: replay,
+// when wanted, is Amplitude's (consent-gated, NEXT_PUBLIC_AMPLITUDE_REPLAY_SAMPLE_RATE).
+// Product analytics live in app/lib/analytics (they add event-name breadcrumbs).
 import * as Sentry from '@sentry/nextjs';
 
 import { WEB_SENTRY_DSN } from './sentry.dsn';

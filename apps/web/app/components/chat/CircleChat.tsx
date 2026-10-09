@@ -5,6 +5,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { MessageBubble } from '@/components/chat/MessageBubble';
 import { Button } from '@/components/ui/button';
+import { AnalyticsEvents, analytics } from '@/lib/analytics';
 import {
   chatClient,
   type ChatMessage,
@@ -288,6 +289,10 @@ export function CircleChat({ circleId }: CircleChatProps) {
     if (reason === null) return; // cancelled
     try {
       await chatClient.reportMessage(messageId, reason || null);
+      // The typed reason is free text: only whether one was given leaves the browser.
+      analytics.track(
+        AnalyticsEvents.contentReported({ content_type: 'message', reason: reason.trim() ? 'other' : 'unspecified' })
+      );
       window.alert('Thanks — this message has been reported.');
     } catch (err) {
       console.warn('[chat] report failed', err);
@@ -328,6 +333,7 @@ export function CircleChat({ circleId }: CircleChatProps) {
         clientId,
       });
       upsertMessage(saved); // replaces optimistic row via clientId match
+      analytics.track(AnalyticsEvents.chatMessageSent({ kind: 'text' }));
     } catch (err) {
       console.warn('[chat] send failed', err);
       // Roll back the optimistic row and restore the draft.

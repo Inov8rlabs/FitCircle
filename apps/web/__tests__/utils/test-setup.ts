@@ -2,6 +2,8 @@ import '@testing-library/jest-dom';
 import { cleanup } from '@testing-library/react';
 import { afterEach, vi } from 'vitest';
 
+import type * as AnalyticsModule from '@/lib/analytics';
+
 // Cleanup after each test
 afterEach(() => {
   cleanup();
@@ -38,12 +40,24 @@ vi.mock('next/headers', () => ({
   })),
 }));
 
-// Mock Amplitude analytics
-vi.mock('@/lib/analytics', () => ({
-  trackEvent: vi.fn(),
-  identifyUser: vi.fn(),
-  setUserProperty: vi.fn(),
-}));
+// Stub the analytics facade (keeps the generated AnalyticsEvents constructors real)
+vi.mock('@/lib/analytics', async (importOriginal) => {
+  const actual = await importOriginal<typeof AnalyticsModule>();
+  return {
+    ...actual,
+    analytics: {
+      init: vi.fn(),
+      track: vi.fn(),
+      identify: vi.fn(),
+      setUserProperties: vi.fn(),
+      reset: vi.fn(),
+      flush: vi.fn(),
+      setOptOut: vi.fn(),
+      userId: null,
+      hasConsent: false,
+    },
+  };
+});
 
 // Mock Supabase (detailed mock in mock-supabase.ts)
 vi.mock('@/lib/supabase-server', () => ({

@@ -25,6 +25,10 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
+      - name: Analytics codegen up to date
+        # Fails when apps/web/app/lib/analytics/events.generated.ts is stale vs analytics/tracking-plan.json
+        run: npm run analytics:check
+
       - name: Lint
         run: cd apps/web && bun run lint
 

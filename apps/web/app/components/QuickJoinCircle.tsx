@@ -21,6 +21,7 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
+import { AnalyticsEvents, analytics, toErrorKind } from '@/lib/analytics';
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/stores/auth-store';
 
@@ -125,6 +126,7 @@ export default function QuickJoinCircle({ isOpen, onClose, initialCode = '' }: Q
     if (!circlePreview) return;
 
     setIsJoining(true);
+    analytics.track(AnalyticsEvents.fitCircleJoinStarted({ source: 'invite_code' }));
     try {
       // Direct approach to join the circle
       const joinResult = (await (supabase
@@ -147,6 +149,7 @@ export default function QuickJoinCircle({ isOpen, onClose, initialCode = '' }: Q
       }
 
       // Success animation
+      analytics.track(AnalyticsEvents.fitCircleJoined({ source: 'invite_code' }));
       setStep('success');
       toast.success('Welcome to the FitCircle!');
       
@@ -158,6 +161,12 @@ export default function QuickJoinCircle({ isOpen, onClose, initialCode = '' }: Q
     } catch (error: any) {
       console.error('Error joining circle:', error);
       const errorMessage = error.message || 'Failed to join FitCircle';
+      analytics.track(
+        AnalyticsEvents.fitCircleJoinFailed({
+          source: 'invite_code',
+          error_kind: errorMessage.includes('already a member') ? 'validation' : toErrorKind(error),
+        })
+      );
       
       // Provide helpful error messages
       if (errorMessage.includes('already a member')) {

@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
+import { AnalyticsEvents, analytics, isUpgradeRequired } from '@/lib/analytics';
 import { nutritionClient, type FitzyMessage } from '@/lib/api/nutrition-client';
 import { useAuthStore } from '@/stores/auth-store';
 
@@ -89,12 +90,16 @@ export function FitzyChat({ circleId, fill }: FitzyChatProps) {
     setInput('');
     setLoading(true);
     setError(null);
+    analytics.track(AnalyticsEvents.fitzyMessageSent({ is_suggestion: false }));
 
     try {
       const res = await nutritionClient.fitzyChat(next.slice(-MAX_TURNS_SENT), circleId);
       setMessages((prev) => [...prev, { role: 'assistant', content: res.answer }]);
       setDisclaimer(res.disclaimer);
     } catch (err) {
+      if (isUpgradeRequired(err)) {
+        analytics.track(AnalyticsEvents.aiLimitReached({ feature: 'fitzy', source: circleId ? 'circle_fitzy' : 'fitzy' }));
+      }
       setError(err instanceof Error ? err.message : 'Fitzy could not respond. Try again.');
       // Roll back the optimistic user turn so the input isn't lost.
       setMessages((prev) => prev.slice(0, -1));

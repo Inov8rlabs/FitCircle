@@ -5,6 +5,8 @@ import { Sparkles, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 
+import { AnalyticsEvents, analytics } from '@/lib/analytics';
+
 import { FitzyChat } from './FitzyChat';
 
 interface FitzyLauncherProps {
@@ -39,6 +41,7 @@ export function FitzyLauncher({ variant = 'nav', onOpen }: FitzyLauncherProps) {
 
   const handleOpen = () => {
     onOpen?.();
+    analytics.track(AnalyticsEvents.fitzyOpened({ surface: 'nav' }));
     setOpen(true);
   };
 

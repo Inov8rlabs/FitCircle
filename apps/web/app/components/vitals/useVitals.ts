@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 
+import { AnalyticsEvents, analytics } from '@/lib/analytics';
 import { nutritionClient } from '@/lib/api/nutrition-client';
 import { vitalsClient } from '@/lib/api/vitals-client';
 import { announceStreakAutoClaim, STREAK_AUTO_CLAIMED_EVENT } from '@/lib/streaks/auto-claim-events';
@@ -85,6 +86,7 @@ export function useVitals(days = 7): UseVitalsResult {
       water_ml: clamped,
       is_private: true,
     });
+    analytics.track(AnalyticsEvents.waterLogged({ source: 'dashboard' }));
     announceStreakAutoClaim(streak);
     await refresh({ silent: true });
   }, [refresh]);

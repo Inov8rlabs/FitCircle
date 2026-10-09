@@ -6,8 +6,8 @@ import { Check, Sparkles } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { Card, CardContent } from '@/components/ui/card';
-
-type Plan = 'monthly' | 'annual' | 'lifetime';
+import { AnalyticsEvents, analytics, toErrorKind, type Plan } from '@/lib/analytics';
+import { rememberCheckout, webProductId } from '@/lib/analytics/checkout';
 
 const PRICE_MONTHLY = 9.99;
 const PRICE_ANNUAL = 29.99;
@@ -21,29 +21,54 @@ const PRICE_LIFETIME = 179.99;
 const PROMO_ANNUAL = Number(process.env.NEXT_PUBLIC_LAUNCH_PROMO_ANNUAL ?? '') || null;
 const SHOW_LIFETIME = process.env.NEXT_PUBLIC_LIFETIME_OFFER === 'true';
 
-export function PricingCards() {
+export function PricingCards({ source = 'pricing_page' }: { source?: string }) {
   const [selected, setSelected] = useState<Plan>('annual'); // annual pre-selected
   const [busy, setBusy] = useState(false);
 
+  const selectPlan = (plan: Plan) => {
+    setSelected(plan);
+    analytics.track(AnalyticsEvents.paywallPlanSelected({ source, plan, product_id: webProductId(plan) }));
+  };
+
   const startCheckout = async () => {
     setBusy(true);
+    const plan = selected;
+    const product_id = webProductId(plan);
+    analytics.track(AnalyticsEvents.purchaseStarted({ source, plan, product_id, store: 'stripe' }));
     try {
       const res = await fetch('/api/billing/checkout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ plan: selected }),
+        body: JSON.stringify({ plan }),
       });
       const body = await res.json();
       if (res.status === 409) {
+        analytics.track(
+          AnalyticsEvents.purchaseFailed({ source, plan, product_id, store: 'stripe', error_kind: 'validation' })
+        );
         toast.info(body?.message ?? 'You already have FitCircle Pro.');
         return;
       }
       if (!res.ok || !body?.url) {
+        analytics.track(
+          AnalyticsEvents.purchaseFailed({
+            source,
+            plan,
+            product_id,
+            store: 'stripe',
+            error_kind: toErrorKind(null, res.ok ? 500 : res.status),
+          })
+        );
         toast.error('Could not start checkout — please try again.');
         return;
       }
+      // The Stripe return pages read this back to report Completed / Cancelled with the source.
+      rememberCheckout({ plan, source });
       window.location.assign(body.url);
-    } catch {
+    } catch (error) {
+      analytics.track(
+        AnalyticsEvents.purchaseFailed({ source, plan, product_id, store: 'stripe', error_kind: toErrorKind(error) })
+      );
       toast.error('Could not start checkout — please try again.');
     } finally {
       setBusy(false);
@@ -61,7 +86,7 @@ export function PricingCards() {
   ) => (
     <button
       type="button"
-      onClick={() => setSelected(plan)}
+      onClick={() => selectPlan(plan)}
       aria-pressed={selected === plan}
       className={`relative w-full rounded-xl border p-4 text-left transition-colors ${
         selected === plan

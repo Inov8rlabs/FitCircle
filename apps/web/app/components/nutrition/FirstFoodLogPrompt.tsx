@@ -61,8 +61,8 @@ export function FirstFoodLogPrompt({ hasLogs, onLogged }: FirstFoodLogPromptProp
           </div>
 
           <div className="space-y-3">
-            <PhotoLog onLogged={handleLogged} />
-            <VoiceLog onLogged={handleLogged} />
+            <PhotoLog onLogged={handleLogged} surface="first_log_prompt" />
+            <VoiceLog onLogged={handleLogged} surface="first_log_prompt" />
             <FoodSearch />
           </div>
         </>

@@ -8,6 +8,7 @@ import { PhotoThumb, fileKey } from '@/components/nutrition/PhotoThumb';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { AnalyticsEvents, analytics, isUpgradeRequired } from '@/lib/analytics';
 import {
   BODY_COMP_LOW_CONFIDENCE_THRESHOLD,
   BODY_COMP_SCAN_MAX_IMAGES,
@@ -134,6 +135,10 @@ export function BodyCompScan({ unitSystem, onLowConfidence, onSaved }: BodyCompS
       setMeasuredAt(toLocalDateTimeInputValue(Number.isNaN(when.getTime()) ? new Date() : when));
       setEditingKey(null);
     } catch (err) {
+      // Daily scan quota (RATE_LIMITED) or the Pro gate (UPGRADE/PREMIUM_REQUIRED).
+      if (isUpgradeRequired(err) || (err instanceof BodyCompApiError && err.code === 'RATE_LIMITED')) {
+        analytics.track(AnalyticsEvents.aiLimitReached({ feature: 'body_scan', source: 'body_scan' }));
+      }
       if (err instanceof BodyCompApiError && err.code === 'RATE_LIMITED') {
         setError('Daily scan limit reached — try again tomorrow, or log the numbers manually.');
       } else if (err instanceof BodyCompApiError && err.code === 'PARSE_FAILED') {
@@ -206,6 +211,7 @@ export function BodyCompScan({ unitSystem, onLowConfidence, onSaved }: BodyCompS
     setError(null);
     try {
       const saved = await bodyCompClient.create(input);
+      analytics.track(AnalyticsEvents.bodyCompositionLogged({ source: 'scan' }));
       resetReview();
       toast.success('Scan saved');
       onSaved(saved);

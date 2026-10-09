@@ -11,7 +11,6 @@ import {
 } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { toast } from 'sonner';
-import { announceStreakAutoClaim, clientTimezone, extractStreakMeta } from '@/lib/streaks/auto-claim-events';
 
 import { Navbar } from '@/components/layout/navbar';
 import { Button } from '@/components/ui/button';
@@ -24,6 +23,8 @@ import { Label } from '@/components/ui/label';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
+import { AnalyticsEvents, analytics } from '@/lib/analytics';
+import { announceStreakAutoClaim, clientTimezone, extractStreakMeta } from '@/lib/streaks/auto-claim-events';
 import type {
   BeverageCategory, BeverageLogEntry, CreateBeverageLogInput,
 } from '@/lib/types/beverage-log';
@@ -95,6 +96,7 @@ export default function BeverageLogPage() {
         method: 'POST',
         body: JSON.stringify({ ...input, timezone: clientTimezone() }),
       });
+      analytics.track(AnalyticsEvents.beverageLogged({ category: input.category }));
       toast.success('Logged!');
       // Server-side streak auto-claim for this drink → refresh streak UI + toast.
       announceStreakAutoClaim(extractStreakMeta(env));

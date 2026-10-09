@@ -25,6 +25,8 @@ import { MilestoneBadge } from '@/components/streaks/MilestoneBadge';
 import { Navbar } from '@/components/layout/navbar';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
+import { AnalyticsEvents, analytics } from '@/lib/analytics';
+import { useTrackOnce } from '@/lib/analytics/react';
 import {
   type ClaimableDay,
   type ShieldStatus,
@@ -105,7 +107,9 @@ export default function StreaksPage() {
 
     try {
       const result = await streakClient.claimStreak(null, timezone);
+      analytics.track(AnalyticsEvents.checkInCompleted({ is_backfill: false, streak_day: result.streakCount }));
       if (result.milestone) {
+        analytics.track(AnalyticsEvents.streakMilestoneReached({ milestone: result.milestone.milestone }));
         const m = MILESTONES.find(m => m.days === result.milestone!.milestone) ?? null;
         setMilestone(m);
       }
@@ -128,7 +132,11 @@ export default function StreaksPage() {
     if (isClaiming) return;
     setIsClaiming(true);
     try {
-      await streakClient.claimStreak(date, timezone);
+      const result = await streakClient.claimStreak(date, timezone);
+      analytics.track(AnalyticsEvents.checkInCompleted({ is_backfill: true, streak_day: result.streakCount }));
+      if (result.milestone) {
+        analytics.track(AnalyticsEvents.streakMilestoneReached({ milestone: result.milestone.milestone }));
+      }
       toast.success(`Claimed ${formatDay(date)}`);
       await load();
     } catch (e: any) {
@@ -143,6 +151,7 @@ export default function StreaksPage() {
     if (!shield?.can_activate && shield && shield.available <= 0) return;
     try {
       const result = await streakClient.activateFreeze(date, timezone);
+      analytics.track(AnalyticsEvents.streakShieldUsed());
       toast.success(result.message ?? 'Shield activated');
       await load();
     } catch (e: any) {
@@ -523,6 +532,8 @@ function ShieldDialog({
   available, unlimited, date, onConfirm, onCancel,
 }: { available: number; unlimited: boolean; date: string; onConfirm: () => void; onCancel: () => void }) {
   const canUse = unlimited || available > 0;
+  // Out of shields: this dialog is a Pro upsell card.
+  useTrackOnce(AnalyticsEvents.proCardShown({ source: 'streak_shield' }), !canUse);
   return (
     <motion.div
       className="fixed inset-0 z-[60] bg-background/95 backdrop-blur-sm flex items-center justify-center p-4"
@@ -553,9 +564,23 @@ function ShieldDialog({
             </>
           ) : (
             <>
-              <Button variant="ghost" className="flex-1" onClick={onCancel}>Maybe later</Button>
+              <Button
+                variant="ghost"
+                className="flex-1"
+                onClick={() => {
+                  analytics.track(AnalyticsEvents.proCardDismissed({ source: 'streak_shield' }));
+                  onCancel();
+                }}
+              >
+                Maybe later
+              </Button>
               <Button asChild className="flex-1 bg-gradient-to-r from-purple-500 to-indigo-500 hover:from-purple-600 hover:to-indigo-600">
-                <a href="/upgrade?source=streak_shield">Get Pro</a>
+                <a
+                  href="/upgrade?source=pro_card"
+                  onClick={() => analytics.track(AnalyticsEvents.proCardTapped({ source: 'streak_shield' }))}
+                >
+                  Get Pro
+                </a>
               </Button>
             </>
           )}

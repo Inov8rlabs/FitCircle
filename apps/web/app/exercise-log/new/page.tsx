@@ -20,6 +20,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
+import { AnalyticsEvents, analytics, durationBand } from '@/lib/analytics';
 import { exerciseClient } from '@/lib/api/exercise-client';
 import type { ExerciseCategory, LocationType } from '@/lib/types/exercise';
 
@@ -69,6 +70,14 @@ export default function NewExerciseEntry() {
         notes: notes.trim() || undefined,
         source: 'manual',
       });
+      analytics.track(
+        AnalyticsEvents.workoutLogged({
+          source: 'form',
+          category,
+          duration_band: durationBand(Number(duration)),
+          is_edit: false,
+        })
+      );
       toast.success('Workout logged!');
       // Server-side streak auto-claim for this workout → refresh streak UI + toast.
       announceStreakAutoClaim(streak);

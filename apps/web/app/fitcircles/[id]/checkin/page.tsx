@@ -22,6 +22,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { AnalyticsEvents, analytics } from '@/lib/analytics';
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/stores/auth-store';
 
@@ -170,6 +171,9 @@ export default function CheckInPage() {
 
       if (response.ok) {
         const data = await response.json();
+        analytics.track(
+          AnalyticsEvents.checkInCompleted({ is_backfill: false, has_weight: fitCircle.type === 'weight_loss' })
+        );
         toast.success('Progress entry submitted successfully!');
 
         // Reset form

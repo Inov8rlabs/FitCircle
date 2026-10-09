@@ -10,6 +10,7 @@ import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/components/ui/use-toast';
+import { AnalyticsEvents, analytics, type MealType } from '@/lib/analytics';
 import { announceStreakAutoClaim, clientTimezone, extractStreakMeta } from '@/lib/streaks/auto-claim-events';
 import { supabase } from '@/lib/supabase';
 import type { BeverageCustomizations } from '@/lib/types/beverage-log';
@@ -229,6 +230,15 @@ export function FoodLogEntryForm() {
         });
         streakMeta = streak;
         if (data?.id) await uploadFoodPhotosBatch(data.id);
+        analytics.track(
+          AnalyticsEvents.mealLogged({
+            method: 'manual',
+            is_edit: false,
+            meal_type: category === 'snack' ? 'snack' : (mealType as MealType),
+            has_photo: photos.length > 0,
+            is_backfill: entryDate !== toLocalDateTimeInputValue(new Date()).slice(0, 10),
+          })
+        );
       } else if (category === 'water') {
         if (waterAmount <= 0) throw new Error('Please select water amount');
         const { streak } = await createViaApi('/api/mobile/food-log', {
@@ -240,6 +250,7 @@ export function FoodLogEntryForm() {
           entry_date: entryDate,
         });
         streakMeta = streak;
+        analytics.track(AnalyticsEvents.waterLogged({ source: 'form' }));
       } else {
         // Beverage (coffee/tea/soda/juice/alcohol)
         if (!selectedBevType) throw new Error('Please select a beverage type');
@@ -272,6 +283,7 @@ export function FoodLogEntryForm() {
           entry_date: entryDate,
         });
         streakMeta = streak;
+        analytics.track(AnalyticsEvents.beverageLogged({ category }));
         if (category === 'alcohol' && data?.id) {
           await uploadBeveragePhoto(data.id);
         }

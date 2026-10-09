@@ -1,6 +1,14 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 
+import {
+  AnalyticsEvents,
+  analytics,
+  signupUserProperties,
+  toErrorKind,
+  userPropertiesFor,
+  type LogoutReason,
+} from '@/lib/analytics';
 import { supabase } from '@/lib/supabase';
 
 export interface User {
@@ -24,6 +32,7 @@ export interface User {
   achievements: Achievement[];
   joinedAt: string;
   lastCheckIn?: string;
+  onboardingCompleted?: boolean;
   preferences: UserPreferences;
 }
 
@@ -73,7 +82,7 @@ interface AuthState {
   // Actions
   login: (email: string, password: string) => Promise<void>;
   register: (data: RegisterData) => Promise<void>;
-  logout: () => void;
+  logout: (reason?: LogoutReason) => void;
   updateUser: (updates: Partial<User>) => void;
   updatePreferences: (preferences: Partial<UserPreferences>) => void;
   refreshToken: () => Promise<void>;
@@ -166,6 +175,8 @@ async function buildUserFromAuth(authUser: {
     streak: profile?.current_streak ?? 0,
     achievements: [],
     joinedAt: profile?.created_at || authUser.created_at || new Date().toISOString(),
+    onboardingCompleted:
+      typeof profile?.onboarding_completed === 'boolean' ? profile.onboarding_completed : undefined,
     preferences,
   };
 }
@@ -182,6 +193,7 @@ export const useAuthStore = create<AuthState>()(
 
       login: async (email: string, password: string) => {
         set({ isLoading: true, error: null, errorCode: null });
+        analytics.track(AnalyticsEvents.loginStarted({ method: 'email' }));
         try {
           // Sign in with Supabase Auth
           const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
@@ -194,6 +206,10 @@ export const useAuthStore = create<AuthState>()(
           if (authData.user) {
             // Fetch the real profile row and populate user fields from it
             const user = await buildUserFromAuth(authData.user);
+
+            // Identify before the Completed event (analytics/README.md → Identity).
+            analytics.identify(user.id, userPropertiesFor(user));
+            analytics.track(AnalyticsEvents.loginCompleted({ method: 'email' }));
 
             set({
               user,
@@ -220,6 +236,16 @@ export const useAuthStore = create<AuthState>()(
             errorCode = 'INVALID_CREDENTIALS';
             friendly = "The email or password you entered is incorrect. Try again, or reset your password if you've forgotten it.";
           }
+          analytics.track(
+            AnalyticsEvents.loginFailed({
+              method: 'email',
+              error_kind: isInvalidCredentials
+                ? 'invalid_credentials'
+                : isEmailNotConfirmed
+                  ? 'forbidden'
+                  : toErrorKind(error, typeof error?.status === 'number' ? error.status : undefined),
+            })
+          );
 
           set({
             error: friendly,
@@ -232,6 +258,9 @@ export const useAuthStore = create<AuthState>()(
 
       register: async (data: RegisterData) => {
         set({ isLoading: true, error: null });
+        analytics.track(AnalyticsEvents.signUpStarted({ method: 'email' }));
+        let accountCreated = false;
+        let existingAccount = false;
         try {
           // Create user with Supabase Auth
           const baseUrl = process.env.NEXT_PUBLIC_APP_URL ||
@@ -249,6 +278,20 @@ export const useAuthStore = create<AuthState>()(
           });
 
           if (authError) throw authError;
+
+          // Supabase returns an obfuscated user with no identities when the email
+          // is already registered (and confirmation is on): not a new account.
+          const alreadyRegistered = authData.user?.identities?.length === 0;
+          if (alreadyRegistered) existingAccount = true;
+          if (authData.user && !alreadyRegistered) {
+            accountCreated = true;
+            analytics.identify(authData.user.id, {
+              ...signupUserProperties('email'),
+              plan: 'free',
+              onboarding_completed: false,
+            });
+            analytics.track(AnalyticsEvents.signUpCompleted({ method: 'email' }));
+          }
 
           // If no session (email confirmation required), sign in immediately for dev/testing
           if (authData.user && !authData.session) {
@@ -316,6 +359,16 @@ export const useAuthStore = create<AuthState>()(
             throw new Error('Registration succeeded but could not create session');
           }
         } catch (error: any) {
+          if (!accountCreated) {
+            analytics.track(
+              AnalyticsEvents.signUpFailed({
+                method: 'email',
+                error_kind: existingAccount
+                  ? 'account_exists'
+                  : toErrorKind(error, typeof error?.status === 'number' ? error.status : undefined),
+              })
+            );
+          }
           set({
             error: error.message || 'Registration failed',
             isLoading: false,
@@ -324,7 +377,12 @@ export const useAuthStore = create<AuthState>()(
         }
       },
 
-      logout: () => {
+      logout: (reason: LogoutReason = 'user') => {
+        // Track Logout BEFORE reset() so it is attributed to the user.
+        if (get().user || analytics.userId) {
+          analytics.track(AnalyticsEvents.logout({ reason }));
+          analytics.reset();
+        }
         void (async () => {
         try {
           await supabase.auth.signOut();
@@ -378,7 +436,7 @@ export const useAuthStore = create<AuthState>()(
           set({ token: newToken });
         } catch (error) {
           set({ error: 'Failed to refresh token' });
-          get().logout();
+          get().logout('session_expired');
         }
       },
 
@@ -393,6 +451,7 @@ export const useAuthStore = create<AuthState>()(
 
           if (error) throw error;
 
+          analytics.track(AnalyticsEvents.passwordResetRequested());
           set({ isLoading: false });
         } catch (error: any) {
           set({

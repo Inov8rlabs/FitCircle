@@ -19,10 +19,12 @@ import {
 import Link from 'next/link';
 
 import DashboardNav from '@/components/DashboardNav';
+import { StoreButton } from '@/components/marketing/StoreButton';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Logo, LogoIcon } from '@/components/ui/logo';
+import { analytics, AnalyticsEvents } from '@/lib/analytics';
 import { useAuthStore } from '@/stores/auth-store';
 
 // Store links are wired up the moment a listing goes live: set
@@ -117,56 +119,6 @@ const fitzyPoints = [
   'A nudge before a streak slips, not after',
   'Available on the web and in the app'
 ];
-
-function StoreButton({
-  href,
-  label,
-  eyebrow,
-  icon,
-  comingSoon,
-}: {
-  href: string;
-  label: string;
-  eyebrow: string;
-  icon: React.ReactNode;
-  comingSoon: boolean;
-}) {
-  const inner = (
-    <>
-      {icon}
-      <div className="text-left">
-        <div className="text-xs text-gray-400">{eyebrow}</div>
-        <div className="text-lg font-semibold text-white">{label}</div>
-      </div>
-    </>
-  );
-  return (
-    <div className="relative">
-      {comingSoon && (
-        <Badge className="absolute -top-3 -right-3 z-10 bg-purple-600 text-white border-purple-500 px-3 py-1 text-xs font-semibold">
-          Coming soon
-        </Badge>
-      )}
-      {comingSoon ? (
-        <div
-          aria-disabled
-          className="flex items-center gap-3 bg-slate-900/50 border border-slate-700 rounded-xl px-6 py-4 opacity-60"
-        >
-          {inner}
-        </div>
-      ) : (
-        <a
-          href={href}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="flex items-center gap-3 bg-slate-900/70 border border-slate-700 rounded-xl px-6 py-4 hover:border-purple-500 hover:bg-slate-900 transition-colors"
-        >
-          {inner}
-        </a>
-      )}
-    </div>
-  );
-}
 
 export default function LandingPage() {
   const { user } = useAuthStore();
@@ -472,6 +424,8 @@ export default function LandingPage() {
               eyebrow="Download on the"
               label="App Store"
               comingSoon={!APP_STORE_URL}
+              store="app_store"
+              placement="landing_download_section"
               icon={
                 <svg className="w-10 h-10 text-white" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
                   <path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.81-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z" />
@@ -483,6 +437,8 @@ export default function LandingPage() {
               eyebrow="Get it on"
               label="Google Play"
               comingSoon={!PLAY_STORE_URL}
+              store="play_store"
+              placement="landing_download_section"
               icon={
                 <svg className="w-10 h-10" viewBox="0 0 24 24" aria-hidden>
                   <path fill="#34A853" d="M3.6 2.4 13.2 12l-9.6 9.6c-.37-.2-.6-.6-.6-1.05V3.45c0-.45.23-.85.6-1.05z" />
@@ -516,6 +472,7 @@ export default function LandingPage() {
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
+            onViewportEnter={() => analytics.track(AnalyticsEvents.pricingViewed({ source: 'landing' }))}
           >
             <div className="flex items-center gap-2 mb-3">
               <Crown className="h-6 w-6 text-amber-400" />
@@ -527,7 +484,7 @@ export default function LandingPage() {
             </p>
             <div className="flex flex-col sm:flex-row gap-3">
               <Button className="bg-amber-500 hover:bg-amber-400 text-slate-950 font-semibold" asChild>
-                <Link href="/upgrade">
+                <Link href="/upgrade?source=landing">
                   See what Pro includes
                   <ArrowRight className="ml-2 h-4 w-4" />
                 </Link>
@@ -616,7 +573,7 @@ export default function LandingPage() {
                 <li><Link href="/food-log" className="hover:text-indigo-400 transition-colors">Food log</Link></li>
                 <li><Link href="/fitcircles" className="hover:text-indigo-400 transition-colors">FitCircles</Link></li>
                 <li><Link href="/challenges" className="hover:text-indigo-400 transition-colors">Challenges</Link></li>
-                <li><Link href="/upgrade" className="hover:text-indigo-400 transition-colors">FitCircle Pro</Link></li>
+                <li><Link href="/upgrade?source=landing_footer" className="hover:text-indigo-400 transition-colors">FitCircle Pro</Link></li>
               </ul>
             </div>
             <div>

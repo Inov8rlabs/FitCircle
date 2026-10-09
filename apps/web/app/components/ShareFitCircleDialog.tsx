@@ -23,6 +23,7 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { AnalyticsEvents, analytics } from '@/lib/analytics';
 
 
 interface ShareFitCircleDialogProps {
@@ -54,6 +55,7 @@ export function ShareFitCircleDialog({
   const copyToClipboard = async () => {
     try {
       await navigator.clipboard.writeText(inviteUrl);
+      analytics.track(AnalyticsEvents.inviteShared({ method: 'copy_link' }));
       setCopySuccess(true);
       toast.success('Invite link copied to clipboard!');
       setTimeout(() => setCopySuccess(false), 2000);
@@ -82,6 +84,7 @@ Let's do this! 🚀`;
     try {
       const message = generateShareMessage();
       await navigator.clipboard.writeText(message);
+      analytics.track(AnalyticsEvents.inviteShared({ method: 'copy_link' }));
       setMessageCopySuccess(true);
       toast.success('Message copied! Ready to share on WhatsApp, Instagram, or anywhere!');
       setTimeout(() => setMessageCopySuccess(false), 3000);
@@ -174,6 +177,7 @@ Let's do this! 🚀`;
       }
 
       if (result.sent > 0) {
+        analytics.track(AnalyticsEvents.inviteShared({ method: 'email' }));
         toast.success(
           `Invitation${result.sent > 1 ? 's' : ''} sent to ${result.sent} ${
             result.sent > 1 ? 'people' : 'person'

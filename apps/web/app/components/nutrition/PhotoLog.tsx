@@ -3,6 +3,8 @@
 import { Camera, Loader2, Plus, Sparkles, X } from 'lucide-react';
 import { useRef, useState } from 'react';
 
+import { AnalyticsEvents, analytics } from '@/lib/analytics';
+import { trackedPhotoParse } from '@/lib/analytics/meal';
 import {
   nutritionClient,
   ApiError,
@@ -17,6 +19,8 @@ import { PhotoThumb, fileKey } from './PhotoThumb';
 
 interface PhotoLogProps {
   onLogged?: () => void;
+  /** Analytics placement (Meal Log Started.surface). */
+  surface?: string;
 }
 
 /**
@@ -27,7 +31,7 @@ interface PhotoLogProps {
  * then reviewed in NutritionConfirm; the photos ride along and are attached to
  * the entry on commit.
  */
-export function PhotoLog({ onLogged }: PhotoLogProps) {
+export function PhotoLog({ onLogged, surface = 'food_log' }: PhotoLogProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [pending, setPending] = useState<File[]>([]);
   const [note, setNote] = useState('');
@@ -52,7 +56,11 @@ export function PhotoLog({ onLogged }: PhotoLogProps) {
       const compressed = await compressImagesForUpload(files);
       setLastFiles(compressed);
       setLastNote(hint);
-      const parsed = await nutritionClient.photoParse(compressed, hint);
+      const parsed = await trackedPhotoParse(() => nutritionClient.photoParse(compressed, hint), {
+        imageCount: compressed.length,
+        hasNote: hint.trim().length > 0,
+        source: surface,
+      });
       setDraft(parsed);
       setShowConfirm(true);
       setPending([]);
@@ -77,6 +85,10 @@ export function PhotoLog({ onLogged }: PhotoLogProps) {
     const files = Array.from(e.target.files ?? []);
     e.target.value = ''; // allow re-picking the same file
     if (files.length === 0) return;
+    if (pending.length === 0) {
+      // Web file picker (gallery or, on phones, the camera sheet).
+      analytics.track(AnalyticsEvents.mealLogStarted({ method: 'photo_library', surface }));
+    }
     setError(null);
     setPending((prev) => [...prev, ...files].slice(0, PHOTO_PARSE_MAX_IMAGES));
   };
@@ -98,6 +110,7 @@ export function PhotoLog({ onLogged }: PhotoLogProps) {
     return (
       <NutritionConfirm
         draft={draft}
+        method="photo_library"
         initialImages={lastFiles}
         onCommitted={() => {
           reset();

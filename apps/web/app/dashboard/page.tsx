@@ -58,6 +58,7 @@ import { WaterWeekCard } from '@/components/vitals/WaterWeekCard';
 import { WeightVitalsCard } from '@/components/vitals/WeightVitalsCard';
 import { useDailyGoals } from '@/hooks/useDailyGoals';
 import { useUnitPreference } from '@/hooks/useUnitPreference';
+import { AnalyticsEvents, analytics } from '@/lib/analytics';
 import { supabase } from '@/lib/supabase';
 import {
   parseWeightToKg,
@@ -440,6 +441,7 @@ export default function DashboardPage() {
       return;
     }
 
+    analytics.track(AnalyticsEvents.weightLogged({ source: 'quick_log' }));
     toast.success('Weight logged!');
     setQuickWeight('');
     void fetchCheckIns();
@@ -466,6 +468,7 @@ export default function DashboardPage() {
 
     if (error) throw error;
 
+    analytics.track(AnalyticsEvents.stepsLogged({ source: 'quick_log' }));
     toast.success('Steps logged!');
     setQuickSteps('');
     void fetchCheckIns();
@@ -501,6 +504,9 @@ export default function DashboardPage() {
       toast.error('Failed to save data');
       return;
     }
+
+    if (data.weight) analytics.track(AnalyticsEvents.weightLogged({ source: 'form' }));
+    if (data.steps) analytics.track(AnalyticsEvents.stepsLogged({ source: 'form' }));
 
     const dateDisplay = new Date(data.date).toLocaleDateString('en-US', {
       month: 'short',

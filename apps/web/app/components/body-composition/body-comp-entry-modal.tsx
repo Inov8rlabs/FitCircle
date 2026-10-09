@@ -20,6 +20,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { UnitToggle } from '@/components/ui/unit-toggle';
 import { useUnitPreference } from '@/hooks/useUnitPreference';
+import { AnalyticsEvents, analytics } from '@/lib/analytics';
 import { bodyCompClient, BodyCompApiError } from '@/lib/api/body-comp-client';
 import type {
   BodyCompCreate,
@@ -533,6 +534,8 @@ export function BodyCompEntryModal({
           ...(v.notes.trim() ? { notes: v.notes.trim() } : {}),
         };
         saved = await bodyCompClient.create(input);
+        // A low-confidence scan that falls back to this form is still a scan.
+        analytics.track(AnalyticsEvents.bodyCompositionLogged({ source: prefill ? 'scan' : 'manual' }));
         toast.success('Entry saved');
       }
       onOpenChange(false);

@@ -5,6 +5,7 @@
 import { useState, useEffect } from 'react';
 import { toast } from 'sonner';
 
+import { AnalyticsEvents, analytics } from '@/lib/analytics';
 import { supabase } from '@/lib/supabase';
 import { type UnitSystem, type WeightUnit, getWeightUnit } from '@/lib/utils/units';
 import { useAuthStore } from '@/stores/auth-store';
@@ -104,6 +105,10 @@ export function useUnitPreference(): UseUnitPreferenceReturn {
 
       // Update local state
       setUnitSystemState(system);
+      if (system !== unitSystem) {
+        analytics.track(AnalyticsEvents.unitsChanged({ units_system: system }));
+      }
+      analytics.setUserProperties({ units_system: system });
 
       // Update user store
       updateUser({

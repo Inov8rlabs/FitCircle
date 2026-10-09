@@ -30,7 +30,7 @@ import {
   Wrench,
   QrCode,
 } from 'lucide-react';
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 
 
@@ -43,6 +43,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 // import { Switch } from '@/components/ui/switch'; // Temporarily disabled
 import { Textarea } from '@/components/ui/textarea';
+import { AnalyticsEvents, analytics, isUpgradeRequired, toErrorKind } from '@/lib/analytics';
 import { CHALLENGE_TEMPLATES } from '@/lib/data/challenge-templates';
 import { supabase } from '@/lib/supabase';
 import { type ChallengeCategory } from '@/lib/types/circle-challenge';
@@ -97,6 +98,10 @@ const CHALLENGE_CATEGORY_FILTERS: { label: string; value: ChallengeCategory | nu
 
 export default function CircleCreationWizard({ isOpen, onClose, onSuccess }: CircleCreationWizardProps) {
   const { user } = useAuthStore();
+
+  useEffect(() => {
+    if (isOpen) analytics.track(AnalyticsEvents.fitCircleCreationStarted({ source: 'circles_page' }));
+  }, [isOpen]);
   const [currentStep, setCurrentStep] = useState(1);
   const [isCreating, setIsCreating] = useState(false);
   const [emailInput, setEmailInput] = useState('');
@@ -248,6 +253,7 @@ export default function CircleCreationWizard({ isOpen, onClose, onSuccess }: Cir
   };
 
   const copyInviteCode = () => {
+    analytics.track(AnalyticsEvents.inviteShared({ method: 'copy_code' }));
     void navigator.clipboard.writeText(inviteLink); // inviteLink stores the code
     toast.success('Invite code copied to clipboard!');
   };
@@ -256,6 +262,7 @@ export default function CircleCreationWizard({ isOpen, onClose, onSuccess }: Cir
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL ||
       (typeof window !== 'undefined' ? window.location.origin : '');
     const url = `${baseUrl}/join/${inviteLink}`;
+    analytics.track(AnalyticsEvents.inviteShared({ method: 'copy_link' }));
     void navigator.clipboard.writeText(url);
     toast.success('Invite link copied to clipboard!');
   };
@@ -456,11 +463,31 @@ export default function CircleCreationWizard({ isOpen, onClose, onSuccess }: Cir
         }
       }
 
+      analytics.track(
+        AnalyticsEvents.fitCircleCreated({
+          challenge_type:
+            formData.challengeMode === 'template' && selectedTemplate
+              ? selectedTemplate.category
+              : formData.challengeMode === 'custom'
+                ? formData.customChallengeCategory
+                : 'none',
+          visibility: formData.isPrivate ? 'private' : 'public',
+          from_template: formData.challengeMode === 'template' && Boolean(selectedTemplate),
+        })
+      );
+      // The circle's invite code is generated with it (shown on the next step).
+      analytics.track(AnalyticsEvents.inviteCreated());
       toast.success('FitCircle created successfully!');
 
       // Move to step 5 (invite members)
       setCurrentStep(5);
     } catch (error: any) {
+      analytics.track(
+        AnalyticsEvents.fitCircleCreateFailed({
+          error_kind: toErrorKind(error),
+          upgrade_required: isUpgradeRequired(error),
+        })
+      );
       console.error('Error creating FitCircle:', error);
       toast.error(error.message || 'Failed to create FitCircle');
     } finally {

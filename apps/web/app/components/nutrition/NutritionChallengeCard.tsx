@@ -3,6 +3,7 @@
 import { Loader2, Settings2, Target, Trophy } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
+import { AnalyticsEvents, analytics } from '@/lib/analytics';
 import {
   NUTRITION_METRIC_TYPES,
   TARGET_REQUIRED_METRICS,
@@ -226,6 +227,10 @@ function ChallengeConfigForm({
         metricType,
         needsTarget ? Number(targetValue) : null
       );
+      // The plan's metric_type enum covers the target metrics only (veg/sober/standard are not in it).
+      if (metricType === 'calorie_target' || metricType === 'protein_target' || metricType === 'carb_target') {
+        analytics.track(AnalyticsEvents.nutritionChallengeSet({ metric_type: metricType, is_update: current != null }));
+      }
       onSaved();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to save');

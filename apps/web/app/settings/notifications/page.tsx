@@ -27,6 +27,7 @@ import {
   CardTitle,
 } from '@/components/ui/card';
 import { Switch } from '@/components/ui/switch';
+import { AnalyticsEvents, analytics } from '@/lib/analytics';
 import { createBrowserSupabase } from '@/lib/supabase';
 
 /**
@@ -220,6 +221,20 @@ export default function NotificationSettingsPage() {
             { onConflict: 'user_id' }
           );
         if (error) throw error;
+        if (savingLabel === 'quiet') {
+          analytics.track(
+            AnalyticsEvents.notificationSettingsChanged({
+              setting: 'quiet_hours',
+              enabled: patch.quiet_hours_start != null,
+            })
+          );
+        } else {
+          for (const [setting, enabled] of Object.entries(patch)) {
+            if (typeof enabled === 'boolean') {
+              analytics.track(AnalyticsEvents.notificationSettingsChanged({ setting, enabled }));
+            }
+          }
+        }
       } catch (error) {
         console.error('Error saving notification preferences:', error);
         setPreferences(previous);

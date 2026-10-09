@@ -6,6 +6,7 @@ import { Toaster } from 'sonner';
 import { CookieConsentBanner } from '@/components/CookieConsentBanner';
 import { OfflineIndicator } from '@/components/pwa/offline-indicator';
 import { PWAInstall } from '@/components/pwa/pwa-install';
+import { AnalyticsRoot } from '@/lib/analytics/react';
 
 import './globals.css';
 import { Providers } from './providers';
@@ -134,6 +135,7 @@ export default function RootLayout({
       </head>
       <body className={`${inter.variable} font-sans antialiased`}>
         <Providers>
+          <AnalyticsRoot />
           {children}
           <Toaster
             position="top-center"

@@ -13,6 +13,8 @@ import Link from 'next/link';
 
 import { Navbar } from '@/components/layout/navbar';
 import { useEntitlements } from '@/hooks/useEntitlements';
+import { AnalyticsEvents, analytics } from '@/lib/analytics';
+import { firstTimeFor, takeCheckout, webProductId } from '@/lib/analytics/checkout';
 
 const POLL_INTERVAL_MS = 2000;
 const POLL_MAX_ATTEMPTS = 15;
@@ -21,6 +23,24 @@ export default function UpgradeSuccessPage() {
   const { refresh } = useEntitlements();
   const [state, setState] = useState<'activating' | 'active' | 'slow'>('activating');
   const attempts = useRef(0);
+
+  // Stripe only redirects to success_url after a successful payment, so the
+  // purchase is complete on arrival (entitlement sync can lag; see polling below).
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const sessionId = params.get('session_id');
+    const context = takeCheckout(params.get('plan'));
+    if (!context || !firstTimeFor(sessionId)) return;
+    analytics.track(
+      AnalyticsEvents.purchaseCompleted({
+        source: context.source,
+        plan: context.plan,
+        product_id: webProductId(context.plan),
+        store: 'stripe',
+      })
+    );
+    analytics.setUserProperties({ plan: 'pro', pro_plan: context.plan });
+  }, []);
 
   useEffect(() => {
     let cancelled = false;

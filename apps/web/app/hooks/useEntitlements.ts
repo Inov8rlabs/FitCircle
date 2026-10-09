@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 
+import { analytics, proPlanOf } from '@/lib/analytics';
 import type { EntitlementsResponse } from '@/lib/types/body-composition';
 
 /**
@@ -19,7 +20,14 @@ export function useEntitlements() {
       if (!res.ok) return null;
       const body = await res.json();
       const data: EntitlementsResponse | null = body?.data ?? null;
-      if (data) setEntitlements(data);
+      if (data) {
+        setEntitlements(data);
+        const pro = data.tier === 'premium';
+        analytics.setUserProperties({
+          plan: pro ? 'pro' : 'free',
+          pro_plan: proPlanOf(pro, data.subscription?.productId),
+        });
+      }
       return data;
     } catch {
       return null;

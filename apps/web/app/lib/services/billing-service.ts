@@ -96,8 +96,10 @@ export class BillingService {
               : { allow_promotion_codes: true }),
           }
         : {}),
-      success_url: `${origin}/upgrade/success?session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${origin}/upgrade`,
+      // `plan` / `checkout` let the return pages report the purchase funnel
+      // (Purchase Completed / Cancelled) without another Stripe lookup.
+      success_url: `${origin}/upgrade/success?session_id={CHECKOUT_SESSION_ID}&plan=${plan}`,
+      cancel_url: `${origin}/upgrade?checkout=cancelled&plan=${plan}`,
     });
 
     if (!session.url) throw new Error('Stripe did not return a checkout URL');

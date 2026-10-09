@@ -11,6 +11,7 @@ import QuickJoinCircle from '@/components/QuickJoinCircle';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
+import { analytics } from '@/lib/analytics';
 import { useAuthStore } from '@/stores/auth-store';
 
 // import { fitCircleService } from '@/lib/services/fitcircle-service'; // Temporarily disabled due to RLS issues
@@ -56,6 +57,7 @@ export default function CirclesPage() {
         const data = await response.json();
         console.log('Successfully fetched circles:', data.circles?.length || 0);
         setMyCircles(data.circles || []);
+        analytics.setUserProperties({ circles_count: (data.circles || []).length });
         setIsLoading(false);
         return;
       }

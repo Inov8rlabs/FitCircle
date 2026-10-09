@@ -3,6 +3,8 @@
 import { Camera, Check, ChevronDown, Loader2, Minus, Plus, Sparkles, Trash2, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 
+import { AnalyticsEvents, analytics, type MealMethod } from '@/lib/analytics';
+import { trackedPhotoParse } from '@/lib/analytics/meal';
 import { announceStreakAutoClaim } from '@/lib/streaks/auto-claim-events';
 
 import {
@@ -42,6 +44,8 @@ function defaultMealTypeForHour(hour: number): MealType {
 interface NutritionConfirmProps {
   /** Draft returned by photo/voice parse. When null, starts an empty manual entry. */
   draft: NutritionDraft | null;
+  /** How the meal was captured (Meal Logged.method). */
+  method?: MealMethod;
   onCommitted?: () => void;
   onCancel?: () => void;
   /** When provided, shows a "Fix Issue" control that re-runs the AI analysis. */
@@ -182,6 +186,7 @@ const numFmt = (v: number) => {
  */
 export function NutritionConfirm({
   draft,
+  method = 'manual',
   onCommitted,
   onCancel,
   onReanalyze,
@@ -235,7 +240,10 @@ export function NutritionConfirm({
     setError(null);
     try {
       // One request, one vision call — the server analyzes all photos together.
-      const merged = await nutritionClient.photoParse(files);
+      const merged = await trackedPhotoParse(() => nutritionClient.photoParse(files), {
+        imageCount: files.length,
+        source: 'meal_review_add_photo',
+      });
       const newItems = merged.items.filter((i) => i.name.trim());
       if (dropped > 0) {
         setError(`Only ${PHOTO_PARSE_MAX_IMAGES} photos can be analyzed at once — ${dropped} ${dropped === 1 ? 'photo was' : 'photos were'} skipped.`);
@@ -387,6 +395,15 @@ export function NutritionConfirm({
           /* photo upload is non-fatal */
         }
       }
+      analytics.track(
+        AnalyticsEvents.mealLogged({
+          method,
+          is_edit: Boolean(editEntry),
+          meal_type: mealType === 'other' ? undefined : mealType,
+          item_count: named.length,
+          has_photo: images.length > 0,
+        })
+      );
       onCommitted?.();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to save');

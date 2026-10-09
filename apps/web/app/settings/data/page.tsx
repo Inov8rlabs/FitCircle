@@ -19,6 +19,7 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { AnalyticsEvents, analytics } from '@/lib/analytics';
 import { useAuthStore } from '@/stores/auth-store';
 
 async function authedFetch<T>(path: string, init?: RequestInit): Promise<T> {
@@ -52,6 +53,7 @@ export default function DataSettingsPage() {
   const handleExport = async () => {
     if (!user) return;
     setExporting(true);
+    analytics.track(AnalyticsEvents.dataExportRequested());
     try {
       // Use the existing CCPA data-export endpoint if available; otherwise fall
       // back to fetching the user's daily tracking and serialising client-side.
@@ -82,7 +84,8 @@ export default function DataSettingsPage() {
     try {
       await authedFetch('/api/user/delete', { method: 'POST' });
       toast.success('Account deletion scheduled.');
-      await logout();
+      analytics.track(AnalyticsEvents.accountDeleted());
+      await logout('account_deleted');
       router.push('/');
     } catch (e: any) {
       toast.error(e?.message ?? 'Could not delete account');

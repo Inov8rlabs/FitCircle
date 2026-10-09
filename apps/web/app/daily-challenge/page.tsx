@@ -23,6 +23,7 @@ import { Navbar } from '@/components/layout/navbar';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import { AnalyticsEvents, analytics } from '@/lib/analytics';
 import {
   type DailyChallengeWithProgress,
   type LeaderboardEntry,
@@ -83,7 +84,12 @@ export default function DailyChallengePage() {
       const next = await dailyChallengeClient.updateProgress(challenge.id, value);
       setChallenge(next);
       setProgressInput('');
-      if (next.user_completed && !wasCompleted) setCelebrate(true);
+      if (next.user_completed && !wasCompleted) {
+        analytics.track(
+          AnalyticsEvents.dailyChallengeCompleted({ challenge_type: challenge.challenge_category ?? undefined })
+        );
+        setCelebrate(true);
+      }
       const lb = await dailyChallengeClient.getLeaderboard(challenge.id).catch(() => ({ entries: [] }));
       setLeaderboard(lb.entries);
     } catch (e: any) {

@@ -60,6 +60,7 @@ import { DateRangeDisplay, DatePicker } from '@/components/ui/date-picker';
 import { Progress } from '@/components/ui/progress';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useUnitPreference } from '@/hooks/useUnitPreference';
+import { AnalyticsEvents, analytics } from '@/lib/analytics';
 import { nutritionClient, type PrivacyTier } from '@/lib/api/nutrition-client';
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/stores/auth-store';
@@ -161,6 +162,8 @@ export default function FitCirclePage() {
   const [chatUnread, setChatUnread] = useState(0);
   const activeTabRef = useRef(activeTab);
   activeTabRef.current = activeTab;
+  // FitCircle Viewed fires once per circle, after the member list loads.
+  const viewedCircleRef = useRef<string | null>(null);
 
   const circleId = params.id as string;
 
@@ -317,6 +320,10 @@ export default function FitCirclePage() {
         }));
 
         setParticipants(participantsList);
+        if (viewedCircleRef.current !== circleId) {
+          viewedCircleRef.current = circleId;
+          analytics.track(AnalyticsEvents.fitCircleViewed({ member_count: participantsList.length }));
+        }
 
         // Check if current user is a participant
         const userIsParticipant = participantsList.some((p: any) => p.is_current_user);
@@ -410,6 +417,7 @@ export default function FitCirclePage() {
     if (!inviteUrl) return;
 
     await navigator.clipboard.writeText(inviteUrl);
+    analytics.track(AnalyticsEvents.inviteShared({ method: 'copy_link' }));
     setCopySuccess(true);
     setTimeout(() => setCopySuccess(false), 2000);
   };
@@ -1101,7 +1109,12 @@ export default function FitCirclePage() {
             onValueChange={(tab) => {
               setActiveTab(tab);
               // Opening the chat tab reads the timeline (CircleChat marks read).
-              if (tab === 'chat') setChatUnread(0);
+              if (tab === 'chat') {
+                setChatUnread(0);
+                analytics.track(AnalyticsEvents.chatOpened());
+              }
+              // The nutrition tab embeds the circle's Fitzy coach.
+              if (tab === 'nutrition') analytics.track(AnalyticsEvents.fitzyOpened({ surface: 'circle_nutrition' }));
             }}
             className="w-full"
           >
@@ -1160,6 +1173,8 @@ export default function FitCirclePage() {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.5 }}
+            viewport={{ once: true }}
+            onViewportEnter={() => analytics.track(AnalyticsEvents.leaderboardViewed())}
           >
             <Card className="bg-slate-900/50 border-slate-800/50 backdrop-blur-xl">
               <CardHeader className="p-4 sm:p-6">

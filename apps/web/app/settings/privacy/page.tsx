@@ -24,7 +24,9 @@ import {
   CardTitle,
 } from '@/components/ui/card';
 import { Switch } from '@/components/ui/switch';
+import { AnalyticsEvents, analytics } from '@/lib/analytics';
 import { createBrowserSupabase } from '@/lib/supabase';
+import { useAuthStore } from '@/stores/auth-store';
 
 
 interface PrivacySettings {
@@ -126,6 +128,8 @@ export default function PrivacySettingsPage() {
         marketing: settings.marketing_enabled,
       };
       document.cookie = `fc_consent=${encodeURIComponent(JSON.stringify(consentCookie))};path=/;max-age=${365 * 24 * 60 * 60};secure;samesite=strict`;
+      // Apply immediately: revoking opts every provider out, granting starts them.
+      analytics.setOptOut(!settings.analytics_enabled);
 
       toast.success('Privacy settings saved successfully');
 
@@ -141,6 +145,7 @@ export default function PrivacySettingsPage() {
 
   const handleDownloadData = async () => {
     try {
+      analytics.track(AnalyticsEvents.dataExportRequested());
       toast.loading('Preparing your data export...');
       const response = await fetch('/api/privacy/export');
 
@@ -204,7 +209,9 @@ export default function PrivacySettingsPage() {
 
       if (response.ok) {
         toast.success('Your account has been deleted');
-        // Sign out and redirect
+        analytics.track(AnalyticsEvents.accountDeleted());
+        // Sign out (tracks Logout before analytics reset) and redirect
+        useAuthStore.getState().logout('account_deleted');
         await supabase.auth.signOut();
         void router.push('/');
       } else {
@@ -226,6 +233,7 @@ export default function PrivacySettingsPage() {
       });
 
       if (response.ok) {
+        if (optOut) analytics.setOptOut(true);
         setSettings({ ...settings, do_not_sell: optOut, analytics_enabled: !optOut });
         toast.success(optOut ? 'Opted out of data sharing' : 'Opted into data sharing');
       } else {

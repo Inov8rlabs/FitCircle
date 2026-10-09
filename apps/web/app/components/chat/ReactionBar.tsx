@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 
+import { AnalyticsEvents, analytics } from '@/lib/analytics';
 import {
   REACTION_KINDS,
   chatClient,
@@ -51,6 +52,7 @@ export function ReactionBar({ messageId, reactions, onChange }: ReactionBarProps
         existing?.reactedByMe
           ? await chatClient.removeReaction(messageId, reaction)
           : await chatClient.addReaction(messageId, reaction);
+      if (!existing?.reactedByMe) analytics.track(AnalyticsEvents.chatReactionSent({ reaction }));
       onChange?.(result.reactions);
     } catch (err) {
       console.warn('[chat] reaction toggle failed', err);

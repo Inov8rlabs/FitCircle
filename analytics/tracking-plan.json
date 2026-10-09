@@ -1,0 +1,1991 @@
+{
+  "$schema": "./tracking-plan.schema.json",
+  "version": 4,
+  "updated": "2026-10-09",
+  "conventions": {
+    "eventNames": "Title Case, '<Object> <Past-tense verb>' (e.g. 'Meal Logged'). Names are frozen once shipped: rename in the analytics tool, never in code.",
+    "propertyNames": "snake_case. Enum values are lowercase snake_case.",
+    "identity": "user_id = FitCircle profile UUID on every platform, set on sign-up/login/session restore, cleared on logout. Never email, name or username.",
+    "privacy": "Never send health VALUES (calories, macros, weight, body fat, steps, water volume, workout minutes), free text, emails, names or photos. Send coarse bands or booleans instead (has_weight, duration_band).",
+    "providers": "Clients send every event to all enabled providers (Amplitude, PostHog, Sentry breadcrumbs, debug console). A provider is enabled by its key in build config.",
+    "bands": "duration_band: lt_15 <15 min, 15_30 [15,30), 30_60 [30,60), 60_plus >=60."
+  },
+  "enums": {
+    "auth_method": [
+      "email",
+      "apple",
+      "google"
+    ],
+    "error_kind": [
+      "network",
+      "invalid_credentials",
+      "account_exists",
+      "validation",
+      "not_found",
+      "forbidden",
+      "rate_limited",
+      "server",
+      "cancelled",
+      "unknown"
+    ],
+    "meal_method": [
+      "photo_camera",
+      "photo_library",
+      "voice",
+      "manual",
+      "search",
+      "quick_add",
+      "repeat"
+    ],
+    "meal_type": [
+      "breakfast",
+      "lunch",
+      "dinner",
+      "snack"
+    ],
+    "log_source": [
+      "form",
+      "quick_log",
+      "dashboard",
+      "onboarding",
+      "health_sync",
+      "widget",
+      "check_in"
+    ],
+    "plan": [
+      "monthly",
+      "annual",
+      "lifetime"
+    ],
+    "store": [
+      "app_store",
+      "play_store",
+      "stripe"
+    ],
+    "join_source": [
+      "invite_code",
+      "invite_link",
+      "recommendation",
+      "browse"
+    ],
+    "duration_band": [
+      "lt_15",
+      "15_30",
+      "30_60",
+      "60_plus"
+    ],
+    "platform_app": [
+      "ios",
+      "android",
+      "web"
+    ],
+    "environment": [
+      "production",
+      "development"
+    ]
+  },
+  "globalProperties": [
+    {
+      "name": "platform_app",
+      "type": "enum",
+      "enum": "platform_app",
+      "description": "Which FitCircle client sent the event. Stamped by every client."
+    },
+    {
+      "name": "environment",
+      "type": "enum",
+      "enum": "environment",
+      "description": "production for store/release builds, development otherwise."
+    },
+    {
+      "name": "app_build",
+      "type": "string",
+      "description": "Build number (iOS CFBundleVersion, Android versionCode, web deployment id)."
+    }
+  ],
+  "userProperties": [
+    {
+      "name": "plan",
+      "type": "enum",
+      "values": [
+        "free",
+        "pro"
+      ],
+      "description": "Current entitlement."
+    },
+    {
+      "name": "pro_plan",
+      "type": "enum",
+      "values": [
+        "none",
+        "monthly",
+        "annual",
+        "lifetime"
+      ],
+      "description": "Which Pro product, if any."
+    },
+    {
+      "name": "signup_method",
+      "type": "enum",
+      "enum": "auth_method",
+      "setOnce": true,
+      "description": "How the account was created."
+    },
+    {
+      "name": "signup_platform",
+      "type": "enum",
+      "enum": "platform_app",
+      "setOnce": true,
+      "description": "Client the account was created on."
+    },
+    {
+      "name": "account_created_date",
+      "type": "string",
+      "setOnce": true,
+      "description": "UTC date (YYYY-MM-DD) the account was created; cohorting."
+    },
+    {
+      "name": "onboarding_completed",
+      "type": "bool",
+      "description": "Has finished onboarding."
+    },
+    {
+      "name": "units_system",
+      "type": "enum",
+      "values": [
+        "imperial",
+        "metric"
+      ],
+      "description": "Display units."
+    },
+    {
+      "name": "health_connected",
+      "type": "bool",
+      "description": "Apple Health / Health Connect authorised."
+    },
+    {
+      "name": "push_enabled",
+      "type": "bool",
+      "description": "OS push permission granted."
+    },
+    {
+      "name": "ai_consent",
+      "type": "bool",
+      "description": "Allowed sending photos/voice/messages to AI providers."
+    },
+    {
+      "name": "circles_count",
+      "type": "int",
+      "description": "Circles the user belongs to (updated when it changes)."
+    },
+    {
+      "name": "primary_goal",
+      "type": "string",
+      "description": "Goal chosen in onboarding (e.g. lose_weight, maintain, build_muscle)."
+    }
+  ],
+  "events": [
+    {
+      "name": "Sign Up Started",
+      "category": "auth",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "description": "User began creating an account.",
+      "properties": [
+        {
+          "name": "method",
+          "type": "enum",
+          "enum": "auth_method",
+          "required": true
+        }
+      ]
+    },
+    {
+      "name": "Sign Up Completed",
+      "category": "auth",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "description": "A new account was created. Fire after identify().",
+      "properties": [
+        {
+          "name": "method",
+          "type": "enum",
+          "enum": "auth_method",
+          "required": true
+        }
+      ]
+    },
+    {
+      "name": "Sign Up Failed",
+      "category": "auth",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "description": "Account creation failed.",
+      "properties": [
+        {
+          "name": "method",
+          "type": "enum",
+          "enum": "auth_method",
+          "required": true
+        },
+        {
+          "name": "error_kind",
+          "type": "enum",
+          "enum": "error_kind",
+          "required": true
+        }
+      ]
+    },
+    {
+      "name": "Login Started",
+      "category": "auth",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "description": "User began signing in.",
+      "properties": [
+        {
+          "name": "method",
+          "type": "enum",
+          "enum": "auth_method",
+          "required": true
+        }
+      ]
+    },
+    {
+      "name": "Login Completed",
+      "category": "auth",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "description": "Returning user signed in. Fire after identify().",
+      "properties": [
+        {
+          "name": "method",
+          "type": "enum",
+          "enum": "auth_method",
+          "required": true
+        }
+      ]
+    },
+    {
+      "name": "Login Failed",
+      "category": "auth",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "description": "Sign-in failed.",
+      "properties": [
+        {
+          "name": "method",
+          "type": "enum",
+          "enum": "auth_method",
+          "required": true
+        },
+        {
+          "name": "error_kind",
+          "type": "enum",
+          "enum": "error_kind",
+          "required": true
+        }
+      ]
+    },
+    {
+      "name": "Password Reset Requested",
+      "category": "auth",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "description": "User asked for a password reset email.",
+      "properties": []
+    },
+    {
+      "name": "Logout",
+      "category": "auth",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "description": "Session ended. Fire BEFORE reset().",
+      "properties": [
+        {
+          "name": "reason",
+          "type": "enum",
+          "values": [
+            "user",
+            "session_expired",
+            "account_deleted"
+          ],
+          "required": true
+        }
+      ]
+    },
+    {
+      "name": "Account Deleted",
+      "category": "auth",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "description": "User deleted their account.",
+      "properties": []
+    },
+    {
+      "name": "Onboarding Started",
+      "category": "onboarding",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "description": "New user reached the first onboarding step.",
+      "properties": []
+    },
+    {
+      "name": "Onboarding Step Viewed",
+      "category": "onboarding",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "description": "An onboarding step became visible. Pair with Step Completed for drop-off per step.",
+      "properties": [
+        {
+          "name": "step_name",
+          "type": "string",
+          "required": true,
+          "description": "Stable snake_case id, one of: questionnaire, meet_fitzy, profile, goals, persona, health, first_check_in, celebration, circle_recommendations, preferences (web). Never a display title."
+        },
+        {
+          "name": "step_number",
+          "type": "int",
+          "required": true
+        }
+      ]
+    },
+    {
+      "name": "Onboarding Step Completed",
+      "category": "onboarding",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "description": "User advanced past a step.",
+      "properties": [
+        {
+          "name": "step_name",
+          "type": "string",
+          "required": true,
+          "description": "Stable snake_case id, one of: questionnaire, meet_fitzy, profile, goals, persona, health, first_check_in, celebration, circle_recommendations, preferences (web). Never a display title."
+        },
+        {
+          "name": "step_number",
+          "type": "int",
+          "required": true
+        }
+      ]
+    },
+    {
+      "name": "Onboarding Step Skipped",
+      "category": "onboarding",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "description": "User skipped a step.",
+      "properties": [
+        {
+          "name": "step_name",
+          "type": "string",
+          "required": true,
+          "description": "Stable snake_case id, one of: questionnaire, meet_fitzy, profile, goals, persona, health, first_check_in, celebration, circle_recommendations, preferences (web). Never a display title."
+        },
+        {
+          "name": "step_number",
+          "type": "int",
+          "required": true
+        }
+      ]
+    },
+    {
+      "name": "Recommended Circles Viewed",
+      "category": "onboarding",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "description": "Circle recommendations were shown.",
+      "properties": [
+        {
+          "name": "count",
+          "type": "int",
+          "required": true
+        }
+      ]
+    },
+    {
+      "name": "Onboarding Completed",
+      "category": "onboarding",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "description": "Onboarding finished and profile saved.",
+      "properties": [
+        {
+          "name": "joined_circle",
+          "type": "bool",
+          "required": false
+        }
+      ]
+    },
+    {
+      "name": "Health Permissions Responded",
+      "category": "permissions",
+      "platforms": [
+        "ios",
+        "android"
+      ],
+      "description": "Health data permission answered.",
+      "properties": [
+        {
+          "name": "granted",
+          "type": "bool",
+          "required": true
+        },
+        {
+          "name": "provider",
+          "type": "enum",
+          "values": [
+            "apple_health",
+            "health_connect"
+          ],
+          "required": true
+        },
+        {
+          "name": "surface",
+          "type": "string",
+          "required": false,
+          "description": "onboarding, dashboard, settings."
+        }
+      ]
+    },
+    {
+      "name": "Push Permission Responded",
+      "category": "permissions",
+      "platforms": [
+        "ios",
+        "android"
+      ],
+      "description": "OS push permission prompt answered.",
+      "properties": [
+        {
+          "name": "granted",
+          "type": "bool",
+          "required": true
+        },
+        {
+          "name": "surface",
+          "type": "string",
+          "required": false
+        }
+      ]
+    },
+    {
+      "name": "Tracking Permission Responded",
+      "category": "permissions",
+      "platforms": [
+        "ios"
+      ],
+      "description": "App Tracking Transparency prompt answered.",
+      "properties": [
+        {
+          "name": "status",
+          "type": "enum",
+          "values": [
+            "authorized",
+            "denied",
+            "restricted",
+            "not_determined"
+          ],
+          "required": true
+        }
+      ]
+    },
+    {
+      "name": "AI Consent Responded",
+      "category": "permissions",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "description": "AI data-sharing consent answered or changed.",
+      "properties": [
+        {
+          "name": "granted",
+          "type": "bool",
+          "required": true
+        },
+        {
+          "name": "surface",
+          "type": "enum",
+          "values": [
+            "photo_log",
+            "voice_log",
+            "fitzy",
+            "settings",
+            "body_comp_scan"
+          ],
+          "required": true
+        }
+      ]
+    },
+    {
+      "name": "Screen Viewed",
+      "category": "navigation",
+      "platforms": [
+        "ios",
+        "android"
+      ],
+      "description": "A top-level screen or tab became visible (web uses autocaptured page views).",
+      "properties": [
+        {
+          "name": "screen",
+          "type": "string",
+          "required": true,
+          "description": "Stable snake_case id: dashboard, circles, nutrition, exercise, profile, circle_detail, chat, fitzy, paywall, settings …"
+        }
+      ]
+    },
+    {
+      "name": "Push Notification Opened",
+      "category": "navigation",
+      "platforms": [
+        "ios",
+        "android"
+      ],
+      "description": "App opened from a push tap.",
+      "properties": [
+        {
+          "name": "notification_type",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "route",
+          "type": "string",
+          "required": false
+        }
+      ]
+    },
+    {
+      "name": "Notification Settings Changed",
+      "category": "settings",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "description": "A notification preference was toggled.",
+      "properties": [
+        {
+          "name": "setting",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "enabled",
+          "type": "bool",
+          "required": true
+        }
+      ]
+    },
+    {
+      "name": "Units Changed",
+      "category": "settings",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "description": "Display units changed.",
+      "properties": [
+        {
+          "name": "units_system",
+          "type": "enum",
+          "values": [
+            "imperial",
+            "metric"
+          ],
+          "required": true
+        }
+      ]
+    },
+    {
+      "name": "Data Export Requested",
+      "category": "settings",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "description": "User exported their data.",
+      "properties": []
+    },
+    {
+      "name": "Meal Log Started",
+      "category": "nutrition",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "description": "User chose how to log a meal. Top of the logging funnel.",
+      "properties": [
+        {
+          "name": "method",
+          "type": "enum",
+          "enum": "meal_method",
+          "required": true
+        },
+        {
+          "name": "surface",
+          "type": "string",
+          "required": false,
+          "description": "nutrition_tab, dashboard, quick_log, chat, fitzy."
+        }
+      ]
+    },
+    {
+      "name": "Meal Photo Analysis Started",
+      "category": "nutrition",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "description": "Photo(s) sent for AI analysis.",
+      "properties": [
+        {
+          "name": "image_count",
+          "type": "int",
+          "required": true
+        },
+        {
+          "name": "has_note",
+          "type": "bool",
+          "required": false
+        }
+      ]
+    },
+    {
+      "name": "Meal Photo Analyzed",
+      "category": "nutrition",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "description": "AI returned a nutrition draft.",
+      "properties": [
+        {
+          "name": "item_count",
+          "type": "int",
+          "required": true
+        },
+        {
+          "name": "confidence",
+          "type": "enum",
+          "values": [
+            "low",
+            "medium",
+            "high"
+          ],
+          "required": false
+        },
+        {
+          "name": "cached",
+          "type": "bool",
+          "required": false
+        }
+      ]
+    },
+    {
+      "name": "Meal Photo Analysis Failed",
+      "category": "nutrition",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "description": "AI analysis failed.",
+      "properties": [
+        {
+          "name": "error_kind",
+          "type": "enum",
+          "enum": "error_kind",
+          "required": true
+        },
+        {
+          "name": "upgrade_required",
+          "type": "bool",
+          "required": false
+        }
+      ]
+    },
+    {
+      "name": "Meal Voice Parsed",
+      "category": "nutrition",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "description": "Voice description parsed into a draft.",
+      "properties": [
+        {
+          "name": "item_count",
+          "type": "int",
+          "required": true
+        }
+      ]
+    },
+    {
+      "name": "Meal Voice Parse Failed",
+      "category": "nutrition",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "description": "Voice parse failed.",
+      "properties": [
+        {
+          "name": "error_kind",
+          "type": "enum",
+          "enum": "error_kind",
+          "required": true
+        },
+        {
+          "name": "upgrade_required",
+          "type": "bool",
+          "required": false
+        }
+      ]
+    },
+    {
+      "name": "Meal Logged",
+      "category": "nutrition",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "description": "A meal entry was saved. The core value event.",
+      "properties": [
+        {
+          "name": "method",
+          "type": "enum",
+          "enum": "meal_method",
+          "required": true
+        },
+        {
+          "name": "meal_type",
+          "type": "enum",
+          "enum": "meal_type",
+          "required": false
+        },
+        {
+          "name": "item_count",
+          "type": "int",
+          "required": false
+        },
+        {
+          "name": "has_photo",
+          "type": "bool",
+          "required": false
+        },
+        {
+          "name": "is_edit",
+          "type": "bool",
+          "required": true
+        },
+        {
+          "name": "is_backfill",
+          "type": "bool",
+          "required": false,
+          "description": "Logged for a past day."
+        },
+        {
+          "name": "shared_circle_count",
+          "type": "int",
+          "required": false
+        }
+      ]
+    },
+    {
+      "name": "Meal Deleted",
+      "category": "nutrition",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "description": "A meal entry was deleted.",
+      "properties": []
+    },
+    {
+      "name": "Beverage Logged",
+      "category": "nutrition",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "description": "A beverage entry was saved.",
+      "properties": [
+        {
+          "name": "category",
+          "type": "string",
+          "required": true
+        }
+      ]
+    },
+    {
+      "name": "Water Logged",
+      "category": "nutrition",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "description": "Water was logged.",
+      "properties": [
+        {
+          "name": "source",
+          "type": "enum",
+          "enum": "log_source",
+          "required": true
+        }
+      ]
+    },
+    {
+      "name": "AI Limit Reached",
+      "category": "nutrition",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "description": "Free AI quota exhausted; paywall offered.",
+      "properties": [
+        {
+          "name": "feature",
+          "type": "enum",
+          "values": [
+            "photo_log",
+            "voice_log",
+            "fitzy",
+            "body_scan"
+          ],
+          "required": true
+        },
+        {
+          "name": "source",
+          "type": "string",
+          "required": false
+        }
+      ]
+    },
+    {
+      "name": "Nutrition Challenge Set",
+      "category": "nutrition",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "description": "A circle creator set or updated the circle's nutrition challenge.",
+      "properties": [
+        {
+          "name": "metric_type",
+          "type": "enum",
+          "values": [
+            "protein_target",
+            "calorie_target",
+            "carb_target"
+          ],
+          "required": true
+        },
+        {
+          "name": "is_update",
+          "type": "bool",
+          "required": true
+        }
+      ]
+    },
+    {
+      "name": "Workout Logged",
+      "category": "activity",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "description": "A workout was saved.",
+      "properties": [
+        {
+          "name": "source",
+          "type": "enum",
+          "enum": "log_source",
+          "required": true
+        },
+        {
+          "name": "category",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "duration_band",
+          "type": "enum",
+          "enum": "duration_band",
+          "required": false
+        },
+        {
+          "name": "is_edit",
+          "type": "bool",
+          "required": false
+        }
+      ]
+    },
+    {
+      "name": "Weight Logged",
+      "category": "activity",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "description": "Weight was logged.",
+      "properties": [
+        {
+          "name": "source",
+          "type": "enum",
+          "enum": "log_source",
+          "required": true
+        }
+      ]
+    },
+    {
+      "name": "Steps Logged",
+      "category": "activity",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "description": "Steps logged manually (not background sync).",
+      "properties": [
+        {
+          "name": "source",
+          "type": "enum",
+          "enum": "log_source",
+          "required": true
+        }
+      ]
+    },
+    {
+      "name": "Body Composition Logged",
+      "category": "activity",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "description": "A body composition entry was saved.",
+      "properties": [
+        {
+          "name": "source",
+          "type": "enum",
+          "values": [
+            "manual",
+            "scan"
+          ],
+          "required": true
+        }
+      ]
+    },
+    {
+      "name": "Check-in Completed",
+      "category": "streaks",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "description": "Daily check-in submitted (claims the streak day).",
+      "properties": [
+        {
+          "name": "streak_day",
+          "type": "int",
+          "required": false
+        },
+        {
+          "name": "has_weight",
+          "type": "bool",
+          "required": false
+        },
+        {
+          "name": "is_backfill",
+          "type": "bool",
+          "required": true
+        }
+      ]
+    },
+    {
+      "name": "Streak Milestone Reached",
+      "category": "streaks",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "description": "A streak milestone celebration was shown.",
+      "properties": [
+        {
+          "name": "milestone",
+          "type": "int",
+          "required": true
+        }
+      ]
+    },
+    {
+      "name": "Streak Shield Used",
+      "category": "streaks",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "description": "A shield protected the streak (observed by the client).",
+      "properties": []
+    },
+    {
+      "name": "Daily Challenge Completed",
+      "category": "streaks",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "description": "Today's daily challenge was completed.",
+      "properties": [
+        {
+          "name": "challenge_type",
+          "type": "string",
+          "required": false
+        }
+      ]
+    },
+    {
+      "name": "FitCircle Creation Started",
+      "category": "circles",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "description": "Create-circle flow opened.",
+      "properties": [
+        {
+          "name": "source",
+          "type": "string",
+          "required": false
+        }
+      ]
+    },
+    {
+      "name": "FitCircle Created",
+      "category": "circles",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "description": "A circle was created.",
+      "properties": [
+        {
+          "name": "challenge_type",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "visibility",
+          "type": "enum",
+          "values": [
+            "public",
+            "private"
+          ],
+          "required": false
+        },
+        {
+          "name": "from_template",
+          "type": "bool",
+          "required": false
+        }
+      ]
+    },
+    {
+      "name": "FitCircle Create Failed",
+      "category": "circles",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "description": "Circle creation failed.",
+      "properties": [
+        {
+          "name": "error_kind",
+          "type": "enum",
+          "enum": "error_kind",
+          "required": true
+        },
+        {
+          "name": "upgrade_required",
+          "type": "bool",
+          "required": false
+        }
+      ]
+    },
+    {
+      "name": "FitCircle Join Started",
+      "category": "circles",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "description": "User tried to join a circle.",
+      "properties": [
+        {
+          "name": "source",
+          "type": "enum",
+          "enum": "join_source",
+          "required": true
+        }
+      ]
+    },
+    {
+      "name": "FitCircle Joined",
+      "category": "circles",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "description": "User joined a circle.",
+      "properties": [
+        {
+          "name": "source",
+          "type": "enum",
+          "enum": "join_source",
+          "required": true
+        }
+      ]
+    },
+    {
+      "name": "FitCircle Join Failed",
+      "category": "circles",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "description": "Join failed.",
+      "properties": [
+        {
+          "name": "source",
+          "type": "enum",
+          "enum": "join_source",
+          "required": true
+        },
+        {
+          "name": "error_kind",
+          "type": "enum",
+          "enum": "error_kind",
+          "required": true
+        }
+      ]
+    },
+    {
+      "name": "FitCircle Viewed",
+      "category": "circles",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "description": "A circle's detail screen opened.",
+      "properties": [
+        {
+          "name": "member_count",
+          "type": "int",
+          "required": false
+        }
+      ]
+    },
+    {
+      "name": "FitCircle Left",
+      "category": "circles",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "description": "User left a circle.",
+      "properties": []
+    },
+    {
+      "name": "Leaderboard Viewed",
+      "category": "circles",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "description": "A circle leaderboard was viewed.",
+      "properties": []
+    },
+    {
+      "name": "Invite Created",
+      "category": "circles",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "description": "An invite code/link was generated.",
+      "properties": []
+    },
+    {
+      "name": "Invite Shared",
+      "category": "circles",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "description": "Invite handed off.",
+      "properties": [
+        {
+          "name": "method",
+          "type": "enum",
+          "values": [
+            "copy_code",
+            "copy_link",
+            "share_sheet",
+            "email"
+          ],
+          "required": true
+        }
+      ]
+    },
+    {
+      "name": "Invite Link Opened",
+      "category": "circles",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "description": "An invite deep link / landing page was opened (viral loop top).",
+      "properties": [
+        {
+          "name": "signed_in",
+          "type": "bool",
+          "required": true
+        }
+      ]
+    },
+    {
+      "name": "Chat Opened",
+      "category": "social",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "description": "Circle chat opened.",
+      "properties": []
+    },
+    {
+      "name": "Chat Message Sent",
+      "category": "social",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "description": "Member posted in circle chat.",
+      "properties": [
+        {
+          "name": "kind",
+          "type": "enum",
+          "values": [
+            "text",
+            "meal",
+            "image"
+          ],
+          "required": true
+        }
+      ]
+    },
+    {
+      "name": "Chat Reaction Sent",
+      "category": "social",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "description": "Member reacted to a chat item.",
+      "properties": [
+        {
+          "name": "reaction",
+          "type": "string",
+          "required": true
+        }
+      ]
+    },
+    {
+      "name": "Content Reported",
+      "category": "safety",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "description": "User reported content or a member.",
+      "properties": [
+        {
+          "name": "content_type",
+          "type": "enum",
+          "values": [
+            "message",
+            "meal",
+            "profile"
+          ],
+          "required": true
+        },
+        {
+          "name": "reason",
+          "type": "string",
+          "required": true
+        }
+      ]
+    },
+    {
+      "name": "User Blocked",
+      "category": "safety",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "description": "User blocked another member.",
+      "properties": [
+        {
+          "name": "surface",
+          "type": "enum",
+          "values": [
+            "chat",
+            "meal_card",
+            "profile"
+          ],
+          "required": true
+        }
+      ]
+    },
+    {
+      "name": "Fitzy Opened",
+      "category": "ai",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "description": "The Fitzy assistant was opened.",
+      "properties": [
+        {
+          "name": "surface",
+          "type": "string",
+          "required": false
+        }
+      ]
+    },
+    {
+      "name": "Fitzy Message Sent",
+      "category": "ai",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "description": "User sent a message to Fitzy.",
+      "properties": [
+        {
+          "name": "is_suggestion",
+          "type": "bool",
+          "required": false
+        }
+      ]
+    },
+    {
+      "name": "Share Card Generated",
+      "category": "sharing",
+      "platforms": [
+        "ios",
+        "android"
+      ],
+      "description": "A share card image was generated.",
+      "properties": [
+        {
+          "name": "card_type",
+          "type": "string",
+          "required": true
+        }
+      ]
+    },
+    {
+      "name": "Share Card Shared",
+      "category": "sharing",
+      "platforms": [
+        "ios",
+        "android"
+      ],
+      "description": "Share card handed off.",
+      "properties": [
+        {
+          "name": "card_type",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "method",
+          "type": "enum",
+          "values": [
+            "share_sheet",
+            "save_to_photos",
+            "copy_link"
+          ],
+          "required": true
+        }
+      ]
+    },
+    {
+      "name": "Pro Card Shown",
+      "category": "monetization",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "description": "In-app Pro upsell card rendered.",
+      "properties": [
+        {
+          "name": "source",
+          "type": "string",
+          "required": true,
+          "description": "Snake_case trigger id: ai_limit, pro_card, settings, circle_limit, history_limit, remove_ads, body_scan, milestone, streak_shield, locked_feature, pricing_page, onboarding, landing, landing_footer (web). Never camelCase."
+        }
+      ]
+    },
+    {
+      "name": "Pro Card Tapped",
+      "category": "monetization",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "description": "Pro upsell card tapped.",
+      "properties": [
+        {
+          "name": "source",
+          "type": "string",
+          "required": true,
+          "description": "Snake_case trigger id: ai_limit, pro_card, settings, circle_limit, history_limit, remove_ads, body_scan, milestone, streak_shield, locked_feature, pricing_page, onboarding, landing, landing_footer (web). Never camelCase."
+        }
+      ]
+    },
+    {
+      "name": "Pro Card Dismissed",
+      "category": "monetization",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "description": "Pro upsell card dismissed.",
+      "properties": [
+        {
+          "name": "source",
+          "type": "string",
+          "required": true,
+          "description": "Snake_case trigger id: ai_limit, pro_card, settings, circle_limit, history_limit, remove_ads, body_scan, milestone, streak_shield, locked_feature, pricing_page, onboarding, landing, landing_footer (web). Never camelCase."
+        }
+      ]
+    },
+    {
+      "name": "Paywall Viewed",
+      "category": "monetization",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "description": "Paywall presented. Top of the purchase funnel.",
+      "properties": [
+        {
+          "name": "source",
+          "type": "string",
+          "required": true,
+          "description": "Snake_case trigger id: ai_limit, pro_card, settings, circle_limit, history_limit, remove_ads, body_scan, milestone, streak_shield, locked_feature, pricing_page, onboarding, landing, landing_footer (web). Never camelCase."
+        }
+      ]
+    },
+    {
+      "name": "Paywall Plan Selected",
+      "category": "monetization",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "description": "A plan was tapped on the paywall.",
+      "properties": [
+        {
+          "name": "source",
+          "type": "string",
+          "required": true,
+          "description": "Snake_case trigger id: ai_limit, pro_card, settings, circle_limit, history_limit, remove_ads, body_scan, milestone, streak_shield, locked_feature, pricing_page, onboarding, landing, landing_footer (web). Never camelCase."
+        },
+        {
+          "name": "plan",
+          "type": "enum",
+          "enum": "plan",
+          "required": true
+        },
+        {
+          "name": "product_id",
+          "type": "string",
+          "required": true,
+          "description": "Store product id; web (Stripe) uses stripe_pro_<plan>."
+        }
+      ]
+    },
+    {
+      "name": "Paywall Dismissed",
+      "category": "monetization",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "description": "Paywall closed without purchase.",
+      "properties": [
+        {
+          "name": "source",
+          "type": "string",
+          "required": true,
+          "description": "Snake_case trigger id: ai_limit, pro_card, settings, circle_limit, history_limit, remove_ads, body_scan, milestone, streak_shield, locked_feature, pricing_page, onboarding, landing, landing_footer (web). Never camelCase."
+        }
+      ]
+    },
+    {
+      "name": "Purchase Started",
+      "category": "monetization",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "description": "Store purchase sheet / Stripe checkout requested.",
+      "properties": [
+        {
+          "name": "source",
+          "type": "string",
+          "required": true,
+          "description": "Snake_case trigger id: ai_limit, pro_card, settings, circle_limit, history_limit, remove_ads, body_scan, milestone, streak_shield, locked_feature, pricing_page, onboarding, landing, landing_footer (web). Never camelCase."
+        },
+        {
+          "name": "plan",
+          "type": "enum",
+          "enum": "plan",
+          "required": true
+        },
+        {
+          "name": "product_id",
+          "type": "string",
+          "required": true,
+          "description": "Store product id; web (Stripe) uses stripe_pro_<plan>."
+        },
+        {
+          "name": "store",
+          "type": "enum",
+          "enum": "store",
+          "required": true
+        }
+      ]
+    },
+    {
+      "name": "Purchase Completed",
+      "category": "monetization",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "description": "Purchase succeeded and Pro granted (client view; renewals come from RevenueCat).",
+      "properties": [
+        {
+          "name": "source",
+          "type": "string",
+          "required": true,
+          "description": "Snake_case trigger id: ai_limit, pro_card, settings, circle_limit, history_limit, remove_ads, body_scan, milestone, streak_shield, locked_feature, pricing_page, onboarding, landing, landing_footer (web). Never camelCase."
+        },
+        {
+          "name": "plan",
+          "type": "enum",
+          "enum": "plan",
+          "required": true
+        },
+        {
+          "name": "product_id",
+          "type": "string",
+          "required": true,
+          "description": "Store product id; web (Stripe) uses stripe_pro_<plan>."
+        },
+        {
+          "name": "store",
+          "type": "enum",
+          "enum": "store",
+          "required": true
+        },
+        {
+          "name": "price",
+          "type": "number",
+          "required": false
+        },
+        {
+          "name": "currency",
+          "type": "string",
+          "required": false
+        }
+      ]
+    },
+    {
+      "name": "Purchase Cancelled",
+      "category": "monetization",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "description": "User cancelled the store sheet / checkout.",
+      "properties": [
+        {
+          "name": "source",
+          "type": "string",
+          "required": true,
+          "description": "Snake_case trigger id: ai_limit, pro_card, settings, circle_limit, history_limit, remove_ads, body_scan, milestone, streak_shield, locked_feature, pricing_page, onboarding, landing, landing_footer (web). Never camelCase."
+        },
+        {
+          "name": "plan",
+          "type": "enum",
+          "enum": "plan",
+          "required": false
+        },
+        {
+          "name": "product_id",
+          "type": "string",
+          "required": false,
+          "description": "Store product id; web (Stripe) uses stripe_pro_<plan>."
+        },
+        {
+          "name": "store",
+          "type": "enum",
+          "enum": "store",
+          "required": true
+        }
+      ]
+    },
+    {
+      "name": "Purchase Failed",
+      "category": "monetization",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "description": "Purchase failed.",
+      "properties": [
+        {
+          "name": "source",
+          "type": "string",
+          "required": true,
+          "description": "Snake_case trigger id: ai_limit, pro_card, settings, circle_limit, history_limit, remove_ads, body_scan, milestone, streak_shield, locked_feature, pricing_page, onboarding, landing, landing_footer (web). Never camelCase."
+        },
+        {
+          "name": "plan",
+          "type": "enum",
+          "enum": "plan",
+          "required": false
+        },
+        {
+          "name": "product_id",
+          "type": "string",
+          "required": false,
+          "description": "Store product id; web (Stripe) uses stripe_pro_<plan>."
+        },
+        {
+          "name": "store",
+          "type": "enum",
+          "enum": "store",
+          "required": true
+        },
+        {
+          "name": "error_kind",
+          "type": "enum",
+          "enum": "error_kind",
+          "required": true
+        }
+      ]
+    },
+    {
+      "name": "Restore Started",
+      "category": "monetization",
+      "platforms": [
+        "ios",
+        "android"
+      ],
+      "description": "Restore purchases requested.",
+      "properties": [
+        {
+          "name": "source",
+          "type": "string",
+          "required": true,
+          "description": "Snake_case trigger id: ai_limit, pro_card, settings, circle_limit, history_limit, remove_ads, body_scan, milestone, streak_shield, locked_feature, pricing_page, onboarding, landing, landing_footer (web). Never camelCase."
+        }
+      ]
+    },
+    {
+      "name": "Restore Completed",
+      "category": "monetization",
+      "platforms": [
+        "ios",
+        "android"
+      ],
+      "description": "Restore finished.",
+      "properties": [
+        {
+          "name": "source",
+          "type": "string",
+          "required": true,
+          "description": "Snake_case trigger id: ai_limit, pro_card, settings, circle_limit, history_limit, remove_ads, body_scan, milestone, streak_shield, locked_feature, pricing_page, onboarding, landing, landing_footer (web). Never camelCase."
+        },
+        {
+          "name": "is_pro",
+          "type": "bool",
+          "required": true
+        }
+      ]
+    },
+    {
+      "name": "Restore Failed",
+      "category": "monetization",
+      "platforms": [
+        "ios",
+        "android"
+      ],
+      "description": "Restore failed.",
+      "properties": [
+        {
+          "name": "source",
+          "type": "string",
+          "required": true,
+          "description": "Snake_case trigger id: ai_limit, pro_card, settings, circle_limit, history_limit, remove_ads, body_scan, milestone, streak_shield, locked_feature, pricing_page, onboarding, landing, landing_footer (web). Never camelCase."
+        },
+        {
+          "name": "error_kind",
+          "type": "enum",
+          "enum": "error_kind",
+          "required": true
+        }
+      ]
+    },
+    {
+      "name": "Subscription Managed",
+      "category": "monetization",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "description": "User opened store / billing-portal subscription management.",
+      "properties": []
+    },
+    {
+      "name": "App Store Link Clicked",
+      "category": "acquisition",
+      "platforms": [
+        "web"
+      ],
+      "description": "A store badge on the website was clicked.",
+      "properties": [
+        {
+          "name": "store",
+          "type": "enum",
+          "values": [
+            "app_store",
+            "play_store"
+          ],
+          "required": true
+        },
+        {
+          "name": "placement",
+          "type": "string",
+          "required": true,
+          "description": "hero, footer, pricing, invite_landing …"
+        }
+      ]
+    },
+    {
+      "name": "Pricing Viewed",
+      "category": "acquisition",
+      "platforms": [
+        "web"
+      ],
+      "description": "Pricing section/page viewed.",
+      "properties": [
+        {
+          "name": "source",
+          "type": "string",
+          "required": false
+        }
+      ]
+    },
+    {
+      "name": "Ad Impression",
+      "category": "ads",
+      "platforms": [
+        "ios",
+        "android"
+      ],
+      "description": "An ad was shown.",
+      "properties": [
+        {
+          "name": "placement",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "format",
+          "type": "enum",
+          "values": [
+            "banner",
+            "interstitial",
+            "rewarded",
+            "native"
+          ],
+          "required": true
+        }
+      ]
+    },
+    {
+      "name": "Ad Clicked",
+      "category": "ads",
+      "platforms": [
+        "ios",
+        "android"
+      ],
+      "description": "An ad was tapped.",
+      "properties": [
+        {
+          "name": "placement",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "format",
+          "type": "enum",
+          "values": [
+            "banner",
+            "interstitial",
+            "rewarded",
+            "native"
+          ],
+          "required": true
+        }
+      ]
+    },
+    {
+      "name": "Ad Failed",
+      "category": "ads",
+      "platforms": [
+        "ios",
+        "android"
+      ],
+      "description": "An ad failed to load.",
+      "properties": [
+        {
+          "name": "placement",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "format",
+          "type": "enum",
+          "values": [
+            "banner",
+            "interstitial",
+            "rewarded",
+            "native"
+          ],
+          "required": true
+        },
+        {
+          "name": "error_code",
+          "type": "int",
+          "required": false
+        }
+      ]
+    }
+  ]
+}

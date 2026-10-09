@@ -35,6 +35,7 @@ import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/use-toast';
 
 import { NutritionDetailDialog } from './nutrition-detail-dialog';
+import { AnalyticsEvents, analytics } from '@/lib/analytics';
 import { BeverageLogService } from '@/lib/services/beverage-log-service';
 import { FoodLogService } from '@/lib/services/food-log-service';
 import { supabase } from '@/lib/supabase';
@@ -279,6 +280,7 @@ export function FoodLogList({ entries, userId }: FoodLogListProps) {
                 await BeverageLogService.deleteEntry(id, userId, supabase as any);
             } else {
                 await FoodLogService.deleteEntry(id, userId, supabase as any);
+                if (type === 'food') analytics.track(AnalyticsEvents.mealDeleted());
             }
 
             setEntryList(prev => prev.filter(e => e.id !== id));
