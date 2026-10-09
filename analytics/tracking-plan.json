@@ -1,6 +1,6 @@
 {
   "$schema": "./tracking-plan.schema.json",
-  "version": 4,
+  "version": 5,
   "updated": "2026-10-09",
   "conventions": {
     "eventNames": "Title Case, '<Object> <Past-tense verb>' (e.g. 'Meal Logged'). Names are frozen once shipped: rename in the analytics tool, never in code.",
@@ -1094,6 +1094,25 @@
       ],
       "description": "A shield protected the streak (observed by the client).",
       "properties": []
+    },
+    {
+      "name": "Review Prompt Requested",
+      "category": "streaks",
+      "platforms": [
+        "ios"
+      ],
+      "description": "The app asked the OS for the App Store rating prompt at a positive moment. The OS decides whether it is shown (max 3 per year), so this is an upper bound on prompts seen.",
+      "properties": [
+        {
+          "name": "trigger",
+          "type": "enum",
+          "values": [
+            "streak_milestone",
+            "meal_count"
+          ],
+          "required": true
+        }
+      ]
     },
     {
       "name": "Daily Challenge Completed",

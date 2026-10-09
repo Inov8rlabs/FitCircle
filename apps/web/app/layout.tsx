@@ -85,6 +85,12 @@ export const metadata: Metadata = {
       },
     ],
   },
+  // Smart App Banner: Safari on iPhone shows "Get" (or "Open" once installed)
+  // above every page. Installs from our own traffic also lift App Store search
+  // ranking. Safari hides it in the installed PWA and remembers a dismissal.
+  itunes: {
+    appId: '6811432467',
+  },
   appleWebApp: {
     capable: true,
     statusBarStyle: 'default',
