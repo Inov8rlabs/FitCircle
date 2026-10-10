@@ -111,7 +111,7 @@ describe('provider registration', () => {
           fileDownloads: false,
           frustrationInteractions: false,
         }),
-        remoteConfig: { fetchRemoteConfig: false },
+        fetchRemoteConfig: false,
       })
     );
     expect(sessionReplayPlugin).not.toHaveBeenCalled();

@@ -66,7 +66,7 @@ export class AmplitudeProvider extends DeferredProvider<AmplitudeSDK> {
         networkTracking: false,
         webVitals: false,
       },
-      remoteConfig: { fetchRemoteConfig: false },
+      fetchRemoteConfig: false,
       logLevel: amplitude.Types.LogLevel.Warn,
     }).promise;
 
