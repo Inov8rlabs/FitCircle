@@ -4,10 +4,10 @@ import { z } from 'zod';
 
 import { authRateLimiter, getIdentifier, applyRateLimit } from '@/lib/middleware/rate-limit';
 import { MobileAPIService } from '@/lib/services/mobile-api-service';
+import { toMobileUser } from '@/lib/services/mobile-profile-response';
 import { SocialAuthError, findOrCreateSocialUser } from '@/lib/services/social-auth-service';
 import { parseLenient, validationMessage } from '@/lib/validation/lenient-parse';
 
-import { toIosAuthUser } from '../apple/ios-auth-user';
 
 const googleAuthSchema = z
   .object({
@@ -138,7 +138,7 @@ export async function POST(request: NextRequest) {
         refresh_token: tokens.refresh_token,
         expires_in: Math.floor(tokens.expires_at - Date.now() / 1000),
         // Same shape as the Apple route (nested preference defaults filled in).
-        user: toIosAuthUser(profile, userId, email),
+        user: toMobileUser(profile, { id: userId, email }),
         // First sign-in with this Google account: clients route to onboarding.
         is_new_user: isNewUser,
       },

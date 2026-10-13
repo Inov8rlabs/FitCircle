@@ -133,7 +133,9 @@ describe('POST /api/mobile/onboarding/assessment', () => {
     expect(state.assessments).toEqual([valid]);
     const body = await res.json();
     expect(body.success).toBe(true);
-    expect(Object.keys(body.data).sort()).toEqual(['fitnessLevel', 'preferredWorkoutTypes', 'timeCommitment']);
+    expect(body.data).toMatchObject({ fitnessLevel: expect.anything(), timeCommitment: expect.anything() });
+    // Plus the iOS OnboardingStatus keys.
+    expect(body.data).toMatchObject({ has_completed_assessment: true, completed_steps: ['assessment'] });
   });
 
   it('validation error: envelope and details map kept, message says what is wrong', async () => {

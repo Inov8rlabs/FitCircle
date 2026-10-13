@@ -98,9 +98,9 @@ describe('PUT /api/mobile/profile', () => {
     expect(state.updates).toHaveLength(0);
   });
 
-  it('gender: the response has no gender key while the column does not exist', async () => {
+  it('gender: null when the row has none', async () => {
     const res = await put({ displayName: 'Ani' });
-    expect('gender' in (await res.json()).data.user).toBe(false);
+    expect((await res.json()).data.user.gender).toBeNull();
   });
 
   it('response is decodable by iOS even when stored preferences is {}', async () => {

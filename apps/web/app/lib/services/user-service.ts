@@ -49,6 +49,8 @@ export interface UserHistoryEntry {
   weight_change: number | null;
   is_public: boolean;
   note: string | null;
+  /** Same as `note`; the key the iOS app decodes. */
+  notes: string | null;
 }
 
 export interface UserHistoryResponse {
@@ -543,6 +545,7 @@ export class UserService {
               : null,
             is_public: true, // Circle check-ins are visible to circle members
             note: checkIn.note,
+            notes: checkIn.note, // the key iOS CheckInEntry reads
           });
         }
 
@@ -614,6 +617,7 @@ export class UserService {
           : null,
         is_public: true, // For now, all entries are considered public to friends
         note: entry.notes,
+        notes: entry.notes, // the key iOS CheckInEntry reads
       });
     }
 

@@ -292,6 +292,7 @@ describe('GET /api/mobile/challenges/daily/[id]/leaderboard', () => {
     expect(body.data[0]).toEqual({
       user_id: userId(1),
       display_name: 'Alice',
+      name: 'Alice',
       avatar_url: null,
       progress: 9000,
       is_completed: false,
@@ -317,6 +318,7 @@ describe('GET /api/mobile/challenges/daily/[id]/leaderboard', () => {
     expect(body.user_entry).toEqual({
       user_id: ME,
       display_name: 'Me',
+      name: 'Me',
       avatar_url: null,
       progress: 5,
       is_completed: false,

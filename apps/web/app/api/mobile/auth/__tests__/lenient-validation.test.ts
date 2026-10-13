@@ -114,8 +114,9 @@ describe('POST /api/mobile/auth/login', () => {
     const body = await res.json();
     expect(body.success).toBe(true);
     expect(Object.keys(body.data).sort()).toEqual(['access_token', 'expires_in', 'refresh_token', 'user']);
-    expect(body.data.user.date_of_birth).toBe('1984-09-26T00:00:00.000Z');
-    expect('gender' in body.data.user).toBe(false);
+    // The calendar date (iOS reads a date-only string as local midnight).
+    expect(body.data.user.date_of_birth).toBe('1984-09-26');
+    expect(body.data.user.gender).toBeNull();
   });
 
   it('validation error: existing keys kept, message says what is wrong', async () => {

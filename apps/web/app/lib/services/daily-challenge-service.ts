@@ -45,6 +45,8 @@ export interface DailyChallengeWithProgress extends DailyChallenge {
 export interface LeaderboardEntry {
   user_id: string;
   display_name: string;
+  /** Same as display_name; the key iOS decodes. */
+  name: string;
   avatar_url: string | null;
   progress: number;
   is_completed: boolean;
@@ -473,8 +475,11 @@ export class DailyChallengeService {
       return {
         user_id: row.user_id as string,
         display_name: (profile?.display_name as string) || 'Anonymous',
+        // iOS `DailyChallengeParticipant` reads `name` (required); without it
+        // the whole leaderboard failed to decode and showed empty.
+        name: (profile?.display_name as string) || 'Anonymous',
         avatar_url: (profile?.avatar_url as string) || null,
-        progress: row.progress as number,
+        progress,
         is_completed: row.is_completed as boolean,
         completed_at: row.completed_at as string | null,
         rank,
@@ -526,8 +531,9 @@ export class DailyChallengeService {
     const userEntry: LeaderboardEntry = {
       user_id: viewerId,
       display_name: profile?.display_name || 'Anonymous',
+      name: profile?.display_name || 'Anonymous',
       avatar_url: profile?.avatar_url || null,
-      progress: participant.progress,
+      progress: toNumber(participant.progress),
       is_completed: participant.is_completed,
       completed_at: participant.completed_at,
       rank,

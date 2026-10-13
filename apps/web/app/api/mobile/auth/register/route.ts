@@ -4,6 +4,7 @@ import { z } from 'zod';
 
 import { registerRateLimiter, getIdentifier, applyRateLimit } from '@/lib/middleware/rate-limit';
 import { MobileAPIService } from '@/lib/services/mobile-api-service';
+import { toMobileUser } from '@/lib/services/mobile-profile-response';
 import {
   USERNAME_PATTERN,
   USERNAME_RULES_MESSAGE,
@@ -132,36 +133,6 @@ export async function POST(request: NextRequest) {
     // Generate JWT tokens for mobile
     const tokens = await MobileAPIService.generateTokens(authData.user.id, authData.user.email!);
 
-    // Transform preferences to match iOS structure (same as login endpoint)
-    const dbPreferences = profile?.preferences || {};
-    const transformedPreferences = {
-      notifications: {
-        push: dbPreferences.notifications?.push ?? true,
-        email: dbPreferences.notifications?.email ?? true,
-        sms: dbPreferences.notifications?.sms ?? false,
-        challenge_invite: dbPreferences.notifications?.challenge_invite ?? true,
-        team_invite: dbPreferences.notifications?.team_invite ?? true,
-        check_in_reminder: dbPreferences.notifications?.check_in_reminder ?? true,
-        achievement: dbPreferences.notifications?.achievement ?? true,
-        comment: dbPreferences.notifications?.comment ?? true,
-        reaction: dbPreferences.notifications?.reaction ?? true,
-        leaderboard_update: dbPreferences.notifications?.leaderboard_update ?? true,
-        weekly_insights: dbPreferences.notifications?.weekly_insights ?? true,
-      },
-      privacy: {
-        profile_visibility: dbPreferences.privacy?.profile_visibility || 'public',
-        show_weight: dbPreferences.privacy?.show_weight ?? true,
-        show_progress: dbPreferences.privacy?.show_progress ?? true,
-        allow_team_invites: dbPreferences.privacy?.allow_team_invites ?? true,
-        allow_challenge_invites: dbPreferences.privacy?.allow_challenge_invites ?? true,
-      },
-      display: {
-        theme: dbPreferences.display?.theme || 'dark',
-        language: dbPreferences.display?.language || 'en',
-        units: dbPreferences.unitSystem || dbPreferences.display?.units || 'metric',
-      },
-    };
-
     // Return mobile-friendly response matching login format
     return NextResponse.json(
       {
@@ -170,12 +141,7 @@ export async function POST(request: NextRequest) {
           access_token: tokens.access_token,
           refresh_token: tokens.refresh_token,
           expires_in: Math.floor((tokens.expires_at - Date.now() / 1000)),
-          user: {
-            id: authData.user.id,
-            email: authData.user.email,
-            ...profile,
-            preferences: transformedPreferences,
-          },
+          user: toMobileUser(profile, { id: authData.user.id, email: authData.user.email }),
         },
       },
       { status: 201 }

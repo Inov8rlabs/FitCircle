@@ -134,10 +134,10 @@ describe('MobileAPIService.getUserProfileWithStats: gender', () => {
     expect((await MobileAPIService.getUserProfileWithStats('u1')).gender).toBeNull();
   });
 
-  it('adds no gender key before migration 088', async () => {
+  it('returns gender: null when the row has none', async () => {
     db.row = { ...baseRow };
     const profile = await MobileAPIService.getUserProfileWithStats('u1');
-    expect('gender' in profile).toBe(false);
+    expect(profile.gender).toBeNull();
     expect(profile.preferences.privacy.allow_team_invites).toBe(true);
   });
 });

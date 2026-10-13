@@ -3,9 +3,9 @@ import jwt from 'jsonwebtoken';
 import { createAdminSupabase } from '../supabase-admin';
 
 import { EngagementStreakService } from './engagement-streak-service';
-import { StreakClaimingService } from './streak-claiming-service';
 import { MetricStreakService } from './metric-streak-service';
-import { safeGender } from './mobile-profile-response';
+import { toMobileProfile } from './mobile-profile-response';
+import { StreakClaimingService } from './streak-claiming-service';
 import { isValidUsername } from './username-service';
 
 /**
@@ -834,87 +834,16 @@ export class MobileAPIService {
     // Calculate streak
     const currentStreak = this.calculateStreak(trackingData || []);
 
-    // Sanitize goals array - filter out invalid string entries
-    const sanitizedGoals = this.sanitizeGoalsArray(profile.goals || []);
-
-    // Transform preferences to match iOS expected format
-    const dbPreferences = profile.preferences || {};
-    const transformedPreferences = {
-      notifications: {
-        push: dbPreferences.notifications?.push ?? true,
-        email: dbPreferences.notifications?.email ?? true,
-        sms: dbPreferences.notifications?.sms ?? false,
-        challenge_invite: dbPreferences.notifications?.challenge_invite ?? true,
-        team_invite: dbPreferences.notifications?.team_invite ?? true,
-        check_in_reminder: dbPreferences.notifications?.check_in_reminder ?? true,
-        achievement: dbPreferences.notifications?.achievement ?? true,
-        comment: dbPreferences.notifications?.comment ?? true,
-        reaction: dbPreferences.notifications?.reaction ?? true,
-        leaderboard_update: dbPreferences.notifications?.leaderboard_update ?? true,
-        weekly_insights: dbPreferences.notifications?.weekly_insights ?? true,
-      },
-      privacy: {
-        profile_visibility: dbPreferences.privacy?.profileVisibility || dbPreferences.privacy?.profile_visibility || 'public',
-        show_weight: dbPreferences.privacy?.showWeight ?? dbPreferences.privacy?.show_weight ?? true,
-        show_progress: dbPreferences.privacy?.showProgress ?? dbPreferences.privacy?.show_progress ?? true,
-        allow_team_invites: dbPreferences.privacy?.allowTeamInvites ?? dbPreferences.privacy?.allow_team_invites ?? true,
-        allow_challenge_invites: dbPreferences.privacy?.allowChallengeInvites ?? dbPreferences.privacy?.allow_challenge_invites ?? true,
-      },
-      display: {
-        theme: dbPreferences.display?.theme || 'dark',
-        language: dbPreferences.display?.language || 'en',
-        units: dbPreferences.display?.units || dbPreferences.unitSystem || 'metric',
-      },
-      units: {
-        height: dbPreferences.units?.height || (dbPreferences.unitSystem === 'imperial' ? 'inches' : 'cm'),
-        weight: dbPreferences.units?.weight || (dbPreferences.unitSystem === 'imperial' ? 'lbs' : 'kg'),
-      },
-      unitSystem: dbPreferences.unitSystem || 'metric',
-      // Hydration target lives in preferences (not goals[] — shipped iOS builds
-      // decode goals[].type as a closed enum). Optional; clients ignore if absent.
-      ...(dbPreferences.hydration ? { hydration: dbPreferences.hydration } : {}),
-    };
-
     return {
-      ...profile,
-      // profiles.gender exists once migration 088 is applied. iOS decodes it as
-      // a closed enum, so only the known values (or null) may go out.
-      ...('gender' in profile ? { gender: safeGender(profile.gender) } : {}),
+      // Every iOS `User` field normalized (goals, preferences, enums, dates);
+      // the rest of the row passes through.
+      ...toMobileProfile(profile),
       stats: {
         totalPoints: profile.total_points || 0,
         currentStreak,
         challengesCompleted: challengesCompleted || 0,
       },
-      goals: sanitizedGoals,
-      preferences: transformedPreferences,
     };
-  }
-
-  /**
-   * Sanitize goals array to ensure all entries are valid Goal objects
-   * iOS expects: { type: string, target_weight_kg?: number, starting_weight_kg?: number, daily_steps_target?: number }
-   */
-  private static sanitizeGoalsArray(goals: any[]): any[] {
-    if (!Array.isArray(goals)) {
-      return [];
-    }
-
-    return goals
-      .filter((goal) => {
-        // Filter out invalid entries (strings, nulls, etc)
-        return (
-          goal &&
-          typeof goal === 'object' &&
-          goal.type &&
-          typeof goal.type === 'string'
-        );
-      })
-      .map((goal) => ({
-        type: goal.type,
-        target_weight_kg: goal.target_weight_kg || null,
-        starting_weight_kg: goal.starting_weight_kg || null,
-        daily_steps_target: goal.daily_steps_target || null,
-      }));
   }
 
   /**

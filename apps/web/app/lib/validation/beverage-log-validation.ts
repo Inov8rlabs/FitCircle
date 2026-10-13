@@ -97,16 +97,37 @@ export function toClientBeverageCustomizations<T>(customizations: T): T {
 }
 
 /**
+ * Nutrition columns the iOS model decodes as required numbers. They are
+ * nullable in the table (web quick-add omits them), and one null failed the
+ * user's whole beverage list on iOS.
+ */
+const CLIENT_REQUIRED_NUMBERS = ['calories', 'caffeine_mg', 'sugar_g'] as const;
+
+/**
  * A `beverage_logs` row as returned to clients: same row, customizations in the
- * client spelling. Null / undefined rows are returned unchanged.
+ * client spelling (an object, never null), missing nutrition numbers as 0.
+ * Null / undefined rows are returned unchanged.
  */
 export function toClientBeverageEntry<T>(entry: T): T {
   if (typeof entry !== 'object' || entry === null) return entry;
   const row = entry as Record<string, unknown>;
-  if (!('customizations' in row)) return entry;
-  const customizations = toClientBeverageCustomizations(row.customizations);
-  if (customizations === row.customizations) return entry;
-  return { ...row, customizations } as T;
+  const out: Record<string, unknown> = { ...row };
+  let changed = false;
+  if ('customizations' in row) {
+    const customizations =
+      row.customizations === null ? {} : toClientBeverageCustomizations(row.customizations);
+    if (customizations !== row.customizations) {
+      out.customizations = customizations;
+      changed = true;
+    }
+  }
+  for (const key of CLIENT_REQUIRED_NUMBERS) {
+    if (key in row && row[key] === null) {
+      out[key] = 0;
+      changed = true;
+    }
+  }
+  return changed ? (out as T) : entry;
 }
 
 /**

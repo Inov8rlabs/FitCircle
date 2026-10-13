@@ -96,11 +96,26 @@ describe('toProfileUpdateResponse', () => {
     preferences: {},
   };
 
-  it('keeps every column and adds no gender key before migration 088', () => {
-    const user = toProfileUpdateResponse(row)!;
-    expect(user).toMatchObject({ id: 'u1', username: 'ani', display_name: 'Ani', date_of_birth: '1984-09-26' });
-    expect('gender' in user).toBe(false);
+  it('keeps every column', () => {
+    const user = toProfileUpdateResponse({ ...row, subscription_tier: 'pro' })!;
+    expect(user).toMatchObject({
+      id: 'u1',
+      username: 'ani',
+      display_name: 'Ani',
+      date_of_birth: '1984-09-26',
+      subscription_tier: 'pro',
+    });
     expect(user.preferences.privacy.allow_challenge_invites).toBe(true);
+  });
+
+  it('drops the string goals web onboarding stores (the Edit Profile save failure)', () => {
+    const user = toProfileUpdateResponse({
+      ...row,
+      goals: ['health', 'weight_loss', { type: 'weight', target_weight_kg: '70.5' }],
+    })!;
+    expect(user.goals).toEqual([
+      { type: 'weight', target_weight_kg: 70.5, starting_weight_kg: null, daily_steps_target: null },
+    ]);
   });
 
   it('returns gender once the column exists, and never an unknown value', () => {

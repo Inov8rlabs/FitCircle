@@ -5,11 +5,11 @@ import { z } from 'zod';
 import { authRateLimiter, getIdentifier, applyRateLimit } from '@/lib/middleware/rate-limit';
 import { AppleTokenService } from '@/lib/services/apple-token-service';
 import { MobileAPIService } from '@/lib/services/mobile-api-service';
+import { toMobileUser } from '@/lib/services/mobile-profile-response';
 import { SocialAuthError, findOrCreateSocialUser } from '@/lib/services/social-auth-service';
 import { validationMessage } from '@/lib/validation/lenient-parse';
 
 import { appleTokenAudiences, parseAppleAuthRequest } from './apple-request';
-import { toIosAuthUser } from './ios-auth-user';
 
 interface AppleJWTPayload {
   iss: string;
@@ -120,7 +120,7 @@ export async function POST(request: NextRequest) {
         access_token: tokens.access_token,
         refresh_token: tokens.refresh_token,
         expires_in: Math.floor(tokens.expires_at - Date.now() / 1000),
-        user: toIosAuthUser(profile, userId, email),
+        user: toMobileUser(profile, { id: userId, email }),
         // First sign-in with this Apple ID: clients route to onboarding.
         is_new_user: isNewUser,
       },

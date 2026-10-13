@@ -2,6 +2,7 @@ import { type NextRequest, NextResponse } from 'next/server';
 
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { AssessmentService } from '@/lib/services/assessment-service';
+import { MobileAPIService } from '@/lib/services/mobile-api-service';
 
 /**
  * POST /api/mobile/onboarding/complete
@@ -14,10 +15,16 @@ export async function POST(request: NextRequest) {
     const user = await requireMobileAuth(request);
 
     const result = await AssessmentService.completeOnboarding(user.id);
+    // Onboarding is already complete here; a failed read must not report otherwise.
+    const profile = await MobileAPIService.getUserProfileWithStats(user.id).catch((error) => {
+      console.error('[Mobile API] Onboarding complete: profile read failed:', error?.message);
+      return {};
+    });
 
     return NextResponse.json({
       success: true,
-      data: result,
+      // iOS decodes `data` as its `User`; Android and web read success/xpAwarded.
+      data: { ...profile, ...result },
       meta: { requestTime: Date.now() - startTime },
       error: null,
     });

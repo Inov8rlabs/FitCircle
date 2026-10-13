@@ -1,3 +1,5 @@
+import { randomUUID } from 'node:crypto';
+
 import { type NextRequest, NextResponse } from 'next/server';
 
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
@@ -26,7 +28,9 @@ export async function GET(request: NextRequest) {
 
     const response = NextResponse.json({
       success: true,
-      data: { recommendations: recommendations || [] },
+      // iOS `GoalRecommendation.id` is a required UUID: without it every
+      // response failed to decode and no recommendation was ever shown.
+      data: { recommendations: (recommendations || []).map((rec) => ({ id: randomUUID(), ...rec })) },
       error: null,
       meta: {
         requestTime: Date.now(),

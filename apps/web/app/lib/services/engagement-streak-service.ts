@@ -33,6 +33,34 @@ import { StreakClaimingService } from './streak-claiming-service';
  * owned by StreakClaimingService.activateFreeze. The freeze methods here are
  * thin compatibility wrappers over those.
  */
+/**
+ * Activity types the shipped apps can show. iOS decodes `activities` as a
+ * closed enum, so ONE unknown value (e.g. `exercise_log`, written for every
+ * counted workout) failed the whole history and emptied the streak calendar.
+ */
+const CLIENT_ACTIVITY_TYPES = new Set([
+  'weight_log',
+  'steps_log',
+  'mood_log',
+  'circle_checkin',
+  'social_interaction',
+  'streak_freeze',
+  'streak_checkin',
+  'milestone_achieved',
+  'freeze_earned',
+]);
+
+/**
+ * The type as a client may receive it: `freeze_used` is the same event as
+ * `streak_freeze` (a shield covered the day); anything else the apps do not
+ * know (workouts included) was an activity that counted for the day.
+ */
+export function toClientActivityType(type: string): ActivityType {
+  if (CLIENT_ACTIVITY_TYPES.has(type)) return type as ActivityType;
+  if (type === 'freeze_used') return 'streak_freeze';
+  return 'streak_checkin' as ActivityType;
+}
+
 export class EngagementStreakService {
   // ============================================================================
   // CORE STREAK MANAGEMENT
@@ -424,6 +452,7 @@ export class EngagementStreakService {
     if (error) throw error;
 
     const activityMap = new Map<string, ActivityType[]>();
+    const countMap = new Map<string, number>();
     let totalActivities = 0;
 
     for (const activity of activities || []) {
@@ -431,7 +460,10 @@ export class EngagementStreakService {
       if (!activityMap.has(date)) {
         activityMap.set(date, []);
       }
-      activityMap.get(date)!.push(activity.activity_type as ActivityType);
+      countMap.set(date, (countMap.get(date) ?? 0) + 1);
+      const day = activityMap.get(date)!;
+      const type = toClientActivityType(activity.activity_type);
+      if (!day.includes(type)) day.push(type);
       totalActivities++;
     }
 
@@ -439,7 +471,7 @@ export class EngagementStreakService {
       .map(([date, dayActivities]) => ({
         date,
         activities: dayActivities,
-        activity_count: dayActivities.length,
+        activity_count: countMap.get(date) ?? dayActivities.length,
       }))
       .sort((a, b) => b.date.localeCompare(a.date));
 

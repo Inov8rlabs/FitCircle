@@ -5,6 +5,8 @@ import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { AssessmentService } from '@/lib/services/assessment-service';
 import { parseLenient, validationMessage } from '@/lib/validation/lenient-parse';
 
+import { fromIosResponses } from './ios-responses';
+
 const assessmentSchema = z.object({
   exercise_frequency: z.enum(['never', '1-2x_week', '3-4x_week', 'daily']),
   primary_goal: z.enum(['lose_weight', 'gain_muscle', 'improve_cardio', 'maintain_health', 'stress_relief']),
@@ -25,7 +27,7 @@ export async function POST(request: NextRequest) {
   try {
     const user = await requireMobileAuth(request);
 
-    const body = await request.json();
+    const body = fromIosResponses(await request.json());
     const responses = parseLenient(assessmentSchema, body);
 
     const result = await AssessmentService.submitAssessment(user.id, responses);
@@ -36,6 +38,12 @@ export async function POST(request: NextRequest) {
         fitnessLevel: result.fitnessLevel,
         timeCommitment: result.timeCommitment,
         preferredWorkoutTypes: result.preferredWorkoutTypes,
+        // iOS decodes the result as its `OnboardingStatus`.
+        current_step: 'recommendations',
+        completed_steps: ['assessment'],
+        has_completed_assessment: true,
+        fitness_level: result.fitnessLevel,
+        detected_persona: null,
       },
       meta: { requestTime: Date.now() - startTime },
       error: null,
