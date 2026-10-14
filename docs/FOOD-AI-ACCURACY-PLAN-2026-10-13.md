@@ -251,6 +251,85 @@ than Sonnet 5.5, so they cannot be a default model; Qwen 3.5/3.6 are superseded.
    prompt (`RESPONSE_SHAPE_PROMPT`); failures fell to 2/100. Gemini/OpenAI/Anthropic keep the
    native schema and the §3a numbers. Reports: `scripts/golden/reports/*-{alibaba,moonshotai,zai,deepseek,stepfun}_*.report.json`.
 
+## 3c. Phase 1 results — grounding, portion prior, prompt (2026-10-14)
+
+**Shipped data (prod):** migration 098 + `scripts/load-generic-foods.mjs`: 13,547 generic USDA
+foods tagged (`data_type` fndds/sr_legacy/foundation, `category`, `sodium_per_100g`; Foundation
+energy from the Atwater nutrients) and 36,611 household-measure weights in `food_portions`.
+
+**Root cause of §3a finding 4.** The legacy grounding accepted any row sharing ≥60% of name
+tokens from a table that is 99% branded products: "fresh banana" → *FRESH BANANA NUT MUFFIN*
+(416 kcal/100 g), "cherry tomatoes" → a dried-tomato snack (346), "mixed salad greens" → a
+branded salad kit (103). `NutritionGroundingService` replaces it: generic-only retrieval
+(stemmed prefix FTS, state-word down-weighting, plain-row boost, the model's own `dbName` lookup
+key), a Haiku 5.5 picker that chooses the row *or none* for the whole plate in one call
+(lexical Dice ≥0.75 fallback), then the row's density / sodium / unit weights.
+
+**Paired ablation** (same Gemini 3.8 Flash outputs, grounding re-applied offline; `rawItems` in
+every eval case now makes this a standard report field `ablation.modelOnly`):
+
+| variant | SNAPMe kcal ±40% | SNAPMe MAPE | SNAPMe bias | N5k kcal ±40% | N5k MAPE | N5k bias |
+|---|---|---|---|---|---|---|
+| model only (no grounding) | 62% | 41% | −7% | **69%** | **35%** | −5% |
+| legacy grounding (§3a, separate run) | 61% | 61% | +22% | 64% | 55% | +15% |
+| generic: DB density always | 61% | 41% | −3% | 63% | 38% | −4% |
+| generic + USDA portion prior | 61% | 42% | −1% | 61% | 56% | +16% |
+| **generic, density clamp ×2 (shipped)** | **63%** | **40%** | −3% | 68% | 37% | −4% |
+
+Findings:
+1. Generic grounding fixes *density*: 79–83% of grounded items now land within ±20% of the true
+   kcal/100 g (legacy 37–50%); median item density error 5% vs the model's 7% (mean 18% vs 38%).
+2. It does **not** fix *totals*, because the remaining error is portion size, and FNDDS "as
+   eaten" rows carry fat the plate may not have (N5k is lean cafeteria food): replacing the
+   density unconditionally costs 1–6 pts. **Decision: clamp mode** — keep the model's macros
+   unless its density is >2× off the matched row (catches hallucinations: unmatched items had
+   144% mean density error); the row still supplies provenance, sodium and unit weights.
+3. The **USDA portion prior is off** (`NUTRITION_PORTION_PRIOR=true` to enable): USDA "cup" /
+   "slice" weights are too ambiguous for mixed dishes (toast → 15 g, chopped-salad cup → 260 g)
+   and cost 6 pts on N5k. Unit weights are still offered in the picker.
+4. Model-only accuracy with Gemini 3.8 Flash is already far better than §3a's production
+   figures suggested, because §3a numbers *included* the legacy grounding damage.
+
+**Prompt** (same grounding, fresh runs): the `shrink` rules ("choose the SMALLER", "revise DOWN")
+replaced by plate-coverage anchors and a symmetric sanity check — **promoted to production**.
+
+| prompt | SNAPMe kcal ±40% | SNAPMe MAPE | SNAPMe bias | SNAPMe ±25% | N5k kcal ±40% | N5k MAPE | N5k bias | N5k ±25% |
+|---|---|---|---|---|---|---|---|---|
+| shrink (old production) | 61–63% | 41–42% | −2…−7% | 36–48% | 67% | 43% | +5% | 44% |
+| **scale (new production)** | **66%** | **40%** | −2% | 47% | **69%** | **35%** | −3% | **48%** |
+| shrink + hidden-fat rules | 65% | 39% | −4% | 47% | – | – | – | – |
+| scale + hidden-fat rules | **68%** | **39%** | −1% | **50%** | 69% | 37% | +5% | 49% |
+
+The hidden-fat rules help on real phone photos (SNAPMe +2 pts, bias −1%) but add fat that lean
+cafeteria food does not have (N5k fat MAPE 82% → 94%, bias −3% → +5%, MAPE 35% → 37%), and did
+not move SNAPMe fat MAPE (78% either way; that truth is self-reported). **Not promoted**: it
+stays the `scale_fat` variant until the weighed home set or the production draft-vs-saved signal
+says which population our users' plates resemble. Ensembling model totals (Gemini + Sonnet,
+median of three, mean of four) was tested offline on the §3a runs and gives ≤2 pts: not pursued.
+
+### Competitive position vs Cal AI (researched 2026-10-14)
+
+What Cal AI does, from public sources: vision models from Anthropic and OpenAI routed by food
+type, retrieval against a food database (MyFitnessPal's 20M-item branded/restaurant DB since the
+acquisition), the iPhone depth sensor for portion volume, describe/barcode/label fallbacks and an
+"AI edit" fix, results in <15 s, and a self-reported "90% on visible foods".
+
+Independent accuracy evidence: the NIH/NIDDK metabolic-kitchen test (NUTRITION 2026, 102 weighed
+meals, photos through MyFitnessPal, LoseIt!, Cal AI, Appediet) found **every app ~33% low on
+calories (250–345 kcal/meal) and ~30 g/meal low on fat**; a competitor-run 60-meal test put Cal AI
+at 14% calorie MAPE / 76% within ±20% / 18% MAPE on South-Asian food. App-store complaints centre
+on sodium/fiber and occasional absurd values.
+
+Where FitCircle stands on the closest protocol (weighed plates, Nutrition5k): **bias −3%, MAPE
+35%**, versus the −33% bias measured for Cal AI's class. Depth sensing has not rescued them from
+portion error, which is the dominant error for everyone. To make "better than Cal AI" a measured
+claim rather than an inference we need a head-to-head on identical photos: a 30-plate SNAPMe
+subset run through Cal AI by hand (≈15 min on a phone), scored with this harness. Gaps to close
+on features: nutrition-label scanning and a one-tap "fix" flow.
+
+Reports: `scripts/golden/reports/*-ground_{generic,off,legacy}*.report.json`,
+`*-scale-*.report.json`, `*-fat-*.report.json`.
+
 ## 4. Not doing
 
 - Switching providers blindly without the bake-off (Haiku 4.5 → Gemini is likely right, but

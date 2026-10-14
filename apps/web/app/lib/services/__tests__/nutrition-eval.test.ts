@@ -280,3 +280,24 @@ describe('nutrition-eval — portion MAPE ignores sub-5 g truth items (but MAE c
     expect(s.portionMaeG).toBeCloseTo((15 + 19.8) / 2, 5);
   });
 });
+
+describe('nutrition-eval — paired grounding ablation', () => {
+  it('re-scores the same cases on the pre-grounding items and reports both', () => {
+    // Truth: 100 g banana = 89 kcal. Grounded output is right; the model's raw guess was 2× too dense.
+    const g = golden('p1', 'western', [['banana', 100, 89]], 89);
+    const grounded = model([['banana', 100, 89, 0.9]], 0.9);
+    const raw = model([['banana', 100, 178, 0.9]], 0.9).items;
+    const c: EvalCase = { golden: g, modelOutput: grounded, dbMatches: [true], groundedKcalPer100g: [89], rawItems: raw };
+    const report = buildReport([c], 'test-v1');
+    expect(report.overall.within25Rate).toBe(1);
+    expect(report.ablation?.modelOnly.within25Rate).toBe(0);
+    expect(report.ablation?.modelOnly.dbMatchCoverage).toBe(0);
+  });
+
+  it('is omitted when no case was grounded or rawItems are missing', () => {
+    const g = golden('p2', 'western', [['banana', 100, 89]], 89);
+    const out = model([['banana', 100, 89, 0.9]], 0.9);
+    expect(buildReport([{ golden: g, modelOutput: out, dbMatches: [false], rawItems: out.items }], 'test-v1').ablation).toBeUndefined();
+    expect(buildReport([{ golden: g, modelOutput: out, dbMatches: [true] }], 'test-v1').ablation).toBeUndefined();
+  });
+});

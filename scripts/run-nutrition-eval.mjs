@@ -16,6 +16,7 @@
  *                          as a comma list: --models=a,b,c runs them one after another and
  *                          prints a comparison table at the end.
  *   --prompt=<variant>     prompt variant id passed to the service (default production prompt)
+ *   --grounding=<mode>     generic (default) | legacy (old Dice-floor over all foods) | off (model only)
  *   --limit=<n>            only the first n golden records
  *   --concurrency=<n>      parallel parses (default 3)
  *   --out=<dir>            where reports go (default scripts/golden/reports)
@@ -59,6 +60,7 @@ const args = Object.fromEntries(
 const goldenPath = args.golden || args._ || 'scripts/golden/nutrition5k.json';
 const models = (args.models || args.model || '').split(',').map((s) => s.trim()).filter(Boolean);
 const promptVariant = args.prompt || undefined;
+const grounding = args.grounding || undefined; // generic | legacy | off
 const limit = args.limit ? parseInt(args.limit, 10) : undefined;
 const concurrency = args.concurrency ? parseInt(args.concurrency, 10) : 3;
 const outDir = args.out || 'scripts/golden/reports';
@@ -126,7 +128,7 @@ const runs = models.length ? models : [undefined];
 let anyFail = false;
 for (const model of runs) {
   const label = model ?? 'production config';
-  console.log(`\n[run-nutrition-eval] ▶ ${label}${promptVariant ? ` (prompt=${promptVariant})` : ''}`);
+  console.log(`\n[run-nutrition-eval] ▶ ${label}${promptVariant ? ` (prompt=${promptVariant})` : ''}${grounding ? ` (grounding=${grounding})` : ''}`);
   const started = Date.now();
   let report;
   try {
@@ -134,6 +136,7 @@ for (const model of runs) {
       concurrency,
       model,
       promptVariant,
+      grounding,
       limit,
       outDir,
       onProgress: (done, total) => {

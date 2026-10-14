@@ -66,6 +66,12 @@ export const parsedFoodItemSchema = z.object({
   // Empty names are kept here so the plate-level schema can drop the item instead of
   // failing the whole parse; see photoParseResultSchema.
   name: textOr('').describe('Common food name, e.g. "grilled chicken breast"'),
+  // Lookup key for reference-database grounding (Phase 1): the plainest generic name for the
+  // same food in the same state, as a nutrition database lists it. Optional; stripped from the
+  // client-facing draft.
+  dbName: z.preprocess((v) => (typeof v === 'string' && v.trim() ? v.trim() : undefined), z.string().optional()).describe(
+    'Plain generic database name for this food in its cooked/raw state, e.g. "banana, raw", "rice, white, cooked", "chicken curry"',
+  ),
   quantity: nonNegative.describe('Estimated amount in the serving unit (midpoint if a range)'),
   quantityRange: rangeOrNull.describe(
     'Min/max when the model is uncertain; null when confident. UI defaults to quantity (midpoint).',

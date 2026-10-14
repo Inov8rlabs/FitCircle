@@ -6,6 +6,11 @@ import { z } from 'zod';
 
 export type FoodSource = 'off' | 'usda' | 'custom' | 'recipe';
 
+// USDA data type of a reference row (migration 098). The three generic types are what AI
+// grounding searches; `branded` and NULL (unclassified) are only reached by explicit search.
+export type FoodDataType = 'fndds' | 'sr_legacy' | 'foundation' | 'branded';
+export const GENERIC_FOOD_DATA_TYPES: readonly FoodDataType[] = ['fndds', 'sr_legacy', 'foundation'];
+
 // ============================================================================
 // DB row shape (snake_case, macros per 100g — the OFF/USDA convention)
 // ============================================================================
@@ -25,6 +30,9 @@ export interface FoodRow {
   fat_per_100g: number | null;
   fiber_per_100g: number | null;
   sugar_per_100g: number | null;
+  sodium_per_100g?: number | null;   // mg (098); optional so older fixtures/selects still type-check
+  data_type?: FoodDataType | null;   // 098
+  category?: string | null;          // 098
   locale: string | null;
   recipe_ingredients: Array<{ name: string; grams: number; food_id?: string }> | null;
   recipe_servings: number | null;
@@ -50,9 +58,22 @@ export interface FoodDTO {
     fatG: number | null;
     fiberG: number | null;
     sugarG: number | null;
+    sodiumMg?: number | null; // 098; absent on rows loaded before the generic layer
   };
   locale: string | null;
   isCustom: boolean; // source is 'custom' or 'recipe'
+  dataType?: FoodDataType | null; // 098
+  category?: string | null;       // 098
+}
+
+// A household-measure weight for a food (food_portions, 098): `amount` × `unit` = `gramWeight` g.
+export interface FoodPortionDTO {
+  id: number;
+  foodId: string;
+  amount: number;
+  unit: string;
+  description: string | null;
+  gramWeight: number;
 }
 
 // ============================================================================

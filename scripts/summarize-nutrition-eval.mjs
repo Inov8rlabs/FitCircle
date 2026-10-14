@@ -18,7 +18,7 @@ const latest = new Map();
 for (const f of files) {
   const r = JSON.parse(readFileSync(path.join(dir, f), 'utf8'));
   if (datasetFilter && r.datasetVersion !== datasetFilter) continue;
-  const key = `${r.datasetVersion}|${r.run?.model ?? 'production'}|${r.run?.promptVariant ?? ''}`;
+  const key = `${r.datasetVersion}|${r.run?.model ?? 'production'}|${r.run?.promptVariant ?? ''}|${r.run?.grounding ?? ''}`;
   latest.set(key, { file: f, r }); // sorted ascending → last write wins
 }
 
@@ -31,6 +31,7 @@ const rows = [...latest.values()].map(({ r }) => {
     dataset: r.datasetVersion,
     model: run.model ?? 'production',
     prompt: run.promptVariant ?? '',
+    ground: run.grounding ?? '',
     n: r.n,
     fail: run.parseFailures ?? 0,
     failPct: run.attempted ? pct(run.parseFailures / run.attempted) : '–',
@@ -49,6 +50,9 @@ const rows = [...latest.values()].map(({ r }) => {
     fatMAPE: pct(o.fatMape),
     dbCov: pct(o.dbMatchCoverage),
     grndOK: pct(o.groundingCorrectness),
+    // paired ablation (same model outputs, grounding off) when the run captured rawItems
+    in40_off: pct(r.ablation?.modelOnly?.within40Rate),
+    mape_off: pct(r.ablation?.modelOnly?.calMape),
     ece: num(r.ece, 3),
     p50s: run.latencyMsP50 != null ? (run.latencyMsP50 / 1000).toFixed(1) : '–',
     p95s: run.latencyMsP95 != null ? (run.latencyMsP95 / 1000).toFixed(1) : '–',

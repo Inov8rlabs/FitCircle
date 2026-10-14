@@ -212,3 +212,19 @@ describe('NutritionIntelligenceService.repairPhotoJson — second chance for nea
     expect(NutritionIntelligenceService.repairPhotoJson(undefined)).toBeNull();
   });
 });
+
+describe('NutritionIntelligenceService.photoPromptVariant', () => {
+  it('production uses plate-coverage anchors (not the shrink rules) and asks for dbName', () => {
+    const prod = NutritionIntelligenceService.photoPromptVariant();
+    expect(prod).toContain('dbName');
+    expect(prod).not.toContain('choose the SMALLER');
+    expect(prod).not.toContain('revise the portions DOWN');
+    expect(prod).toContain('Do not shrink a clearly full plate');
+    const shrink = NutritionIntelligenceService.photoPromptVariant('shrink');
+    expect(shrink).toContain('choose the SMALLER');
+    expect(shrink).not.toBe(prod);
+    expect(NutritionIntelligenceService.photoPromptVariant('scale')).toBe(prod);
+    expect(NutritionIntelligenceService.photoPromptVariant('scale_fat')).toContain('HIDDEN FAT');
+    expect(NutritionIntelligenceService.photoPromptVariant('nope')).toBe(prod);
+  });
+});

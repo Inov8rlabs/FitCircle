@@ -3,6 +3,7 @@ import { createHash } from 'crypto';
 import * as Sentry from '@sentry/nextjs';
 import { generateText, Output } from 'ai';
 
+
 import { createAdminSupabase } from '../supabase-admin';
 import type { FoodDTO } from '../types/foods';
 import {
@@ -19,6 +20,7 @@ import { FoodLogImageService } from './food-log-image-service';
 import { FoodLogService } from './food-log-service';
 import { FoodsSemanticService, type SemanticCandidate } from './foods-semantic-service';
 import { FoodsService } from './foods-service';
+import { NutritionGroundingService, type GroundingMode } from './nutrition-grounding-service';
 import { UsageService } from './usage-service';
 
 /**
@@ -58,6 +60,8 @@ export interface ParsePhotoOptions {
   bypassCache?: boolean;
   bypassQuota?: boolean;
   promptVariant?: string;
+  /** Grounding strategy (default: NUTRITION_GROUNDING_MODE env, else 'generic'). Eval/bake-off seam. */
+  grounding?: GroundingMode;
 }
 
 export interface ParsePhotoStats {
@@ -67,6 +71,10 @@ export interface ParsePhotoStats {
   latencyMs: number;
   inputTokens?: number;
   outputTokens?: number;
+  /** The vision model's items BEFORE grounding (eval ablations: same model output, grounding on/off). */
+  rawItems?: ParsedFoodItem[];
+  /** Matched reference kcal/100 g per draft item (null = unmatched), from the grounding step. */
+  dbKcalPer100g?: Array<number | null>;
 }
 
 interface ModelUsage {
@@ -93,7 +101,9 @@ const PHOTO_FALLBACK_TIMEOUT_MS = 22_000;
 const TEXT_PRIMARY_TIMEOUT_MS = 15_000;
 const TEXT_FALLBACK_TIMEOUT_MS = 20_000;
 
-const SYSTEM_PROMPT = [
+// The pre-2026-10-14 production prompt ("when torn, choose the SMALLER / revise DOWN"). Kept as the
+// `shrink` eval variant; it under-estimated plates over 400 kcal by 31–47% (plan doc §3a/§3c).
+const SHRINK_SYSTEM_PROMPT = [
   'You are a careful nutrition estimation assistant. Given a photo of a meal, identify every distinct',
   'food component and estimate its quantity and macros.',
   'Rules:',
@@ -106,6 +116,9 @@ const SYSTEM_PROMPT = [
   '- Macros are for the WHOLE item at the estimated grams: calories, proteinG, carbsG, fatG, fiberG,',
   '  sugarG (grams) and sodiumMg (milligrams). Give your best estimate for every field.',
   '- confidence (per item) and overallConfidence are 0..1.',
+  '- dbName is the plainest generic name for the SAME food in the SAME state as a nutrition database lists it,',
+  '  noun first: "banana, raw", "rice, white, cooked", "egg, scrambled", "chicken curry", "tomatoes, cherry, raw".',
+  '  Keep brand, dish and garnish words out of dbName; name stays the friendly display name.',
   '- NUMBER FORMAT: every number is a plain decimal with AT MOST ONE decimal place (e.g. 12.5, 0.3, 180).',
   '  Never write long decimal expansions.',
   '- Do not invent foods you cannot see. If the plate is unclear, return fewer items with lower confidence.',
@@ -125,6 +138,12 @@ const SYSTEM_PROMPT = [
   '  If the total seems high for the amount visible, revise the portions DOWN before returning.',
 ].join(' ');
 
+// toDraft carries the matched reference density as an eval side channel; it is not part of the DTO.
+function stripDbDensity<T extends { dbKcalPer100g?: unknown }>(d: T): Omit<T, 'dbKcalPer100g'> {
+  const { dbKcalPer100g: _ignored, ...rest } = d;
+  return rest;
+}
+
 // Structured output for the photo parse. PHOTO_OUTPUT_JSON_MODE keeps the same Zod parsing but
 // asks the provider for plain JSON mode instead of json_schema (see modelCallOptions.nativeSchema).
 const PHOTO_OUTPUT = Output.object({ schema: photoParseResultSchema });
@@ -138,18 +157,54 @@ const PHOTO_OUTPUT_JSON_MODE: typeof PHOTO_OUTPUT = {
 // guessing key names from the rules above.
 const RESPONSE_SHAPE_PROMPT = [
   'RESPONSE FORMAT: reply with ONE JSON object and nothing else — no prose, no markdown fences:',
-  '{"items":[{"name":string,"quantity":number,"quantityRange":{"min":number,"max":number}|null,',
+  '{"items":[{"name":string,"dbName":string,"quantity":number,"quantityRange":{"min":number,"max":number}|null,',
   '"servingUnit":string,"grams":number,"gramsPerUnit":number,"calories":number,"proteinG":number,',
   '"carbsG":number,"fatG":number,"fiberG":number,"sugarG":number,"sodiumMg":number,"confidence":number}],',
   '"overallConfidence":number,"notes":string|null}',
 ].join(' ');
 
+// Hidden-fat rule (candidate): the NIH metabolic-kitchen test of four photo apps (NUTRITION 2026)
+// found every app, Cal AI included, ~33% low on calories and ~30 g/meal low on fat — cooking oil,
+// butter, ghee, dressings and cheese that the photo does not show. Our own fat MAPE is 74–111%.
+const HIDDEN_FAT_RULES = [
+  'HIDDEN FAT — the most common reason estimates run low: assume the normal cooking fat for how a food was',
+  'prepared and include it in that item\'s fatG and calories. Sautéed, stir-fried or pan-fried vegetables/meat:',
+  '+1 tsp oil (5 g, 45 kcal) per ~100 g; roasted vegetables: +1 tsp oil per cup; fried or breaded items:',
+  '15-25% of weight is absorbed fat; curries, dals and gravies: 1-2 tbsp oil/ghee/cream per serving; dressed',
+  'salads: 1-2 tbsp dressing (10-20 g fat); buttered toast/rice/vegetables: +1 tsp butter each; cheese on',
+  'anything: 15-30 g. Restaurant and takeout dishes use MORE fat than home cooking. Only skip added fat',
+  'when the food is clearly steamed, boiled, raw or dry.',
+].join(' ');
+
+// PRODUCTION prompt (promoted 2026-10-14, plan doc §3c): the shrink-biased rules replaced by
+// plate-coverage anchors and a symmetric sanity check. Eval vs the shrink prompt, same grounding:
+// SNAPMe kcal±40% 61–63% → 66% (bias −7% → −2%), Nutrition5k 67% → 69% (bias +5% → −3%).
+// (The joined prompt has irregular spacing at line breaks, hence regex replacement.)
+const SYSTEM_PROMPT = SHRINK_SYSTEM_PROMPT
+  .replace(
+    /- When torn between two portion sizes, choose the SMALLER\.[\s\S]*?more harmful error here\./,
+    '- When torn between two portion sizes, use the plate coverage to decide: food covering a full dinner plate to the rim is typically 400-700 g in total, a half-covered plate 200-350 g, a side bowl or katori 100-180 g, a small snack plate under 150 g. Do not shrink a clearly full plate.',
+  )
+  .replace(
+    /- Sanity-check the whole plate:[\s\S]*?revise the portions DOWN before returning\./,
+    '- Sanity-check the whole plate: the total grams should match the plate coverage above and the sum of calories should look right for that weight. Revise portions UP or DOWN as needed before returning; a full plate of rice, meat and vegetables is rarely under 500 kcal, a small snack rarely over 250 kcal.',
+  );
+
 // Named prompt variants for the eval harness (`--prompt=<id>`). `production` is what ships;
-// new candidates are added here, measured against it on the golden set, and promoted by
+// new candidates are added here, measured against it on the golden sets, and promoted by
 // becoming the new SYSTEM_PROMPT. Unknown ids fall back to production.
 const PHOTO_PROMPT_VARIANTS: Record<string, string> = {
   production: SYSTEM_PROMPT,
+  // The previous production prompt, for regression comparisons.
+  shrink: SHRINK_SYSTEM_PROMPT,
+  // Same as production (kept so older eval reports' `--prompt=scale` runs stay reproducible).
+  scale: SYSTEM_PROMPT,
+  // Candidate: explicit hidden-fat accounting on top of the old prompt (see HIDDEN_FAT_RULES).
+  fat: `${SHRINK_SYSTEM_PROMPT} ${HIDDEN_FAT_RULES}`,
 };
+// Candidate: production + hidden-fat accounting.
+PHOTO_PROMPT_VARIANTS.scale_fat = `${SYSTEM_PROMPT} ${HIDDEN_FAT_RULES}`;
+
 
 // Single-item re-estimate: the user corrected a food's name (or set a portion) and wants its
 // macros recomputed for that exact food and amount. Text-only — same model family as voice.
@@ -222,7 +277,7 @@ export class NutritionIntelligenceService {
     const hint = note?.trim() || null;
     const primaryModel = opts.model ?? VISION_MODEL;
     const fallbackModel = opts.fallbackModel === undefined ? FAST_FALLBACK_MODEL : opts.fallbackModel;
-    const systemPrompt = PHOTO_PROMPT_VARIANTS[opts.promptVariant ?? 'production'] ?? SYSTEM_PROMPT;
+    const systemPrompt = this.photoPromptVariant(opts.promptVariant);
 
     // 1. Cost guard — content hash cache so an identical request never re-bills (§7.6).
     //    The key covers every image plus the note (a different note must not hit a stale
@@ -243,14 +298,14 @@ export class NutritionIntelligenceService {
     const imageHash = hasher.digest('hex');
     const cached = opts.bypassCache ? null : await this.getCachedResult(imageHash);
     if (cached) {
+      const { dbKcalPer100g, ...draft } = await this.toDraft(userId, cached, VISION_MODEL, true, 'photo', 'llm_vision', opts.grounding);
       return {
-        draft: {
-          ...(await this.toDraft(userId, cached, VISION_MODEL, true, 'photo', 'llm_vision')),
-          parseHash: imageHash,
-        },
+        draft: { ...draft, parseHash: imageHash },
         model: VISION_MODEL,
         cached: true,
         latencyMs: 0,
+        rawItems: cached.items,
+        dbKcalPer100g,
       };
     }
 
@@ -335,14 +390,14 @@ export class NutritionIntelligenceService {
     //    run bypasses the cache entirely so it never seeds production with eval outputs.
     if (!opts.bypassCache) await this.recordParse(userId, imageHash, result);
 
+    const { dbKcalPer100g, ...draft } = await this.toDraft(userId, result, model, false, 'photo', 'llm_vision', opts.grounding);
     return {
-      draft: {
-        ...(await this.toDraft(userId, result, model, false, 'photo', 'llm_vision')),
-        parseHash: imageHash,
-      },
+      draft: { ...draft, parseHash: imageHash },
       model,
       cached: false,
       latencyMs,
+      rawItems: result.items,
+      dbKcalPer100g,
       inputTokens: usage.inputTokens,
       outputTokens: usage.outputTokens,
     };
@@ -395,7 +450,7 @@ export class NutritionIntelligenceService {
     await this.recordParseLog(userId, transcriptHash);
 
     return {
-      ...(await this.toDraft(userId, result, model, false, 'voice', 'llm_voice')),
+      ...stripDbDensity(await this.toDraft(userId, result, model, false, 'voice', 'llm_voice')),
       parseHash: transcriptHash,
     };
   }
@@ -658,6 +713,11 @@ export class NutritionIntelligenceService {
    * (2026-09-16 item, 2026-09-22 photo). Ask Gemini for minimal thinking and leave
    * headroom for whatever it still spends.
    */
+  /** The photo system prompt for a named variant (eval harness `--prompt=`); unknown ids → production. */
+  static photoPromptVariant(id?: string): string {
+    return PHOTO_PROMPT_VARIANTS[id ?? 'production'] ?? SYSTEM_PROMPT;
+  }
+
   static modelCallOptions(model: string, answerTokens: number): {
     maxOutputTokens: number;
     providerOptions: Record<string, Record<string, unknown>>;
@@ -991,10 +1051,12 @@ export class NutritionIntelligenceService {
     cachedFlag: boolean,
     inputMethod: NutritionDraftDTO['inputMethod'],
     nutritionSource: NutritionDraftDTO['nutritionSource'],
-  ): Promise<NutritionDraftDTO> {
-    // Ground each parsed item against the foods DB (authoritative macros) where we
-    // can confidently match; otherwise keep the model's estimate.
-    const items = await this.groundItems(userId, result.items);
+    grounding?: GroundingMode,
+  ): Promise<NutritionDraftDTO & { dbKcalPer100g?: Array<number | null> }> {
+    // Ground each parsed item against the foods DB where we can confidently match; the
+    // reference row supplies provenance, sodium and unit weights, and replaces the model's
+    // macros only when the model's density is implausible (NutritionGroundingService).
+    const { items, dbKcalPer100g } = await this.groundItemsByMode(userId, result.items, grounding);
 
     const totals = items.reduce(
       (acc, it) => ({
@@ -1018,10 +1080,32 @@ export class NutritionIntelligenceService {
       cached: cachedFlag,
       totals,
       healthScore: this.healthScore(totals),
+      ...(dbKcalPer100g ? { dbKcalPer100g } : {}),
     };
   }
 
   // MARK: - DB grounding (PRD §7.2.1 single-source-of-truth)
+
+  /**
+   * 'generic' (default): NutritionGroundingService — generic USDA layer + model picker +
+   * portion priors (Phase 1). 'legacy': the Dice-floor grounding below over the whole foods
+   * table, kept for A/B evals. 'off': the model's own numbers.
+   */
+  private static async groundItemsByMode(
+    userId: string,
+    items: ParsedFoodItem[],
+    mode: GroundingMode = NutritionGroundingService.modeFromEnv(),
+  ): Promise<{ items: NutritionDraftItem[]; dbKcalPer100g?: Array<number | null> }> {
+    if (mode === 'legacy') return { items: await this.groundItems(userId, items) };
+    try {
+      const { items: grounded, stats } = await NutritionGroundingService.ground(userId, items, { mode });
+      return { items: grounded, dbKcalPer100g: stats.dbKcalPer100g };
+    } catch (err) {
+      console.warn('[nutrition] generic grounding failed, keeping model estimates:', (err as Error)?.message);
+      const { items: plain } = await NutritionGroundingService.ground(userId, items, { mode: 'off' });
+      return { items: plain };
+    }
+  }
 
   /**
    * For each parsed item, look it up in the foods DB and — when we find a

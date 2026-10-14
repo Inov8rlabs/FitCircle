@@ -6,6 +6,7 @@ import type { PhotoParseResult } from '../types/nutrition';
 import type { EvalCase, EvalReport, EvalRunStats, GoldenRecord } from '../types/nutrition-eval';
 
 import { buildReport } from './nutrition-eval';
+import type { GroundingMode } from './nutrition-grounding-service';
 import { NutritionIntelligenceService, type ParsePhotoOptions } from './nutrition-intelligence-service';
 
 /**
@@ -66,6 +67,8 @@ export interface RunOptions {
   /** Bake-off: the vision model to test (overrides production primary; disables fallback/cache/quota). */
   model?: string;
   promptVariant?: string;
+  /** Grounding strategy to evaluate ('generic' | 'legacy' | 'off'); default = service default. */
+  grounding?: GroundingMode;
   /** Only run the first N golden records (after loading). */
   limit?: number;
   /** Directory to persist the JSON report + per-case outputs into (created if missing). */
@@ -187,9 +190,9 @@ export class NutritionEvalRunner {
     }
 
     const parseOpts: ParsePhotoOptions | undefined = opts.model
-      ? { model: opts.model, fallbackModel: null, bypassCache: true, bypassQuota: true, promptVariant: opts.promptVariant }
-      : opts.promptVariant
-        ? { bypassCache: true, bypassQuota: true, promptVariant: opts.promptVariant }
+      ? { model: opts.model, fallbackModel: null, bypassCache: true, bypassQuota: true, promptVariant: opts.promptVariant, grounding: opts.grounding }
+      : opts.promptVariant || opts.grounding
+        ? { bypassCache: true, bypassQuota: true, promptVariant: opts.promptVariant, grounding: opts.grounding }
         : { bypassQuota: true };
 
     let parsed;
@@ -215,9 +218,12 @@ export class NutritionEvalRunner {
 
     // Stage 4 from the real grounding path: grounded items carry matchedFoodId and DB density.
     const dbMatches = draft.items.map((it) => it.matchedFoodId != null);
-    const groundedKcalPer100g = draft.items.map((it) =>
-      it.matchedFoodId != null && it.grams > 0 ? (it.calories / it.grams) * 100 : null,
-    );
+    // Prefer the matched row's own density (side channel from the grounding step); the item's
+    // final density equals it only when grounding replaced the model's macros.
+    const groundedKcalPer100g =
+      parsed.dbKcalPer100g && parsed.dbKcalPer100g.length === draft.items.length
+        ? parsed.dbKcalPer100g
+        : draft.items.map((it) => (it.matchedFoodId != null && it.grams > 0 ? (it.calories / it.grams) * 100 : null));
 
     // Stage 1 semantic assist: embedding cosine between every predicted and truth name, so
     // "large boiled egg" can match FNDDS's "Egg, whole, boiled or poached". Best-effort.
@@ -234,6 +240,7 @@ export class NutritionEvalRunner {
         dbMatches,
         groundedKcalPer100g,
         nameSimilarities,
+        rawItems: parsed.rawItems,
         latencyMs: parsed.latencyMs,
         inputTokens: parsed.inputTokens,
         outputTokens: parsed.outputTokens,
@@ -293,6 +300,7 @@ export class NutritionEvalRunner {
     const saved = JSON.parse(readFileSync(casesPath, 'utf8')) as {
       model?: string;
       promptVariant?: string | null;
+      grounding?: GroundingMode | null;
       datasetVersion?: string;
       failures?: Array<{ id: string; error: string }>;
       cases: Array<Omit<EvalCase, 'golden'> & { id: string }>;
@@ -311,7 +319,7 @@ export class NutritionEvalRunner {
       cases.push({ ...c, golden, nameSimilarities, model: c.model ?? saved.model });
     }
     const attempted = cases.length + (saved.failures?.length ?? 0);
-    const runOpts: RunOptions = { model: saved.model, promptVariant: saved.promptVariant ?? undefined, outDir: opts.outDir };
+    const runOpts: RunOptions = { model: saved.model, promptVariant: saved.promptVariant ?? undefined, grounding: saved.grounding ?? undefined, outDir: opts.outDir };
     const run = this.runStats(cases, attempted, saved.failures?.length ?? 0, runOpts);
     const report = buildReport(cases, saved.datasetVersion ?? goldenSet[0]?.datasetVersion ?? 'unknown', run);
     if (opts.outDir) this.persist(report, cases, saved.failures ?? [], runOpts);
@@ -334,6 +342,7 @@ export class NutritionEvalRunner {
     return {
       model,
       promptVariant: opts.promptVariant ?? null,
+      grounding: opts.grounding ?? null,
       attempted,
       parsed: cases.length,
       parseFailures,
@@ -357,7 +366,7 @@ export class NutritionEvalRunner {
     mkdirSync(dir, { recursive: true });
     const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
     const slug = (report.run?.model ?? 'production').replace(/[^a-z0-9.]+/gi, '_');
-    const variant = opts.promptVariant ? `-${opts.promptVariant}` : '';
+    const variant = `${opts.promptVariant ? `-${opts.promptVariant}` : ''}${opts.grounding ? `-ground_${opts.grounding}` : ''}`;
     const base = `${stamp}-${slug}${variant}`;
     writeFileSync(path.join(dir, `${base}.report.json`), JSON.stringify(report, null, 2));
     writeFileSync(
@@ -366,6 +375,7 @@ export class NutritionEvalRunner {
         {
           model: report.run?.model,
           promptVariant: opts.promptVariant ?? null,
+          grounding: opts.grounding ?? null,
           datasetVersion: report.datasetVersion,
           failures,
           cases: cases.map((c) => ({
@@ -374,6 +384,7 @@ export class NutritionEvalRunner {
             dbMatches: c.dbMatches,
             groundedKcalPer100g: c.groundedKcalPer100g,
             nameSimilarities: c.nameSimilarities,
+            rawItems: c.rawItems,
             latencyMs: c.latencyMs,
             inputTokens: c.inputTokens,
             outputTokens: c.outputTokens,

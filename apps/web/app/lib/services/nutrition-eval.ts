@@ -236,6 +236,26 @@ export function buildReport(cases: EvalCase[], datasetVersion: string, run?: Eva
   const overall = aggregate('overall', scored);
   const ece = expectedCalibrationError(scored);
 
+  // Paired ablation: re-score the same cases on the model's pre-grounding items, so the report
+  // shows what grounding itself contributed on identical model outputs.
+  const withRaw = cases.filter((c) => Array.isArray(c.rawItems) && c.rawItems.length === c.modelOutput.items.length);
+  const ablation =
+    withRaw.length > 0 && withRaw.some((c) => c.dbMatches.some(Boolean))
+      ? {
+          modelOnly: aggregate(
+            'overall (grounding off, same outputs)',
+            withRaw.map((c) =>
+              scoreRecord({
+                ...c,
+                modelOutput: { ...c.modelOutput, items: c.rawItems! },
+                dbMatches: c.rawItems!.map(() => false),
+                groundedKcalPer100g: c.rawItems!.map(() => null),
+              }),
+            ),
+          ),
+        }
+      : undefined;
+
   // Per-slice breakdowns across the four slice dimensions.
   const bySlice: SliceReport[] = [];
   const dims: Array<keyof ScoredRecord['slices']> = ['cuisine', 'mealType', 'difficulty', 'lighting'];
@@ -271,5 +291,6 @@ export function buildReport(cases: EvalCase[], datasetVersion: string, run?: Eva
 
   const report: EvalReport = { datasetVersion, n: scored.length, overall, bySlice, ece, thresholds: t, pass: failures.length === 0, failures };
   if (run) report.run = run;
+  if (ablation) report.ablation = ablation;
   return report;
 }

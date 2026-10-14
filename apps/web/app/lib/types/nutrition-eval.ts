@@ -6,7 +6,7 @@
 // runs deterministically in CI. The runner (separate) feeds golden images through the live
 // parsePhoto pipeline to PRODUCE the model outputs; scoring is decoupled and testable.
 
-import type { PhotoParseResult } from './nutrition';
+import type { ParsedFoodItem, PhotoParseResult } from './nutrition';
 
 // ============================================================================
 // Golden record (versioned, reviewable artifact — §8.3). Ground truth for one image.
@@ -104,6 +104,7 @@ export interface SliceReport {
 export interface EvalRunStats {
   model: string;                 // the vision model under test
   promptVariant: string | null;
+  grounding?: string | null;     // grounding strategy for the run (null = service default)
   attempted: number;             // golden records attempted
   parsed: number;                // records that produced a scorable output
   parseFailures: number;         // attempts that threw (schema/timeout/provider)
@@ -125,6 +126,10 @@ export interface EvalReport {
   pass: boolean;            // every tracked metric meets its threshold
   failures: string[];       // human-readable list of which metrics missed
   run?: EvalRunStats;
+  // Paired ablation on the SAME model outputs (present when cases carry rawItems): the overall
+  // metrics the run would have scored with grounding off. Compare with `overall` to see what
+  // grounding itself contributed, free of run-to-run model noise.
+  ablation?: { modelOnly: SliceReport };
 }
 
 // ============================================================================
@@ -172,6 +177,9 @@ export interface EvalCase {
   // max(tokenDice, semantic) so FNDDS-style truth labels ("Egg, whole, boiled or poached")
   // still match a model's "large boiled egg". Scorers stay pure: the runner does the I/O.
   nameSimilarities?: number[][];
+  // Optional: the model's items before grounding (parallel to modelOutput.items), so a report
+  // can compare grounded vs model-only totals on the SAME model output (no run-to-run noise).
+  rawItems?: ParsedFoodItem[];
   // Optional per-case observability from the runner.
   latencyMs?: number;
   inputTokens?: number;

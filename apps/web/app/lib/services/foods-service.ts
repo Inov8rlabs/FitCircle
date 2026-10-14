@@ -7,6 +7,8 @@ import {
   type FoodSearchParams,
   FOOD_SEARCH_DEFAULT_LIMIT,
   FOOD_SEARCH_MAX_LIMIT,
+  GENERIC_FOOD_DATA_TYPES,
+  type FoodPortionDTO,
 } from '../types/foods';
 
 import { DietaryPreferencesService } from './dietary-preferences-service';
@@ -18,6 +20,11 @@ import { DietaryPreferencesService } from './dietary-preferences-service';
  * Authorization is explicit in-code (the service uses the admin client): search and reads are
  * scoped to global reference rows (owner_id IS NULL) OR the requesting user's own custom rows.
  */
+// USDA's "default" rows for a food — the plain variant a photo most often means.
+const PLAIN_ROW_RE = /\b(NFS|NS as to|not added in cooking|regular|raw|cooked)\b/i;
+// Preparation-state words: weak evidence of identity in overlap scoring (stemmed forms).
+const STATE_TOKENS = new Set(['raw', 'cooked', 'boiled', 'fried', 'grilled', 'roasted', 'baked', 'steamed', 'dried', 'canned', 'frozen', 'ripe', 'whole', 'fat', 'added', 'not', 'nf', 'n', 'type', 'with', 'without']);
+
 export class FoodsService {
   /**
    * Full-text + trigram search over global reference foods AND the user's custom foods/recipes.
@@ -78,6 +85,120 @@ export class FoodsService {
       .map((x) => this.toDTO(x.row));
 
     return ranked;
+  }
+
+  /**
+   * Candidate retrieval for AI grounding (Phase 1 of the food-AI accuracy plan): searches ONLY
+   * the generic USDA layer (FNDDS / SR Legacy / Foundation, migration 098) plus the user's own
+   * custom foods and recipes — never the 1.86M branded rows, which is where "fresh banana" used
+   * to land on "FRESH BANANA NUT MUFFIN". Over-fetches via FTS (AND), then widens to an OR of
+   * the content tokens when the strict query is too narrow, and ranks by token overlap.
+   * Returns at most `limit` rows (default 6). Failure-isolated: errors yield [].
+   */
+  static async searchGeneric(userId: string, query: string, limit = 6): Promise<FoodDTO[]> {
+    const supabase = createAdminSupabase();
+    const q = query.trim();
+    if (!q) return [];
+    const visible = `and(owner_id.is.null,data_type.in.(${GENERIC_FOOD_DATA_TYPES.join(',')})),owner_id.eq.${userId}`;
+    const overFetch = 60;
+    const stems = this.contentTokens(q);
+    if (!stems.length) return [];
+    let rows: FoodRow[] = [];
+    try {
+      // Stemmed prefix terms ("egg:*" matches "eggs", "tomato:*" matches "Tomatoes") — the
+      // search_vector uses the 'simple' config, which does no stemming of its own.
+      const prefix = (t: string) => `${t.replace(/[^a-z0-9]/g, '')}:*`;
+      const { data } = await supabase
+        .from('foods')
+        .select('*')
+        .or(visible)
+        .textSearch('search_vector', stems.map(prefix).join(' & '), { config: 'simple' })
+        .limit(overFetch);
+      rows = (data ?? []) as FoodRow[];
+      if (rows.length < 5 && stems.length > 1) {
+        // Widen to ANY food word (never the state words alone — "raw" alone matches thousands).
+        const foodStems = stems.filter((t) => !STATE_TOKENS.has(t));
+        const { data: wide } = await supabase
+          .from('foods')
+          .select('*')
+          .or(visible)
+          .textSearch('search_vector', (foodStems.length ? foodStems : stems).map(prefix).join(' | '), { config: 'simple' })
+          .limit(overFetch * 2);
+        const seen = new Set(rows.map((r) => r.id));
+        for (const r of (wide ?? []) as FoodRow[]) if (!seen.has(r.id)) rows.push(r);
+      }
+    } catch {
+      return [];
+    }
+    const qTokens = new Set(stems);
+    // State words (raw/cooked/fried…) matter for the pick but are weak evidence that a row is
+    // the same FOOD, so they weigh less in overlap; a row must share at least one food word.
+    const w = (t: string) => (STATE_TOKENS.has(t) ? 0.3 : 1);
+    const qWeight = [...qTokens].reduce((n, t) => n + w(t), 0);
+    const scored = rows.map((r) => {
+      const nTokens = new Set(this.contentTokens(r.name));
+      let inter = 0;
+      let foodHit = false;
+      for (const t of qTokens) if (nTokens.has(t)) { inter += w(t); if (!STATE_TOKENS.has(t)) foodHit = true; }
+      const nWeight = [...nTokens].reduce((n, t) => n + w(t), 0);
+      const dice = qWeight && nWeight ? (2 * inter) / (qWeight + nWeight) : 0;
+      const coverage = qWeight ? inter / qWeight : 0; // how much of the query the name explains
+      let score = foodHit ? 0.5 * dice + 0.5 * coverage : 0;
+      if (r.owner_id === userId) score += 0.3;                       // the user's own foods first
+      if (r.data_type === 'fndds') score += 0.03;                     // "as eaten" dishes over raw ingredients
+      if (PLAIN_ROW_RE.test(r.name)) score += 0.06;                   // USDA's generic/default variant of a food
+      if (r.name.length > 80) score -= 0.02;                         // very long SR names are usually sub-variants
+      return { r, score };
+    });
+    scored.sort((a, b) => b.score - a.score);
+    return scored.slice(0, limit).map((x) => this.toDTO(x.r));
+  }
+
+  /** Household-measure weights for a set of foods (food_portions, 098). Failure-isolated. */
+  static async portionsFor(foodIds: string[]): Promise<Map<string, FoodPortionDTO[]>> {
+    const out = new Map<string, FoodPortionDTO[]>();
+    const ids = [...new Set(foodIds.filter(Boolean))];
+    if (!ids.length) return out;
+    try {
+      const supabase = createAdminSupabase();
+      const { data } = await supabase
+        .from('food_portions')
+        .select('id, food_id, amount, unit, description, gram_weight, seq_num')
+        .in('food_id', ids)
+        .order('seq_num', { ascending: true })
+        .limit(ids.length * 20);
+      for (const p of (data ?? []) as Array<{ id: number; food_id: string; amount: number; unit: string; description: string | null; gram_weight: number }>) {
+        const list = out.get(p.food_id) ?? [];
+        list.push({ id: p.id, foodId: p.food_id, amount: Number(p.amount), unit: p.unit, description: p.description, gramWeight: Number(p.gram_weight) });
+        out.set(p.food_id, list);
+      }
+    } catch {
+      /* portions are a prior, never a blocker */
+    }
+    return out;
+  }
+
+  private static readonly STOP_TOKENS = new Set(['and', 'with', 'the', 'of', 'in', 'on', 'or', 'a', 'an', 'to', 'for', 'fresh', 'some', 'style', 'homemade', 'plain', 'sliced', 'slices', 'chopped', 'diced', 'pieces', 'piece', 'cubes', 'cubed', 'bowl', 'cup', 'small', 'medium', 'large', 'nfs', 'ns', 'as']);
+  /**
+   * Lower-case, lightly stemmed content tokens (eggs→egg, tomatoes→tomato, berries→berri) minus
+   * filler/size words, for overlap scoring and prefix FTS terms. Same function on both sides so
+   * the stems only ever need to agree with themselves.
+   */
+  static contentTokens(s: string): string[] {
+    return s
+      .toLowerCase()
+      .replace(/[^a-z0-9\s]/g, ' ')
+      .split(/\s+/)
+      .filter((t) => t.length > 1 && !this.STOP_TOKENS.has(t))
+      .map((t) => this.stem(t));
+  }
+  private static stem(t: string): string {
+    if (t.length <= 3) return t;
+    if (t.endsWith('ies')) return `${t.slice(0, -3)}y`;
+    if (t.endsWith('oes') || t.endsWith('ches') || t.endsWith('shes') || t.endsWith('sses')) return t.slice(0, -2);
+    if (t.endsWith('ss') || t.endsWith('us')) return t;
+    if (t.endsWith('s')) return t.slice(0, -1);
+    return t;
   }
 
   /** Exact barcode lookup against global reference rows. null when not found. */
@@ -255,9 +376,12 @@ export class FoodsService {
         fatG: r.fat_per_100g,
         fiberG: r.fiber_per_100g,
         sugarG: r.sugar_per_100g,
+        sodiumMg: r.sodium_per_100g ?? null,
       },
       locale: r.locale,
       isCustom: r.source === 'custom' || r.source === 'recipe',
+      dataType: r.data_type ?? null,
+      category: r.category ?? null,
     };
   }
 }
