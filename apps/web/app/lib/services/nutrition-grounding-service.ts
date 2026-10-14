@@ -22,7 +22,7 @@ import { generateText, Output } from 'ai';
 import { z } from 'zod';
 
 import type { FoodDTO, FoodPortionDTO } from '../types/foods';
-import type { NutritionDraftItem, ParsedFoodItem, UnitOption } from '../types/nutrition';
+import type { DraftAlternate, NutritionDraftItem, ParsedFoodItem, UnitOption } from '../types/nutrition';
 
 import { FoodsService } from './foods-service';
 
@@ -31,6 +31,8 @@ export type GroundingMode = 'generic' | 'legacy' | 'off';
 export const DEFAULT_PICKER_MODEL = 'anthropic/claude-haiku-5.5';
 const PICKER_TIMEOUT_MS = 8_000;
 const CANDIDATES_PER_ITEM = 8;
+/** "Did you mean…" alternates returned per item. */
+const MAX_ALTERNATES = 3;
 /** Fallback (no picker): accept a candidate only on a strict token Dice. */
 const FALLBACK_DICE_FLOOR = 0.75;
 /** Portion prior: correct the model's gramsPerUnit when it is outside [1/PRIOR_RATIO, PRIOR_RATIO] × USDA
@@ -121,12 +123,14 @@ export class NutritionGroundingService {
 
     const out = items.map((it, i) => {
       const food = matched[i];
-      if (!food || food.per100g.calories == null) return this.ungrounded(it);
+      // "Did you mean…": the other candidates, for a one-tap swap on the confirm card.
+      const alternates = this.alternates(candidates[i], food?.id ?? null);
+      if (!food || food.per100g.calories == null) return { ...this.ungrounded(it), ...(alternates.length ? { alternates } : {}) };
       stats.grounded++;
       stats.dbKcalPer100g[i] = food.per100g.calories;
       const applied = this.apply(it, food, portions.get(food.id) ?? []);
       if (applied.grams > 0 && it.grams > 0 && Math.abs(applied.calories / applied.grams - it.calories / it.grams) > 1e-6 * (it.calories / it.grams || 1)) stats.replaced++;
-      return applied;
+      return alternates.length ? { ...applied, alternates } : applied;
     });
     return { items: out, stats };
   }
@@ -144,6 +148,30 @@ export class NutritionGroundingService {
       if (out.length >= CANDIDATES_PER_ITEM) break;
     }
     return out.slice(0, CANDIDATES_PER_ITEM);
+  }
+
+  /** Up to MAX_ALTERNATES candidates other than the picked row, with the panel the client needs to swap locally. */
+  static alternates(candidates: FoodDTO[], pickedId: string | null): DraftAlternate[] {
+    const out: DraftAlternate[] = [];
+    for (const f of candidates) {
+      if (f.id === pickedId || f.per100g.calories == null) continue;
+      if (out.some((o) => o.name.toLowerCase() === f.name.toLowerCase())) continue;
+      out.push({
+        foodId: f.id,
+        name: f.name,
+        per100g: {
+          calories: f.per100g.calories,
+          proteinG: f.per100g.proteinG ?? 0,
+          carbsG: f.per100g.carbsG ?? 0,
+          fatG: f.per100g.fatG ?? 0,
+          fiberG: f.per100g.fiberG ?? 0,
+          sugarG: f.per100g.sugarG ?? 0,
+          ...(f.per100g.sodiumMg != null ? { sodiumMg: f.per100g.sodiumMg } : {}),
+        },
+      });
+      if (out.length >= MAX_ALTERNATES) break;
+    }
+    return out;
   }
 
   // MARK: - picking

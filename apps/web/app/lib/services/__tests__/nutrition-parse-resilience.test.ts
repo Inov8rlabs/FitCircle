@@ -228,3 +228,21 @@ describe('NutritionIntelligenceService.photoPromptVariant', () => {
     expect(NutritionIntelligenceService.photoPromptVariant('nope')).toBe(prod);
   });
 });
+
+describe('NutritionIntelligenceService.refinePromptBlock ("fix")', () => {
+  it('lists the items the user sees and quotes the correction, asking for the complete corrected plate', () => {
+    const block = NutritionIntelligenceService.refinePromptBlock({
+      correction: "it's brown rice, and there's no cheese",
+      items: [
+        { name: 'white rice', quantity: 1, servingUnit: 'cup', grams: 158, calories: 205 },
+        { name: 'cheddar cheese', grams: 28, calories: 113 },
+      ],
+      previousParseHash: null,
+    });
+    expect(block).toContain('REVISION REQUEST');
+    expect(block).toContain('1. white rice — 1 cup (158 g), 205 kcal');
+    expect(block).toContain('2. cheddar cheese — 28 g, 113 kcal');
+    expect(block).toContain('The user\'s correction: "it\'s brown rice, and there\'s no cheese"');
+    expect(block).toContain('Return the COMPLETE corrected plate');
+  });
+});

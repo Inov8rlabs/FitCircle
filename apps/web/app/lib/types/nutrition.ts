@@ -107,7 +107,50 @@ export interface NutritionDraftItem extends ParsedFoodItem {
   matchedFoodId: string | null;   // foods.id when grounded against the DB, else null
   itemSource: NutritionSource;    // 'foods_db' when grounded, else 'llm_vision'
   unitOptions: UnitOption[];
+  // "Did you mean…": up to 3 other reference foods the grounding step considered for this
+  // item. Clients swap locally (name, matchedFoodId, per100g × grams). Absent on older drafts.
+  alternates?: DraftAlternate[];
 }
+
+export interface DraftAlternate {
+  foodId: string;
+  name: string;
+  per100g: {
+    calories: number;
+    proteinG: number;
+    carbsG: number;
+    fatG: number;
+    fiberG: number;
+    sugarG: number;
+    sodiumMg?: number | null;
+  };
+}
+
+// A "fix": the user's free-text correction plus the items as they currently see them
+// (photo-parse re-runs the vision model with both and the original photo).
+export const PHOTO_PARSE_MAX_CORRECTION_CHARS = 500;
+export const refineDraftItemSchema = z.object({
+  name: z.string().trim().min(1).max(200),
+  quantity: z.number().nonnegative().optional(),
+  servingUnit: z.string().trim().max(40).optional(),
+  grams: z.number().nonnegative().optional(),
+  calories: z.number().nonnegative().optional(),
+  proteinG: z.number().nonnegative().optional(),
+  carbsG: z.number().nonnegative().optional(),
+  fatG: z.number().nonnegative().optional(),
+});
+export type RefineDraftItem = z.infer<typeof refineDraftItemSchema>;
+export interface PhotoRefineRequest {
+  correction: string;
+  items: RefineDraftItem[];
+  /** parseHash of the draft being corrected (provenance for the training signal). */
+  previousParseHash?: string | null;
+}
+export const nutritionFeedbackSchema = z.object({
+  parseHash: z.string().trim().min(8).max(128),
+  rating: z.enum(['up', 'down']),
+  comment: z.string().trim().max(500).optional(),
+});
 
 // The full LLM result for one photo: the plate is an array of items + an overall confidence.
 export const photoParseResultSchema = z.object({

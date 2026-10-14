@@ -7,6 +7,7 @@ import { NutritionTrainingService } from '@/lib/services/nutrition-training-serv
 import { UpgradeRequiredError } from '@/lib/services/usage-service';
 import { PHOTO_PARSE_MAX_IMAGES, PHOTO_PARSE_MAX_NOTE_CHARS } from '@/lib/types/nutrition';
 import { readParseFallbackOptions } from '@/lib/validation/nutrition-parse-options';
+import { readRefineRequest } from '@/lib/validation/nutrition-refine';
 
 // The vision parse routinely takes 20-40s. Without this, the function is killed at
 // the platform default (~10s) and the request appears to "time out". 60s is the max
@@ -51,6 +52,20 @@ export async function POST(request: NextRequest) {
     const note = typeof rawNote === 'string' ? rawNote.trim().slice(0, MAX_NOTE_CHARS) || null : null;
     // Both absent (every shipped client today) → the Option-B save below is unchanged.
     const fallback = readParseFallbackOptions((key) => formData.get(key));
+    // "Fix": `correction` (what the user says is wrong) + `draft` (the items they are looking at,
+    // JSON) + optional `parseHash` of that draft. Re-runs the vision model; never cached.
+    const refine = readRefineRequest((key) => formData.get(key));
+    if (refine === 'invalid') {
+      return NextResponse.json(
+        {
+          success: false,
+          data: null,
+          error: { code: 'VALIDATION_ERROR', message: 'Invalid correction or draft', details: {}, timestamp: new Date().toISOString() },
+          meta: null,
+        },
+        { status: 400 }
+      );
+    }
 
     if (files.length === 0) {
       return NextResponse.json(
@@ -116,7 +131,7 @@ export async function POST(request: NextRequest) {
     );
 
     try {
-      const draft = await NutritionIntelligenceService.parsePhoto(user.id, images, note);
+      const draft = await NutritionIntelligenceService.parsePhoto(user.id, images, note, refine ? { refine } : {});
 
       // Production accuracy signal: record the draft AFTER responding so the user never
       // waits on it; the food-log create route links the saved entry to this row.
@@ -127,6 +142,8 @@ export async function POST(request: NextRequest) {
           draft,
           latencyMs,
           imageCount: images.length,
+          correction: refine?.correction ?? null,
+          refinedFromHash: refine?.previousParseHash ?? null,
         }),
       );
 
@@ -239,9 +256,9 @@ export async function POST(request: NextRequest) {
               ...(fallback.skipFallbackSave ? { fallbackSaved: false } : {}),
               ...(isUpgrade
                 ? {
-                    feature: (parseError as UpgradeRequiredError).feature,
-                    used: (parseError as UpgradeRequiredError).used,
-                    limit: (parseError as UpgradeRequiredError).limit,
+                    feature: (parseError).feature,
+                    used: (parseError).used,
+                    limit: (parseError).limit,
                   }
                 : {}),
             },
@@ -271,3 +288,4 @@ export async function POST(request: NextRequest) {
     );
   }
 }
+

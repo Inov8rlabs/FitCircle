@@ -101,6 +101,9 @@ export class NutritionTrainingService {
     draft: NutritionDraftDTO;
     latencyMs: number;
     imageCount: number | null;
+    /** When the draft came from a "fix" (099): what the user said and which draft it corrected. */
+    correction?: string | null;
+    refinedFromHash?: string | null;
   }): Promise<void> {
     if (!this.enabled) return;
     try {
@@ -119,10 +122,51 @@ export class NutritionTrainingService {
         latency_ms: Math.round(params.latencyMs),
         cached: draft.cached,
         image_count: params.imageCount,
+        ...(params.correction ? { correction: params.correction.slice(0, 500), refined_from_hash: params.refinedFromHash ?? null } : {}),
       });
       if (error) console.error('[NutritionTrainingService.captureDraft] insert failed (non-fatal):', error.message);
     } catch (err) {
       console.error('[NutritionTrainingService.captureDraft] failed (non-fatal):', err);
+    }
+  }
+
+  /**
+   * Thumbs up/down from the confirm card (099). Stamps the user's newest draft row carrying this
+   * parse_hash. Returns whether a row was found. Never throws.
+   */
+  static async rateDraft(params: {
+    userId: string;
+    parseHash: string;
+    rating: 'up' | 'down';
+    comment?: string | null;
+  }): Promise<boolean> {
+    try {
+      const supabase = createAdminSupabase();
+      const { data: row } = await supabase
+        .from('nutrition_training_samples')
+        .select('id')
+        .eq('user_id', params.userId)
+        .eq('parse_hash', params.parseHash)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (!row) return false;
+      const { error } = await supabase
+        .from('nutrition_training_samples')
+        .update({
+          user_rating: params.rating,
+          user_comment: params.comment?.trim().slice(0, 500) || null,
+          rated_at: new Date().toISOString(),
+        })
+        .eq('id', row.id);
+      if (error) {
+        console.error('[NutritionTrainingService.rateDraft] update failed (non-fatal):', error.message);
+        return false;
+      }
+      return true;
+    } catch (err) {
+      console.error('[NutritionTrainingService.rateDraft] failed (non-fatal):', err);
+      return false;
     }
   }
 

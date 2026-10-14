@@ -185,3 +185,25 @@ describe('FoodsService.contentTokens (retrieval stems)', () => {
     expect(FoodsService.contentTokens('Rice, white, cooked, NS as to fat')).toEqual(['rice', 'white', 'cooked', 'fat']);
   });
 });
+
+describe('NutritionGroundingService.alternates ("did you mean")', () => {
+  it('returns up to 3 other candidates with a per-100 g panel, skipping the picked row and duplicate names', () => {
+    const picked = food({ name: 'Banana, raw', id: 'banana' });
+    const alts = NutritionGroundingService.alternates(
+      [picked, food({ name: 'Banana, baked', id: 'baked' }), food({ name: 'banana, BAKED', id: 'dupe' }), food({ name: 'Banana chips', id: 'chips' }), food({ name: 'Banana nectar', id: 'nectar' }), food({ name: 'Plantain', id: 'plantain' })],
+      'banana',
+    );
+    expect(alts.map((a) => a.foodId)).toEqual(['baked', 'chips', 'nectar']);
+    expect(alts[0].per100g).toEqual({ calories: 89, proteinG: 1.1, carbsG: 22.8, fatG: 0.3, fiberG: 2.6, sugarG: 12.2, sodiumMg: 1 });
+  });
+
+  it('is attached to grounded AND unmatched items by ground()', async () => {
+    vi.spyOn(FoodsService, 'searchGeneric').mockResolvedValue([food({ name: 'Banana, raw', id: 'banana' }), food({ name: 'Banana, baked', id: 'baked' })]);
+    vi.spyOn(FoodsService, 'portionsFor').mockResolvedValue(new Map());
+    const { items } = await NutritionGroundingService.ground('u', [item(), item({ name: 'banana bread' })], { mode: 'generic', pick: async () => [0, null] });
+    expect(items[0].matchedFoodId).toBe('banana');
+    expect(items[0].alternates?.map((a) => a.name)).toEqual(['Banana, baked']);
+    expect(items[1].matchedFoodId).toBeNull();
+    expect(items[1].alternates?.map((a) => a.name)).toEqual(['Banana, raw', 'Banana, baked']);
+  });
+});

@@ -347,6 +347,26 @@ scanning and a one-tap "fix" flow.
 Reports: `scripts/golden/reports/*-ground_{generic,off,legacy}*.report.json`,
 `*-scale-*.report.json`, `*-fat-*.report.json`.
 
+## 3d. Correction flow ("fix it") — 2026-10-14
+
+Accuracy work only pays off if a wrong result is cheap to fix. Shipped contract (backend; iOS
+and Android confirm cards built against it):
+
+- **Fix with a sentence.** `POST /api/mobile/food/photo-parse` accepts optional `correction`
+  (≤500 chars, typed or dictated) + `draft` (the items the user is looking at, JSON) +
+  `parseHash`. The vision model re-runs on the same photo with a REVISION block (previous items,
+  the correction, "the user's statement outranks the photo, keep everything else"). Never cached;
+  counts as a paid parse; the new draft row records `correction` and `refined_from_hash` (099).
+  Smoke test on a weighed plate: "it's a cheese naan with no chicken, half a cup of rice, plain
+  lettuce not caesar" → naan and lettuce replaced, chicken/rice untouched, 720 → 602 kcal, 8.6 s.
+- **Did you mean…** every draft item carries up to 3 `alternates` (the grounding candidates the
+  picker did not choose, with per-100 g panels) so a wrong row is a one-tap swap with no call.
+- **Thumbs up/down.** `POST /api/mobile/food/feedback` {parseHash, rating, comment?} stamps the
+  draft row (`user_rating`, `user_comment`, `rated_at`), turning the draft-vs-saved signal from
+  "edited" into "rated wrong".
+- **Photo stays visible** while reviewing or editing (hero/thumbnail header + full-screen zoom) on
+  both mobile confirm cards and on saved-entry editing.
+
 ## 4. Not doing
 
 - Switching providers blindly without the bake-off (Haiku 4.5 → Gemini is likely right, but

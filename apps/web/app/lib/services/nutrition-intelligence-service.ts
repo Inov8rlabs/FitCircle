@@ -14,6 +14,8 @@ import {
   type UnitOption,
   parsedFoodItemSchema,
   photoParseResultSchema,
+  PHOTO_PARSE_MAX_CORRECTION_CHARS,
+  type PhotoRefineRequest,
 } from '../types/nutrition';
 
 import { FoodLogImageService } from './food-log-image-service';
@@ -62,6 +64,11 @@ export interface ParsePhotoOptions {
   promptVariant?: string;
   /** Grounding strategy (default: NUTRITION_GROUNDING_MODE env, else 'generic'). Eval/bake-off seam. */
   grounding?: GroundingMode;
+  /**
+   * "Fix": re-run the vision model on the same photo(s) with the items the user currently sees
+   * and their free-text correction. Never served from or written to the cache.
+   */
+  refine?: PhotoRefineRequest;
 }
 
 export interface ParsePhotoStats {
@@ -258,8 +265,9 @@ export class NutritionIntelligenceService {
     userId: string,
     images: ParsePhotoImage[],
     note?: string | null,
+    opts: Pick<ParsePhotoOptions, 'refine'> = {},
   ): Promise<NutritionDraftDTO> {
-    return (await this.parsePhotoWithStats(userId, images, note)).draft;
+    return (await this.parsePhotoWithStats(userId, images, note, opts)).draft;
   }
 
   /**
@@ -287,24 +295,29 @@ export class NutritionIntelligenceService {
     // fixed-width blocks with domain separation, so image partitions ([A,B] vs the single
     // file A||B) and image-vs-note boundaries can never collide. The single-image no-note
     // key stays the raw byte hash for backward compatibility with existing cache rows.
+    const refine = opts.refine && opts.refine.correction.trim() ? opts.refine : undefined;
     const hasher = createHash('sha256');
-    if (images.length === 1 && !hint) {
+    if (images.length === 1 && !hint && !refine) {
       hasher.update(images[0].bytes);
     } else {
       hasher.update(`v2:${images.length}:`);
       for (const img of images) hasher.update(createHash('sha256').update(img.bytes).digest());
       if (hint) hasher.update(`note:${hint}`);
+      // A fix gets its own parseHash (the training row for the corrected draft must not collide
+      // with the original's) but is never cached: the correction text is part of the key only.
+      if (refine) hasher.update(`fix:${refine.correction.trim()}:${JSON.stringify(refine.items)}`);
     }
     const imageHash = hasher.digest('hex');
-    const cached = opts.bypassCache ? null : await this.getCachedResult(imageHash);
-    if (cached) {
-      const { dbKcalPer100g, ...draft } = await this.toDraft(userId, cached, VISION_MODEL, true, 'photo', 'llm_vision', opts.grounding);
+    const useCache = !opts.bypassCache && !refine;
+    const cachedResult = useCache ? await this.getCachedResult(imageHash) : null;
+    if (cachedResult) {
+      const { dbKcalPer100g, ...draft } = await this.toDraft(userId, cachedResult, VISION_MODEL, true, 'photo', 'llm_vision', opts.grounding);
       return {
         draft: { ...draft, parseHash: imageHash },
         model: VISION_MODEL,
         cached: true,
         latencyMs: 0,
-        rawItems: cached.items,
+        rawItems: cachedResult.items,
         dbKcalPer100g,
       };
     }
@@ -335,6 +348,7 @@ export class NutritionIntelligenceService {
           'are partially hidden in the photos.',
       );
     }
+    if (refine) promptBits.push(this.refinePromptBlock(refine));
     let result: PhotoParseResult;
     let usage: ModelUsage = {};
     let model = primaryModel;
@@ -388,7 +402,7 @@ export class NutritionIntelligenceService {
 
     // 4. Record the call (for the daily cap) and cache the result by image hash. A bake-off
     //    run bypasses the cache entirely so it never seeds production with eval outputs.
-    if (!opts.bypassCache) await this.recordParse(userId, imageHash, result);
+    if (useCache) await this.recordParse(userId, imageHash, result);
 
     const { dbKcalPer100g, ...draft } = await this.toDraft(userId, result, model, false, 'photo', 'llm_vision', opts.grounding);
     return {
@@ -713,6 +727,31 @@ export class NutritionIntelligenceService {
    * (2026-09-16 item, 2026-09-22 photo). Ask Gemini for minimal thinking and leave
    * headroom for whatever it still spends.
    */
+  /**
+   * The "fix" block appended to the user prompt: the items the user is looking at, and what they
+   * said is wrong. The model revises the WHOLE plate (the user's statement outranks the photo),
+   * keeping everything the correction does not touch.
+   */
+  static refinePromptBlock(refine: PhotoRefineRequest): string {
+    const rows = refine.items.slice(0, 40).map((it, i) => {
+      const qty = it.quantity != null && it.servingUnit ? `${it.quantity} ${it.servingUnit}` : it.grams != null ? `${Math.round(it.grams)} g` : '';
+      const g = it.grams != null ? `${Math.round(it.grams)} g` : '';
+      const kcal = it.calories != null ? `${Math.round(it.calories)} kcal` : '';
+      return `  ${i + 1}. ${it.name}${qty ? ` — ${qty}` : ''}${g && qty && !qty.endsWith(' g') ? ` (${g})` : ''}${kcal ? `, ${kcal}` : ''}`;
+    });
+    return [
+      'REVISION REQUEST. The user reviewed a previous estimate of this same photo and says it is wrong.',
+      'Previous items as the user sees them:',
+      ...(rows.length ? rows : ['  (none)']),
+      `The user's correction: "${refine.correction.trim().slice(0, PHOTO_PARSE_MAX_CORRECTION_CHARS)}"`,
+      'Return the COMPLETE corrected plate: apply exactly what the correction says (renamed foods, removed',
+      'foods, different preparation, different portion), re-estimate anything the correction changes,',
+      'and keep every other item as it was unless the photo clearly contradicts it. The user\'s statement',
+      'outranks what the photo appears to show. Do not add foods the user did not mention unless they are',
+      'clearly visible and were missing before.',
+    ].join('\n');
+  }
+
   /** The photo system prompt for a named variant (eval harness `--prompt=`); unknown ids → production. */
   static photoPromptVariant(id?: string): string {
     return PHOTO_PROMPT_VARIANTS[id ?? 'production'] ?? SYSTEM_PROMPT;
