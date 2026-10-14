@@ -1,0 +1,1822 @@
+{
+ "version": "calai-headtohead-v1",
+ "created": "2026-10-14",
+ "source": "SNAPMe before-photos (USDA, CC BY-SA 4.0); truth = ASA24 reported intake",
+ "plates": [
+  {
+   "n": 1,
+   "file": "01.jpeg",
+   "id": "snapme:SNAPME9090:3:94bf9df24af38fe2eca204fce6b8",
+   "cuisine": "south_asian",
+   "mealType": "dinner",
+   "truth": {
+    "items": [
+     {
+      "name": "Beef curry",
+      "canonicalId": null,
+      "grams": 354,
+      "calories": 368.16,
+      "protein": 22.23,
+      "carbs": 24.18,
+      "fat": 20.99
+     },
+     {
+      "name": "Rice, white, cooked, fat added in cooking, made with oil",
+      "canonicalId": null,
+      "grams": 81.5,
+      "calories": 122.25,
+      "protein": 2.12,
+      "carbs": 22.18,
+      "fat": 2.49
+     }
+    ],
+    "total": {
+     "calories": 490.41,
+     "protein": 24.35,
+     "carbs": 46.36,
+     "fat": 23.48
+    }
+   }
+  },
+  {
+   "n": 2,
+   "file": "02.jpeg",
+   "id": "snapme:SNAPME9090:3:cb95a5f04446ad802896d29466bb",
+   "cuisine": "western",
+   "mealType": "breakfast",
+   "truth": {
+    "items": [
+     {
+      "name": "Sweet potato fries, fast food / restaurant",
+      "canonicalId": null,
+      "grams": 30,
+      "calories": 91.5,
+      "protein": 0.58,
+      "carbs": 9.49,
+      "fat": 7.18
+     },
+     {
+      "name": "Onions, cooked, from fresh, made with oil",
+      "canonicalId": null,
+      "grams": 52.5,
+      "calories": 32.55,
+      "protein": 0.69,
+      "carbs": 5.19,
+      "fat": 1.2
+     },
+     {
+      "name": "Spinach, cooked, from fresh, made with oil",
+      "canonicalId": null,
+      "grams": 90,
+      "calories": 39.6,
+      "protein": 2.59,
+      "carbs": 3.28,
+      "fat": 2.43
+     },
+     {
+      "name": "Peppers, red, cooked, made with oil",
+      "canonicalId": null,
+      "grams": 35.25,
+      "calories": 19.39,
+      "protein": 0.31,
+      "carbs": 2.27,
+      "fat": 1.2
+     },
+     {
+      "name": "Egg, whole, fried with oil",
+      "canonicalId": null,
+      "grams": 92,
+      "calories": 197.8,
+      "protein": 12.21,
+      "carbs": 0.7,
+      "fat": 15.86
+     }
+    ],
+    "total": {
+     "calories": 380.84,
+     "protein": 16.38,
+     "carbs": 20.93,
+     "fat": 27.87
+    }
+   }
+  },
+  {
+   "n": 3,
+   "file": "03.jpeg",
+   "id": "snapme:SNAPME9130:2:5fa772fd4154a2888c63e8a87402",
+   "cuisine": "south_asian",
+   "mealType": "dinner",
+   "truth": {
+    "items": [
+     {
+      "name": "Pork roast, loin, cooked, lean only eaten",
+      "canonicalId": null,
+      "grams": 113.4,
+      "calories": 234.74,
+      "protein": 32.18,
+      "carbs": 0,
+      "fat": 10.83
+     },
+     {
+      "name": "Squash, summer, yellow or green, cooked, from fresh, made with oil",
+      "canonicalId": null,
+      "grams": 92.5,
+      "calories": 37.92,
+      "protein": 0.81,
+      "carbs": 3.87,
+      "fat": 2.54
+     },
+     {
+      "name": "Squash, winter type, mashed, fat added in cooking, no sugar added in cooking",
+      "canonicalId": null,
+      "grams": 122.5,
+      "calories": 61.25,
+      "protein": 1.08,
+      "carbs": 10.56,
+      "fat": 2.41
+     },
+     {
+      "name": "Vegetable curry",
+      "canonicalId": null,
+      "grams": 118,
+      "calories": 79.06,
+      "protein": 2.55,
+      "carbs": 10.69,
+      "fat": 3.36
+     },
+     {
+      "name": "Mushrooms, cooked, from fresh, made with oil",
+      "canonicalId": null,
+      "grams": 120.75,
+      "calories": 62.79,
+      "protein": 2.54,
+      "carbs": 6.17,
+      "fat": 3.95
+     }
+    ],
+    "total": {
+     "calories": 475.76,
+     "protein": 39.16,
+     "carbs": 31.29,
+     "fat": 23.09
+    }
+   }
+  },
+  {
+   "n": 4,
+   "file": "04.jpeg",
+   "id": "snapme:SNAPME9118:1:ba1be6174c04968ceb4b8af385c4",
+   "cuisine": "western",
+   "mealType": "lunch",
+   "truth": {
+    "items": [
+     {
+      "name": "Vegetable soup, home recipe",
+      "canonicalId": null,
+      "grams": 234,
+      "calories": 88.92,
+      "protein": 4.26,
+      "carbs": 14.6,
+      "fat": 2.04
+     },
+     {
+      "name": "Carrots, cooked, from fresh, fat not added in cooking",
+      "canonicalId": null,
+      "grams": 78,
+      "calories": 27.3,
+      "protein": 0.59,
+      "carbs": 6.37,
+      "fat": 0.14
+     },
+     {
+      "name": "Squash, summer, yellow or green, cooked, from fresh, fat not added in cooking",
+      "canonicalId": null,
+      "grams": 24,
+      "calories": 4.8,
+      "protein": 0.22,
+      "carbs": 1.03,
+      "fat": 0.07
+     },
+     {
+      "name": "Soybean curd",
+      "canonicalId": null,
+      "grams": 120,
+      "calories": 73.2,
+      "protein": 8.6,
+      "carbs": 1.42,
+      "fat": 4.43
+     }
+    ],
+    "total": {
+     "calories": 194.22,
+     "protein": 13.67,
+     "carbs": 23.42,
+     "fat": 6.68
+    }
+   }
+  },
+  {
+   "n": 5,
+   "file": "05.jpeg",
+   "id": "snapme:SNAPME9031:1:6cbdad364aeb8beb25f97466b616",
+   "cuisine": "south_asian",
+   "mealType": "breakfast",
+   "truth": {
+    "items": [
+     {
+      "name": "Tomato catsup",
+      "canonicalId": null,
+      "grams": 15,
+      "calories": 15.15,
+      "protein": 0.16,
+      "carbs": 4.11,
+      "fat": 0.02
+     },
+     {
+      "name": "Chicken curry",
+      "canonicalId": null,
+      "grams": 177,
+      "calories": 145.14,
+      "protein": 10.14,
+      "carbs": 11.81,
+      "fat": 6.81
+     },
+     {
+      "name": "Vegetables, cooked, fat added in cooking",
+      "canonicalId": null,
+      "grams": 91,
+      "calories": 71.89,
+      "protein": 2.54,
+      "carbs": 11.56,
+      "fat": 1.79
+     },
+     {
+      "name": "Yellow rice, cooked",
+      "canonicalId": null,
+      "grams": 79,
+      "calories": 69.52,
+      "protein": 1.42,
+      "carbs": 15.09,
+      "fat": 0.36
+     }
+    ],
+    "total": {
+     "calories": 301.7,
+     "protein": 14.26,
+     "carbs": 42.57,
+     "fat": 8.98
+    }
+   }
+  },
+  {
+   "n": 6,
+   "file": "06.jpeg",
+   "id": "snapme:SNAPME9189:2:019525bc44629e6bf653ec631237",
+   "cuisine": "mediterranean",
+   "mealType": "lunch",
+   "truth": {
+    "items": [
+     {
+      "name": "Couscous, plain, cooked",
+      "canonicalId": null,
+      "grams": 160,
+      "calories": 177.6,
+      "protein": 6.03,
+      "carbs": 36.98,
+      "fat": 0.26
+     },
+     {
+      "name": "Chicken breast, sauteed, skin not eaten",
+      "canonicalId": null,
+      "grams": 210,
+      "calories": 369.6,
+      "protein": 62.2,
+      "carbs": 0,
+      "fat": 11.45
+     },
+     {
+      "name": "Pepper, sweet, red, raw",
+      "canonicalId": null,
+      "grams": 82,
+      "calories": 25.42,
+      "protein": 0.81,
+      "carbs": 4.94,
+      "fat": 0.25
+     }
+    ],
+    "total": {
+     "calories": 572.62,
+     "protein": 69.04,
+     "carbs": 41.92,
+     "fat": 11.96
+    }
+   }
+  },
+  {
+   "n": 7,
+   "file": "07.jpeg",
+   "id": "snapme:SNAPME9173:2:256dc39f46d5b9973165224a608c",
+   "cuisine": "east_asian",
+   "mealType": "dinner",
+   "truth": {
+    "items": [
+     {
+      "name": "Dumpling, steamed, filled with meat, poultry, or seafood",
+      "canonicalId": null,
+      "grams": 210,
+      "calories": 237.3,
+      "protein": 14.49,
+      "carbs": 23.25,
+      "fat": 9.66
+     },
+     {
+      "name": "Seaweed, cooked",
+      "canonicalId": null,
+      "grams": 6.4,
+      "calories": 3.91,
+      "protein": 0.36,
+      "carbs": 0.32,
+      "fat": 0.21
+     },
+     {
+      "name": "Shrimp, coated, fried, made with oil",
+      "canonicalId": null,
+      "grams": 28,
+      "calories": 59.36,
+      "protein": 4.24,
+      "carbs": 3.09,
+      "fat": 3.25
+     }
+    ],
+    "total": {
+     "calories": 300.57,
+     "protein": 19.09,
+     "carbs": 26.66,
+     "fat": 13.12
+    }
+   }
+  },
+  {
+   "n": 8,
+   "file": "08.jpeg",
+   "id": "snapme:SNAPME9119:3:75985aab48bc9d1beab254f27bbe",
+   "cuisine": "western",
+   "mealType": "dinner",
+   "truth": {
+    "items": [
+     {
+      "name": "Pasta with tomato-based sauce and seafood, restaurant",
+      "canonicalId": null,
+      "grams": 500,
+      "calories": 825,
+      "protein": 25.8,
+      "carbs": 88.8,
+      "fat": 40.1
+     },
+     {
+      "name": "Clams, steamed or boiled",
+      "canonicalId": null,
+      "grams": 25,
+      "calories": 42.75,
+      "protein": 7.3,
+      "carbs": 1.78,
+      "fat": 0.48
+     },
+     {
+      "name": "Tomatoes, cooked, from fresh",
+      "canonicalId": null,
+      "grams": 82,
+      "calories": 14.76,
+      "protein": 0.78,
+      "carbs": 3.27,
+      "fat": 0.09
+     },
+     {
+      "name": "Mussels, steamed or poached",
+      "canonicalId": null,
+      "grams": 24,
+      "calories": 41.04,
+      "protein": 5.69,
+      "carbs": 1.76,
+      "fat": 1.07
+     }
+    ],
+    "total": {
+     "calories": 923.55,
+     "protein": 39.57,
+     "carbs": 95.61,
+     "fat": 41.74
+    }
+   }
+  },
+  {
+   "n": 9,
+   "file": "09.jpeg",
+   "id": "snapme:SNAPME9004:3:142508b84416a346717ddf2a3723",
+   "cuisine": "east_asian",
+   "mealType": "lunch",
+   "truth": {
+    "items": [
+     {
+      "name": "Rice, white, with soy-based sauce, fat not added in cooking",
+      "canonicalId": null,
+      "grams": 355.5,
+      "calories": 362.61,
+      "protein": 7.32,
+      "carbs": 78.35,
+      "fat": 1
+     },
+     {
+      "name": "Soybean curd, deep fried",
+      "canonicalId": null,
+      "grams": 113.4,
+      "calories": 306.18,
+      "protein": 21.34,
+      "carbs": 10.05,
+      "fat": 22.88
+     },
+     {
+      "name": "Egg omelet or scrambled egg, with vegetables other than dark green and/or tomatoes, fat added in cooking",
+      "canonicalId": null,
+      "grams": 22.25,
+      "calories": 34.49,
+      "protein": 1.8,
+      "carbs": 0.75,
+      "fat": 2.71
+     },
+     {
+      "name": "Cabbage, Chinese, cooked, made with oil",
+      "canonicalId": null,
+      "grams": 87.5,
+      "calories": 30.63,
+      "protein": 1.32,
+      "carbs": 1.51,
+      "fat": 2.4
+     },
+     {
+      "name": "Onions, cooked, from fresh, made with oil",
+      "canonicalId": null,
+      "grams": 52.5,
+      "calories": 32.55,
+      "protein": 0.69,
+      "carbs": 5.19,
+      "fat": 1.2
+     }
+    ],
+    "total": {
+     "calories": 766.46,
+     "protein": 32.47,
+     "carbs": 95.85,
+     "fat": 30.19
+    }
+   }
+  },
+  {
+   "n": 10,
+   "file": "10.jpeg",
+   "id": "snapme:SNAPME9103:1:073062b545edb2853c734215efbc",
+   "cuisine": "mediterranean",
+   "mealType": "dinner",
+   "truth": {
+    "items": [
+     {
+      "name": "Rice pilaf",
+      "canonicalId": null,
+      "grams": 309,
+      "calories": 420.24,
+      "protein": 10.17,
+      "carbs": 74.47,
+      "fat": 9.15
+     },
+     {
+      "name": "Falafel",
+      "canonicalId": null,
+      "grams": 68,
+      "calories": 343.4,
+      "protein": 5.66,
+      "carbs": 19.94,
+      "fat": 27.57
+     }
+    ],
+    "total": {
+     "calories": 763.64,
+     "protein": 15.83,
+     "carbs": 94.41,
+     "fat": 36.72
+    }
+   }
+  },
+  {
+   "n": 11,
+   "file": "11.jpeg",
+   "id": "snapme:SNAPME9143:1:79ef257b496aa5f09ea78bd1cbb3",
+   "cuisine": "western",
+   "mealType": "lunch",
+   "truth": {
+    "items": [
+     {
+      "name": "Quinoa, fat not added in cooking",
+      "canonicalId": null,
+      "grams": 85,
+      "calories": 102,
+      "protein": 3.72,
+      "carbs": 18.03,
+      "fat": 1.62
+     },
+     {
+      "name": "Cucumber, raw",
+      "canonicalId": null,
+      "grams": 29.75,
+      "calories": 3.57,
+      "protein": 0.18,
+      "carbs": 0.64,
+      "fat": 0.05
+     },
+     {
+      "name": "Raspberries, red, raw",
+      "canonicalId": null,
+      "grams": 11.4,
+      "calories": 5.93,
+      "protein": 0.14,
+      "carbs": 1.36,
+      "fat": 0.07
+     },
+     {
+      "name": "Mixed salad greens, raw",
+      "canonicalId": null,
+      "grams": 35,
+      "calories": 5.95,
+      "protein": 0.53,
+      "carbs": 1.13,
+      "fat": 0.08
+     },
+     {
+      "name": "Apple, raw",
+      "canonicalId": null,
+      "grams": 45.5,
+      "calories": 23.66,
+      "protein": 0.12,
+      "carbs": 6.28,
+      "fat": 0.08
+     },
+     {
+      "name": "Olive oil",
+      "canonicalId": null,
+      "grams": 27,
+      "calories": 238.68,
+      "protein": 0,
+      "carbs": 0,
+      "fat": 27
+     },
+     {
+      "name": "Lemon juice, 100%, freshly squeezed",
+      "canonicalId": null,
+      "grams": 15.5,
+      "calories": 3.41,
+      "protein": 0.05,
+      "carbs": 1.07,
+      "fat": 0.04
+     },
+     {
+      "name": "Mustard",
+      "canonicalId": null,
+      "grams": 1.88,
+      "calories": 1.13,
+      "protein": 0.07,
+      "carbs": 0.11,
+      "fat": 0.06
+     }
+    ],
+    "total": {
+     "calories": 384.33,
+     "protein": 4.81,
+     "carbs": 28.62,
+     "fat": 29
+    }
+   }
+  },
+  {
+   "n": 12,
+   "file": "12.jpeg",
+   "id": "snapme:SNAPME9044:3:e5edf5ff4eb78d1b3337171d8045",
+   "cuisine": "latin",
+   "mealType": "lunch",
+   "truth": {
+    "items": [
+     {
+      "name": "Tortilla, flour",
+      "canonicalId": null,
+      "grams": 71,
+      "calories": 217.26,
+      "protein": 5.82,
+      "carbs": 35.06,
+      "fat": 5.67
+     },
+     {
+      "name": "Pork, cooked",
+      "canonicalId": null,
+      "grams": 100.5,
+      "calories": 212.06,
+      "protein": 27.83,
+      "carbs": 0,
+      "fat": 10.55
+     },
+     {
+      "name": "Refried beans, fat added in cooking",
+      "canonicalId": null,
+      "grams": 31.63,
+      "calories": 45.54,
+      "protein": 1.94,
+      "carbs": 5.63,
+      "fat": 1.81
+     },
+     {
+      "name": "Cheese, Monterey",
+      "canonicalId": null,
+      "grams": 28.25,
+      "calories": 105.37,
+      "protein": 6.92,
+      "carbs": 0.19,
+      "fat": 8.55
+     },
+     {
+      "name": "Rice, cooked",
+      "canonicalId": null,
+      "grams": 79,
+      "calories": 101.91,
+      "protein": 2.11,
+      "carbs": 22.11,
+      "fat": 0.22
+     }
+    ],
+    "total": {
+     "calories": 682.14,
+     "protein": 44.62,
+     "carbs": 62.99,
+     "fat": 26.8
+    }
+   }
+  },
+  {
+   "n": 13,
+   "file": "13.jpeg",
+   "id": "snapme:SNAPME9038:1:128f8d534590a7e9d7ddeec5a0e6",
+   "cuisine": "south_asian",
+   "mealType": "lunch",
+   "truth": {
+    "items": [
+     {
+      "name": "Pinto, calico, or red Mexican beans, dry, cooked, made with oil",
+      "canonicalId": null,
+      "grams": 135,
+      "calories": 265.95,
+      "protein": 11.21,
+      "carbs": 32.6,
+      "fat": 10.72
+     },
+     {
+      "name": "Onions, cooked, from fresh, made with oil",
+      "canonicalId": null,
+      "grams": 12,
+      "calories": 7.44,
+      "protein": 0.16,
+      "carbs": 1.19,
+      "fat": 0.27
+     },
+     {
+      "name": "Garlic, cooked",
+      "canonicalId": null,
+      "grams": 4.15,
+      "calories": 6.14,
+      "protein": 0.26,
+      "carbs": 1.36,
+      "fat": 0.02
+     },
+     {
+      "name": "Cilantro, raw",
+      "canonicalId": null,
+      "grams": 1.1,
+      "calories": 0.25,
+      "protein": 0.02,
+      "carbs": 0.04,
+      "fat": 0.01
+     },
+     {
+      "name": "Naan, Indian flatbread",
+      "canonicalId": null,
+      "grams": 44,
+      "calories": 136.84,
+      "protein": 4.88,
+      "carbs": 22.1,
+      "fat": 3.2
+     },
+     {
+      "name": "Carrots, cooked, from fresh, made with oil",
+      "canonicalId": null,
+      "grams": 36,
+      "calories": 21.24,
+      "protein": 0.26,
+      "carbs": 2.86,
+      "fat": 1.08
+     }
+    ],
+    "total": {
+     "calories": 437.86,
+     "protein": 16.79,
+     "carbs": 60.15,
+     "fat": 15.3
+    }
+   }
+  },
+  {
+   "n": 14,
+   "file": "14.jpeg",
+   "id": "snapme:SNAPME9061:2:903282c5488bb1bc77361849bad4",
+   "cuisine": "western",
+   "mealType": "breakfast",
+   "truth": {
+    "items": [
+     {
+      "name": "Oatmeal, regular or quick, made with water, fat not added in cooking",
+      "canonicalId": null,
+      "grams": 60,
+      "calories": 38.4,
+      "protein": 1.33,
+      "carbs": 6.82,
+      "fat": 0.65
+     },
+     {
+      "name": "Walnuts",
+      "canonicalId": null,
+      "grams": 7.5,
+      "calories": 49.05,
+      "protein": 1.14,
+      "carbs": 1.03,
+      "fat": 4.89
+     },
+     {
+      "name": "Cereal, granola",
+      "canonicalId": null,
+      "grams": 27.75,
+      "calories": 105.73,
+      "protein": 2.5,
+      "carbs": 22.23,
+      "fat": 1.44
+     },
+     {
+      "name": "Mixed seeds",
+      "canonicalId": null,
+      "grams": 9.06,
+      "calories": 52.56,
+      "protein": 1.99,
+      "carbs": 1.97,
+      "fat": 4.5
+     },
+     {
+      "name": "Almond milk, unsweetened",
+      "canonicalId": null,
+      "grams": 61,
+      "calories": 9.15,
+      "protein": 0.36,
+      "carbs": 0.35,
+      "fat": 0.67
+     }
+    ],
+    "total": {
+     "calories": 254.89,
+     "protein": 7.32,
+     "carbs": 32.4,
+     "fat": 12.15
+    }
+   }
+  },
+  {
+   "n": 15,
+   "file": "15.jpeg",
+   "id": "snapme:SNAPME9008:3:325be6ae460196d3325745c453ce",
+   "cuisine": "western",
+   "mealType": "lunch",
+   "truth": {
+    "items": [
+     {
+      "name": "Chicken thigh, grilled with sauce, skin not eaten",
+      "canonicalId": null,
+      "grams": 390,
+      "calories": 741,
+      "protein": 77.22,
+      "carbs": 28.39,
+      "fat": 33.38
+     },
+     {
+      "name": "Tomato catsup",
+      "canonicalId": null,
+      "grams": 15,
+      "calories": 15.15,
+      "protein": 0.16,
+      "carbs": 4.11,
+      "fat": 0.02
+     },
+     {
+      "name": "Peppers, green, cooked, made with oil",
+      "canonicalId": null,
+      "grams": 88.5,
+      "calories": 48.68,
+      "protein": 0.78,
+      "carbs": 5.7,
+      "fat": 3.01
+     },
+     {
+      "name": "Onions, cooked, from fresh, made with oil",
+      "canonicalId": null,
+      "grams": 47,
+      "calories": 29.14,
+      "protein": 0.62,
+      "carbs": 4.65,
+      "fat": 1.08
+     },
+     {
+      "name": "Cucumber, raw",
+      "canonicalId": null,
+      "grams": 27,
+      "calories": 3.24,
+      "protein": 0.16,
+      "carbs": 0.58,
+      "fat": 0.04
+     },
+     {
+      "name": "Carrots, raw",
+      "canonicalId": null,
+      "grams": 20,
+      "calories": 8.2,
+      "protein": 0.19,
+      "carbs": 1.92,
+      "fat": 0.05
+     },
+     {
+      "name": "Celery, raw",
+      "canonicalId": null,
+      "grams": 17,
+      "calories": 2.72,
+      "protein": 0.12,
+      "carbs": 0.5,
+      "fat": 0.03
+     }
+    ],
+    "total": {
+     "calories": 848.13,
+     "protein": 79.25,
+     "carbs": 45.85,
+     "fat": 37.61
+    }
+   }
+  },
+  {
+   "n": 16,
+   "file": "16.jpeg",
+   "id": "snapme:SNAPME9109:2:884f06dc42cfa4acae6993d57fd9",
+   "cuisine": "east_asian",
+   "mealType": "lunch",
+   "truth": {
+    "items": [
+     {
+      "name": "Peppers, red, cooked, fat not added in cooking",
+      "canonicalId": null,
+      "grams": 19.63,
+      "calories": 5.5,
+      "protein": 0.18,
+      "carbs": 1.31,
+      "fat": 0.04
+     },
+     {
+      "name": "Peppers, green, cooked, fat not added in cooking",
+      "canonicalId": null,
+      "grams": 29.44,
+      "calories": 8.24,
+      "protein": 0.27,
+      "carbs": 1.96,
+      "fat": 0.06
+     },
+     {
+      "name": "Onions, cooked, from fresh, fat not added in cooking",
+      "canonicalId": null,
+      "grams": 16,
+      "calories": 7.04,
+      "protein": 0.22,
+      "carbs": 1.62,
+      "fat": 0.03
+     },
+     {
+      "name": "Tofu",
+      "canonicalId": null,
+      "grams": 116,
+      "calories": 70.76,
+      "protein": 8.32,
+      "carbs": 1.37,
+      "fat": 4.28
+     },
+     {
+      "name": "Noodles, cooked",
+      "canonicalId": null,
+      "grams": 200,
+      "calories": 274,
+      "protein": 9.02,
+      "carbs": 50.02,
+      "fat": 4.12
+     },
+     {
+      "name": "Carrots, cooked, from fresh, fat not added in cooking",
+      "canonicalId": null,
+      "grams": 28,
+      "calories": 9.8,
+      "protein": 0.21,
+      "carbs": 2.29,
+      "fat": 0.05
+     }
+    ],
+    "total": {
+     "calories": 375.34,
+     "protein": 18.22,
+     "carbs": 58.57,
+     "fat": 8.58
+    }
+   }
+  },
+  {
+   "n": 17,
+   "file": "17.jpeg",
+   "id": "snapme:SNAPME9089:1:c4621c584690b39a37adc64d0711",
+   "cuisine": "western",
+   "mealType": "breakfast",
+   "truth": {
+    "items": [
+     {
+      "name": "Oatmeal, regular or quick, made with water, fat not added in cooking",
+      "canonicalId": null,
+      "grams": 120,
+      "calories": 76.8,
+      "protein": 2.65,
+      "carbs": 13.63,
+      "fat": 1.31
+     },
+     {
+      "name": "Egg white omelet, scrambled, or fried, made with cooking spray",
+      "canonicalId": null,
+      "grams": 107,
+      "calories": 68.48,
+      "protein": 13.08,
+      "carbs": 1.03,
+      "fat": 0.77
+     },
+     {
+      "name": "Strawberries, raw",
+      "canonicalId": null,
+      "grams": 36,
+      "calories": 11.52,
+      "protein": 0.24,
+      "carbs": 2.76,
+      "fat": 0.11
+     },
+     {
+      "name": "Grapes, raw",
+      "canonicalId": null,
+      "grams": 37.75,
+      "calories": 26.05,
+      "protein": 0.27,
+      "carbs": 6.83,
+      "fat": 0.06
+     },
+     {
+      "name": "Plum, raw",
+      "canonicalId": null,
+      "grams": 33,
+      "calories": 15.18,
+      "protein": 0.23,
+      "carbs": 3.77,
+      "fat": 0.09
+     },
+     {
+      "name": "Yogurt, Greek, nonfat milk, plain",
+      "canonicalId": null,
+      "grams": 61.25,
+      "calories": 36.14,
+      "protein": 6.24,
+      "carbs": 2.21,
+      "fat": 0.24
+     },
+     {
+      "name": "Granola, homemade",
+      "canonicalId": null,
+      "grams": 30.5,
+      "calories": 149.15,
+      "protein": 4.17,
+      "carbs": 16.43,
+      "fat": 7.41
+     },
+     {
+      "name": "Peanut butter",
+      "canonicalId": null,
+      "grams": 10.67,
+      "calories": 63.78,
+      "protein": 2.37,
+      "carbs": 2.38,
+      "fat": 5.48
+     }
+    ],
+    "total": {
+     "calories": 447.1,
+     "protein": 29.25,
+     "carbs": 49.04,
+     "fat": 15.47
+    }
+   }
+  },
+  {
+   "n": 18,
+   "file": "18.jpeg",
+   "id": "snapme:SNAPME9038:3:d70447284848b00f159671b8b4bd",
+   "cuisine": "south_asian",
+   "mealType": "lunch",
+   "truth": {
+    "items": [
+     {
+      "name": "Rice, brown, cooked, fat not added in cooking",
+      "canonicalId": null,
+      "grams": 97.5,
+      "calories": 118.95,
+      "protein": 2.66,
+      "carbs": 24.81,
+      "fat": 0.94
+     },
+     {
+      "name": "Potato, boiled, from fresh, peel eaten, fat added in cooking",
+      "canonicalId": null,
+      "grams": 85,
+      "calories": 106.25,
+      "protein": 2.03,
+      "carbs": 17.07,
+      "fat": 3.59
+     },
+     {
+      "name": "Chicken curry",
+      "canonicalId": null,
+      "grams": 236,
+      "calories": 193.52,
+      "protein": 13.52,
+      "carbs": 15.74,
+      "fat": 9.09
+     }
+    ],
+    "total": {
+     "calories": 418.72,
+     "protein": 18.21,
+     "carbs": 57.62,
+     "fat": 13.62
+    }
+   }
+  },
+  {
+   "n": 19,
+   "file": "19.jpeg",
+   "id": "snapme:SNAPME9132:3:c6eb0025404d93e2e7802ae639d2",
+   "cuisine": "western",
+   "mealType": "breakfast",
+   "truth": {
+    "items": [
+     {
+      "name": "Yogurt, whole milk, plain",
+      "canonicalId": null,
+      "grams": 122.5,
+      "calories": 74.72,
+      "protein": 4.25,
+      "carbs": 5.71,
+      "fat": 3.98
+     },
+     {
+      "name": "Cereal, granola",
+      "canonicalId": null,
+      "grams": 27.75,
+      "calories": 105.73,
+      "protein": 2.5,
+      "carbs": 22.23,
+      "fat": 1.44
+     },
+     {
+      "name": "Strawberries, frozen, unsweetened",
+      "canonicalId": null,
+      "grams": 3.07,
+      "calories": 1.07,
+      "protein": 0.01,
+      "carbs": 0.28,
+      "fat": 0
+     },
+     {
+      "name": "Lime juice, 100%, freshly squeezed",
+      "canonicalId": null,
+      "grams": 3.44,
+      "calories": 0.86,
+      "protein": 0.01,
+      "carbs": 0.29,
+      "fat": 0
+     },
+     {
+      "name": "Butter, stick, unsalted",
+      "canonicalId": null,
+      "grams": 3.14,
+      "calories": 22.51,
+      "protein": 0.03,
+      "carbs": 0,
+      "fat": 2.55
+     },
+     {
+      "name": "Egg, yolk only, cooked, fat not added in cooking",
+      "canonicalId": null,
+      "grams": 2.5,
+      "calories": 9.08,
+      "protein": 0.45,
+      "carbs": 0.1,
+      "fat": 0.75
+     },
+     {
+      "name": "Sugar",
+      "canonicalId": null,
+      "grams": 5.56,
+      "calories": 21.5,
+      "protein": 0,
+      "carbs": 5.55,
+      "fat": 0
+     }
+    ],
+    "total": {
+     "calories": 235.47,
+     "protein": 7.25,
+     "carbs": 34.16,
+     "fat": 8.72
+    }
+   }
+  },
+  {
+   "n": 20,
+   "file": "20.jpeg",
+   "id": "snapme:SNAPME9071:2:60b4449a43eab164b0a8daac4ce3",
+   "cuisine": "south_asian",
+   "mealType": "breakfast",
+   "truth": {
+    "items": [
+     {
+      "name": "Naan, Indian flatbread",
+      "canonicalId": null,
+      "grams": 44,
+      "calories": 136.84,
+      "protein": 4.88,
+      "carbs": 22.1,
+      "fat": 3.2
+     },
+     {
+      "name": "Cheese, Mexican blend",
+      "canonicalId": null,
+      "grams": 28.25,
+      "calories": 101.14,
+      "protein": 6.65,
+      "carbs": 0.49,
+      "fat": 8.05
+     }
+    ],
+    "total": {
+     "calories": 237.98,
+     "protein": 11.53,
+     "carbs": 22.59,
+     "fat": 11.25
+    }
+   }
+  },
+  {
+   "n": 21,
+   "file": "21.jpeg",
+   "id": "snapme:SNAPME9190:1:1c010abf4b24aa2911974fbddebf",
+   "cuisine": "western",
+   "mealType": "breakfast",
+   "truth": {
+    "items": [
+     {
+      "name": "Muffin, English, whole wheat",
+      "canonicalId": null,
+      "grams": 58,
+      "calories": 129.34,
+      "protein": 5.05,
+      "carbs": 25.98,
+      "fat": 1.16
+     },
+     {
+      "name": "Jam, preserve, all flavors",
+      "canonicalId": null,
+      "grams": 20,
+      "calories": 55.6,
+      "protein": 0.07,
+      "carbs": 13.77,
+      "fat": 0.01
+     },
+     {
+      "name": "Butter, stick, salted",
+      "canonicalId": null,
+      "grams": 9.47,
+      "calories": 67.87,
+      "protein": 0.08,
+      "carbs": 0.01,
+      "fat": 7.68
+     }
+    ],
+    "total": {
+     "calories": 252.81,
+     "protein": 5.2,
+     "carbs": 39.76,
+     "fat": 8.85
+    }
+   }
+  },
+  {
+   "n": 22,
+   "file": "22.jpeg",
+   "id": "snapme:SNAPME9131:1:9a8b737c484890f8765402c97bbd",
+   "cuisine": "latin",
+   "mealType": "dinner",
+   "truth": {
+    "items": [
+     {
+      "name": "Rice, brown, cooked, fat added in cooking, made with oil",
+      "canonicalId": null,
+      "grams": 49,
+      "calories": 68.6,
+      "protein": 1.3,
+      "carbs": 12.19,
+      "fat": 1.57
+     },
+     {
+      "name": "Cucumber, raw",
+      "canonicalId": null,
+      "grams": 49,
+      "calories": 5.88,
+      "protein": 0.29,
+      "carbs": 1.06,
+      "fat": 0.08
+     },
+     {
+      "name": "Broccoli, cooked, from fresh, fat not added in cooking",
+      "canonicalId": null,
+      "grams": 40,
+      "calories": 14,
+      "protein": 0.95,
+      "carbs": 2.85,
+      "fat": 0.16
+     },
+     {
+      "name": "Chicken tenders or strips, breaded, from other sources",
+      "canonicalId": null,
+      "grams": 100,
+      "calories": 262,
+      "protein": 17.84,
+      "carbs": 16.53,
+      "fat": 13.84
+     },
+     {
+      "name": "Salsa, red, commercially-prepared",
+      "canonicalId": null,
+      "grams": 46.69,
+      "calories": 13.54,
+      "protein": 0.71,
+      "carbs": 3.1,
+      "fat": 0.08
+     }
+    ],
+    "total": {
+     "calories": 364.02,
+     "protein": 21.09,
+     "carbs": 35.73,
+     "fat": 15.73
+    }
+   }
+  },
+  {
+   "n": 23,
+   "file": "23.jpeg",
+   "id": "snapme:SNAPME9083:1:e731e7c149c19f6ed48052d95fd1",
+   "cuisine": "latin",
+   "mealType": "dinner",
+   "truth": {
+    "items": [
+     {
+      "name": "Tortilla, corn",
+      "canonicalId": null,
+      "grams": 63,
+      "calories": 137.34,
+      "protein": 3.59,
+      "carbs": 28.12,
+      "fat": 1.8
+     },
+     {
+      "name": "Chicken",
+      "canonicalId": null,
+      "grams": 75.94,
+      "calories": 124.54,
+      "protein": 20.34,
+      "carbs": 0,
+      "fat": 4.83
+     },
+     {
+      "name": "Cheese, Cheddar",
+      "canonicalId": null,
+      "grams": 15.89,
+      "calories": 64.2,
+      "protein": 3.63,
+      "carbs": 0.49,
+      "fat": 5.29
+     },
+     {
+      "name": "Enchilada sauce, red",
+      "canonicalId": null,
+      "grams": 70.31,
+      "calories": 21.09,
+      "protein": 0.44,
+      "carbs": 3.42,
+      "fat": 0.64
+     }
+    ],
+    "total": {
+     "calories": 347.17,
+     "protein": 28,
+     "carbs": 32.03,
+     "fat": 12.56
+    }
+   }
+  },
+  {
+   "n": 24,
+   "file": "24.jpeg",
+   "id": "snapme:SNAPME9132:2:031fcdea411982b9d9475d0f6fdb",
+   "cuisine": "mediterranean",
+   "mealType": "dinner",
+   "truth": {
+    "items": [
+     {
+      "name": "Eggplant, cooked, made with oil",
+      "canonicalId": null,
+      "grams": 216,
+      "calories": 157.68,
+      "protein": 1.68,
+      "carbs": 17.82,
+      "fat": 10.13
+     },
+     {
+      "name": "Bulgur, fat not added in cooking",
+      "canonicalId": null,
+      "grams": 103.5,
+      "calories": 85.91,
+      "protein": 3.17,
+      "carbs": 19.13,
+      "fat": 0.25
+     },
+     {
+      "name": "Lentils, dry, cooked, fat not added in cooking",
+      "canonicalId": null,
+      "grams": 27,
+      "calories": 31.05,
+      "protein": 2.42,
+      "carbs": 5.41,
+      "fat": 0.1
+     },
+     {
+      "name": "Olive oil",
+      "canonicalId": null,
+      "grams": 4.05,
+      "calories": 35.8,
+      "protein": 0,
+      "carbs": 0,
+      "fat": 4.05
+     },
+     {
+      "name": "Salt, table",
+      "canonicalId": null,
+      "grams": 0.15,
+      "calories": 0,
+      "protein": 0,
+      "carbs": 0,
+      "fat": 0
+     },
+     {
+      "name": "Lemon juice, 100%, freshly squeezed",
+      "canonicalId": null,
+      "grams": 4.7,
+      "calories": 1.03,
+      "protein": 0.02,
+      "carbs": 0.32,
+      "fat": 0.01
+     },
+     {
+      "name": "Cheese, Feta",
+      "canonicalId": null,
+      "grams": 14.18,
+      "calories": 37.42,
+      "protein": 2.01,
+      "carbs": 0.58,
+      "fat": 3.02
+     },
+     {
+      "name": "Olives, black",
+      "canonicalId": null,
+      "grams": 4.22,
+      "calories": 4.43,
+      "protein": 0.04,
+      "carbs": 0.26,
+      "fat": 0.4
+     },
+     {
+      "name": "Onions, young green, raw",
+      "canonicalId": null,
+      "grams": 3.75,
+      "calories": 1.2,
+      "protein": 0.07,
+      "carbs": 0.28,
+      "fat": 0.01
+     },
+     {
+      "name": "Parsley, raw",
+      "canonicalId": null,
+      "grams": 0.94,
+      "calories": 0.34,
+      "protein": 0.03,
+      "carbs": 0.06,
+      "fat": 0.01
+     },
+     {
+      "name": "Chives, raw",
+      "canonicalId": null,
+      "grams": 0.38,
+      "calories": 0.11,
+      "protein": 0.01,
+      "carbs": 0.02,
+      "fat": 0
+     },
+     {
+      "name": "Oregano",
+      "canonicalId": null,
+      "grams": 0.38,
+      "calories": 0.99,
+      "protein": 0.03,
+      "carbs": 0.26,
+      "fat": 0.02
+     }
+    ],
+    "total": {
+     "calories": 355.96,
+     "protein": 9.48,
+     "carbs": 44.14,
+     "fat": 18
+    }
+   }
+  },
+  {
+   "n": 25,
+   "file": "25.jpeg",
+   "id": "snapme:SNAPME9018:1:5ee651964b6a83df0b3e715d5c68",
+   "cuisine": "western",
+   "mealType": "dinner",
+   "truth": {
+    "items": [
+     {
+      "name": "Ravioli, meat-filled, no sauce",
+      "canonicalId": null,
+      "grams": 240,
+      "calories": 453.6,
+      "protein": 29.95,
+      "carbs": 41.88,
+      "fat": 17.35
+     },
+     {
+      "name": "Cheese sauce",
+      "canonicalId": null,
+      "grams": 45.56,
+      "calories": 72.9,
+      "protein": 1.48,
+      "carbs": 3.49,
+      "fat": 5.93
+     },
+     {
+      "name": "Mixed vegetables, cooked, from canned, fat not added in cooking",
+      "canonicalId": null,
+      "grams": 91,
+      "calories": 44.59,
+      "protein": 2.35,
+      "carbs": 8.41,
+      "fat": 0.23
+     }
+    ],
+    "total": {
+     "calories": 571.09,
+     "protein": 33.78,
+     "carbs": 53.78,
+     "fat": 23.51
+    }
+   }
+  },
+  {
+   "n": 26,
+   "file": "26.jpeg",
+   "id": "snapme:SNAPME9128:3:9cdd40564c6994e48241e9c18f69",
+   "cuisine": "western",
+   "mealType": "breakfast",
+   "truth": {
+    "items": [
+     {
+      "name": "Tomatoes, raw",
+      "canonicalId": null,
+      "grams": 39.5,
+      "calories": 7.11,
+      "protein": 0.35,
+      "carbs": 1.54,
+      "fat": 0.08
+     },
+     {
+      "name": "Bread, multigrain",
+      "canonicalId": null,
+      "grams": 24,
+      "calories": 63.6,
+      "protein": 3.21,
+      "carbs": 10.4,
+      "fat": 1.02
+     },
+     {
+      "name": "Cheese, Colby Jack",
+      "canonicalId": null,
+      "grams": 42,
+      "calories": 161.28,
+      "protein": 10.13,
+      "carbs": 0.68,
+      "fat": 13.1
+     },
+     {
+      "name": "Avocado, raw",
+      "canonicalId": null,
+      "grams": 201,
+      "calories": 321.6,
+      "protein": 4.02,
+      "carbs": 17.15,
+      "fat": 29.47
+     }
+    ],
+    "total": {
+     "calories": 553.59,
+     "protein": 17.71,
+     "carbs": 29.77,
+     "fat": 43.67
+    }
+   }
+  },
+  {
+   "n": 27,
+   "file": "27.jpeg",
+   "id": "snapme:SNAPME9175:1:ce50d9114efb809a1cfde6487ca0",
+   "cuisine": "mediterranean",
+   "mealType": "dinner",
+   "truth": {
+    "items": [
+     {
+      "name": "Bread, whole wheat, made from home recipe or purchased at bakery",
+      "canonicalId": null,
+      "grams": 63.45,
+      "calories": 157.36,
+      "protein": 5.84,
+      "carbs": 30.1,
+      "fat": 2.6
+     },
+     {
+      "name": "Avocado, raw",
+      "canonicalId": null,
+      "grams": 201,
+      "calories": 321.6,
+      "protein": 4.02,
+      "carbs": 17.15,
+      "fat": 29.47
+     },
+     {
+      "name": "Tomatoes, raw",
+      "canonicalId": null,
+      "grams": 85,
+      "calories": 15.3,
+      "protein": 0.75,
+      "carbs": 3.31,
+      "fat": 0.17
+     },
+     {
+      "name": "Corn, raw",
+      "canonicalId": null,
+      "grams": 36.25,
+      "calories": 31.18,
+      "protein": 1.19,
+      "carbs": 6.78,
+      "fat": 0.49
+     },
+     {
+      "name": "Olives, black",
+      "canonicalId": null,
+      "grams": 18.38,
+      "calories": 19.29,
+      "protein": 0.16,
+      "carbs": 1.11,
+      "fat": 1.75
+     },
+     {
+      "name": "Cheese, goat",
+      "canonicalId": null,
+      "grams": 8.75,
+      "calories": 31.5,
+      "protein": 2.06,
+      "carbs": 0.07,
+      "fat": 2.52
+     },
+     {
+      "name": "Olive oil",
+      "canonicalId": null,
+      "grams": 13.5,
+      "calories": 119.34,
+      "protein": 0,
+      "carbs": 0,
+      "fat": 13.5
+     }
+    ],
+    "total": {
+     "calories": 695.57,
+     "protein": 14.02,
+     "carbs": 58.52,
+     "fat": 50.5
+    }
+   }
+  },
+  {
+   "n": 28,
+   "file": "28.jpeg",
+   "id": "snapme:SNAPME9072:2:35ee7d6a49658babf711e45c59fb",
+   "cuisine": "east_asian",
+   "mealType": "dinner",
+   "truth": {
+    "items": [
+     {
+      "name": "Cabbage, Chinese, cooked, made with oil",
+      "canonicalId": null,
+      "grams": 262.5,
+      "calories": 91.88,
+      "protein": 3.96,
+      "carbs": 4.51,
+      "fat": 7.19
+     },
+     {
+      "name": "Teriyaki sauce",
+      "canonicalId": null,
+      "grams": 12,
+      "calories": 10.68,
+      "protein": 0.71,
+      "carbs": 1.87,
+      "fat": 0
+     },
+     {
+      "name": "Mixed salad greens, raw",
+      "canonicalId": null,
+      "grams": 52.5,
+      "calories": 8.93,
+      "protein": 0.8,
+      "carbs": 1.69,
+      "fat": 0.13
+     },
+     {
+      "name": "Italian dressing, made with vinegar and oil",
+      "canonicalId": null,
+      "grams": 4.9,
+      "calories": 11.76,
+      "protein": 0.02,
+      "carbs": 0.59,
+      "fat": 1.03
+     },
+     {
+      "name": "Pork chop, fried, lean and fat eaten",
+      "canonicalId": null,
+      "grams": 226.8,
+      "calories": 478.55,
+      "protein": 62.8,
+      "carbs": 0,
+      "fat": 23.81
+     }
+    ],
+    "total": {
+     "calories": 601.8,
+     "protein": 68.29,
+     "carbs": 8.66,
+     "fat": 32.16
+    }
+   }
+  },
+  {
+   "n": 29,
+   "file": "29.jpeg",
+   "id": "snapme:SNAPME9087:2:4ef0f4084b5d982df4600a8528a9",
+   "cuisine": "latin",
+   "mealType": "lunch",
+   "truth": {
+    "items": [
+     {
+      "name": "Bread, multigrain",
+      "canonicalId": null,
+      "grams": 36,
+      "calories": 95.4,
+      "protein": 4.81,
+      "carbs": 15.6,
+      "fat": 1.52
+     },
+     {
+      "name": "Egg, whole, fried without fat",
+      "canonicalId": null,
+      "grams": 39,
+      "calories": 62.79,
+      "protein": 5.53,
+      "carbs": 0.32,
+      "fat": 4.18
+     },
+     {
+      "name": "Butter, stick, unsalted",
+      "canonicalId": null,
+      "grams": 7.1,
+      "calories": 50.91,
+      "protein": 0.06,
+      "carbs": 0,
+      "fat": 5.76
+     },
+     {
+      "name": "Salsa, pico de gallo",
+      "canonicalId": null,
+      "grams": 15,
+      "calories": 2.55,
+      "protein": 0.11,
+      "carbs": 0.56,
+      "fat": 0.02
+     }
+    ],
+    "total": {
+     "calories": 211.65,
+     "protein": 10.51,
+     "carbs": 16.48,
+     "fat": 11.48
+    }
+   }
+  },
+  {
+   "n": 30,
+   "file": "30.jpeg",
+   "id": "snapme:SNAPME9015:1:2160e0c94609a30f7d189baebf36",
+   "cuisine": "western",
+   "mealType": "breakfast",
+   "truth": {
+    "items": [
+     {
+      "name": "Oatmeal, regular or quick, made with water, fat not added in cooking",
+      "canonicalId": null,
+      "grams": 240,
+      "calories": 153.6,
+      "protein": 5.3,
+      "carbs": 27.26,
+      "fat": 2.62
+     },
+     {
+      "name": "Flax seeds",
+      "canonicalId": null,
+      "grams": 21,
+      "calories": 112.14,
+      "protein": 3.84,
+      "carbs": 6.06,
+      "fat": 8.85
+     },
+     {
+      "name": "Blueberries, frozen, unsweetened",
+      "canonicalId": null,
+      "grams": 155,
+      "calories": 79.05,
+      "protein": 0.65,
+      "carbs": 18.86,
+      "fat": 0.99
+     },
+     {
+      "name": "Banana, raw",
+      "canonicalId": null,
+      "grams": 118,
+      "calories": 105.02,
+      "protein": 1.29,
+      "carbs": 26.95,
+      "fat": 0.39
+     }
+    ],
+    "total": {
+     "calories": 449.81,
+     "protein": 11.08,
+     "carbs": 79.13,
+     "fat": 12.85
+    }
+   }
+  }
+ ]
+}

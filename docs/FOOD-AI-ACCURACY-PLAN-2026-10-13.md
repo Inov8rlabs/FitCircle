@@ -322,10 +322,27 @@ on sodium/fiber and occasional absurd values.
 
 Where FitCircle stands on the closest protocol (weighed plates, Nutrition5k): **bias −3%, MAPE
 35%**, versus the −33% bias measured for Cal AI's class. Depth sensing has not rescued them from
-portion error, which is the dominant error for everyone. To make "better than Cal AI" a measured
-claim rather than an inference we need a head-to-head on identical photos: a 30-plate SNAPMe
-subset run through Cal AI by hand (≈15 min on a phone), scored with this harness. Gaps to close
-on features: nutrition-label scanning and a one-tap "fix" flow.
+portion error, which is the dominant error for everyone.
+
+**Head-to-head, identical photos (2026-10-14).** 30 SNAPMe plates (`scripts/golden/calai-headtohead-v1.json`;
+photos 01–30) were logged in Cal AI from the camera roll (first answer, no fix/retake; numbers
+transcribed from screenshots into `scripts/golden/calai-headtohead-v1-calai.csv`) and parsed by
+FitCircle production (Gemini 3.8 Flash, scale prompt, clamp grounding). 26 plates had a Cal AI
+result; both apps are scored on those 26 (`scripts/score-calai-headtohead.mjs --paired`):
+
+| app | kcal ±25% | kcal ±40% | kcal MAPE | kcal bias | protein MAPE | carbs MAPE | fat MAPE |
+|---|---|---|---|---|---|---|---|
+| Cal AI | 31% | 54% | 41% | −4% | 39% | 43% | 51% |
+| **FitCircle** | **46%** | **58%** | **32%** | −12% | **37%** | **33%** | **45%** |
+
+By cuisine (kcal ±40%, Cal AI → FitCircle): South Asian 80% → 80%, western 60% → 50%,
+Mediterranean 50% → 50%, East Asian 50% → 75%, Latin 0% → 33%. FitCircle is ahead on every
+accuracy metric; Cal AI's smaller *signed* bias comes from larger errors that cancel (its MAPE is
+9 pts worse). Both apps miss the same big plates (seafood spaghetti 924 kcal: 303 vs 391;
+grilled chicken platter 848 kcal: 276 vs 312), so portion size on dense, piled plates remains the
+shared frontier. 26 plates resolve a ~10-pt gap, not a 3-pt one; the four plates without a Cal AI
+result (18, 23, 25, 30) can be added to the sheet later. Gaps to close on features: nutrition-label
+scanning and a one-tap "fix" flow.
 
 Reports: `scripts/golden/reports/*-ground_{generic,off,legacy}*.report.json`,
 `*-scale-*.report.json`, `*-fat-*.report.json`.
