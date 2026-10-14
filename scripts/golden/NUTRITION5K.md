@@ -38,6 +38,29 @@ Both the metadata CSV **and** the overhead `rgb.png` images are individually rea
 need the multi-hundred-GB `gsutil` download just to run the eval. Use `--verify-images` so the golden
 set only contains dishes whose overhead image actually exists.
 
+## v2 set (2026-10-13): `nutrition5k-v2.json`
+
+299 dishes, both cafeterias, **stratified seeded sample** (seed 20261013) over difficulty × cuisine,
+≥ 2 ingredients, every overhead image HEAD-verified. Cuisine is a coarse keyword tag from the
+ingredient list (`CUISINE_KEYWORDS` in the generator): western 219, east_asian 42,
+mediterranean 23, latin 15. Regenerate identically with:
+
+```bash
+B=https://storage.googleapis.com/nutrition5k_dataset/nutrition5k_dataset/metadata
+node scripts/generate-nutrition5k-golden.mjs "$B/dish_metadata_cafe1.csv,$B/dish_metadata_cafe2.csv" \
+  scripts/golden/nutrition5k-v2.json --sample=300 --seed=20261013 --min-ingredients=2 \
+  --version=nutrition5k-v2 --verify-images
+```
+
+Run the eval / a model bake-off against it (reports land in `scripts/golden/reports/`):
+
+```bash
+# OIDC auth: `cd apps/web && vercel env pull .env.local` first (token lasts ~12 h)
+npx tsx --tsconfig apps/web/tsconfig.json scripts/run-nutrition-eval.mjs \
+  --golden=scripts/golden/nutrition5k-v2.json \
+  --models=anthropic/claude-haiku-4.5,google/gemini-3-flash --concurrency=4 --no-gate
+```
+
 ## Generate the golden set
 
 ```bash

@@ -53,8 +53,21 @@ export function normalizeFoodLogEntryAliases(body: unknown): unknown {
   };
 }
 
+// Provenance (migration 054 columns). Optional on create/update so a client can state
+// where an entry's nutrition came from; when absent, the backend infers photo/voice
+// provenance by reconciling the entry with its AI draft (NutritionTrainingService).
+const provenanceFields = {
+  input_method: z.enum(['photo', 'voice', 'barcode', 'search', 'recent', 'manual', 'imported']).optional(),
+  nutrition_source: z
+    .enum(['llm_vision', 'llm_voice', 'foods_db', 'user', 'healthkit', 'healthconnect', 'mfp'])
+    .optional(),
+  llm_confidence: z.number().min(0).max(1).optional(),
+  food_id: z.string().uuid().optional(),
+};
+
 export const CreateFoodLogEntrySchema = z.object({
   entry_type: z.enum(['food', 'water', 'supplement']),
+  ...provenanceFields,
   logged_at: z.string().datetime().optional(),
   entry_date: z.string().date().optional(),
   meal_type: z.enum(['breakfast', 'lunch', 'dinner', 'snack', 'other']).optional(),
@@ -81,6 +94,7 @@ export const CreateFoodLogEntrySchema = z.object({
 );
 
 export const UpdateFoodLogEntrySchema = z.object({
+  ...provenanceFields,
   logged_at: z.string().datetime().optional(),
   entry_date: z.string().date().optional(),
   meal_type: z.enum(['breakfast', 'lunch', 'dinner', 'snack', 'other']).optional(),

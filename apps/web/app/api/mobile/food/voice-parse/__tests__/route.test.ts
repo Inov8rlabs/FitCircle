@@ -7,6 +7,14 @@ const state = {
   ownsCalls: [] as string[],
 };
 
+vi.mock('next/server', async (importOriginal) => {
+  const original: Record<string, unknown> = await importOriginal();
+  return {
+    ...original,
+    // `after()` needs a request scope; the draft-capture hook is a no-op here.
+    after: () => {},
+  };
+});
 vi.mock('@/lib/middleware/mobile-auth', () => ({
   requireMobileAuth: async () => ({ id: 'user-1' }),
 }));

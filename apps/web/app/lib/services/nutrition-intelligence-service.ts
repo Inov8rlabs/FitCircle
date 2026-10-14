@@ -39,8 +39,40 @@ import { UsageService } from './usage-service';
 // and the user reviews the draft before committing; the model's main job here is
 // to identify foods + estimate portions, which Haiku handles well. To trade speed
 // back for Sonnet's portion nuance, set this to 'anthropic/claude-sonnet-4.6'.
-const VISION_MODEL = 'anthropic/claude-haiku-4.5';
-const FAST_FALLBACK_MODEL = 'google/gemini-3-flash';
+// Both are env-overridable so a bake-off winner can be promoted (or rolled back) without a
+// deploy: NUTRITION_VISION_MODEL / NUTRITION_FALLBACK_MODEL (gateway slugs).
+const VISION_MODEL = process.env.NUTRITION_VISION_MODEL?.trim() || 'anthropic/claude-haiku-4.5';
+const FAST_FALLBACK_MODEL = process.env.NUTRITION_FALLBACK_MODEL?.trim() || 'google/gemini-3-flash';
+
+/**
+ * Internal knobs for the eval runner / bake-offs. Production callers pass nothing.
+ * - model / fallbackModel: override the vision models (fallbackModel null = no fallback).
+ * - bypassCache: skip the content-hash cache read AND write (every call is a fresh model call
+ *   and never pollutes the production cache).
+ * - bypassQuota: skip the per-user daily quota (the eval's system user has no tier).
+ * - promptVariant: pick a system prompt from PHOTO_PROMPT_VARIANTS (default: production).
+ */
+export interface ParsePhotoOptions {
+  model?: string;
+  fallbackModel?: string | null;
+  bypassCache?: boolean;
+  bypassQuota?: boolean;
+  promptVariant?: string;
+}
+
+export interface ParsePhotoStats {
+  draft: NutritionDraftDTO;
+  model: string;
+  cached: boolean;
+  latencyMs: number;
+  inputTokens?: number;
+  outputTokens?: number;
+}
+
+interface ModelUsage {
+  inputTokens?: number;
+  outputTokens?: number;
+}
 
 // Voice parsing is text-only (no image) — kept on Sonnet 4.6 for slightly better
 // free-text parsing. p95 target < 1.2s (§7.6).
@@ -74,6 +106,8 @@ const SYSTEM_PROMPT = [
   '- Macros are for the WHOLE item at the estimated grams: calories, proteinG, carbsG, fatG, fiberG,',
   '  sugarG (grams) and sodiumMg (milligrams). Give your best estimate for every field.',
   '- confidence (per item) and overallConfidence are 0..1.',
+  '- NUMBER FORMAT: every number is a plain decimal with AT MOST ONE decimal place (e.g. 12.5, 0.3, 180).',
+  '  Never write long decimal expansions.',
   '- Do not invent foods you cannot see. If the plate is unclear, return fewer items with lower confidence.',
   '- Be body- and food-neutral: never judge the food, never comment on the eater. Just identify and estimate.',
   'PORTION REALISM — this is where estimates most often go wrong, so weigh it heavily:',
@@ -90,6 +124,32 @@ const SYSTEM_PROMPT = [
   '- Sanity-check the whole plate: the sum of calories should look right for the total volume of food shown.',
   '  If the total seems high for the amount visible, revise the portions DOWN before returning.',
 ].join(' ');
+
+// Structured output for the photo parse. PHOTO_OUTPUT_JSON_MODE keeps the same Zod parsing but
+// asks the provider for plain JSON mode instead of json_schema (see modelCallOptions.nativeSchema).
+const PHOTO_OUTPUT = Output.object({ schema: photoParseResultSchema });
+const PHOTO_OUTPUT_JSON_MODE: typeof PHOTO_OUTPUT = {
+  ...PHOTO_OUTPUT,
+  responseFormat: Promise.resolve({ type: 'json' as const }),
+};
+
+// Appended to the system prompt when a model is called WITHOUT a native JSON schema (see
+// modelCallOptions.nativeSchema): the exact shape the Zod schema expects, so the model is not
+// guessing key names from the rules above.
+const RESPONSE_SHAPE_PROMPT = [
+  'RESPONSE FORMAT: reply with ONE JSON object and nothing else — no prose, no markdown fences:',
+  '{"items":[{"name":string,"quantity":number,"quantityRange":{"min":number,"max":number}|null,',
+  '"servingUnit":string,"grams":number,"gramsPerUnit":number,"calories":number,"proteinG":number,',
+  '"carbsG":number,"fatG":number,"fiberG":number,"sugarG":number,"sodiumMg":number,"confidence":number}],',
+  '"overallConfidence":number,"notes":string|null}',
+].join(' ');
+
+// Named prompt variants for the eval harness (`--prompt=<id>`). `production` is what ships;
+// new candidates are added here, measured against it on the golden set, and promoted by
+// becoming the new SYSTEM_PROMPT. Unknown ids fall back to production.
+const PHOTO_PROMPT_VARIANTS: Record<string, string> = {
+  production: SYSTEM_PROMPT,
+};
 
 // Single-item re-estimate: the user corrected a food's name (or set a portion) and wants its
 // macros recomputed for that exact food and amount. Text-only — same model family as voice.
@@ -144,8 +204,25 @@ export class NutritionIntelligenceService {
     images: ParsePhotoImage[],
     note?: string | null,
   ): Promise<NutritionDraftDTO> {
+    return (await this.parsePhotoWithStats(userId, images, note)).draft;
+  }
+
+  /**
+   * parsePhoto plus per-call observability (model actually used, latency, tokens). Used by the
+   * eval runner for bake-offs; `opts` lets it pin a model and bypass cache/quota. Production
+   * behaviour with no opts is identical to parsePhoto.
+   */
+  static async parsePhotoWithStats(
+    userId: string,
+    images: ParsePhotoImage[],
+    note?: string | null,
+    opts: ParsePhotoOptions = {},
+  ): Promise<ParsePhotoStats> {
     if (images.length === 0) throw new Error('ParseFailed');
     const hint = note?.trim() || null;
+    const primaryModel = opts.model ?? VISION_MODEL;
+    const fallbackModel = opts.fallbackModel === undefined ? FAST_FALLBACK_MODEL : opts.fallbackModel;
+    const systemPrompt = PHOTO_PROMPT_VARIANTS[opts.promptVariant ?? 'production'] ?? SYSTEM_PROMPT;
 
     // 1. Cost guard — content hash cache so an identical request never re-bills (§7.6).
     //    The key covers every image plus the note (a different note must not hit a stale
@@ -164,16 +241,24 @@ export class NutritionIntelligenceService {
       if (hint) hasher.update(`note:${hint}`);
     }
     const imageHash = hasher.digest('hex');
-    const cached = await this.getCachedResult(imageHash);
+    const cached = opts.bypassCache ? null : await this.getCachedResult(imageHash);
     if (cached) {
-      return await this.toDraft(userId, cached, VISION_MODEL, true, 'photo', 'llm_vision');
+      return {
+        draft: {
+          ...(await this.toDraft(userId, cached, VISION_MODEL, true, 'photo', 'llm_vision')),
+          parseHash: imageHash,
+        },
+        model: VISION_MODEL,
+        cached: true,
+        latencyMs: 0,
+      };
     }
 
     // 2. Tier-aware per-user daily quota on premium vision calls (§9.2 + MONETIZATION-PLAN).
     //    Caching is checked first so repeat/identical photos don't count against the quota.
     //    A multi-image request is ONE model call and counts as one parse.
     //    Throws UpgradeRequiredError (free limit, paywall trigger) or Error('RateLimited').
-    await UsageService.assertFoodAiQuota(userId);
+    if (!opts.bypassQuota) await UsageService.assertFoodAiQuota(userId);
 
     // 3. Structured vision call via the AI Gateway. generateText + Output.object validates
     //    the result against the Zod schema; explicit failover below handles a failed attempt.
@@ -196,44 +281,71 @@ export class NutritionIntelligenceService {
       );
     }
     let result: PhotoParseResult;
-    let model = VISION_MODEL;
+    let usage: ModelUsage = {};
+    let model = primaryModel;
     const startedAt = Date.now();
     try {
-      result = await this.callPhotoModel(
-        VISION_MODEL,
+      ({ result, usage } = await this.callPhotoModel(
+        primaryModel,
         userId,
+        systemPrompt,
         promptBits.join('\n\n'),
         images,
         PHOTO_PRIMARY_TIMEOUT_MS,
-      );
+      ));
     } catch (primaryError) {
-      model = FAST_FALLBACK_MODEL;
-      try {
-        result = await this.callPhotoModel(
-          FAST_FALLBACK_MODEL,
-          userId,
-          promptBits.join('\n\n'),
-          images,
-          PHOTO_FALLBACK_TIMEOUT_MS,
-        );
-      } catch (fallbackError) {
-        this.logParseFailure('photo', userId, FAST_FALLBACK_MODEL, Date.now() - startedAt, {
+      if (!fallbackModel) {
+        this.logParseFailure('photo', userId, primaryModel, Date.now() - startedAt, {
           imageCount: images.length,
           mimeType: images[0].mimeType,
           imageBytes: images.reduce((a, img) => a + img.bytes.length, 0),
           hasNote: !!hint,
           imageHash: imageHash.slice(0, 12),
-          primaryModel: VISION_MODEL,
+          primaryModel,
+          fallback: 'disabled',
+        }, primaryError);
+        throw new Error('ParseFailed');
+      }
+      model = fallbackModel;
+      try {
+        ({ result, usage } = await this.callPhotoModel(
+          fallbackModel,
+          userId,
+          systemPrompt,
+          promptBits.join('\n\n'),
+          images,
+          PHOTO_FALLBACK_TIMEOUT_MS,
+        ));
+      } catch (fallbackError) {
+        this.logParseFailure('photo', userId, fallbackModel, Date.now() - startedAt, {
+          imageCount: images.length,
+          mimeType: images[0].mimeType,
+          imageBytes: images.reduce((a, img) => a + img.bytes.length, 0),
+          hasNote: !!hint,
+          imageHash: imageHash.slice(0, 12),
+          primaryModel,
           primaryError: this.describeParseError(primaryError),
         }, fallbackError);
         throw new Error('ParseFailed');
       }
     }
+    const latencyMs = Date.now() - startedAt;
 
-    // 4. Record the call (for the daily cap) and cache the result by image hash.
-    await this.recordParse(userId, imageHash, result);
+    // 4. Record the call (for the daily cap) and cache the result by image hash. A bake-off
+    //    run bypasses the cache entirely so it never seeds production with eval outputs.
+    if (!opts.bypassCache) await this.recordParse(userId, imageHash, result);
 
-    return await this.toDraft(userId, result, model, false, 'photo', 'llm_vision');
+    return {
+      draft: {
+        ...(await this.toDraft(userId, result, model, false, 'photo', 'llm_vision')),
+        parseHash: imageHash,
+      },
+      model,
+      cached: false,
+      latencyMs,
+      inputTokens: usage.inputTokens,
+      outputTokens: usage.outputTokens,
+    };
   }
 
   /**
@@ -282,7 +394,10 @@ export class NutritionIntelligenceService {
     const transcriptHash = createHash('sha256').update(transcript).digest('hex');
     await this.recordParseLog(userId, transcriptHash);
 
-    return await this.toDraft(userId, result, model, false, 'voice', 'llm_voice');
+    return {
+      ...(await this.toDraft(userId, result, model, false, 'voice', 'llm_voice')),
+      parseHash: transcriptHash,
+    };
   }
 
   /**
@@ -546,13 +661,61 @@ export class NutritionIntelligenceService {
   static modelCallOptions(model: string, answerTokens: number): {
     maxOutputTokens: number;
     providerOptions: Record<string, Record<string, unknown>>;
+    /**
+     * false → call the model in plain JSON mode (no json_schema response_format) and describe
+     * the shape in the prompt instead. Qwen 3.8 Flash answered a bare `[]` (2 output tokens)
+     * on a third of plates when the gateway sent our schema (2026-10-14 screen); in plain JSON
+     * mode the same plates parse. Our Zod parse + repairPhotoJson still validate the reply.
+     */
+    nativeSchema: boolean;
   } {
     const isGemini = model.startsWith('google/gemini');
+    // OpenAI reasoning models (gpt-5.x) also spend output budget on reasoning, and their
+    // strict structured-output mode rejects our self-healing schema (z.preprocess fields are
+    // not "required" in the generated JSON schema) — so ask for low effort, extra headroom and
+    // non-strict schema validation; our Zod parse still validates the answer.
+    const isOpenAI = model.startsWith('openai/');
+    // Gemini 3.5+ / 4 reject thinkingLevel "minimal" (400 "Thinking level MINIMAL is not
+    // supported"); "low" is their floor. Gemini 3 / 3.1 accept "minimal".
+    const geminiThinking = /gemini-(3\.[5-9]|[4-9])/.test(model) ? 'low' : 'minimal';
+    // Open-weight-style vendors on the gateway (Qwen, Kimi, GLM, DeepSeek, StepFun) reason by
+    // default: with our prompt that is 2–3k thinking tokens and 20–40 s per call, past the
+    // 28 s abort (every Qwen call "timed out" in the 2026-10-14 bake-off), and Kimi spends
+    // the whole output budget thinking and returns nothing. Each vendor only honours its own
+    // switch (probed 2026-10-14 via @ai-sdk/gateway providerOptions keyed by vendor slug).
+    const vendor = model.split('/')[0];
+    const thinkingOff: Record<string, Record<string, unknown>> = {
+      alibaba: { enableThinking: false },
+      stepfun: { enableThinking: false },
+      moonshotai: { thinking: { type: 'disabled' } },
+      zai: { thinking: { type: 'disabled' } },
+      deepseek: { thinking: { type: 'disabled' } },
+    };
     return {
-      maxOutputTokens: isGemini ? answerTokens + 4_000 : answerTokens,
-      providerOptions: isGemini
-        ? { google: { thinkingConfig: { thinkingLevel: 'minimal', includeThoughts: false } } }
-        : {},
+      // Headroom for models that spend output budget on reasoning: Gemini, OpenAI, and the
+      // vendors above when their switch is not honoured (GLM 5.3 Flash still "thinks" ~1.4k
+      // tokens with thinking disabled and hit the 2k cap on 7/100 plates, 2026-10-14).
+      maxOutputTokens: isGemini || isOpenAI || thinkingOff[vendor] ? answerTokens + 4_000 : answerTokens,
+      nativeSchema: !thinkingOff[vendor],
+      providerOptions: thinkingOff[vendor]
+        ? { [vendor]: thinkingOff[vendor] }
+        : isGemini
+        ? {
+            // Schema-in-prompt rather than Gemini's native responseSchema. In native mode
+            // every Gemini 3.x model sometimes emits a runaway decimal ("2.5000000…" for
+            // thousands of tokens) until the output cap kills the parse — 1/12 on 3-flash
+            // and 3.8-flash, 8/12 on 3.1-flash-lite, 7/12 on 3.5-flash (2026-10-14 eval).
+            // With the schema in the prompt the models write ordinary JSON; combined with
+            // repairPhotoJson (they like a bare array with `foodName`) that is 0–1/12.
+            // NUTRITION_GEMINI_NATIVE_SCHEMA=true restores native mode for comparison.
+            google: {
+              thinkingConfig: { thinkingLevel: geminiThinking, includeThoughts: false },
+              ...(process.env.NUTRITION_GEMINI_NATIVE_SCHEMA === 'true' ? {} : { structuredOutputs: false }),
+            },
+          }
+        : isOpenAI
+          ? { openai: { reasoningEffort: 'low', strictJsonSchema: false } }
+          : {},
     };
   }
 
@@ -579,40 +742,145 @@ export class NutritionIntelligenceService {
     return result.output;
   }
 
+  /**
+   * Second chance for a reply that is good JSON but not quite our shape. Seen in the eval
+   * (2026-10-14): Gemini in prompt-schema mode returns a bare ARRAY of items with keys like
+   * `foodName` / `foodItem`; other models occasionally wrap JSON in ``` fences or use
+   * snake_case macro keys. The Zod schema still validates the repaired object, so nothing
+   * unvalidated reaches the client; this only rescues parses we would otherwise throw away.
+   */
+  static repairPhotoJson(text: string | undefined | null): PhotoParseResult | null {
+    if (!text) return null;
+    const stripped = text.replace(/```(?:json)?/gi, '').trim();
+    const start = Math.min(
+      ...['{', '['].map((ch) => stripped.indexOf(ch)).filter((i) => i >= 0),
+    );
+    if (!Number.isFinite(start)) return null;
+    const last = Math.max(stripped.lastIndexOf('}'), stripped.lastIndexOf(']'));
+    if (last <= start) return null;
+    let parsed: unknown;
+    const candidate = stripped.slice(start, last + 1);
+    try {
+      parsed = JSON.parse(candidate);
+    } catch {
+      // Trailing commas before a closing bracket are the usual culprit.
+      try {
+        parsed = JSON.parse(candidate.replace(/,\s*([\]}])/g, '$1'));
+      } catch {
+        return null;
+      }
+    }
+
+    const NAME_KEYS = ['name', 'foodName', 'food_name', 'foodItem', 'food_item', 'food', 'item', 'label', 'title'];
+    const ALIASES: Record<string, string[]> = {
+      calories: ['calories', 'kcal', 'energyKcal', 'energy_kcal', 'calories_kcal'],
+      proteinG: ['proteinG', 'protein_g', 'protein'],
+      carbsG: ['carbsG', 'carbs_g', 'carbs', 'carbohydratesG', 'carbohydrates_g', 'carbohydrates'],
+      fatG: ['fatG', 'fat_g', 'fat', 'totalFatG'],
+      fiberG: ['fiberG', 'fiber_g', 'fiber', 'fibreG', 'fibre'],
+      sugarG: ['sugarG', 'sugar_g', 'sugar', 'sugarsG', 'sugars'],
+      sodiumMg: ['sodiumMg', 'sodium_mg', 'sodium'],
+      gramsPerUnit: ['gramsPerUnit', 'grams_per_unit', 'gramPerUnit'],
+      servingUnit: ['servingUnit', 'serving_unit', 'unit'],
+      quantityRange: ['quantityRange', 'quantity_range', 'range'],
+      grams: ['grams', 'totalGrams', 'total_grams', 'weightG', 'weight_g', 'weightGrams'],
+      quantity: ['quantity', 'qty', 'amount', 'count'],
+      confidence: ['confidence', 'itemConfidence'],
+    };
+    const normalizeItem = (raw: unknown): Record<string, unknown> | null => {
+      if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+      const o = raw as Record<string, unknown>;
+      const out: Record<string, unknown> = {};
+      for (const k of NAME_KEYS) if (typeof o[k] === 'string' && o[k]) { out.name = o[k]; break; }
+      for (const [canon, keys] of Object.entries(ALIASES)) {
+        for (const k of keys) if (o[k] !== undefined) { out[canon] = o[k]; break; }
+      }
+      return out;
+    };
+
+    let obj: Record<string, unknown>;
+    if (Array.isArray(parsed)) {
+      obj = { items: parsed };
+    } else if (parsed && typeof parsed === 'object') {
+      const o = parsed as Record<string, unknown>;
+      const itemsKey = ['items', 'foods', 'foodItems', 'food_items', 'components', 'ingredients'].find((k) => Array.isArray(o[k]));
+      obj = { ...o, items: itemsKey ? o[itemsKey] : [] };
+    } else {
+      return null;
+    }
+    const items = (obj.items as unknown[]).map(normalizeItem).filter((x): x is Record<string, unknown> => !!x);
+    if (items.length === 0) return null;
+    if (obj.overallConfidence === undefined) {
+      const confs = items.map((it) => Number(it.confidence)).filter((n) => Number.isFinite(n));
+      obj.overallConfidence = confs.length ? confs.reduce((a, b) => a + b, 0) / confs.length : 0.5;
+    }
+    if (obj.notes === undefined) obj.notes = null;
+    const safe = photoParseResultSchema.safeParse({ ...obj, items });
+    // The schema drops nameless items; a repair that leaves nothing nameable is no repair.
+    return safe.success && safe.data.items.length > 0 ? safe.data : null;
+  }
+
   private static async callPhotoModel(
     model: string,
     userId: string,
+    system: string,
     prompt: string,
     images: ParsePhotoImage[],
     timeoutMs: number,
-  ): Promise<PhotoParseResult> {
+  ): Promise<{ result: PhotoParseResult; usage: ModelUsage }> {
     const limits = this.modelCallOptions(model, 2_000);
-    const result = await generateText({
-      model,
-      output: Output.object({ schema: photoParseResultSchema }),
-      system: SYSTEM_PROMPT,
-      maxRetries: 0,
-      timeout: timeoutMs,
-      maxOutputTokens: limits.maxOutputTokens,
-      providerOptions: {
-        ...limits.providerOptions,
-        gateway: this.gatewayOptions(userId, 'photo'),
-      },
-      messages: [
-        {
-          role: 'user',
-          content: [
-            { type: 'text', text: prompt },
-            ...images.map((img) => ({
-              type: 'image' as const,
-              image: img.bytes,
-              mediaType: img.mimeType,
-            })),
-          ],
-        },
-      ],
+    const usageOf = (u: { inputTokens?: number; outputTokens?: number } | undefined): ModelUsage => ({
+      inputTokens: u?.inputTokens ?? undefined,
+      outputTokens: u?.outputTokens ?? undefined,
     });
-    return this.outputOrThrow(result, model);
+    let result;
+    try {
+      result = await generateText({
+        model,
+        output: limits.nativeSchema ? PHOTO_OUTPUT : PHOTO_OUTPUT_JSON_MODE,
+        system: limits.nativeSchema ? system : `${system} ${RESPONSE_SHAPE_PROMPT}`,
+        maxRetries: 0,
+        timeout: timeoutMs,
+        maxOutputTokens: limits.maxOutputTokens,
+        providerOptions: {
+          ...limits.providerOptions,
+          gateway: this.gatewayOptions(userId, 'photo'),
+        },
+        messages: [
+          {
+            role: 'user',
+            content: [
+              { type: 'text', text: prompt },
+              ...images.map((img) => ({
+                type: 'image' as const,
+                image: img.bytes,
+                mediaType: img.mimeType,
+              })),
+            ],
+          },
+        ],
+      });
+    } catch (err) {
+      // generateText itself throws NoObjectGeneratedError when the completed reply fails the
+      // schema; it carries the raw text, so a near-miss shape gets one repair attempt here.
+      const e = err as { text?: string; finishReason?: string; usage?: ModelUsage };
+      if (e?.text && (e.finishReason == null || e.finishReason === 'stop')) {
+        const repaired = this.repairPhotoJson(e.text);
+        if (repaired) return { result: repaired, usage: usageOf(e.usage) };
+      }
+      throw err;
+    }
+    const usage = usageOf(result.usage);
+    try {
+      return { result: this.outputOrThrow(result, model), usage };
+    } catch (err) {
+      // Same second chance for the lazy `.output` path.
+      if (result.finishReason === 'stop') {
+        const repaired = this.repairPhotoJson((err as { text?: string })?.text ?? result.text);
+        if (repaired) return { result: repaired, usage };
+      }
+      throw err;
+    }
   }
 
   private static async callVoiceModel(

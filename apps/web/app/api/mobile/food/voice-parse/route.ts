@@ -1,8 +1,9 @@
-import { type NextRequest, NextResponse } from 'next/server';
+import { after, type NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { NutritionIntelligenceService } from '@/lib/services/nutrition-intelligence-service';
+import { NutritionTrainingService } from '@/lib/services/nutrition-training-service';
 import { UpgradeRequiredError } from '@/lib/services/usage-service';
 import { safeParseLenient } from '@/lib/validation/lenient-parse';
 import { readParseFallbackOptionsFromJson } from '@/lib/validation/nutrition-parse-options';
@@ -74,6 +75,12 @@ export async function POST(request: NextRequest) {
 
     try {
       const draft = await NutritionIntelligenceService.parseVoice(user.id, parsed.data.transcript);
+
+      // Production accuracy signal (see photo-parse): draft row written after the response.
+      const latencyMs = Date.now() - startTime;
+      after(() =>
+        NutritionTrainingService.captureDraft({ userId: user.id, draft, latencyMs, imageCount: null }),
+      );
 
       return NextResponse.json({
         success: true,

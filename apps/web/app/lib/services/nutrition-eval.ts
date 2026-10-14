@@ -5,12 +5,16 @@ import type { ParsedFoodItem } from '../types/nutrition';
 import {
   type EvalCase,
   type EvalReport,
+  type EvalRunStats,
   type GoldenItem,
   type ScoredRecord,
   type SliceReport,
   type StageScores,
   EVAL_THRESHOLDS,
   FUZZY_MATCH_THRESHOLD,
+  GROUNDING_DENSITY_TOLERANCE,
+  PORTION_MAPE_MIN_TRUTH_G,
+  SEMANTIC_MATCH_THRESHOLD,
 } from '../types/nutrition-eval';
 
 // ============================================================================
@@ -33,8 +37,31 @@ export function nameSimilarity(a: string, b: string): number {
   return (2 * inter) / (sa.size + sb.size);
 }
 
-function matchesTruth(pred: ParsedFoodItem, truth: GoldenItem): boolean {
-  return nameSimilarity(pred.name, truth.name) >= FUZZY_MATCH_THRESHOLD;
+/**
+ * Index-based matcher so the optional semantic matrix can be consulted: a prediction matches a
+ * truth item on token Dice OR on runner-supplied embedding similarity.
+ */
+function makeMatcher(c: EvalCase): (pi: number, ti: number) => boolean {
+  const preds = c.modelOutput.items;
+  const truths = c.golden.groundTruth.items;
+  const sem = c.nameSimilarities;
+  return (pi, ti) => {
+    if (nameSimilarity(preds[pi].name, truths[ti].name) >= FUZZY_MATCH_THRESHOLD) return true;
+    const s = sem?.[pi]?.[ti];
+    return typeof s === 'number' && s >= SEMANTIC_MATCH_THRESHOLD;
+  };
+}
+
+/** Best gram estimate for a predicted item: explicit grams, else quantity × gramsPerUnit. */
+function predGrams(p: ParsedFoodItem): number {
+  if (p.grams > 0) return p.grams;
+  if (p.quantity > 0 && p.gramsPerUnit > 0) return p.quantity * p.gramsPerUnit;
+  return p.grams;
+}
+
+/** |pred − truth| / truth, or null when the truth is 0 (undefined ratio). */
+function absPctErr(pred: number, truth: number): number | null {
+  return truth > 0 ? Math.abs(pred - truth) / truth : null;
 }
 
 // ============================================================================
@@ -43,48 +70,101 @@ function matchesTruth(pred: ParsedFoodItem, truth: GoldenItem): boolean {
 export function scoreRecord(c: EvalCase): ScoredRecord {
   const preds = c.modelOutput.items;
   const truths = c.golden.groundTruth.items;
+  const matches = makeMatcher(c);
+  const truthFor = (pi: number): GoldenItem | null => {
+    for (let ti = 0; ti < truths.length; ti++) if (matches(pi, ti)) return truths[ti];
+    return null;
+  };
 
   // --- Stage 1: identification -------------------------------------------------
   // Top-1: the most-confident predicted item matches SOME truth item.
-  const topPred = preds.length ? [...preds].sort((a, b) => b.confidence - a.confidence)[0] : null;
-  const identTop1 = topPred && truths.some((t) => matchesTruth(topPred, t)) ? 1 : 0;
+  let topIdx = -1;
+  preds.forEach((p, i) => {
+    if (topIdx < 0 || p.confidence > preds[topIdx].confidence) topIdx = i;
+  });
+  const identTop1 = topIdx >= 0 && truthFor(topIdx) ? 1 : 0;
 
   // Multi-item recall: fraction of truth items matched by some prediction.
-  const matchedTruths = truths.filter((t) => preds.some((p) => matchesTruth(p, t)));
-  const multiItemRecall = truths.length ? matchedTruths.length / truths.length : 0;
+  let matchedTruthCount = 0;
+  truths.forEach((_, ti) => {
+    if (preds.some((_, pi) => matches(pi, ti))) matchedTruthCount++;
+  });
+  const multiItemRecall = truths.length ? matchedTruthCount / truths.length : 0;
 
   // Hallucination: predicted items matching NO truth item.
-  const hallucinated = preds.filter((p) => !truths.some((t) => matchesTruth(p, t)));
-  const hallucinationRate = preds.length ? hallucinated.length / preds.length : 0;
+  let hallucinatedCount = 0;
+  preds.forEach((_, pi) => {
+    if (!truthFor(pi)) hallucinatedCount++;
+  });
+  const hallucinationRate = preds.length ? hallucinatedCount / preds.length : 0;
 
-  // --- Stage 2: portion MAPE on matched items (grams) -------------------------
-  const errs: number[] = [];
-  for (const p of preds) {
-    const t = truths.find((tt) => matchesTruth(p, tt));
-    if (t && t.grams > 0) errs.push(Math.abs(p.quantity - t.grams) / t.grams);
-  }
-  const portionMape = errs.length ? errs.reduce((a, b) => a + b, 0) / errs.length : null;
+  // --- Stage 2: portion error on matched items (grams) -------------------------
+  // Compare the item's GRAMS (not `quantity`, which is in the model's natural unit —
+  // "2 slices" vs 60 g truth was scoring as a 97% miss).
+  // Percentage error is only meaningful for substantive items: Nutrition5k lists 0.2 g of
+  // parsley or 1 g of oil, and a 20 g guess there is a 10 000% "error" that swamps the mean.
+  // Those items still count in the absolute (grams) error.
+  const pctErrs: number[] = [];
+  const absErrs: number[] = [];
+  preds.forEach((p, pi) => {
+    const t = truthFor(pi);
+    if (t && t.grams > 0) {
+      const g = predGrams(p);
+      if (t.grams >= PORTION_MAPE_MIN_TRUTH_G) pctErrs.push(Math.abs(g - t.grams) / t.grams);
+      absErrs.push(Math.abs(g - t.grams));
+    }
+  });
+  const mean = (xs: number[]) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null);
+  const portionMape = mean(pctErrs);
+  const portionMaeG = mean(absErrs);
 
-  // --- Stage 3: nutrition mapping on TOTAL calories ---------------------------
-  const predCal = preds.reduce((s, p) => s + p.calories, 0);
-  const truthCal = c.golden.groundTruth.total.calories;
-  const calErr = truthCal > 0 ? Math.abs(predCal - truthCal) / truthCal : 1;
+  // --- Stage 3: nutrition mapping on the plate TOTALS ----------------------------
+  const sum = (f: (p: ParsedFoodItem) => number) => preds.reduce((s, p) => s + f(p), 0);
+  const predCal = sum((p) => p.calories);
+  const truth = c.golden.groundTruth.total;
+  const calErr = truth.calories > 0 ? Math.abs(predCal - truth.calories) / truth.calories : 1;
+  const calSignedPctErr = truth.calories > 0 ? (predCal - truth.calories) / truth.calories : 0;
   const withinPct25 = calErr <= 0.25;
   const withinPct40 = calErr <= 0.4;
 
-  // --- Stage 4: DB match coverage ---------------------------------------------
+  // --- Stage 4: DB match coverage + grounding correctness -----------------------
   const dbMatchCoverage = c.dbMatches.length
     ? c.dbMatches.filter(Boolean).length / c.dbMatches.length
     : 0;
+
+  let groundingCorrectness: number | null = null;
+  if (c.groundedKcalPer100g) {
+    let considered = 0;
+    let plausible = 0;
+    preds.forEach((_, i) => {
+      const density = c.groundedKcalPer100g?.[i];
+      if (density == null) return;
+      const t = truthFor(i);
+      if (!t || t.grams <= 0) return;
+      const truthDensity = (t.calories / t.grams) * 100;
+      if (truthDensity <= 0) return;
+      considered++;
+      if (Math.abs(density - truthDensity) / truthDensity <= GROUNDING_DENSITY_TOLERANCE) plausible++;
+    });
+    groundingCorrectness = considered ? plausible / considered : null;
+  }
 
   const scores: StageScores = {
     identTop1,
     multiItemRecall,
     hallucinationRate,
     portionMape,
+    portionMaeG,
     withinPct25,
     withinPct40,
+    calAbsPctErr: calErr,
+    calAbsErr: Math.abs(predCal - truth.calories),
+    calSignedPctErr,
+    proteinAbsPctErr: absPctErr(sum((p) => p.proteinG), truth.protein),
+    carbsAbsPctErr: absPctErr(sum((p) => p.carbsG), truth.carbs),
+    fatAbsPctErr: absPctErr(sum((p) => p.fatG), truth.fat),
     dbMatchCoverage,
+    groundingCorrectness,
     predictedConfidence: c.modelOutput.overallConfidence,
     wasCorrect: identTop1 === 1,
   };
@@ -121,17 +201,29 @@ export function expectedCalibrationError(scored: ScoredRecord[], buckets = 10): 
 function aggregate(label: string, recs: ScoredRecord[]): SliceReport {
   const n = recs.length;
   const mean = (f: (s: StageScores) => number) => (n ? recs.reduce((a, r) => a + f(r.scores), 0) / n : 0);
-  const mapeVals = recs.map((r) => r.scores.portionMape).filter((x): x is number => x !== null);
+  // Mean over records where the metric is defined (null = undefined for that record).
+  const meanDefined = (f: (s: StageScores) => number | null): number | null => {
+    const vals = recs.map((r) => f(r.scores)).filter((x): x is number => x !== null);
+    return vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : null;
+  };
   return {
     slice: label,
     n,
     identTop1Acc: mean((s) => s.identTop1),
     multiItemRecall: mean((s) => s.multiItemRecall),
     hallucinationRate: mean((s) => s.hallucinationRate),
-    portionMape: mapeVals.length ? mapeVals.reduce((a, b) => a + b, 0) / mapeVals.length : null,
+    portionMape: meanDefined((s) => s.portionMape),
+    portionMaeG: meanDefined((s) => s.portionMaeG),
     within25Rate: mean((s) => (s.withinPct25 ? 1 : 0)),
     within40Rate: mean((s) => (s.withinPct40 ? 1 : 0)),
+    calMape: mean((s) => s.calAbsPctErr),
+    calMae: mean((s) => s.calAbsErr),
+    calBias: mean((s) => s.calSignedPctErr),
+    proteinMape: meanDefined((s) => s.proteinAbsPctErr),
+    carbsMape: meanDefined((s) => s.carbsAbsPctErr),
+    fatMape: meanDefined((s) => s.fatAbsPctErr),
     dbMatchCoverage: mean((s) => s.dbMatchCoverage),
+    groundingCorrectness: meanDefined((s) => s.groundingCorrectness),
   };
 }
 
@@ -139,7 +231,7 @@ function aggregate(label: string, recs: ScoredRecord[]): SliceReport {
 // Build the full report: overall + sliced (per cuisine/meal_type/difficulty/lighting) + ECE
 // + pass/fail against EVAL_THRESHOLDS. Sliced reporting is MANDATORY (§8.3).
 // ============================================================================
-export function buildReport(cases: EvalCase[], datasetVersion: string): EvalReport {
+export function buildReport(cases: EvalCase[], datasetVersion: string, run?: EvalRunStats): EvalReport {
   const scored = cases.map(scoreRecord);
   const overall = aggregate('overall', scored);
   const ece = expectedCalibrationError(scored);
@@ -165,6 +257,9 @@ export function buildReport(cases: EvalCase[], datasetVersion: string): EvalRepo
   if (overall.within25Rate < t.within25RateMin) failures.push(`within25Rate ${overall.within25Rate.toFixed(2)} < ${t.within25RateMin}`);
   if (overall.within40Rate < t.within40RateMin) failures.push(`within40Rate ${overall.within40Rate.toFixed(2)} < ${t.within40RateMin}`);
   if (overall.dbMatchCoverage < t.dbMatchCoverageMin) failures.push(`dbMatchCoverage ${overall.dbMatchCoverage.toFixed(2)} < ${t.dbMatchCoverageMin}`);
+  if (overall.groundingCorrectness !== null && overall.groundingCorrectness < t.groundingCorrectnessMin) {
+    failures.push(`groundingCorrectness ${overall.groundingCorrectness.toFixed(2)} < ${t.groundingCorrectnessMin}`);
+  }
   if (ece > t.eceMax) failures.push(`ECE ${ece.toFixed(3)} > ${t.eceMax}`);
   // Gate the first-class cuisine slices explicitly (§6.11): South Asian + Canadian must not lag.
   for (const sliceLabel of ['cuisine=south_asian', 'cuisine=canadian']) {
@@ -174,5 +269,7 @@ export function buildReport(cases: EvalCase[], datasetVersion: string): EvalRepo
     }
   }
 
-  return { datasetVersion, n: scored.length, overall, bySlice, ece, thresholds: t, pass: failures.length === 0, failures };
+  const report: EvalReport = { datasetVersion, n: scored.length, overall, bySlice, ece, thresholds: t, pass: failures.length === 0, failures };
+  if (run) report.run = run;
+  return report;
 }

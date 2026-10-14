@@ -61,6 +61,7 @@ const rawArgs = process.argv.slice(2);
 const flags = rawArgs.filter((a) => a.startsWith('--'));
 const positional = rawArgs.filter((a) => !a.startsWith('--'));
 
+// `metaArg` may be a comma-separated list (e.g. both cafe CSVs) — rows are pooled.
 const metaArg = positional[0];
 const outPath = positional[1] || 'scripts/golden/nutrition5k.json';
 const limit = positional[2] ? parseInt(positional[2], 10) : Infinity;
@@ -68,6 +69,46 @@ const verifyImages = flags.includes('--verify-images');
 const keepDeprecated = flags.includes('--keep-deprecated');
 const imageryDirFlag = flags.find((f) => f.startsWith('--imagery-dir='));
 const imageryDir = imageryDirFlag ? imageryDirFlag.split('=').slice(1).join('=') : null;
+// --sample=N: instead of "first N rows", draw a seeded, STRATIFIED sample of N dishes across
+// difficulty × cuisine so the golden set isn't dominated by whatever the CSV lists first
+// (the first rows are the earliest scans — mostly single-ingredient incremental plates).
+const sampleFlag = flags.find((f) => f.startsWith('--sample='));
+const sampleSize = sampleFlag ? parseInt(sampleFlag.split('=')[1], 10) : null;
+const seedFlag = flags.find((f) => f.startsWith('--seed='));
+const seed = seedFlag ? parseInt(seedFlag.split('=')[1], 10) : 20261013;
+// --min-ingredients=N: drop incremental plates with fewer distinct ingredients (default 1).
+const minIngrFlag = flags.find((f) => f.startsWith('--min-ingredients='));
+const minIngredients = minIngrFlag ? parseInt(minIngrFlag.split('=')[1], 10) : 1;
+const versionFlag = flags.find((f) => f.startsWith('--version='));
+const DATASET_VERSION_OUT = versionFlag ? versionFlag.split('=')[1] : DATASET_VERSION;
+
+// Deterministic PRNG (mulberry32) so a sample is reproducible from its seed.
+function rng(s) {
+  let a = s >>> 0;
+  return () => {
+    a = (a + 0x6d2b79f5) >>> 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+// Coarse cuisine tag from ingredient names. Nutrition5k is Google-cafeteria food, so this is a
+// weak signal — but the cafeterias do serve curries, dal, naan, stir-fries, etc., and slicing on it
+// is the only way to see whether South-Asian-style plates lag until we have a weighed set.
+const CUISINE_KEYWORDS = [
+  ['south_asian', /\b(curry|dal|daal|lentil|naan|paneer|tikka|masala|biryani|chana|chickpea curry|samosa|raita|korma|saag|tandoori|basmati)\b/i],
+  ['east_asian', /\b(tofu|kimchi|edamame|teriyaki|soy|sesame|bok choy|miso|sushi|ramen|noodle|stir[- ]?fry|fried rice|dumpling|pho|curry paste)\b/i],
+  ['latin', /\b(tortilla|salsa|guacamole|taco|burrito|black beans|pico|jalape|enchilada|carnitas|quesadilla|plantain)\b/i],
+  // `olives` not `olive oil` — oil is a garnish on half the cafeteria plates.
+  ['mediterranean', /\b(hummus|falafel|feta|tzatziki|pita|olives|kalamata|couscous|tabbouleh|shawarma)\b/i],
+];
+function cuisineFor(items) {
+  const names = items.map((i) => i.name).join(' | ');
+  for (const [tag, re] of CUISINE_KEYWORDS) if (re.test(names)) return tag;
+  return 'western';
+}
 
 if (!metaArg) {
   console.error('Usage: node scripts/generate-nutrition5k-golden.mjs <metadataCsvPathOrUrl> [outPath] [limit] [--verify-images] [--imagery-dir=<path>]');
@@ -181,45 +222,126 @@ function parseRow(fields) {
         },
       },
       slices: {
-        // Honest slicing: Nutrition5k is US cafeteria food on a controlled overhead rig.
-        cuisine: 'western',
+        // Honest slicing: Nutrition5k is US cafeteria food on a controlled overhead rig; the
+        // cuisine tag is a coarse keyword guess from the ingredient list (see CUISINE_KEYWORDS).
+        cuisine: cuisineFor(keptItems),
         mealType: 'lunch',
         difficulty: difficultyFor(keptItems.length),
         lighting: 'good',
       },
-      datasetVersion: DATASET_VERSION,
+      datasetVersion: DATASET_VERSION_OUT,
     },
     dishId,
   };
 }
 
 async function main() {
-  console.log(`[generate-nutrition5k-golden] loading metadata: ${metaArg}`);
-  const text = await loadCsvText(metaArg);
-  const lines = text.split(/\r?\n/).filter((l) => l.trim().length > 0);
-  console.log(`  ${lines.length} dish rows in metadata`);
+  const sources = metaArg.split(',').map((s) => s.trim()).filter(Boolean);
+  const lines = [];
+  for (const src of sources) {
+    console.log(`[generate-nutrition5k-golden] loading metadata: ${src}`);
+    const text = await loadCsvText(src);
+    const srcLines = text.split(/\r?\n/).filter((l) => l.trim().length > 0);
+    console.log(`  ${srcLines.length} dish rows in metadata`);
+    lines.push(...srcLines);
+  }
   if (imageryDir) console.log(`  imageUri mode: LOCAL file paths under ${path.resolve(imageryDir)}`);
   else console.log(`  imageUri mode: public HTTPS overhead rgb.png${verifyImages ? ' (HEAD-verified)' : ''}`);
 
-  const records = [];
-  let skippedNoIngr = 0, skippedZero = 0, skippedNoImage = 0, parsedOk = 0;
+  let skippedNoIngr = 0, skippedZero = 0, skippedNoImage = 0, skippedFewIngr = 0, parsedOk = 0;
 
+  // Parse everything first (cheap, local) so sampling sees the whole pool.
+  const pool = [];
+  const seenIds = new Set();
   for (const line of lines) {
-    if (records.length >= limit) break;
     const fields = line.split(',').map((f) => f.trim());
     const out = parseRow(fields);
     if (!out) continue;
     if (out.skip === 'no_ingredients') { skippedNoIngr++; continue; }
     if (out.skip === 'zero_total') { skippedZero++; continue; }
+    if (seenIds.has(out.dishId)) continue;
+    seenIds.add(out.dishId);
+    if (out.record.groundTruth.items.length < minIngredients) { skippedFewIngr++; continue; }
+    pool.push(out.record);
+  }
+  console.log(`  ${pool.length} parseable dishes in the pool`);
 
+  // Order the candidates: stratified seeded sample, or CSV order (legacy "first N").
+  let candidates;
+  if (sampleSize) {
+    const rand = rng(seed);
+    const shuffle = (arr) => {
+      const a = [...arr];
+      for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(rand() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; }
+      return a;
+    };
+    // Strata = difficulty × cuisine. Allocate proportionally, but guarantee every non-western
+    // cuisine stratum at least min(its size, 8) so the slices have something to report on.
+    const strata = new Map();
+    for (const r of pool) {
+      const k = `${r.slices.difficulty}|${r.slices.cuisine}`;
+      if (!strata.has(k)) strata.set(k, []);
+      strata.get(k).push(r);
+    }
+    const quotas = new Map();
+    let allocated = 0;
+    for (const [k, rs] of strata) {
+      const share = Math.round((rs.length / pool.length) * sampleSize);
+      const floor = k.endsWith('|western') ? 0 : Math.min(rs.length, 8);
+      const q = Math.min(rs.length, Math.max(share, floor));
+      quotas.set(k, q);
+      allocated += q;
+    }
+    // Rebalance to hit sampleSize exactly (trim or top up the largest strata).
+    const byLargest = [...strata.entries()].sort((a, b) => b[1].length - a[1].length);
+    let diff = sampleSize - allocated;
+    for (const [k, rs] of byLargest) {
+      if (diff === 0) break;
+      const q = quotas.get(k);
+      const nq = Math.min(rs.length, Math.max(0, q + diff));
+      diff -= nq - q;
+      quotas.set(k, nq);
+    }
+    // Build the candidate list: the quota from each stratum first (shuffled), then the remainder
+    // of each stratum as spares so a 404'd image can be replaced from the SAME stratum.
+    candidates = [];
+    const spares = [];
+    for (const [k, rs] of strata) {
+      const sh = shuffle(rs);
+      const q = quotas.get(k);
+      candidates.push(...sh.slice(0, q).map((r) => ({ r, k })));
+      spares.push(...sh.slice(q).map((r) => ({ r, k })));
+    }
+    candidates = shuffle(candidates);
+    candidates.spares = spares;
+    console.log(`  stratified sample: ${candidates.length} dishes across ${strata.size} strata (seed ${seed})`);
+  } else {
+    candidates = pool.map((r) => ({ r, k: null }));
+  }
+
+  const records = [];
+  const target = sampleSize ?? limit;
+  const spareQueue = new Map(); // stratum -> spares
+  for (const s of candidates.spares ?? []) {
+    if (!spareQueue.has(s.k)) spareQueue.set(s.k, []);
+    spareQueue.get(s.k).push(s.r);
+  }
+  const queue = [...candidates];
+  while (queue.length && records.length < target) {
+    const { r, k } = queue.shift();
     // Optionally verify the overhead image is actually reachable (HTTPS mode only).
     if (verifyImages && !imageryDir) {
-      const ok = await imageExists(out.record.imageUri);
-      if (!ok) { skippedNoImage++; continue; }
+      const ok = await imageExists(r.imageUri);
+      if (!ok) {
+        skippedNoImage++;
+        const spare = k != null ? spareQueue.get(k)?.shift() : null;
+        if (spare) queue.push({ r: spare, k });
+        continue;
+      }
     }
-
     parsedOk++;
-    records.push(out.record);
+    records.push(r);
+    if (records.length % 50 === 0) console.log(`  ${records.length}/${target} verified`);
   }
 
   if (records.length === 0) {
@@ -231,11 +353,13 @@ async function main() {
   writeFileSync(path.resolve(outPath), JSON.stringify(records, null, 2));
 
   const byDifficulty = records.reduce((a, r) => ((a[r.slices.difficulty] = (a[r.slices.difficulty] || 0) + 1), a), {});
+  const byCuisine = records.reduce((a, r) => ((a[r.slices.cuisine] = (a[r.slices.cuisine] || 0) + 1), a), {});
   const avgItems = round(records.reduce((s, r) => s + r.groundTruth.items.length, 0) / records.length);
   console.log(`\n[generate-nutrition5k-golden] wrote ${records.length} records to ${outPath}`);
-  console.log(`  dataset_version=${DATASET_VERSION}  avg_ingredients_per_dish=${avgItems}`);
+  console.log(`  dataset_version=${DATASET_VERSION_OUT}  avg_ingredients_per_dish=${avgItems}`);
   console.log(`  by difficulty:`, byDifficulty);
-  console.log(`  skipped: no_ingredients=${skippedNoIngr}  zero_total=${skippedZero}  image_404=${skippedNoImage}`);
+  console.log(`  by cuisine:`, byCuisine);
+  console.log(`  skipped: no_ingredients=${skippedNoIngr}  zero_total=${skippedZero}  few_ingredients=${skippedFewIngr}  image_404=${skippedNoImage}`);
   if (!verifyImages && !imageryDir) {
     console.log('  NOTE: ~25-30% of dishes have no overhead rgb.png (side-angle only). Re-run with');
     console.log('  --verify-images to HEAD-check and drop dead imageUris before running the eval.');

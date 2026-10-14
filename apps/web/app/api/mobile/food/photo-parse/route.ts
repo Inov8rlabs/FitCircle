@@ -3,6 +3,7 @@ import { after, type NextRequest, NextResponse } from 'next/server';
 
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { NutritionIntelligenceService } from '@/lib/services/nutrition-intelligence-service';
+import { NutritionTrainingService } from '@/lib/services/nutrition-training-service';
 import { UpgradeRequiredError } from '@/lib/services/usage-service';
 import { PHOTO_PARSE_MAX_IMAGES, PHOTO_PARSE_MAX_NOTE_CHARS } from '@/lib/types/nutrition';
 import { readParseFallbackOptions } from '@/lib/validation/nutrition-parse-options';
@@ -116,6 +117,18 @@ export async function POST(request: NextRequest) {
 
     try {
       const draft = await NutritionIntelligenceService.parsePhoto(user.id, images, note);
+
+      // Production accuracy signal: record the draft AFTER responding so the user never
+      // waits on it; the food-log create route links the saved entry to this row.
+      const latencyMs = Date.now() - startTime;
+      after(() =>
+        NutritionTrainingService.captureDraft({
+          userId: user.id,
+          draft,
+          latencyMs,
+          imageCount: images.length,
+        }),
+      );
 
       return NextResponse.json({
         success: true,

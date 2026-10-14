@@ -4,16 +4,17 @@
  * GET /api/mobile/food-log - Get user's food log entries (paginated)
  */
 
-import { resolveEntryDate } from '@/lib/utils/entry-date';
-import { type NextRequest, NextResponse } from 'next/server';
+import { after, type NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { FeatureFlagService } from '@/lib/services/feature-flag-service';
 import { FoodLogService } from '@/lib/services/food-log-service';
+import { NutritionTrainingService } from '@/lib/services/nutrition-training-service';
 import { StreakClaimingService } from '@/lib/services/streak-claiming-service';
 import { resolveClientTimezone } from '@/lib/streaks/client-timezone';
 import { createAdminSupabase } from '@/lib/supabase-admin';
+import { resolveEntryDate } from '@/lib/utils/entry-date';
 import {
   CreateFoodLogEntrySchema,
   FoodLogQuerySchema,
@@ -270,6 +271,18 @@ export async function POST(request: NextRequest) {
 
     if (result.error) {
       throw result.error;
+    }
+
+    // Production accuracy signal: tie this entry back to the AI draft it came from (if
+    // any) and score the user's edits. After the response; never affects the create.
+    if (result.data && NutritionTrainingService.enabled) {
+      const saved = result.data;
+      const explicit = {
+        input_method: validatedData.input_method,
+        nutrition_source: validatedData.nutrition_source,
+        llm_confidence: validatedData.llm_confidence,
+      };
+      after(() => NutritionTrainingService.reconcileEntry(user.id, saved, explicit));
     }
 
     // Logging a meal is a manual action → it claims the streak day the meal

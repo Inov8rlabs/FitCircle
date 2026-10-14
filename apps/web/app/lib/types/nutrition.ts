@@ -32,10 +32,19 @@ const toFiniteNumber = (v: unknown): number => {
   const n = typeof v === 'number' ? v : Number(v);
   return Number.isFinite(n) ? n : 0;
 };
-// ≥ 0, clamped (calories, macros, quantities).
-const nonNegative = z.preprocess((v) => Math.max(0, toFiniteNumber(v)), z.number().nonnegative());
+// ≥ 0, clamped (calories, macros, quantities). The description is part of the JSON schema the
+// model sees: Gemini 3.x in JSON mode otherwise sometimes emits a runaway decimal expansion
+// ("0.25475656565656566869584321975708…" for thousands of tokens) until it hits the output
+// cap and the whole parse is lost (seen 2026-10-14 on gemini-3.8-flash: 299/299 failures).
+const nonNegative = z.preprocess(
+  (v) => Math.max(0, toFiniteNumber(v)),
+  z.number().nonnegative().describe('Non-negative number with at most one decimal place'),
+);
 // 0..1, clamped (per-item and overall confidence).
-const unitInterval = z.preprocess((v) => Math.min(1, Math.max(0, toFiniteNumber(v))), z.number().min(0).max(1));
+const unitInterval = z.preprocess(
+  (v) => Math.min(1, Math.max(0, toFiniteNumber(v))),
+  z.number().min(0).max(1).describe('0..1 with at most two decimal places'),
+);
 
 // The numeric fields above are self-healing; the STRING / object fields were not, and a
 // single glitch there ("servingUnit": null, a missing "notes" or "quantityRange" key,
@@ -121,6 +130,10 @@ export interface NutritionDraftDTO {
   totals: { calories: number; proteinG: number; carbsG: number; fatG: number; fiberG: number; sugarG: number; sodiumMg: number };
   // 0–10 per-meal health score (heuristic over the totals), or null if not computable.
   healthScore: number | null;
+  // Content hash of the parse input (images+note / transcript / item+portion). Lets a
+  // saved entry be tied back to its draft (nutrition_training_samples.parse_hash).
+  // Shipped clients ignore unknown keys (Swift CodingKeys / kotlinx ignoreUnknownKeys).
+  parseHash?: string;
 }
 
 // ============================================================================

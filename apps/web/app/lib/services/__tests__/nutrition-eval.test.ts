@@ -153,3 +153,130 @@ describe('nutrition-eval — report with mandatory sliced reporting (§8.3, §6.
     expect(report.failures.some((f) => f.includes('identTop1Acc'))).toBe(true);
   });
 });
+
+describe('nutrition-eval — v2 metrics (grams MAE, macros, grounding correctness)', () => {
+  it('scores portion error on GRAMS, not the natural-unit quantity', () => {
+    const c: EvalCase = {
+      golden: golden('g5', 'western', [['toast', 60, 160]], 160),
+      modelOutput: {
+        items: [{
+          name: 'toast', quantity: 2, quantityRange: null, servingUnit: 'slice', grams: 66, gramsPerUnit: 33,
+          calories: 176, proteinG: 6, carbsG: 30, fatG: 2, fiberG: 2, sugarG: 2, sodiumMg: 300, confidence: 0.9,
+        }],
+        overallConfidence: 0.9,
+        notes: null,
+      },
+      dbMatches: [false],
+    };
+    const s = scoreRecord(c).scores;
+    expect(s.portionMape).toBeCloseTo(0.1, 5);
+    expect(s.portionMaeG).toBeCloseTo(6, 5);
+  });
+
+  it('reports macro errors on totals and null when the truth macro is zero', () => {
+    const g = golden('g6', 'western', [['rice', 150, 195]], 195);
+    g.groundTruth.total = { calories: 195, protein: 4, carbs: 42, fat: 0 };
+    const c: EvalCase = {
+      golden: g,
+      modelOutput: {
+        items: [{
+          name: 'rice', quantity: 150, quantityRange: null, servingUnit: 'g', grams: 150, gramsPerUnit: 1,
+          calories: 234, proteinG: 5, carbsG: 50.4, fatG: 1, fiberG: 0, sugarG: 0, sodiumMg: 0, confidence: 0.8,
+        }],
+        overallConfidence: 0.8,
+        notes: null,
+      },
+      dbMatches: [true],
+    };
+    const s = scoreRecord(c).scores;
+    expect(s.calAbsPctErr).toBeCloseTo(0.2, 5);
+    expect(s.calSignedPctErr).toBeCloseTo(0.2, 5);
+    expect(s.calAbsErr).toBeCloseTo(39, 5);
+    expect(s.proteinAbsPctErr).toBeCloseTo(0.25, 5);
+    expect(s.carbsAbsPctErr).toBeCloseTo(0.2, 5);
+    expect(s.fatAbsPctErr).toBeNull();
+  });
+
+  it('grounding correctness compares grounded density against the matched truth item', () => {
+    // truth: chicken 100 g / 165 kcal (1.65 kcal/g), rice 150 g / 195 kcal (1.3 kcal/g)
+    const c: EvalCase = {
+      golden: golden('g7', 'western', [['chicken', 100, 165], ['rice', 150, 195]], 360),
+      modelOutput: model([['chicken', 100, 165, 0.9], ['rice', 150, 195, 0.9], ['sauce', 20, 40, 0.5]], 0.9),
+      dbMatches: [true, true, false],
+      // chicken grounded to a plausible row (170 kcal/100 g); rice grounded to a WRONG row (360 kcal/100 g = a dry-weight product)
+      groundedKcalPer100g: [170, 360, null],
+    };
+    const s = scoreRecord(c).scores;
+    expect(s.groundingCorrectness).toBeCloseTo(0.5, 5);
+  });
+
+  it('grounding correctness is null when no grounded item matched a truth item', () => {
+    const c: EvalCase = {
+      golden: golden('g8', 'western', [['salad', 100, 50]], 50),
+      modelOutput: model([['salad', 100, 50, 0.9]], 0.9),
+      dbMatches: [false],
+      groundedKcalPer100g: [null],
+    };
+    expect(scoreRecord(c).scores.groundingCorrectness).toBeNull();
+  });
+
+  it('aggregates the new metrics and gates grounding correctness', () => {
+    const good: EvalCase = {
+      golden: golden('g9', 'western', [['chicken', 100, 165]], 165),
+      modelOutput: model([['chicken', 100, 165, 0.95]], 0.95),
+      dbMatches: [true],
+      groundedKcalPer100g: [165],
+    };
+    const bad: EvalCase = {
+      golden: golden('g10', 'western', [['chicken', 100, 165]], 165),
+      modelOutput: model([['chicken', 100, 165, 0.95]], 0.95),
+      dbMatches: [true],
+      groundedKcalPer100g: [400],
+    };
+    const report = buildReport([good, bad], 'test-v2');
+    expect(report.overall.groundingCorrectness).toBeCloseTo(0.5, 5);
+    expect(report.overall.calMae).toBe(0);
+    expect(report.failures.some((f) => f.includes('groundingCorrectness'))).toBe(true);
+  });
+});
+
+describe('nutrition-eval — semantic name matching (runner-supplied similarity)', () => {
+  it('matches on the embedding similarity when token Dice misses', () => {
+    const c: EvalCase = {
+      golden: golden('g11', 'western', [['Egg, whole, boiled or poached', 44, 62]], 62),
+      modelOutput: model([['large chicken egg', 50, 72, 0.9]], 0.9),
+      dbMatches: [false],
+      nameSimilarities: [[0.71]],
+    };
+    const s = scoreRecord(c).scores;
+    expect(s.identTop1).toBe(1);
+    expect(s.multiItemRecall).toBe(1);
+    expect(s.hallucinationRate).toBe(0);
+    expect(s.portionMape).toBeCloseTo(6 / 44, 5);
+  });
+
+  it('does not match below the semantic threshold', () => {
+    const c: EvalCase = {
+      golden: golden('g12', 'western', [['Egg, whole, boiled or poached', 44, 62]], 62),
+      modelOutput: model([['blueberry muffin', 50, 72, 0.9]], 0.9),
+      dbMatches: [false],
+      nameSimilarities: [[0.31]],
+    };
+    const s = scoreRecord(c).scores;
+    expect(s.identTop1).toBe(0);
+    expect(s.hallucinationRate).toBe(1);
+  });
+});
+
+describe('nutrition-eval — portion MAPE ignores sub-5 g truth items (but MAE counts them)', () => {
+  it('a 20 g guess for 0.2 g of parsley does not swamp the plate', () => {
+    const c: EvalCase = {
+      golden: golden('g13', 'western', [['rice', 150, 195], ['parsley', 0.2, 0.1]], 195),
+      modelOutput: model([['rice', 165, 215, 0.9], ['parsley', 20, 7, 0.4]], 0.8),
+      dbMatches: [true, false],
+    };
+    const s = scoreRecord(c).scores;
+    expect(s.portionMape).toBeCloseTo(0.1, 5);
+    expect(s.portionMaeG).toBeCloseTo((15 + 19.8) / 2, 5);
+  });
+});
