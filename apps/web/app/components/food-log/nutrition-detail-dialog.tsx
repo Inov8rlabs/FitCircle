@@ -18,6 +18,7 @@ import { nutritionClient, PHOTO_PARSE_MAX_IMAGES, type NutritionDraft, type Nutr
 import { compressImagesForUpload } from '@/lib/utils/image-compression';
 import { cn } from '@/lib/utils';
 
+import { EstimateWithAi } from '../nutrition/AiTextEstimate';
 import { NutritionConfirm } from '../nutrition/NutritionConfirm';
 
 type MealType = 'breakfast' | 'lunch' | 'dinner' | 'snack' | 'other';
@@ -43,6 +44,23 @@ function toDraftItem(it: Record<string, any>): NutritionDraftItem {
     confidence: 1,
     matchedFoodId: it.matched_food_id ?? null,
   };
+}
+
+const GENERIC_TITLES = new Set(['meal', 'snack', 'logged meal', 'voice note', 'photo meal', 'food']);
+
+/**
+ * What the user wrote about a saved meal, for "Estimate with AI": the description (an
+ * unparsed voice/photo fallback stores the note there), else a non-generic title, plus the
+ * user's notes — minus the server's own "Saved from a … we couldn't auto-analyze" notice.
+ */
+function describeEntry(entry: any): string {
+  const str = (v: unknown) => (typeof v === 'string' ? v.trim() : '');
+  const description = str(entry?.description);
+  const title = str(entry?.title);
+  const notes = str(entry?.notes);
+  const head = description || (GENERIC_TITLES.has(title.toLowerCase()) ? '' : title);
+  const tail = /^saved from a /i.test(notes) || notes === head ? '' : notes;
+  return [head, tail].filter(Boolean).join('. ').slice(0, 1000);
 }
 
 const round = (v: unknown) => (typeof v === 'number' ? Math.round(v) : 0);
@@ -76,16 +94,21 @@ export function NutritionDetailDialog({ entry, children }: { entry: any; childre
   const [open, setOpen] = useState(false);
   // When set, we're reviewing new photo(s) appended to this meal.
   const [seedDraft, setSeedDraft] = useState<NutritionDraft | null>(null);
+  // 'photo' = appending a photo's foods; 'text' = an AI estimate of a meal saved without nutrition.
+  const [seedSource, setSeedSource] = useState<'photo' | 'text'>('photo');
+  const entryText = describeEntry(entry);
+  const canEstimate = Boolean(canAddPhotoFor(entry)) && items.length === 0 && round(nd.calories) === 0 && !!entryText;
   const [addFiles, setAddFiles] = useState<File[]>([]);
   const [adding, setAdding] = useState(false);
   const [addError, setAddError] = useState<string | null>(null);
   const addRef = useRef<HTMLInputElement>(null);
 
   // Only meals/snacks carry AI nutrition; don't offer it on water/supplement.
-  const canAddPhoto = entry?.id && entry?.entry_type !== 'water' && entry?.entry_type !== 'supplement';
+  const canAddPhoto = canAddPhotoFor(entry);
 
   const resetAdd = () => {
     setSeedDraft(null);
+    setSeedSource('photo');
     setAddFiles([]);
     setAddError(null);
   };
@@ -144,6 +167,7 @@ export function NutritionDetailDialog({ entry, children }: { entry: any; childre
         totals: { calories: 0, proteinG: 0, carbsG: 0, fatG: 0 },
         healthScore: score ?? merged.healthScore ?? null,
       });
+      setSeedSource('photo');
       setAddFiles(files);
     } catch (err) {
       setAddError(err instanceof Error ? err.message : 'Could not analyze that photo.');
@@ -165,11 +189,13 @@ export function NutritionDetailDialog({ entry, children }: { entry: any; childre
         {seedDraft ? (
           <>
             <DialogHeader>
-              <DialogTitle className="pr-6">Add to {entry?.title || 'this meal'}</DialogTitle>
+              <DialogTitle className="pr-6">
+                {seedSource === 'text' ? 'Review the estimate' : `Add to ${entry?.title || 'this meal'}`}
+              </DialogTitle>
             </DialogHeader>
             <NutritionConfirm
               draft={seedDraft}
-              method="photo_library"
+              method={seedSource === 'text' ? 'manual' : 'photo_library'}
               initialImages={addFiles}
               editEntry={{ id: entry.id, mealType: entry?.meal_type as MealType | undefined }}
               onCommitted={() => {
@@ -261,6 +287,24 @@ export function NutritionDetailDialog({ entry, children }: { entry: any; childre
           <p className="text-sm text-muted-foreground">No nutrition details saved for this entry.</p>
         )}
 
+        {canEstimate && (
+          <div className="space-y-1">
+            <p className="text-xs text-muted-foreground">
+              Estimate calories and macros from &ldquo;{entryText.length > 80 ? `${entryText.slice(0, 77)}…` : entryText}&rdquo;.
+            </p>
+            <EstimateWithAi
+              text={entryText}
+              existingEntryId={entry.id}
+              surface="meal_detail"
+              onEstimate={(draft) => {
+                setSeedSource('text');
+                setAddFiles([]);
+                setSeedDraft(draft);
+              }}
+            />
+          </div>
+        )}
+
         {canAddPhoto && (
           <>
             <input ref={addRef} type="file" accept="image/*" multiple className="hidden" onChange={onAddPhotos} />
@@ -295,4 +339,8 @@ function Stat({ label, value, accent, big }: { label: string; value: string | nu
       <div className="text-[11px] text-muted-foreground">{label}</div>
     </div>
   );
+}
+
+function canAddPhotoFor(entry: any): boolean {
+  return Boolean(entry?.id) && entry?.entry_type !== 'water' && entry?.entry_type !== 'supplement';
 }

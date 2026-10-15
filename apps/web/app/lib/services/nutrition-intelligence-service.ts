@@ -16,6 +16,10 @@ import {
   photoParseResultSchema,
   PHOTO_PARSE_MAX_CORRECTION_CHARS,
   type PhotoRefineRequest,
+  type ParseInputSource,
+  type TextParseResult,
+  textParseResultSchema,
+  normalizeAssumptions,
 } from '../types/nutrition';
 
 import { FoodLogImageService } from './food-log-image-service';
@@ -69,6 +73,19 @@ export interface ParsePhotoOptions {
    * and their free-text correction. Never served from or written to the cache.
    */
   refine?: PhotoRefineRequest;
+}
+
+/**
+ * parseVoice options. `source` is what the client sent ('voice' = speech-to-text transcript,
+ * 'text' = typed into the manual form); the rest are eval seams production callers never pass.
+ * - model / fallbackModel: override the text models (fallbackModel null = no fallback).
+ * - bypassQuota: skip the daily quota AND the nutrition_parse_log write (eval runs only).
+ */
+export interface ParseVoiceOptions {
+  source?: ParseInputSource;
+  model?: string;
+  fallbackModel?: string | null;
+  bypassQuota?: boolean;
 }
 
 export interface ParsePhotoStats {
@@ -170,6 +187,17 @@ const RESPONSE_SHAPE_PROMPT = [
   '"overallConfidence":number,"notes":string|null}',
 ].join(' ');
 
+// The text/voice parse: same item shape plus the assumptions list.
+const TEXT_OUTPUT = Output.object({ schema: textParseResultSchema });
+const TEXT_OUTPUT_JSON_MODE: typeof TEXT_OUTPUT = {
+  ...TEXT_OUTPUT,
+  responseFormat: Promise.resolve({ type: 'json' as const }),
+};
+const TEXT_RESPONSE_SHAPE_PROMPT = RESPONSE_SHAPE_PROMPT.replace(
+  /"notes":string\|null\}$/,
+  '"notes":string|null,"assumptions":string[]}',
+);
+
 // Hidden-fat rule (candidate): the NIH metabolic-kitchen test of four photo apps (NUTRITION 2026)
 // found every app, Cal AI included, ~33% low on calories and ~30 g/meal low on fat — cooking oil,
 // butter, ghee, dressings and cheese that the photo does not show. Our own fat MAPE is 74–111%.
@@ -229,23 +257,56 @@ const ITEM_SYSTEM_PROMPT = [
   '- Be body- and food-neutral: just identify and estimate.',
 ].join(' ');
 
-const VOICE_SYSTEM_PROMPT = [
-  'You are a nutrition estimation assistant. The user spoke a description of what they ate and it',
-  'was transcribed to text. Parse that text into every distinct food item with estimated quantity and macros.',
-  'Rules:',
-  '- Estimate, never claim exactness. Infer reasonable quantities from the words: "two eggs" → quantity 2,',
-  '  servingUnit "egg"; "a bowl of rice" → a typical bowl. When the amount is vague or unstated, set',
-  '  quantityRange {min,max} to a plausible span and quantity to its midpoint; when the speaker gave a clear',
-  '  count or measure, set quantityRange to null.',
-  '- servingUnit is the natural unit for the food ("egg", "cup", "slice", "serving", or "g"); quantity is',
-  '  how many; gramsPerUnit is the weight of one; grams is the TOTAL edible weight (always provide it).',
-  '- Macros are for the WHOLE item at the estimated grams: calories, proteinG, carbsG, fatG, fiberG,',
-  '  sugarG (grams), sodiumMg (milligrams). Give your best estimate for every field.',
-  '- confidence (per item) and overallConfidence are 0..1; lower it when the transcript is ambiguous.',
-  '- Only include foods the transcript actually mentions. Ignore filler words and non-food chatter.',
-  '- If the transcript names no food at all, return an empty items array with low overallConfidence.',
-  '- Be body- and food-neutral: never judge the food, never comment on the eater. Just identify and estimate.',
+// Shared by the voice and typed-text parse. Only the opening and the word for the input differ
+// ("transcript" for speech, "description" for typed text). ASSUMPTION_RULES drive the draft's
+// `assumptions` list, which the client shows under its "AI estimate" note.
+const ASSUMPTION_RULES = [
+  'MISSING DETAILS — the user often omits amounts. When the {input} does not state a quantity, assume ONE',
+  'typical single serving as normally eaten (one restaurant/home plate of a dish, one medium coffee drink,',
+  'one bowl), or the count the wording implies (a plural with no number, e.g. "eggs", means 2). When the',
+  'size or preparation is not stated, assume the most common simple home preparation and include its normal',
+  'cooking fat (eggs: scrambled or fried in ~1 tsp butter or oil; vegetables: sautéed in ~1 tsp oil).',
+  '- assumptions: an array of 0-3 short notes for the user, each at most 60 characters, naming ONE thing you',
+  '  assumed that the {input} did not say: the quantity, the size, or the preparation. Write the assumption',
+  '  itself with concrete numbers, e.g. "2 large eggs", "Scrambled in 1 tsp butter", "1 restaurant plate (~350 g)",',
+  '  "Medium (12 oz) with 2% milk". Every number in an assumption must agree with the quantity and grams you',
+  '  return for that item. Return [] when the {input} stated everything that matters. Never restate what the',
+  '  user already said, never give advice.',
 ].join(' ');
+
+function textSystemPrompt(source: ParseInputSource): string {
+  const input = source === 'text' ? 'description' : 'transcript';
+  const opening =
+    source === 'text'
+      ? [
+          'You are a nutrition estimation assistant. The user typed a short description of what they ate; it',
+          'may be terse ("eggs", "latte") or a dish name. Parse it into every distinct food item with estimated',
+          'quantity and macros.',
+        ]
+      : [
+          'You are a nutrition estimation assistant. The user spoke a description of what they ate and it',
+          'was transcribed to text. Parse that text into every distinct food item with estimated quantity and macros.',
+        ];
+  return [
+    ...opening,
+    'Rules:',
+    '- Estimate, never claim exactness. Infer reasonable quantities from the words: "two eggs" → quantity 2,',
+    '  servingUnit "egg"; "a bowl of rice" → a typical bowl. When the amount is vague or unstated, set',
+    '  quantityRange {min,max} to a plausible span and quantity to its midpoint; when the user gave a clear',
+    '  count or measure, set quantityRange to null.',
+    '- servingUnit is the natural unit for the food ("egg", "cup", "slice", "serving", or "g"); quantity is',
+    '  how many; gramsPerUnit is the weight of one; grams is the TOTAL edible weight (always provide it).',
+    '- Macros are for the WHOLE item at the estimated grams: calories, proteinG, carbsG, fatG, fiberG,',
+    '  sugarG (grams), sodiumMg (milligrams). Give your best estimate for every field.',
+    '- dbName is the plainest generic name for the same food as a nutrition database lists it, noun first',
+    '  ("egg, scrambled", "rice, white, cooked"); name stays the friendly display name.',
+    `- confidence (per item) and overallConfidence are 0..1; lower it when the ${input} is ambiguous.`,
+    `- Only include foods the ${input} actually mentions. Ignore filler words and non-food chatter.`,
+    `- If the ${input} names no food at all, return an empty items array with low overallConfidence.`,
+    '- Be body- and food-neutral: never judge the food, never comment on the eater. Just identify and estimate.',
+    ASSUMPTION_RULES.replace(/\{input\}/g, input),
+  ].join(' ');
+}
 
 export interface ParsePhotoImage {
   bytes: Buffer;
@@ -429,31 +490,40 @@ export class NutritionIntelligenceService {
    * @throws Error('RateLimited') when the per-user daily soft cap is exceeded
    * @throws Error('ParseFailed') when the model output cannot be validated
    */
-  static async parseVoice(userId: string, transcript: string): Promise<NutritionDraftDTO> {
+  static async parseVoice(
+    userId: string,
+    transcript: string,
+    opts: ParseVoiceOptions = {},
+  ): Promise<NutritionDraftDTO> {
+    const source: ParseInputSource = opts.source === 'text' ? 'text' : 'voice';
+    const primaryModel = opts.model ?? VOICE_MODEL;
+    const fallbackModel = opts.fallbackModel === undefined ? FAST_FALLBACK_MODEL : opts.fallbackModel;
     // Tier-aware daily quota — COMBINED across all paid parses (photo/voice/item); every
     // recorded parse counts toward the same daily budget. May throw UpgradeRequiredError.
-    await UsageService.assertFoodAiQuota(userId);
+    if (!opts.bypassQuota) await UsageService.assertFoodAiQuota(userId);
 
-    let result: PhotoParseResult;
-    let model = VOICE_MODEL;
+    let result: TextParseResult;
+    let model = primaryModel;
     const startedAt = Date.now();
     try {
-      result = await this.callVoiceModel(VOICE_MODEL, userId, transcript, TEXT_PRIMARY_TIMEOUT_MS);
+      result = await this.callVoiceModel(primaryModel, userId, transcript, TEXT_PRIMARY_TIMEOUT_MS, source);
     } catch (primaryError) {
-      model = FAST_FALLBACK_MODEL;
-      try {
-        result = await this.callVoiceModel(
-          FAST_FALLBACK_MODEL,
-          userId,
-          transcript,
-          TEXT_FALLBACK_TIMEOUT_MS,
-        );
-      } catch (fallbackError) {
-        this.logParseFailure('voice', userId, FAST_FALLBACK_MODEL, Date.now() - startedAt, {
+      const failure = (failedModel: string, err: unknown, extra: Record<string, unknown>) =>
+        this.logParseFailure('voice', userId, failedModel, Date.now() - startedAt, {
+          inputSource: source,
           transcriptLength: transcript.length,
-          primaryModel: VOICE_MODEL,
-          primaryError: this.describeParseError(primaryError),
-        }, fallbackError);
+          primaryModel,
+          ...extra,
+        }, err);
+      if (!fallbackModel) {
+        failure(primaryModel, primaryError, { fallback: 'disabled' });
+        throw new Error('ParseFailed');
+      }
+      model = fallbackModel;
+      try {
+        result = await this.callVoiceModel(fallbackModel, userId, transcript, TEXT_FALLBACK_TIMEOUT_MS, source);
+      } catch (fallbackError) {
+        failure(fallbackModel, fallbackError, { primaryError: this.describeParseError(primaryError) });
         throw new Error('ParseFailed');
       }
     }
@@ -461,10 +531,11 @@ export class NutritionIntelligenceService {
     // Cap accounting (no cache). The hash is over the transcript so the log row matches
     // the not-null image_hash column convention; it is not used for lookups.
     const transcriptHash = createHash('sha256').update(transcript).digest('hex');
-    await this.recordParseLog(userId, transcriptHash);
+    if (!opts.bypassQuota) await this.recordParseLog(userId, transcriptHash);
 
     return {
       ...stripDbDensity(await this.toDraft(userId, result, model, false, 'voice', 'llm_voice')),
+      assumptions: result.assumptions ?? [],
       parseHash: transcriptHash,
     };
   }
@@ -707,7 +778,7 @@ export class NutritionIntelligenceService {
 
   private static gatewayOptions(
     userId: string,
-    source: 'photo' | 'voice' | 'item',
+    source: 'photo' | 'voice' | 'text' | 'item',
   ): { sort: 'ttft'; user: string; tags: string[] } {
     return {
       sort: 'ttft',
@@ -982,37 +1053,89 @@ export class NutritionIntelligenceService {
     }
   }
 
+  /** The system prompt for a text parse (exposed for tests and the eval harness). */
+  static textParsePrompt(source: ParseInputSource): string {
+    return textSystemPrompt(source);
+  }
+
+  /**
+   * Second chance for a text-parse reply that is good JSON but not quite our shape (see
+   * repairPhotoJson); the assumptions are read leniently from the same reply.
+   */
+  static repairTextJson(text: string | undefined | null): TextParseResult | null {
+    const base = this.repairPhotoJson(text);
+    if (!base) return null;
+    let assumptions: string[] = [];
+    try {
+      const stripped = (text ?? '').replace(/```(?:json)?/gi, '').trim();
+      const obj = JSON.parse(stripped.slice(stripped.indexOf('{'), stripped.lastIndexOf('}') + 1));
+      assumptions = normalizeAssumptions(obj?.assumptions);
+    } catch {
+      // A bare array or broken JSON has no assumptions to read.
+    }
+    return { ...base, assumptions };
+  }
+
   private static async callVoiceModel(
     model: string,
     userId: string,
     transcript: string,
     timeoutMs: number,
-  ): Promise<PhotoParseResult> {
+    source: ParseInputSource = 'voice',
+  ): Promise<TextParseResult> {
     const limits = this.modelCallOptions(model, 2_000);
-    const result = await generateText({
-      model,
-      output: Output.object({ schema: photoParseResultSchema }),
-      system: VOICE_SYSTEM_PROMPT,
-      maxRetries: 0,
-      timeout: timeoutMs,
-      maxOutputTokens: limits.maxOutputTokens,
-      providerOptions: {
-        ...limits.providerOptions,
-        gateway: this.gatewayOptions(userId, 'voice'),
-      },
-      messages: [
-        {
-          role: 'user',
-          content: [
-            {
-              type: 'text',
-              text: `Parse this spoken food description into items with estimated quantities and macros:\n\n"${transcript}"`,
-            },
-          ],
+    // Gemini runs with structuredOutputs off and the thinking-off vendors in plain JSON mode
+    // (modelCallOptions), so neither sees our schema: spell the shape out in the prompt, as the
+    // photo path does. Without it Gemini guessed key names and failed the schema (2026-10-14).
+    const geminiPromptSchema =
+      model.startsWith('google/gemini') && process.env.NUTRITION_GEMINI_NATIVE_SCHEMA !== 'true';
+    const shapeInPrompt = !limits.nativeSchema || geminiPromptSchema;
+    const system = textSystemPrompt(source);
+    let result;
+    try {
+      result = await generateText({
+        model,
+        output: limits.nativeSchema ? TEXT_OUTPUT : TEXT_OUTPUT_JSON_MODE,
+        system: shapeInPrompt ? `${system} ${TEXT_RESPONSE_SHAPE_PROMPT}` : system,
+        maxRetries: 0,
+        timeout: timeoutMs,
+        maxOutputTokens: limits.maxOutputTokens,
+        providerOptions: {
+          ...limits.providerOptions,
+          gateway: this.gatewayOptions(userId, source),
         },
-      ],
-    });
-    return this.outputOrThrow(result, model);
+        messages: [
+          {
+            role: 'user',
+            content: [
+              {
+                type: 'text',
+                text:
+                  source === 'text'
+                    ? `Parse this typed food description into items with estimated quantities and macros:\n\n"${transcript}"`
+                    : `Parse this spoken food description into items with estimated quantities and macros:\n\n"${transcript}"`,
+              },
+            ],
+          },
+        ],
+      });
+    } catch (err) {
+      const e = err as { text?: string; finishReason?: string };
+      if (e?.text && (e.finishReason == null || e.finishReason === 'stop')) {
+        const repaired = this.repairTextJson(e.text);
+        if (repaired) return repaired;
+      }
+      throw err;
+    }
+    try {
+      return this.outputOrThrow(result, model);
+    } catch (err) {
+      if (result.finishReason === 'stop') {
+        const repaired = this.repairTextJson((err as { text?: string })?.text ?? result.text);
+        if (repaired) return repaired;
+      }
+      throw err;
+    }
   }
 
   private static async callItemModel(

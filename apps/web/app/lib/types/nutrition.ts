@@ -164,6 +164,52 @@ export const photoParseResultSchema = z.object({
 });
 export type PhotoParseResult = z.infer<typeof photoParseResultSchema>;
 
+// ----------------------------------------------------------------------------
+// Assumptions (text / voice parse): short, user-facing statements of what the model had to
+// assume because the description did not say — a quantity, size or preparation. Shown under
+// the "AI estimate" note so the user knows what to correct. Empty when the text was specific.
+// Parsed leniently: anything that is not an array of strings becomes [] (never fails a parse).
+// ----------------------------------------------------------------------------
+export const DRAFT_ASSUMPTIONS_MAX = 3;
+export const DRAFT_ASSUMPTION_MAX_CHARS = 60;
+
+export type ParseInputSource = 'voice' | 'text';
+
+/** Trim, de-bullet, de-dupe and cap the model's assumptions: ≤3 strings of ≤60 chars. */
+export function normalizeAssumptions(value: unknown): string[] {
+  // A lone string is one assumption; anything else that is not an array is noise.
+  if (typeof value === 'string') value = [value];
+  if (!Array.isArray(value)) return [];
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const raw of value) {
+    if (typeof raw !== 'string') continue;
+    let text = raw.replace(/\s+/g, ' ').replace(/^[\s\-*•·–—]+/, '').trim();
+    if (!text) continue;
+    if (text.length > DRAFT_ASSUMPTION_MAX_CHARS) {
+      const cut = text.slice(0, DRAFT_ASSUMPTION_MAX_CHARS - 1);
+      const space = cut.lastIndexOf(' ');
+      text = `${(space >= 30 ? cut.slice(0, space) : cut).replace(/[\s,;:.(]+$/, '')}…`;
+    }
+    const key = text.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(text);
+    if (out.length >= DRAFT_ASSUMPTIONS_MAX) break;
+  }
+  return out;
+}
+
+const assumptionsList = z.preprocess(normalizeAssumptions, z.array(z.string()));
+
+// The text/voice parse result: the photo shape plus `assumptions`.
+export const textParseResultSchema = photoParseResultSchema.extend({
+  assumptions: assumptionsList.describe(
+    'Up to 3 short user-facing notes (max 60 chars each) naming a quantity, size or preparation you ASSUMED because the text did not state it; [] when the text was specific',
+  ),
+});
+export type TextParseResult = z.infer<typeof textParseResultSchema>;
+
 // ============================================================================
 // API DTO (camelCase) — the photo-parse endpoint response. This is a DRAFT, not a committed log.
 // ============================================================================
@@ -179,6 +225,9 @@ export interface NutritionDraftDTO {
   totals: { calories: number; proteinG: number; carbsG: number; fatG: number; fiberG: number; sugarG: number; sodiumMg: number };
   // 0–10 per-meal health score (heuristic over the totals), or null if not computable.
   healthScore: number | null;
+  // Text/voice parse only: what the model assumed because the description did not say
+  // (0–3 strings, ≤60 chars each; [] when the text was specific). Absent on photo drafts.
+  assumptions?: string[];
   // Content hash of the parse input (images+note / transcript / item+portion). Lets a
   // saved entry be tied back to its draft (nutrition_training_samples.parse_hash).
   // Shipped clients ignore unknown keys (Swift CodingKeys / kotlinx ignoreUnknownKeys).

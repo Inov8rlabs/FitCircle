@@ -5,14 +5,19 @@ const state = {
   owned: new Set<string>(),
   saveCalls: [] as string[],
   ownsCalls: [] as string[],
+  parseCalls: [] as Array<{ transcript: string; opts: unknown }>,
+  captures: [] as Array<Record<string, unknown>>,
+  draft: { items: [], totals: {}, overallConfidence: 0.9 } as Record<string, unknown>,
 };
 
 vi.mock('next/server', async (importOriginal) => {
   const original: Record<string, unknown> = await importOriginal();
   return {
     ...original,
-    // `after()` needs a request scope; the draft-capture hook is a no-op here.
-    after: () => {},
+    // `after()` needs a request scope; run the draft-capture hook inline instead.
+    after: (fn: () => unknown) => {
+      fn();
+    },
   };
 });
 vi.mock('@/lib/middleware/mobile-auth', () => ({
@@ -30,11 +35,19 @@ vi.mock('@/lib/services/usage-service', () => {
   }
   return { UpgradeRequiredError };
 });
+vi.mock('@/lib/services/nutrition-training-service', () => ({
+  NutritionTrainingService: {
+    captureDraft: async (params: Record<string, unknown>) => {
+      state.captures.push(params);
+    },
+  },
+}));
 vi.mock('@/lib/services/nutrition-intelligence-service', () => ({
   NutritionIntelligenceService: {
-    parseVoice: async () => {
+    parseVoice: async (_userId: string, transcript: string, opts: unknown) => {
+      state.parseCalls.push({ transcript, opts });
       if (state.parseError) throw state.parseError;
-      return { items: [], totals: {}, overallConfidence: 0.9 };
+      return state.draft;
     },
     saveUnparsedVoice: async (_userId: string, transcript: string) => {
       state.saveCalls.push(transcript);
@@ -68,6 +81,9 @@ describe('POST /api/mobile/food/voice-parse — Option-B fallback', () => {
     state.owned = new Set([EXISTING]);
     state.saveCalls = [];
     state.ownsCalls = [];
+    state.parseCalls = [];
+    state.captures = [];
+    state.draft = { items: [], totals: {}, overallConfidence: 0.9 };
   });
 
   it('OLD request ({ transcript } only): a failed parse still saves the note as a new entry', async () => {
@@ -143,5 +159,65 @@ describe('POST /api/mobile/food/voice-parse — Option-B fallback', () => {
     expect(body.error.code).toBe('VALIDATION_ERROR');
     expect(body.error.message).toBe('Transcript is empty');
     expect(body.error.details.issues).toBeInstanceOf(Array);
+  });
+});
+
+describe('POST /api/mobile/food/voice-parse — source + assumptions', () => {
+  beforeEach(() => {
+    state.parseError = null;
+    state.owned = new Set([EXISTING]);
+    state.saveCalls = [];
+    state.ownsCalls = [];
+    state.parseCalls = [];
+    state.captures = [];
+    state.draft = { items: [], totals: {}, overallConfidence: 0.9, assumptions: [] };
+  });
+
+  it('defaults source to "voice" when the client does not send it (shipped clients)', async () => {
+    const res = await post({ transcript: 'two eggs' });
+    expect(res.status).toBe(200);
+    expect(state.parseCalls).toEqual([{ transcript: 'two eggs', opts: { source: 'voice' } }]);
+    expect(state.captures[0]).toMatchObject({ userId: 'user-1', imageCount: null, inputSource: 'voice' });
+  });
+
+  it('passes source "text" to the service and records it on the training capture', async () => {
+    const res = await post({ transcript: 'eggs', source: 'text', skip_fallback_save: true });
+    expect(res.status).toBe(200);
+    expect(state.parseCalls[0].opts).toEqual({ source: 'text' });
+    expect(state.captures).toHaveLength(1);
+    expect(state.captures[0].inputSource).toBe('text');
+  });
+
+  it('an unknown / null / non-string source reads as "voice" instead of failing validation', async () => {
+    for (const source of ['keyboard', null, 7, ' TEXT ']) {
+      state.parseCalls = [];
+      const res = await post({ transcript: 'eggs', source });
+      expect(res.status).toBe(200);
+      expect(state.parseCalls[0].opts).toEqual({ source: source === ' TEXT ' ? 'text' : 'voice' });
+    }
+  });
+
+  it('returns the draft assumptions inside the unchanged envelope', async () => {
+    state.draft = {
+      items: [],
+      totals: { calories: 180 },
+      overallConfidence: 0.8,
+      assumptions: ['2 large eggs', 'Scrambled in 1 tsp butter'],
+    };
+    const res = await post({ transcript: 'eggs', source: 'text' });
+    const body = await res.json();
+    expect(Object.keys(body).sort()).toEqual(['data', 'error', 'meta', 'success']);
+    expect(body.success).toBe(true);
+    expect(body.error).toBeNull();
+    expect(body.data.assumptions).toEqual(['2 large eggs', 'Scrambled in 1 tsp butter']);
+  });
+
+  it('text source: rate-limit copy says "AI-estimate", not "voice-estimate"', async () => {
+    state.parseError = new Error('RateLimited');
+    const res = await post({ transcript: 'eggs', source: 'text', skip_fallback_save: true });
+    expect(res.status).toBe(429);
+    const body = await res.json();
+    expect(body.error.message).toBe("You've reached today's AI-estimate limit — you can add the details yourself.");
+    expect(state.captures).toEqual([]);
   });
 });

@@ -104,6 +104,12 @@ export class NutritionTrainingService {
     /** When the draft came from a "fix" (099): what the user said and which draft it corrected. */
     correction?: string | null;
     refinedFromHash?: string | null;
+    /**
+     * Text parse only: 'text' when the description was typed (manual form "Estimate with AI").
+     * Stored as input_method 'text' so typed and spoken drafts can be told apart; the draft
+     * itself still says inputMethod 'voice' (unchanged client contract).
+     */
+    inputSource?: 'voice' | 'text';
   }): Promise<void> {
     if (!this.enabled) return;
     try {
@@ -111,7 +117,7 @@ export class NutritionTrainingService {
       const supabase = createAdminSupabase();
       const { error } = await supabase.from('nutrition_training_samples').insert({
         user_id: params.userId,
-        input_method: draft.inputMethod,
+        input_method: params.inputSource === 'text' ? 'text' : draft.inputMethod,
         model: draft.model,
         overall_confidence: draft.overallConfidence,
         was_edited: false,
@@ -202,7 +208,7 @@ export class NutritionTrainingService {
         .select('id, created_at, input_method, overall_confidence, parsed_items, draft_totals')
         .eq('user_id', userId)
         .is('reconciled_at', null)
-        .in('input_method', ['photo', 'voice'])
+        .in('input_method', ['photo', 'voice', 'text'])
         .gte('created_at', since)
         .order('created_at', { ascending: false })
         .limit(1)
@@ -259,10 +265,12 @@ export class NutritionTrainingService {
         .is('reconciled_at', null);
 
       // Provenance on the entry itself (migration 054 columns). Explicit client values win.
-      const method = draft.input_method === 'voice' ? 'voice' : 'photo';
+      // A typed description ('text') was entered by hand: the entry's input_method is 'manual'
+      // (food_log_entries has no 'text' value); its numbers came from the text model (llm_voice).
+      const method = draft.input_method === 'voice' || draft.input_method === 'text' ? draft.input_method : 'photo';
       const patch: Record<string, unknown> = {};
-      if (!explicit.input_method) patch.input_method = method;
-      if (!explicit.nutrition_source) patch.nutrition_source = method === 'voice' ? 'llm_voice' : 'llm_vision';
+      if (!explicit.input_method) patch.input_method = method === 'text' ? 'manual' : method;
+      if (!explicit.nutrition_source) patch.nutrition_source = method === 'photo' ? 'llm_vision' : 'llm_voice';
       if (explicit.llm_confidence == null && draft.overall_confidence != null) {
         patch.llm_confidence = draft.overall_confidence;
       }

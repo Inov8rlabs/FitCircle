@@ -64,6 +64,11 @@ export interface NutritionDraft {
   cached: boolean;
   totals: NutritionTotals;
   healthScore?: number | null;
+  /**
+   * Text/voice parse only: what the AI assumed because the description did not say
+   * (quantity, size, preparation). 0–3 short strings; [] when the text was specific.
+   */
+  assumptions?: string[];
 }
 
 export interface FoodPer100g {
@@ -499,6 +504,20 @@ export const nutritionClient = {
     authedFetch<NutritionDraft>('/api/mobile/food/voice-parse', {
       method: 'POST',
       body: JSON.stringify({ transcript }),
+    }),
+
+  // Typed description → draft (manual form "Estimate with AI"). Same endpoint as voice with
+  // source "text"; never creates a fallback entry (the form saves itself). Pass
+  // `existingEntryId` when estimating a meal that is already saved.
+  textParse: (text: string, opts?: { existingEntryId?: string }) =>
+    authedFetch<NutritionDraft>('/api/mobile/food/voice-parse', {
+      method: 'POST',
+      body: JSON.stringify({
+        transcript: text.trim().slice(0, 1000),
+        source: 'text',
+        skip_fallback_save: true,
+        ...(opts?.existingEntryId ? { existing_entry_id: opts.existingEntryId } : {}),
+      }),
     }),
 
   // Single-item re-estimate ("tap to fix"): correct an ingredient's name/portion

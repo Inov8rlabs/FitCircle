@@ -4,6 +4,7 @@ import { Loader2, ArrowLeft, X, ImagePlus } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
+import { AiEstimateNote, AI_ESTIMATE_HELPER, EstimateWithAi } from '@/components/nutrition/AiTextEstimate';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -11,6 +12,7 @@ import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/components/ui/use-toast';
 import { AnalyticsEvents, analytics, type MealType } from '@/lib/analytics';
+import type { NutritionDraft } from '@/lib/api/nutrition-client';
 import { announceStreakAutoClaim, clientTimezone, extractStreakMeta } from '@/lib/streaks/auto-claim-events';
 import { supabase } from '@/lib/supabase';
 import type { BeverageCustomizations } from '@/lib/types/beverage-log';
@@ -58,6 +60,17 @@ type AlcoholType = 'beer' | 'wine' | 'spirit' | 'cocktail' | 'other';
 const MAX_FOOD_PHOTOS = 5;
 
 /** YYYY-MM-DDTHH:mm in the user's local timezone (datetime-local input format). */
+// Manual meal macros as typed (strings, so a field can be blank).
+type MacroFields = { calories: string; protein: string; carbs: string; fat: string };
+const EMPTY_MACROS: MacroFields = { calories: '', protein: '', carbs: '', fat: '' };
+
+/** A non-negative number from a macro field, or null when blank/invalid. */
+function macroValue(v: string): number | null {
+  if (v.trim() === '') return null;
+  const n = Number(v);
+  return Number.isFinite(n) && n >= 0 ? n : null;
+}
+
 function toLocalDateTimeInputValue(d: Date): string {
   const pad = (n: number) => `${n}`.padStart(2, '0');
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
@@ -87,6 +100,18 @@ export function FoodLogEntryForm() {
   useEffect(() => {
     return () => photoPreviews.forEach((u) => URL.revokeObjectURL(u));
   }, [photoPreviews]);
+
+  // Meal nutrition (optional): typed by hand or filled by "Estimate with AI" from the
+  // description. The AI draft is kept so its per-item breakdown is saved with the entry.
+  const [macros, setMacros] = useState<MacroFields>(EMPTY_MACROS);
+  const [aiDraft, setAiDraft] = useState<NutritionDraft | null>(null);
+
+  const applyEstimate = (draft: NutritionDraft) => {
+    const t = draft.totals;
+    const r = (v: number | undefined) => String(Math.round(v ?? 0));
+    setMacros({ calories: r(t?.calories), protein: r(t?.proteinG), carbs: r(t?.carbsG), fat: r(t?.fatG) });
+    setAiDraft(draft);
+  };
 
   // Water State
   const [waterAmount, setWaterAmount] = useState<number>(0);
@@ -219,10 +244,53 @@ export function FoodLogEntryForm() {
 
       let streakMeta: ReturnType<typeof extractStreakMeta> = null;
       if (category === 'meal' || category === 'snack') {
+        // Optional nutrition: the user's numbers (typed or AI-filled and possibly edited),
+        // plus the AI's per-item breakdown when the estimate was used.
+        const cal = macroValue(macros.calories);
+        const protein = macroValue(macros.protein);
+        const carbs = macroValue(macros.carbs);
+        const fat = macroValue(macros.fat);
+        const hasNutrition = [cal, protein, carbs, fat].some((v) => v != null);
+        const aiItems = aiDraft?.items.filter((i) => i.name.trim()) ?? [];
+        const nutritionData = hasNutrition
+          ? {
+              ...(cal != null ? { calories: Math.round(cal) } : {}),
+              ...(protein != null ? { protein_g: Math.round(protein) } : {}),
+              ...(carbs != null ? { carbs_g: Math.round(carbs) } : {}),
+              ...(fat != null ? { fat_g: Math.round(fat) } : {}),
+              ...(aiDraft?.healthScore != null ? { health_score: aiDraft.healthScore } : {}),
+              ...(aiItems.length > 0
+                ? {
+                    items: aiItems.map((it) => ({
+                      name: it.name.trim(),
+                      quantity: it.quantity,
+                      serving_unit: it.servingUnit,
+                      grams: it.grams ?? null,
+                      calories: it.calories,
+                      protein_g: it.proteinG,
+                      carbs_g: it.carbsG,
+                      fat_g: it.fatG,
+                      fiber_g: it.fiberG ?? null,
+                      sugar_g: it.sugarG ?? null,
+                      sodium_mg: it.sodiumMg ?? null,
+                    })),
+                  }
+                : {}),
+            }
+          : null;
+        const aiTitle = aiItems.map((i) => i.name.trim()).join(', ').slice(0, 200);
         const { data, streak } = await createViaApi<{ id: string }>('/api/mobile/food-log', {
           entry_type: 'food',
           meal_type: category === 'snack' ? 'snack' : mealType,
-          title: category === 'snack' ? 'Snack' : 'Meal',
+          title: aiTitle || (category === 'snack' ? 'Snack' : 'Meal'),
+          ...(nutritionData
+            ? {
+                nutrition_data: nutritionData,
+                input_method: 'manual',
+                nutrition_source: aiDraft ? 'llm_voice' : 'user',
+                ...(aiDraft ? { llm_confidence: Math.min(1, Math.max(0, aiDraft.overallConfidence)) } : {}),
+              }
+            : {}),
           notes,
           is_private: isPrivate,
           logged_at: loggedAtISO,
@@ -367,7 +435,7 @@ export function FoodLogEntryForm() {
           max={toLocalDateTimeInputValue(new Date())}
         />
         <p className="text-xs text-muted-foreground">
-          When you actually ate/drank this — used to order today's entries chronologically.
+          When you actually ate/drank this — used to order today&apos;s entries chronologically.
         </p>
       </section>
 
@@ -575,14 +643,63 @@ export function FoodLogEntryForm() {
 
       {/* Common Fields */}
       <section className="space-y-4 pt-6 border-t">
-        <div className="space-y-2">
-          <Label>Notes (Optional)</Label>
-          <Textarea
-            placeholder="Add any details..."
-            value={notes}
-            onChange={(e) => setNotes(e.target.value)}
-          />
-        </div>
+        {category === 'meal' || category === 'snack' ? (
+          <div className="space-y-3">
+            <div className="space-y-2">
+              <Label htmlFor="meal-description">What did you eat?</Label>
+              <Textarea
+                id="meal-description"
+                placeholder="e.g. 2 scrambled eggs, 1 slice buttered toast"
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                maxLength={2000}
+              />
+              <p className="text-xs text-muted-foreground">{AI_ESTIMATE_HELPER}</p>
+            </div>
+
+            <EstimateWithAi text={notes} surface="manual_form" onEstimate={applyEstimate} />
+
+            {aiDraft && <AiEstimateNote assumptions={aiDraft.assumptions} />}
+
+            <div className="space-y-2">
+              <Label>Nutrition (optional)</Label>
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                {(
+                  [
+                    ['calories', 'Calories'],
+                    ['protein', 'Protein (g)'],
+                    ['carbs', 'Carbs (g)'],
+                    ['fat', 'Fat (g)'],
+                  ] as const
+                ).map(([key, label]) => (
+                  <div key={key} className="space-y-1">
+                    <Label htmlFor={`macro-${key}`} className="text-xs text-muted-foreground">
+                      {label}
+                    </Label>
+                    <Input
+                      id={`macro-${key}`}
+                      type="number"
+                      inputMode="decimal"
+                      min="0"
+                      value={macros[key]}
+                      onChange={(e) => setMacros((m) => ({ ...m, [key]: e.target.value }))}
+                      placeholder="—"
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            <Label>Notes (Optional)</Label>
+            <Textarea
+              placeholder="Add any details..."
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+            />
+          </div>
+        )}
 
         <div className="flex items-center justify-between p-4 bg-muted/30 rounded-lg border">
           <div className="space-y-0.5">

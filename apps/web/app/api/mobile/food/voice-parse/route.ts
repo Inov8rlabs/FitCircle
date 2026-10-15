@@ -25,11 +25,21 @@ export const maxDuration = 60;
  * the Option-B fallback save for form prefill / re-analysis of a saved entry — see
  * lib/validation/nutrition-parse-options.ts. Without them the route behaves exactly as before.
  *
+ * Optional `source`: "voice" (default — speech-to-text transcript) | "text" (typed into the
+ * manual food form's "Estimate with AI"). Tunes the prompt wording and is recorded on the training
+ * sample; any other value reads as "voice". The draft carries `assumptions` (0–3 short strings)
+ * naming what the model assumed because the text did not say (quantity, size, preparation).
+ *
  * Thin route: all nutrition logic lives in NutritionIntelligenceService (§7.2.1).
  */
 
 const bodySchema = z.object({
   transcript: z.string().trim().min(1, 'Transcript is empty').max(1000, 'Transcript too long'),
+  // Lenient: absent / null / unknown → 'voice', so no client can be rejected over this field.
+  source: z.preprocess(
+    (v) => (typeof v === 'string' && v.trim().toLowerCase() === 'text' ? 'text' : 'voice'),
+    z.enum(['voice', 'text']),
+  ),
 });
 
 export async function POST(request: NextRequest) {
@@ -74,12 +84,20 @@ export async function POST(request: NextRequest) {
     }
 
     try {
-      const draft = await NutritionIntelligenceService.parseVoice(user.id, parsed.data.transcript);
+      const draft = await NutritionIntelligenceService.parseVoice(user.id, parsed.data.transcript, {
+        source: parsed.data.source,
+      });
 
       // Production accuracy signal (see photo-parse): draft row written after the response.
       const latencyMs = Date.now() - startTime;
       after(() =>
-        NutritionTrainingService.captureDraft({ userId: user.id, draft, latencyMs, imageCount: null }),
+        NutritionTrainingService.captureDraft({
+          userId: user.id,
+          draft,
+          latencyMs,
+          imageCount: null,
+          inputSource: parsed.data.source,
+        }),
       );
 
       return NextResponse.json({
@@ -124,7 +142,7 @@ export async function POST(request: NextRequest) {
         console.error(
           '[nutrition-parse-failure:route]',
           JSON.stringify({
-            source: 'voice',
+            source: parsed.data.source,
             userId: user.id,
             code: 'PARSE_FAILED',
             transcriptLength: parsed.data.transcript.length,
@@ -137,16 +155,17 @@ export async function POST(request: NextRequest) {
       }
 
       // Nothing was saved when the fallback is skipped, so the copy must not claim it was.
+      const limitName = parsed.data.source === 'text' ? 'AI-estimate' : 'voice-estimate';
       const message = fallback.skipFallbackSave
         ? isUpgrade
           ? `You've used your ${parseError.limit} free AI logs today — go Pro for unlimited.`
           : isRate
-            ? "You've reached today's voice-estimate limit — you can add the details yourself."
+            ? `You've reached today's ${limitName} limit — you can add the details yourself.`
             : "Couldn't understand that — you can add the details yourself."
         : isUpgrade
           ? `You've used your ${parseError.limit} free AI logs today — go Pro for unlimited. We saved your note so you can add the details.`
           : isRate
-            ? "You've reached today's voice-estimate limit — we saved your note so you can add the details."
+            ? `You've reached today's ${limitName} limit — we saved your note so you can add the details.`
             : "Couldn't understand that — we saved your note so you can add the details.";
 
       return NextResponse.json(

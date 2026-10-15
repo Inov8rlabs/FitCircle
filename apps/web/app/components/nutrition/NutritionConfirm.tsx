@@ -25,6 +25,8 @@ import {
   stepQuantity,
 } from '@/lib/utils/quantity-input';
 
+import { AiEstimateNote } from './AiTextEstimate';
+
 type MealType = 'breakfast' | 'lunch' | 'dinner' | 'snack' | 'other';
 const MEAL_TYPES: MealType[] = ['breakfast', 'lunch', 'dinner', 'snack', 'other'];
 const UNIT_EXTRAS = ['serving', 'piece', 'cup'];
@@ -440,6 +442,11 @@ export function NutritionConfirm({
           )}
         </div>
       </div>
+
+      {/* What the AI assumed for a typed/spoken description (text/voice drafts only). */}
+      {draft?.assumptions && draft.assumptions.length > 0 && (
+        <AiEstimateNote assumptions={draft.assumptions} className="mb-3" />
+      )}
 
       {/* Summary */}
       <div className="rounded-lg border border-slate-700/50 bg-slate-800/40 p-3">

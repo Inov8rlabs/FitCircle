@@ -125,6 +125,17 @@ describe('NutritionTrainingService.reconcileEntry', () => {
     });
   });
 
+  it('typed-text drafts stamp the entry manual + llm_voice (food_log_entries has no "text")', async () => {
+    state.draft = draftRow({ input_method: 'text' });
+    await NutritionTrainingService.reconcileEntry('u1', {
+      id: 'e1', entry_type: 'food', calories: 406, nutrition_data: { items: [{ name: 'white rice' }] },
+    });
+    expect(state.updates.find((u) => u.table === 'nutrition_training_samples')).toBeDefined();
+    expect(state.updates.find((u) => u.table === 'food_log_entries')!.payload).toMatchObject({
+      input_method: 'manual', nutrition_source: 'llm_voice',
+    });
+  });
+
   it('totals-only entry: linked when saved soon after the parse …', async () => {
     state.draft = draftRow();
     await NutritionTrainingService.reconcileEntry('u1', { id: 'e1', entry_type: 'food', calories: 406 });
@@ -185,6 +196,35 @@ describe('NutritionTrainingService.captureDraft', () => {
       image_count: 2,
     });
     expect(state.inserts[0].payload.image_path).toBeUndefined();
+  });
+
+  const voiceDraft = {
+    items: [{ name: 'eggs', grams: 100, calories: 180 } as any],
+    overallConfidence: 0.8,
+    notes: null,
+    inputMethod: 'voice' as const,
+    nutritionSource: 'llm_voice' as const,
+    model: 'anthropic/claude-sonnet-4.6',
+    cached: false,
+    totals: { calories: 180, proteinG: 12, carbsG: 1, fatG: 14, fiberG: 0, sugarG: 0, sodiumMg: 150 },
+    healthScore: 6,
+    assumptions: ['2 large eggs'],
+    parseHash: 'def456',
+  };
+
+  it('records a typed-text parse as input_method "text"', async () => {
+    await NutritionTrainingService.captureDraft({
+      userId: 'u1', latencyMs: 900, imageCount: null, draft: voiceDraft, inputSource: 'text',
+    });
+    expect(state.inserts[0].payload).toMatchObject({ input_method: 'text', parse_hash: 'def456', image_count: null });
+  });
+
+  it('keeps "voice" when the source is voice or not given', async () => {
+    await NutritionTrainingService.captureDraft({
+      userId: 'u1', latencyMs: 900, imageCount: null, draft: voiceDraft, inputSource: 'voice',
+    });
+    await NutritionTrainingService.captureDraft({ userId: 'u1', latencyMs: 900, imageCount: null, draft: voiceDraft });
+    expect(state.inserts.map((i) => i.payload.input_method)).toEqual(['voice', 'voice']);
   });
 
   it('is a no-op when disabled', async () => {
