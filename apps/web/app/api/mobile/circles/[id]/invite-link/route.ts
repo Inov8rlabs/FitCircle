@@ -2,6 +2,8 @@ import { type NextRequest, NextResponse } from 'next/server';
 
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { addAutoRefreshHeaders } from '@/lib/middleware/mobile-auto-refresh';
+import { circleInviteUrl, circleShareMessage } from '@/lib/referrals/links';
+import { ReferralService } from '@/lib/services/referral-service';
 import { createAdminSupabase } from '@/lib/supabase-admin';
 
 /**
@@ -12,7 +14,8 @@ import { createAdminSupabase } from '@/lib/supabase-admin';
  *
  * Response:
  * - invite_code: string (e.g., "ABC123XYZ")
- * - invite_url: string (e.g., "fitcircle://join?code=ABC123XYZ")
+ * - invite_url: string (e.g., "https://www.fitcircle.ai/join/FITABC123?ref=MAYA7K2")
+ * - referral_code / share_message: the sharer's referral code + prefilled share text
  * - expires_at: string | null (invite codes don't expire, but included for future)
  */
 export async function GET(
@@ -83,16 +86,26 @@ export async function GET(
       );
     }
 
-    // Generate invite URL for iOS deep linking
-    const inviteUrl = `fitcircle://join?code=${circle.invite_code}`;
+    // https universal/app link carrying the sharer's referral code, so the
+    // join is attributed to THIS member (not just the circle creator) and
+    // fresh installs land on the web invite page with store links.
+    // docs/REFERRALS_SPEC.md §3. (Was fitcircle://join?code=…, which no app handled.)
+    // Never let referral bookkeeping break sharing: fall back to a plain link.
+    const share = await ReferralService.circleShare(user.id, circle).catch((err) => {
+      console.error('[invite-link] referral share fallback:', err?.message);
+      const url = circleInviteUrl(circle.invite_code);
+      return { referralCode: null, url, message: circleShareMessage(circle.name, url) };
+    });
 
     const response = NextResponse.json({
       success: true,
       data: {
         invite_code: circle.invite_code,
-        invite_url: inviteUrl,
+        invite_url: share.url,
         expires_at: null, // Invite codes don't expire currently
         circle_name: circle.name,
+        referral_code: share.referralCode,
+        share_message: share.message,
       },
       error: null,
       meta: null,

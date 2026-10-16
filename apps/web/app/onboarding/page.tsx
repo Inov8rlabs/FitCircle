@@ -27,6 +27,7 @@ import { Progress } from '@/components/ui/progress';
 import { useProfile } from '@/hooks/useProfile';
 import { AnalyticsEvents, analytics } from '@/lib/analytics';
 import { useTrackOnce } from '@/lib/analytics/react';
+import { postSignupReturnUrl, readPendingInviteFromCookieHeader } from '@/lib/referrals/web';
 import { useAuthStore } from '@/stores/auth-store';
 
 
@@ -90,8 +91,21 @@ function safeReturnUrl(value: string | null): string {
 function OnboardingForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const returnUrl = searchParams.get('returnUrl');
+  const queryReturnUrl = searchParams.get('returnUrl');
   const { user } = useAuthStore();
+  const [inviteReturnUrl, setInviteReturnUrl] = useState<string | null>(null);
+  const returnUrl = queryReturnUrl ?? inviteReturnUrl;
+
+  // Invite attribution fallback for signups that didn't go through /register's
+  // claim (e.g. email confirmation): claim the landing page's fc_ref cookie once
+  // signed in, and send circle invitees back to /join/{circle} afterwards.
+  useEffect(() => {
+    if (!user) return;
+    const pending = readPendingInviteFromCookieHeader(document.cookie);
+    if (!pending) return;
+    setInviteReturnUrl(postSignupReturnUrl(pending.circle, pending.ref));
+    fetch('/api/referrals/claim', { method: 'POST', credentials: 'same-origin' }).catch(() => {});
+  }, [user]);
   const { updateProfile, isLoading } = useProfile();
   const [currentStep, setCurrentStep] = useState(0);
   const [showCelebration, setShowCelebration] = useState(false);

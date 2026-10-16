@@ -109,7 +109,13 @@ export type NotificationType =
   | 'chat_message'
   | 'chat_mention'
   | 'chat_rally'
-  | 'chat_reaction';
+  | 'chat_reaction'
+  // Referrals ("Better Together" — docs/REFERRALS_SPEC.md)
+  | 'referral_friend_joined'
+  | 'referral_reward_earned'
+  | 'referral_reward_banked'
+  | 'referral_lifetime'
+  | 'referral_invitee_welcome';
 
 interface NotificationContent {
   title: string;
@@ -132,7 +138,8 @@ export type NotificationScreen =
   | 'circle_detail'
   | 'circle_chat'
   | 'challenges'
-  | 'streaks';
+  | 'streaks'
+  | 'invite_hub';
 
 export const TYPE_SCREEN_MAP: Record<NotificationType, NotificationScreen> = {
   // Journey
@@ -171,6 +178,12 @@ export const TYPE_SCREEN_MAP: Record<NotificationType, NotificationScreen> = {
   chat_mention: 'circle_chat',
   chat_rally: 'circle_chat',
   chat_reaction: 'circle_chat',
+  // Referrals
+  referral_friend_joined: 'invite_hub',
+  referral_reward_earned: 'invite_hub',
+  referral_reward_banked: 'invite_hub',
+  referral_lifetime: 'invite_hub',
+  referral_invitee_welcome: 'invite_hub',
 };
 
 export function screenFor(type: NotificationType, data: NotificationData): NotificationScreen {
@@ -397,6 +410,33 @@ export const NOTIFICATION_TEMPLATES: Record<
     body: data.preview ? `to "${data.preview}"` : 'to your message',
     category: 'social',
   }),
+
+  // ---- Referrals ----
+  referral_friend_joined: (data) => ({
+    title: `${data.friendName || 'A friend'} joined with your invite 🎉`,
+    body: 'Their first check-in unlocks your free week of Pro. Say hi!',
+    category: 'social',
+  }),
+  referral_reward_earned: (data) => ({
+    title: 'You just earned a free week of Pro 🎁',
+    body: `${data.friendName || 'Your friend'} logged their first activity. Thanks for bringing a friend.`,
+    category: 'celebration',
+  }),
+  referral_reward_banked: (data) => ({
+    title: `+${data.days || 7} days banked 🎁`,
+    body: `${data.friendName || 'Your friend'} is in! Your free week is saved and kicks in when your current plan ends.`,
+    category: 'celebration',
+  }),
+  referral_lifetime: () => ({
+    title: 'Lifetime Pro unlocked 🏆',
+    body: '100 friends moving because of you. Pro is yours, forever.',
+    category: 'celebration',
+  }),
+  referral_invitee_welcome: (data) => ({
+    title: 'Your week of Pro is unlocked ✨',
+    body: `A gift from ${data.inviterName || 'your friend'} for showing up. Enjoy every Pro feature, on us.`,
+    category: 'celebration',
+  }),
 };
 
 // ============================================================================
@@ -444,6 +484,12 @@ export const CAP_EXEMPT_TYPES: ReadonlySet<NotificationType> = new Set<Notificat
   'streak_lost',
   'shield_applied',
   'challenge_completed',
+  // Referral outcomes: a reward the user earned must never lose to a nudge.
+  'referral_friend_joined',
+  'referral_reward_earned',
+  'referral_reward_banked',
+  'referral_lifetime',
+  'referral_invitee_welcome',
 ]);
 
 export function isCapExempt(type: NotificationType): boolean {

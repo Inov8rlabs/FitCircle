@@ -66,6 +66,7 @@ export class EntitlementService {
         productId: profile?.subscription_product_id ?? null,
         expiresAt: profile?.subscription_expires_at ?? null,
         willRenew: profile?.subscription_will_renew ?? false,
+        source: subscriptionSource(tier, profile?.subscription_platform, profile?.subscription_product_id),
       },
       subscriptionsEnabled: flag.enabled === true,
     };
@@ -145,4 +146,19 @@ function computeLimits(
       live('history_extended') ? TIER_LIMITS[tier].historyDays : Number.POSITIVE_INFINITY
     ),
   };
+}
+
+/**
+ * Where premium comes from, for "Pro until … · earned by inviting friends".
+ * Promotional grants pin product_id to 'referral' or 'complimentary'
+ * (ComplimentaryGrantService.applyToProfile).
+ */
+export function subscriptionSource(
+  tier: SubscriptionTier,
+  platform: string | null | undefined,
+  productId: string | null | undefined
+): 'store' | 'referral' | 'complimentary' | null {
+  if (tier !== 'premium') return null;
+  if (platform === 'promotional') return productId === 'referral' ? 'referral' : 'complimentary';
+  return platform ? 'store' : null;
 }

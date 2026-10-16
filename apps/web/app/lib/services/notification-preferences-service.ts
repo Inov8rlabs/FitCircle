@@ -70,6 +70,13 @@ const TYPE_CATEGORY_MAP: Record<string, NotificationCategory> = {
   chat_mention: 'social',
   chat_rally: 'celebration',
   chat_reaction: 'social',
+
+  // Referrals
+  referral_friend_joined: 'social',
+  referral_reward_earned: 'celebration',
+  referral_reward_banked: 'celebration',
+  referral_lifetime: 'celebration',
+  referral_invitee_welcome: 'celebration',
 };
 
 // ============================================================================

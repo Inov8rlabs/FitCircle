@@ -57,7 +57,7 @@ describe('ComplimentaryGrantService', () => {
   });
 
   it('does not touch a live App Store subscription; revoke leaves it alone too', async () => {
-    getDb().profiles.set(USER, freeProfile({ subscription_tier: 'premium', subscription_platform: 'app_store', subscription_product_id: 'pro.annual', subscription_expires_at: new Date(T0 + 30 * 86_400_000).toISOString() }));
+    getDb().profiles.set(USER, freeProfile({ subscription_tier: 'premium', subscription_platform: 'app_store', subscription_product_id: 'pro.annual', subscription_expires_at: new Date(Date.now() + 30 * 86_400_000).toISOString() }));
     await ComplimentaryGrantService.grant({ userId: USER, grantedBy: 'ani' });
     expect(profile().subscription_platform).toBe('app_store');
     await ComplimentaryGrantService.revoke({ userId: USER, revokedBy: 'ani' });

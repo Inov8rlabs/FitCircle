@@ -1,0 +1,16 @@
+{
+  "applinks": {
+    "apps": [],
+    "details": [
+      {
+        "appIDs": ["5CM376P74G.com.inov8rlabs.apps.fitcircle"],
+        "appID": "5CM376P74G.com.inov8rlabs.apps.fitcircle",
+        "components": [
+          { "/": "/i/*", "comment": "Personal invite links" },
+          { "/": "/join/*", "comment": "Circle invite links" }
+        ],
+        "paths": ["/i/*", "/join/*"]
+      }
+    ]
+  }
+}

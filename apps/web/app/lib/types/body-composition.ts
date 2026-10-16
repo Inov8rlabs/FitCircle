@@ -70,6 +70,8 @@ export interface EntitlementSubscription {
   productId: string | null;
   expiresAt: string | null;
   willRenew: boolean;
+  /** 'referral' = Pro time earned by inviting friends (docs/REFERRALS_SPEC.md). */
+  source?: 'store' | 'referral' | 'complimentary' | null;
 }
 
 export interface EntitlementsResponse {

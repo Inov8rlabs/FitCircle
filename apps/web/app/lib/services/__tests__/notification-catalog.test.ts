@@ -22,6 +22,7 @@ const SCREENS = [
   'circle_chat',
   'challenges',
   'streaks',
+  'invite_hub',
 ];
 
 describe('notification catalog contract', () => {

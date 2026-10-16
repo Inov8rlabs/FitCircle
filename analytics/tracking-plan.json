@@ -1,7 +1,7 @@
 {
   "$schema": "./tracking-plan.schema.json",
-  "version": 5,
-  "updated": "2026-10-09",
+  "version": 6,
+  "updated": "2026-10-15",
   "conventions": {
     "eventNames": "Title Case, '<Object> <Past-tense verb>' (e.g. 'Meal Logged'). Names are frozen once shipped: rename in the analytics tool, never in code.",
     "propertyNames": "snake_case. Enum values are lowercase snake_case.",
@@ -82,6 +82,15 @@
     "environment": [
       "production",
       "development"
+    ],
+    "referral_attribution_source": [
+      "universal_link",
+      "app_link",
+      "play_referrer",
+      "paste",
+      "typed",
+      "web",
+      "circle_join"
     ]
   },
   "globalProperties": [
@@ -2003,6 +2012,298 @@
           "name": "error_code",
           "type": "int",
           "required": false
+        }
+      ]
+    },
+    {
+      "name": "Referral Hub Viewed",
+      "category": "acquisition",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "description": "The Better Together invite hub opened.",
+      "properties": [
+        {
+          "name": "source",
+          "type": "enum",
+          "values": [
+            "home_card",
+            "profile",
+            "settings",
+            "wizard",
+            "push",
+            "circle",
+            "circles_empty",
+            "onboarding",
+            "web_nav",
+            "deep_link"
+          ],
+          "required": true
+        }
+      ]
+    },
+    {
+      "name": "Referral Invite Shared",
+      "category": "acquisition",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "description": "A referral/circle invite was handed off from a referral surface.",
+      "properties": [
+        {
+          "name": "method",
+          "type": "enum",
+          "values": [
+            "share_sheet",
+            "copy_link",
+            "copy_code",
+            "nudge"
+          ],
+          "required": true
+        },
+        {
+          "name": "context",
+          "type": "enum",
+          "values": [
+            "hub",
+            "wizard",
+            "home_card",
+            "circle"
+          ],
+          "required": true
+        }
+      ]
+    },
+    {
+      "name": "Referral Card Shown",
+      "category": "acquisition",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "description": "Home feed invite card became visible (once per hidden->shown).",
+      "properties": [
+        {
+          "name": "state",
+          "type": "enum",
+          "values": [
+            "no_circle",
+            "seats",
+            "pending_friend",
+            "progress"
+          ],
+          "required": true
+        }
+      ]
+    },
+    {
+      "name": "Referral Card Tapped",
+      "category": "acquisition",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "description": "Home feed invite card tapped.",
+      "properties": [
+        {
+          "name": "state",
+          "type": "enum",
+          "values": [
+            "no_circle",
+            "seats",
+            "pending_friend",
+            "progress"
+          ],
+          "required": true
+        }
+      ]
+    },
+    {
+      "name": "Referral Card Dismissed",
+      "category": "acquisition",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "description": "Home feed invite card dismissed (14-day snooze).",
+      "properties": [
+        {
+          "name": "state",
+          "type": "enum",
+          "values": [
+            "no_circle",
+            "seats",
+            "pending_friend",
+            "progress"
+          ],
+          "required": true
+        }
+      ]
+    },
+    {
+      "name": "Circle Wizard Started",
+      "category": "acquisition",
+      "platforms": [
+        "ios",
+        "android"
+      ],
+      "description": "Build-your-circle wizard opened.",
+      "properties": [
+        {
+          "name": "source",
+          "type": "enum",
+          "values": [
+            "home_card",
+            "profile",
+            "settings",
+            "wizard",
+            "push",
+            "circle",
+            "circles_empty",
+            "onboarding",
+            "web_nav",
+            "deep_link"
+          ],
+          "required": true
+        }
+      ]
+    },
+    {
+      "name": "Circle Wizard Step Viewed",
+      "category": "acquisition",
+      "platforms": [
+        "ios",
+        "android"
+      ],
+      "description": "Build-your-circle wizard step shown.",
+      "properties": [
+        {
+          "name": "step",
+          "type": "enum",
+          "values": [
+            "hook",
+            "name",
+            "seats",
+            "done"
+          ],
+          "required": true
+        }
+      ]
+    },
+    {
+      "name": "Circle Wizard Completed",
+      "category": "acquisition",
+      "platforms": [
+        "ios",
+        "android"
+      ],
+      "description": "Wizard finished.",
+      "properties": [
+        {
+          "name": "invites_sent",
+          "type": "int",
+          "required": true
+        },
+        {
+          "name": "created_circle",
+          "type": "bool",
+          "required": true
+        }
+      ]
+    },
+    {
+      "name": "Circle Wizard Skipped",
+      "category": "acquisition",
+      "platforms": [
+        "ios",
+        "android"
+      ],
+      "description": "Wizard closed before the done step.",
+      "properties": [
+        {
+          "name": "step",
+          "type": "enum",
+          "values": [
+            "hook",
+            "name",
+            "seats",
+            "done"
+          ],
+          "required": true
+        }
+      ]
+    },
+    {
+      "name": "Referral Code Claimed",
+      "category": "acquisition",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "description": "An invite code was attributed to this account.",
+      "properties": [
+        {
+          "name": "source",
+          "type": "enum",
+          "enum": "referral_attribution_source",
+          "required": true
+        }
+      ]
+    },
+    {
+      "name": "Referral Claim Failed",
+      "category": "acquisition",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "description": "An invite claim was rejected.",
+      "properties": [
+        {
+          "name": "reason",
+          "type": "enum",
+          "values": [
+            "invalid_code",
+            "self_referral",
+            "already_attributed",
+            "window_closed",
+            "device_ineligible",
+            "disabled",
+            "network",
+            "unknown"
+          ],
+          "required": true
+        }
+      ]
+    },
+    {
+      "name": "Referral Reward Celebrated",
+      "category": "acquisition",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "description": "A referral reward celebration was shown.",
+      "properties": [
+        {
+          "name": "kind",
+          "type": "enum",
+          "values": [
+            "inviter_week",
+            "invitee_welcome",
+            "lifetime"
+          ],
+          "required": true
         }
       ]
     }

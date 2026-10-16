@@ -146,6 +146,12 @@ export class StreakClaimingService {
       });
     }
 
+    // A first logged day can qualify a referral (docs/REFERRALS_SPEC.md §2).
+    // Fire-and-forget: referral bookkeeping never slows or fails a claim.
+    import('./referral-service')
+      .then(({ ReferralService }) => ReferralService.onActivity(userId))
+      .catch((err) => console.error('[StreakClaimingService] referral hook failed:', err?.message));
+
     // 5. Recompute the streak including the new claim
     claimDates.add(claimDateStr);
     const newStreak = calculateStreak(claimDates, todayStr);

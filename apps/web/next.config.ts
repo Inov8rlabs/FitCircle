@@ -6,9 +6,11 @@ const nextConfig: NextConfig = {
   async redirects() {
     return [
       {
-        // Android must fetch Digital Asset Links directly from each declared
-        // host. Keep the existing apex-to-www redirect for every other path.
-        source: '/:path((?!\\.well-known/assetlinks\\.json$).*)',
+        // Android (Digital Asset Links) and iOS (apple-app-site-association)
+        // fetch their verification files directly from each declared host and
+        // do not follow redirects. Keep the apex-to-www redirect for every
+        // other path.
+        source: '/:path((?!\\.well-known/(?:assetlinks\\.json|apple-app-site-association)$).*)',
         has: [{ type: 'host', value: 'fitcircle.ai' }],
         destination: 'https://www.fitcircle.ai/:path',
         permanent: false,
@@ -87,6 +89,14 @@ const nextConfig: NextConfig = {
         // cached response would be served to the next account on the device.
         source: '/api/(.*)',
         headers: [{ key: 'Cache-Control', value: 'private, no-store' }],
+      },
+      {
+        // iOS universal links: the AASA file has no extension, so declare its type.
+        source: '/.well-known/apple-app-site-association',
+        headers: [
+          { key: 'Content-Type', value: 'application/json' },
+          { key: 'Cache-Control', value: 'public, max-age=3600' },
+        ],
       },
       {
         source: '/sw.js',

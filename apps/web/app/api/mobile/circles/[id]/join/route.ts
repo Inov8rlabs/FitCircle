@@ -3,6 +3,7 @@ import { z } from 'zod';
 
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { CircleJoinError, CircleService } from '@/lib/services/circle-service';
+import { ReferralService } from '@/lib/services/referral-service';
 import { safeParseLenient, validationMessage } from '@/lib/validation/lenient-parse';
 
 const idSchema = z.string().uuid();
@@ -11,6 +12,7 @@ const bodySchema = z
   .object({
     inviteCode: z.string().min(1).optional().nullable(),
     invite_code: z.string().min(1).optional().nullable(),
+    ref: z.string().max(32).optional().nullable(),
   })
   .partial();
 
@@ -45,6 +47,7 @@ export async function POST(
 
     // Body is optional — null/empty for public joins.
     let inviteCode: string | undefined;
+    let ref: string | null = null;
     try {
       const text = await request.text();
       if (text) {
@@ -52,6 +55,7 @@ export async function POST(
         if (parsed.success) {
           const candidate = parsed.data.inviteCode ?? parsed.data.invite_code ?? undefined;
           inviteCode = candidate?.trim() ? candidate : undefined;
+          ref = parsed.data.ref ?? null;
         }
       }
     } catch {
@@ -62,6 +66,8 @@ export async function POST(
       const circle = await CircleService.joinByInviteCode(user.id, inviteCode, {
         pathCircleId: id,
       });
+      // New accounts joining through an invite become referrals; never fails the join.
+      await ReferralService.attributeCircleJoin(user.id, inviteCode, ref);
 
       return NextResponse.json(
         { success: true, data: circle, error: null },

@@ -404,6 +404,11 @@ export class OnboardingService {
       })
       .eq('user_id', userId);
 
+    // Finishing onboarding can qualify a referral whose first activity came first.
+    import('./referral-service')
+      .then(({ ReferralService }) => ReferralService.onActivity(userId))
+      .catch((err) => console.error('[referral hook] onboarding:', err?.message));
+
     // Get user's goals
     const { data: goals } = await supabaseAdmin
       .from('user_goals')

@@ -4,6 +4,7 @@ import { z } from 'zod';
 
 import { sendWelcomeEmail } from '@/lib/email/email-service';
 import { registerRateLimiter, getIdentifier, applyRateLimit } from '@/lib/middleware/rate-limit';
+import { CLEAR_FC_REF_COOKIE, claimWebInvite, resolveWebInvite } from '@/lib/referrals/web-claim';
 import {
   USERNAME_PATTERN,
   USERNAME_RULES_MESSAGE,
@@ -18,6 +19,9 @@ const registerSchema = z.object({
   fullName: z.string().min(2, 'Full name is required'),
   // Optional: derived from the email when the form doesn't collect one.
   username: z.string().trim().regex(USERNAME_PATTERN, USERNAME_RULES_MESSAGE).optional(),
+  // Optional invite attribution (docs/REFERRALS_SPEC.md §4 Web). Falls back to the fc_ref cookie.
+  ref: z.string().max(32).optional(),
+  circle: z.string().max(32).optional(),
 });
 
 export async function POST(request: NextRequest) {
@@ -117,8 +121,15 @@ export async function POST(request: NextRequest) {
       console.error('Failed to send welcome email:', error);
     });
 
+    // Invite attribution: best-effort, never fails registration.
+    const invite = resolveWebInvite(
+      { ref: validatedData.ref, circle: validatedData.circle },
+      request.headers.get('cookie')
+    );
+    const referral = invite ? await claimWebInvite(authData.user.id, invite) : null;
+
     // Return success response
-    return NextResponse.json({
+    const response = NextResponse.json({
       user: {
         id: authData.user.id,
         email: authData.user.email,
@@ -127,6 +138,10 @@ export async function POST(request: NextRequest) {
       session: authData.session,
       message: 'Registration successful! Check your email for a welcome message.'
     });
+    if (referral && (referral.claimed || referral.reason !== 'ERROR')) {
+      response.cookies.set(CLEAR_FC_REF_COOKIE);
+    }
+    return response;
 
   } catch (error) {
     console.error('Registration error:', error);

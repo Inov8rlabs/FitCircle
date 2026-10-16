@@ -447,6 +447,11 @@ export class AssessmentService {
       })
       .eq('user_id', userId);
 
+    // Finishing onboarding can qualify a referral whose first activity came first.
+    import('./referral-service')
+      .then(({ ReferralService }) => ReferralService.onActivity(userId))
+      .catch((err) => console.error('[referral hook] onboarding:', err?.message));
+
     // Award achievement (ignore duplicate)
     const { error: achievementError } = await supabaseAdmin
       .from('user_achievements')

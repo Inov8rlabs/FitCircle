@@ -65,6 +65,8 @@ export async function middleware(request: NextRequest) {
     '/register',
     '/auth',
     '/join',
+    '/i', // personal invite landing pages (/i/CODE)
+    '/.well-known', // apple-app-site-association has no extension, so the matcher doesn't skip it
     '/privacy',
     '/terms',
     '/support',

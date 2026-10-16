@@ -27,6 +27,14 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { LogoIcon } from '@/components/ui/logo';
 import { useFormPersistence } from '@/hooks/useFormPersistence';
+import { normalizeCode } from '@/lib/referrals/links';
+import type { ReferralPreview } from '@/lib/referrals/types';
+import {
+  inviterFirstName,
+  postSignupReturnUrl,
+  readPendingInviteFromCookieHeader,
+  rewardLine,
+} from '@/lib/referrals/web';
 import { useAuthStore } from '@/stores/auth-store';
 import { useUIStore } from '@/stores/ui-store';
 
@@ -64,7 +72,12 @@ function safeReturnUrl(value: string | null): string {
 function RegisterForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const returnUrl = searchParams.get('returnUrl');
+  const queryRef = searchParams.get('ref');
+  const queryCircle = searchParams.get('circle');
+  const [invite, setInvite] = useState<{ ref: string | null; circle: string | null } | null>(null);
+  const [invitePreview, setInvitePreview] = useState<ReferralPreview | null>(null);
+  // Circle invites land back on /join/{circle} after onboarding so the new member can join.
+  const returnUrl = searchParams.get('returnUrl') ?? postSignupReturnUrl(invite?.circle, invite?.ref);
   const { register: registerUser, isLoading } = useAuthStore();
   const { showToast } = useUIStore();
   const [showPassword, setShowPassword] = useState(false);
@@ -96,6 +109,28 @@ function RegisterForm() {
     enabled: true,
     clearOnUnmount: false,
   });
+
+  // Pending invite: ?ref=&circle= (propagated from the landing page) or the fc_ref cookie.
+  useEffect(() => {
+    const fromQuery =
+      queryRef || queryCircle
+        ? { ref: queryRef ? normalizeCode(queryRef) : null, circle: queryCircle ? normalizeCode(queryCircle) : null }
+        : null;
+    const cookie = fromQuery ? null : readPendingInviteFromCookieHeader(document.cookie);
+    const pending = fromQuery ?? (cookie ? { ref: cookie.ref, circle: cookie.circle } : null);
+    if (!pending) return;
+    setInvite(pending);
+    const code = pending.circle ?? pending.ref;
+    if (!code) return;
+    const qs = new URLSearchParams({ code });
+    if (pending.circle && pending.ref) qs.set('ref', pending.ref);
+    fetch(`/api/referrals/preview?${qs.toString()}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((body) => {
+        if (body?.data?.valid) setInvitePreview(body.data as ReferralPreview);
+      })
+      .catch(() => {});
+  }, [queryRef, queryCircle]);
 
   // Load saved form data on mount
   useEffect(() => {
@@ -135,6 +170,19 @@ function RegisterForm() {
         name: data.name,
         username: data.email.split('@')[0],
       });
+
+      // Invite attribution (best-effort; the route also falls back to the fc_ref cookie
+      // and never errors for a signed-in caller).
+      try {
+        await fetch('/api/referrals/claim', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'same-origin',
+          body: JSON.stringify(invite ?? {}),
+        });
+      } catch {
+        // never block signup on attribution
+      }
 
       // Clear saved form data after successful registration
       clearForm();
@@ -189,6 +237,23 @@ function RegisterForm() {
               </h1>
               <p className="mt-2 text-gray-400">Join thousands achieving their fitness goals together</p>
             </div>
+
+            {invitePreview?.valid && (
+              <div
+                data-testid="register-invite-banner"
+                className="rounded-2xl border border-pink-500/30 bg-gradient-to-br from-purple-600/20 to-pink-600/20 p-4 text-center"
+              >
+                <p className="font-semibold text-white">
+                  {inviterFirstName(invitePreview)} saved you a seat 💜
+                  {invitePreview.kind === 'circle' && invitePreview.circle?.name
+                    ? ` in ${invitePreview.circle.name}`
+                    : ''}
+                </p>
+                {rewardLine(invitePreview.inviteeRewardDays) && (
+                  <p className="mt-1 text-sm text-gray-300">{rewardLine(invitePreview.inviteeRewardDays)}</p>
+                )}
+              </div>
+            )}
 
             {/* Registration Form */}
             <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">

@@ -4,12 +4,15 @@ import { z } from 'zod';
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { CircleService } from '@/lib/services/circle-service';
 import { DailyGoalService } from '@/lib/services/daily-goals';
+import { ReferralService } from '@/lib/services/referral-service';
 import { createAdminSupabase } from '@/lib/supabase-admin';
 import { parseLenient } from '@/lib/validation/lenient-parse';
 
 // Validation schema
 const joinCircleSchema = z.object({
   inviteCode: z.string().min(1, 'Invite code is required'),
+  // Personal referral code of the member who shared the link (…/join/CODE?ref=REF).
+  ref: z.string().max(32).optional(),
   goal: z
     .object({
       goal_type: z.enum(['weight_loss', 'step_count', 'workout_frequency', 'custom']),
@@ -145,6 +148,11 @@ export async function POST(request: NextRequest) {
       // Log but don't fail the request if goal creation fails
       console.error('[Mobile API] Failed to create daily goals:', goalError);
     }
+
+    // A brand-new account joining through an invite is a referral (no-op for
+    // everyone else). Awaited so the referral exists before the client asks for
+    // the hub, but it never fails the join.
+    await ReferralService.attributeCircleJoin(user.id, inviteCode, validatedData.ref ?? null);
 
     // Get updated circle details
     const updatedCircle = await CircleService.getCircle(circle.id);

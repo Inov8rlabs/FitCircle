@@ -11,6 +11,10 @@ vi.mock('@/lib/supabase-admin', () => ({ createAdminSupabase: () => getCircleDb(
 vi.mock('@/lib/services/chat-activity-hooks', () => ({
   ChatActivityHooks: { onMemberJoined: vi.fn().mockResolvedValue(undefined) },
 }));
+const attributeCircleJoin = vi.fn().mockResolvedValue(undefined);
+vi.mock('@/lib/services/referral-service', () => ({
+  ReferralService: { attributeCircleJoin: (...args: unknown[]) => attributeCircleJoin(...args) },
+}));
 vi.mock('@/lib/services/daily-goals', () => ({
   DailyGoalService: { createDailyGoalsForChallenge: vi.fn().mockResolvedValue({ success: true }) },
 }));
@@ -67,6 +71,12 @@ describe('POST /api/mobile/circles/join', () => {
     expect(body.success).toBe(true);
     expect(body.circle.id).toBe(CIRCLE);
     expect(body.message).toBe('Successfully joined the circle');
+  });
+
+  it('attributes the join as a referral, passing the sharer\'s ref through', async () => {
+    const res = await post({ inviteCode: 'fitabc234', ref: 'MAYA7K2' });
+    expect(res.status).toBe(201);
+    expect(attributeCircleJoin).toHaveBeenCalledWith(JOINER, 'FITABC234', 'MAYA7K2');
   });
 
   it('records the creator as the inviter (reads fitcircles.creator_id, which exists)', async () => {

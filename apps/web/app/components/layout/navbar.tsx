@@ -9,6 +9,7 @@ import {
   X,
   User,
   ChevronDown,
+  Gift,
 } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter, usePathname } from 'next/navigation';
@@ -120,6 +121,14 @@ export function Navbar() {
                       <User className="w-4 h-4" />
                       Profile & Settings
                     </Link>
+                    <Link
+                      href="/invite"
+                      onClick={() => setProfileMenuOpen(false)}
+                      className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-gray-300 hover:bg-slate-800 hover:text-white transition-colors"
+                    >
+                      <Gift className="w-4 h-4 text-pink-400" />
+                      Invite friends
+                    </Link>
                     <div className="my-1 border-t border-slate-800" />
                     <button
                       onClick={() => {
@@ -203,6 +212,17 @@ export function Navbar() {
                   </Link>
                 );
               })}
+              <Link
+                href="/invite"
+                onClick={() => setMobileMenuOpen(false)}
+                className={`flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-colors ${pathname === '/invite'
+                    ? 'bg-indigo-500/20 text-indigo-400'
+                    : 'text-gray-300 hover:bg-slate-800 hover:text-white'
+                  }`}
+              >
+                <Gift className="w-5 h-5 text-pink-400" />
+                Invite friends
+              </Link>
               <FitzyLauncher variant="mobile-row" onOpen={() => setMobileMenuOpen(false)} />
             </div>
           </motion.div>
