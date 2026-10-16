@@ -116,7 +116,7 @@ describe('App Store Connect', () => {
     const parts = calls.filter((c) => c.url.startsWith('https://upload.test'));
     expect(parts.map((p) => Array.from(p.body as Uint8Array))).toEqual([[1, 2, 3, 4], [5, 6]]);
     const commit = calls.find((c) => c.method === 'PATCH' && c.url.includes('/appEventScreenshots/shot1'))!;
-    expect(commit.body.data.attributes).toEqual({ uploaded: true, sourceFileChecksum: '6ac1e56bc78f031059be7be854522c4c' });
+    expect(commit.body.data.attributes).toEqual({ uploaded: true });
 
     // Second sync with unchanged art: PATCHes the event, no re-upload.
     const again = mockFetch([

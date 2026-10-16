@@ -9,7 +9,6 @@
  * - submit: `reviewSubmissions` (+ `reviewSubmissionItems`) then submitted=true.
  * Missing env → CampaignError 409 APP_STORE_NOT_CONNECTED.
  */
-import { createHash } from 'node:crypto';
 
 import { SignJWT, importPKCS8 } from 'jose';
 
@@ -59,7 +58,8 @@ export class AscClient {
   private token: string | null = null;
   constructor(
     private readonly cfg: AscConfig,
-    private readonly fetchImpl: typeof fetch = fetch
+    private readonly fetchImpl: typeof fetch = fetch,
+    private readonly sleep: (ms: number) => Promise<void> = (ms) => new Promise((r) => setTimeout(r, ms))
   ) {}
 
   get appId() {
@@ -68,11 +68,19 @@ export class AscClient {
 
   async call<T = any>(method: string, path: string, body?: unknown): Promise<T> {
     this.token ??= await ascToken(this.cfg);
-    const res = await this.fetchImpl(`${ASC_BASE}${path}`, {
-      method,
-      headers: { Authorization: `Bearer ${this.token}`, 'Content-Type': 'application/json' },
-      body: body === undefined ? undefined : JSON.stringify(body),
-    });
+    // App Store Connect returns sporadic 500s. Retry idempotent calls (never POST,
+    // which can succeed server-side and still answer 500 — see adoptExistingEvent).
+    const retries = method === 'POST' ? 0 : 3;
+    let res: Response;
+    for (let attempt = 0; ; attempt++) {
+      res = await this.fetchImpl(`${ASC_BASE}${path}`, {
+        method,
+        headers: { Authorization: `Bearer ${this.token}`, 'Content-Type': 'application/json' },
+        body: body === undefined ? undefined : JSON.stringify(body),
+      });
+      if (!(res.status >= 500 || res.status === 429) || attempt >= retries) break;
+      await this.sleep(1000 * 2 ** attempt);
+    }
     if (res.status === 204) return null as T;
     const text = await res.text();
     let json: any = null;
@@ -192,6 +200,10 @@ export async function syncAppEvent(row: CampaignRow, today: string, fetchImpl: t
     event = await client.call('PATCH', `/v1/appEvents/${a.eventId}`, {
       data: { type: 'appEvents', id: a.eventId, attributes },
     });
+  } else if ((a.eventId = await adoptExistingEvent(client, row.slug))) {
+    event = await client.call('PATCH', `/v1/appEvents/${a.eventId}`, {
+      data: { type: 'appEvents', id: a.eventId, attributes },
+    });
   } else {
     event = await client.call('POST', '/v1/appEvents', {
       data: { type: 'appEvents', attributes, relationships: { app: { data: { type: 'apps', id: client.appId } } } },
@@ -240,6 +252,17 @@ export async function syncAppEvent(row: CampaignRow, today: string, fetchImpl: t
   return a;
 }
 
+/** A POST that answered 500 may still have created the event: reuse a draft with our reference name. */
+async function adoptExistingEvent(client: AscClient, slug: string): Promise<string | null> {
+  try {
+    const res = await client.call('GET', `/v1/apps/${client.appId}/appEvents?limit=200`);
+    const hit = (res?.data ?? []).find((e: any) => e?.attributes?.referenceName === slug);
+    return hit?.id ?? null;
+  } catch {
+    return null;
+  }
+}
+
 async function uploadScreenshot(client: AscClient, localizationId: string, assetType: string, url: string, fetchImpl: typeof fetch): Promise<string> {
   const img = await fetchImpl(url);
   if (!img.ok) throw new CampaignError(502, 'ART_FETCH_FAILED', `Could not download ${assetType} art (HTTP ${img.status})`);
@@ -258,7 +281,8 @@ async function uploadScreenshot(client: AscClient, localizationId: string, asset
     data: {
       type: 'appEventScreenshots',
       id,
-      attributes: { uploaded: true, sourceFileChecksum: createHash('md5').update(bytes).digest('hex') },
+      // appEventScreenshots only accept `uploaded` (no sourceFileChecksum, unlike app screenshots).
+      attributes: { uploaded: true },
     },
   });
   return id;
