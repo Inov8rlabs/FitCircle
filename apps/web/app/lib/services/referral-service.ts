@@ -4,7 +4,7 @@
  *   attribution  claim(): invitee ← inviter, once, within 7 days of signup,
  *                with self/cycle/device checks. Circle joins attribute too.
  *   qualification evaluate(): the invitee finished onboarding and logged a
- *                first activity (a non-freeze streak_claims row) within 30
+ *                activity on 3 different days (non-freeze streak_claims) within 14
  *                days → inviter +7 days, invitee +7 days, lifetime at 100.
  *                Driven by the activity hook (StreakClaimingService) with the
  *                hourly /api/cron/referrals as the safety net.
@@ -429,7 +429,9 @@ export class ReferralService {
       .maybeSingle();
     if (!invitee) return referral.status;
 
-    const active = invitee.onboarding_completed === true && (await this.hasActivity(referral.invitee_id));
+    const days = await this.activityDays(referral.invitee_id, new Date(deadline));
+    await this.recordProgress(referral, days);
+    const active = invitee.onboarding_completed === true && days >= REFERRAL_POLICY.qualifyingDays;
     if (!active) {
       if (Date.now() > deadline) {
         await this.transition(referral.id, 'pending', 'rejected', 'qualify_window_expired');
@@ -729,16 +731,53 @@ export class ReferralService {
     }
   }
 
-  private static async hasActivity(userId: string): Promise<boolean> {
+  /**
+   * Distinct days with real activity (a non-freeze streak_claims row — every
+   * food/exercise/check-in log auto-claims its day) up to the deadline.
+   */
+  static async activityDays(userId: string, deadline: Date = new Date()): Promise<number> {
     const supabase = createAdminSupabase();
     const { data } = await supabase
       .from('streak_claims')
-      .select('claim_method')
+      .select('claim_date, claim_method')
       .eq('user_id', userId)
-      .limit(20);
-    // Shield freezes protect a streak without any logging — they don't count.
-    return ((data ?? []) as Array<{ claim_method: string | null }>).some((r) => r.claim_method !== 'freeze');
+      .limit(400);
+    const cutoff = deadline.toISOString().slice(0, 10);
+    const days = new Set(
+      ((data ?? []) as Array<{ claim_date: string; claim_method: string | null }>)
+        // Shield freezes protect a streak without any logging — they don't count.
+        .filter((r) => r.claim_method !== 'freeze' && String(r.claim_date) <= cutoff)
+        .map((r) => String(r.claim_date))
+    );
+    return days.size;
   }
+
+  /**
+   * Persist the friend's progress (drives the "Sam · 2/3" bar) and, the first
+   * time they're one day away, give the invitee a single gentle push.
+   */
+  private static async recordProgress(referral: ReferralRow, days: number): Promise<void> {
+    const supabase = createAdminSupabase();
+    const row = referral as ReferralRow & { progress_days?: number; progress_notified_days?: number };
+    const capped = Math.min(days, REFERRAL_POLICY.qualifyingDays);
+    if ((row.progress_days ?? 0) !== capped) {
+      await supabase.from('referrals').update({ progress_days: capped }).eq('id', referral.id);
+    }
+    const oneAway = REFERRAL_POLICY.qualifyingDays - 1;
+    if (capped === oneAway && oneAway > 0 && (row.progress_notified_days ?? 0) < oneAway) {
+      const { data: claimed } = await supabase
+        .from('referrals')
+        .update({ progress_notified_days: oneAway })
+        .eq('id', referral.id)
+        .lt('progress_notified_days', oneAway)
+        .select('id');
+      if ((claimed ?? []).length === 1) {
+        const inviter = await this.profile(referral.inviter_id);
+        notify(referral.invitee_id, 'referral_progress', { inviterName: firstNameOf(inviter) });
+      }
+    }
+  }
+
 
   /** Conditional status move; true only for the caller that made it. */
   private static async transition(
@@ -849,6 +888,8 @@ export class ReferralService {
       shareMessage: personalShareMessage(shareUrl),
       program: {
         rewardDaysPerFriend: REFERRAL_POLICY.inviterRewardDays,
+        qualifyingDays: REFERRAL_POLICY.qualifyingDays,
+        qualifyWindowDays: REFERRAL_POLICY.qualifyWindowDays,
         lifetimeThreshold: REFERRAL_POLICY.lifetimeThreshold,
         inviteeRewardDays: inviteeRewardDays(),
         attributionWindowDays: REFERRAL_POLICY.attributionWindowDays,
@@ -875,6 +916,7 @@ export class ReferralService {
           qualifiedAt: r.qualified_at,
           circleName: r.circle_id ? circleName.get(r.circle_id) ?? null : null,
           nudge: joinedNudgeState(r as ReferralRow & { nudge_count?: number; last_nudged_at?: string | null }),
+          progress: this.progressView(r),
         };
       }),
       invites: await ReferralInviteService.listForHub(userId),
@@ -898,6 +940,8 @@ export class ReferralService {
       starterCircle: starter,
       canClaimCode: !asInvitee && ageMs <= REFERRAL_POLICY.attributionWindowDays * DAY_MS,
       referredBy: asInvitee ? await this.inviterSummary(asInvitee.inviter_id) : null,
+      myReward: await this.myRewardView(asInvitee),
+      activation: await this.activation(userId, me?.created_at ?? null),
     };
   }
 
@@ -952,6 +996,83 @@ export class ReferralService {
       // Never-expiring premium = lifetime (referral lifetime grant or a store lifetime purchase).
       lifetime: hasLifetime || (premium && !me?.subscription_expires_at),
       bankedDays,
+    };
+  }
+
+  private static progressView(r: ReferralRow): { days: number; required: number; deadline: string } {
+    const required = REFERRAL_POLICY.qualifyingDays;
+    const stored = (r as ReferralRow & { progress_days?: number }).progress_days ?? 0;
+    return {
+      days: r.status === 'qualified' ? required : Math.min(stored, required),
+      required,
+      deadline: new Date(new Date(r.attributed_at).getTime() + REFERRAL_POLICY.qualifyWindowDays * DAY_MS).toISOString(),
+    };
+  }
+
+  /**
+   * Activation (north-star input, REFERRALS_SPEC §10.6): within the first 7
+   * days — in a circle of 3+, logged on 3+ different days, and got a friend's
+   * reaction. Circle size is evaluated live.
+   */
+  static async activation(userId: string, createdAt: string | null): Promise<NonNullable<ReferralHub['activation']>> {
+    const supabase = createAdminSupabase();
+    const start = createdAt ? new Date(createdAt) : new Date();
+    const windowEnd = new Date(start.getTime() + 7 * DAY_MS);
+    const [{ data: memberships }, loggedDays, { data: myMessages }] = await Promise.all([
+      supabase.from('fitcircle_members').select('fitcircle_id').eq('user_id', userId).eq('status', 'active'),
+      this.activityDays(userId, windowEnd),
+      supabase
+        .from('circle_messages')
+        .select('id')
+        .eq('sender_id', userId)
+        .lt('created_at', windowEnd.toISOString())
+        .limit(200),
+    ]);
+    const circleIds = ((memberships ?? []) as Array<{ fitcircle_id: string }>).map((m) => m.fitcircle_id);
+    let circleOf3 = false;
+    if (circleIds.length) {
+      const { data: members } = await supabase
+        .from('fitcircle_members')
+        .select('fitcircle_id')
+        .in('fitcircle_id', circleIds)
+        .eq('status', 'active');
+      const counts = new Map<string, number>();
+      for (const m of (members ?? []) as Array<{ fitcircle_id: string }>) counts.set(m.fitcircle_id, (counts.get(m.fitcircle_id) ?? 0) + 1);
+      circleOf3 = [...counts.values()].some((n) => n >= 3);
+    }
+    let reactionReceived = false;
+    const messageIds = ((myMessages ?? []) as Array<{ id: string }>).map((m) => m.id);
+    if (messageIds.length) {
+      const { data: reactions } = await supabase
+        .from('circle_message_reactions')
+        .select('user_id')
+        .in('message_id', messageIds)
+        .neq('user_id', userId)
+        .lt('created_at', windowEnd.toISOString())
+        .limit(1);
+      reactionReceived = (reactions ?? []).length > 0;
+    }
+    const loggedDays3 = loggedDays >= 3;
+    return {
+      activated: circleOf3 && loggedDays3 && reactionReceived,
+      circleOf3,
+      loggedDays3,
+      reactionReceived,
+      windowEndsAt: windowEnd.toISOString(),
+    };
+  }
+
+  /** The invitee's own path to their free week ("2 of 3 check-ins — 1 more unlocks it"). */
+  private static async myRewardView(asInvitee: ReferralRow | null): Promise<ReferralHub['myReward']> {
+    if (!asInvitee || (asInvitee.status !== 'pending' && asInvitee.status !== 'qualified')) return null;
+    const days = inviteeRewardDays();
+    if (days === 0) return null;
+    const inviter = await this.profile(asInvitee.inviter_id);
+    return {
+      ...this.progressView(asInvitee),
+      status: asInvitee.status === 'qualified' ? 'unlocked' : 'in_progress',
+      rewardDays: days,
+      inviterFirstName: firstNameOf(inviter),
     };
   }
 

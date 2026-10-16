@@ -27,14 +27,33 @@ import type {
 } from '@/lib/analytics';
 import { useTrackOnce } from '@/lib/analytics/react';
 import { copyText } from '@/lib/referrals/clipboard';
+import { checkInPhrase, myRewardLine } from '@/lib/referrals/invite-form';
 import type { ReferralHub } from '@/lib/referrals/types';
+import { useAuthStore } from '@/stores/auth-store';
 
 import { FriendsList } from './FriendsList';
 import { InviteByContactForm } from './InviteByContactForm';
 import { RewardCelebration } from './RewardCelebration';
 
-const FINE_PRINT =
-  "A friend counts when they join with your link and log their first activity. Rewards are free Pro time; they're never required for anything you've paid for.";
+/** Fine print; the check-in count comes from program.qualifyingDays (§10.1). */
+export function finePrint(qualifyingDays: number): string {
+  return `A friend counts when they join with your link and ${checkInPhrase(qualifyingDays)}. Rewards are free Pro time; they're never required for anything you've paid for.`;
+}
+
+const ACTIVATED_KEY = (userId: string) => `fc_user_activated:${userId}`;
+
+/** Fires `User Activated` once per user (persisted in localStorage; storage failures are ignored). */
+export function trackActivationOnce(userId: string | null | undefined, activated: boolean | undefined): boolean {
+  if (!userId || !activated) return false;
+  try {
+    if (window.localStorage.getItem(ACTIVATED_KEY(userId))) return false;
+    window.localStorage.setItem(ACTIVATED_KEY(userId), new Date().toISOString());
+  } catch {
+    // Private mode / blocked storage: fire anyway; analytics dedupes server-side at worst.
+  }
+  analytics.track(AnalyticsEvents.userActivated());
+  return true;
+}
 
 function fmtDate(iso: string | null | undefined): string | null {
   if (!iso) return null;
@@ -123,6 +142,13 @@ export function InviteHub() {
 
   useTrackOnce(AnalyticsEvents.referralHubViewed({ source: 'web_nav' }), Boolean(hub?.enabled));
 
+  // Activation (§10.6): `activation` is optional until every backend path returns it.
+  const userId = useAuthStore((st) => st.user?.id ?? null);
+  const activated = (hub as (ReferralHub & { activation?: { activated?: boolean } }) | null)?.activation?.activated;
+  useEffect(() => {
+    trackActivationOnce(userId, activated);
+  }, [userId, activated]);
+
   const finishCelebration = () => {
     const rewards = celebrating;
     setCelebrating([]);
@@ -182,9 +208,11 @@ export function InviteHub() {
   }
 
   const stats = hub.stats ?? { invited: 0, pending: 0, qualified: 0, daysEarned: 0, daysBanked: 0, hasLifetime: false, toLifetime: 100 };
-  const program = hub.program ?? { rewardDaysPerFriend: 7, lifetimeThreshold: 100, inviteeRewardDays: 7, attributionWindowDays: 7 };
+  const program = hub.program;
+  const qualifyingDays = program?.qualifyingDays ?? 3;
+  const lifetimeThreshold = program?.lifetimeThreshold ?? 100;
   const weeksEarned = Math.floor(stats.daysEarned / 7);
-  const target = hub.nextMilestone?.count ?? program.lifetimeThreshold;
+  const target = hub.nextMilestone?.count ?? lifetimeThreshold;
   const progress = Math.min(1, target > 0 ? stats.qualified / target : 1);
   const shareText = hub.shareMessage ?? hub.shareUrl ?? '';
   const proLine = proStatusLine(hub);
@@ -227,7 +255,7 @@ export function InviteHub() {
           ) : null}
           {!stats.hasLifetime && (
             <p className="text-gray-400">
-              {stats.qualified} / {program.lifetimeThreshold} friends to Lifetime Pro
+              {stats.qualified} / {lifetimeThreshold} friends to Lifetime Pro
             </p>
           )}
           {proLine && <p className="pt-1 font-medium text-purple-200" data-testid="hub-pro-line">{proLine}</p>}
@@ -272,6 +300,8 @@ export function InviteHub() {
           </div>
         </div>
       </section>
+
+      {hub.myReward && <MyRewardCard reward={hub.myReward} />}
 
       {hub.referredBy && (
         <p className="mt-6 text-center text-sm text-gray-400">
@@ -343,7 +373,7 @@ export function InviteHub() {
         <div className="mt-4 grid gap-3 sm:grid-cols-3">
           {[
             { icon: Send, title: 'Send your link', body: 'Share it with a friend who should be in your corner.' },
-            { icon: Check, title: 'Friend joins & checks in', body: 'They sign up with your link and log a first activity.' },
+            { icon: Check, title: 'Friend joins & checks in', body: `They sign up with your link and ${checkInPhrase(qualifyingDays)}.` },
             { icon: Gift, title: 'You both get a week of Pro', body: 'Free Pro time for both of you, automatically.' },
           ].map((s, i) => (
             <Card key={s.title}>
@@ -424,12 +454,65 @@ export function InviteHub() {
 
       {hub.canClaimCode && <ClaimCodeForm onClaimed={() => void load()} />}
 
-      <p className="mt-12 text-center text-xs leading-relaxed text-gray-500">{FINE_PRINT}</p>
+      <p className="mt-12 text-center text-xs leading-relaxed text-gray-500">{finePrint(qualifyingDays)}</p>
     </div>
   );
 }
 
 // ---------------------------------------------------------------------------
+
+function MyRewardCard({ reward }: { reward: NonNullable<ReferralHub['myReward']> }) {
+  const span = reward.rewardDays === 7 ? 'free week' : `${reward.rewardDays} free days`;
+  if (reward.status === 'unlocked') {
+    return (
+      <div
+        data-testid="my-reward-unlocked"
+        className="mt-8 flex items-center gap-3 rounded-2xl border border-green-500/30 bg-green-500/10 p-4"
+      >
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-green-500/20">
+          <Check className="h-5 w-5 text-green-300" />
+        </div>
+        <div>
+          <p className="font-semibold text-white">Your {span} of Pro is unlocked ✓</p>
+          <p className="text-sm text-gray-300">
+            Thanks for showing up{reward.inviterFirstName ? ` with ${reward.inviterFirstName}` : ''}. Enjoy every Pro feature.
+          </p>
+        </div>
+      </div>
+    );
+  }
+  const done = Math.min(Math.max(0, reward.days), reward.required);
+  return (
+    <div
+      data-testid="my-reward-progress"
+      className="mt-8 rounded-2xl border border-pink-500/30 bg-gradient-to-br from-purple-600/20 via-fuchsia-600/10 to-pink-600/20 p-5"
+    >
+      <p className="text-xs font-medium uppercase tracking-wider text-pink-300">Your free week</p>
+      <div className="mt-3 flex items-center gap-2" aria-label={`${done} of ${reward.required} check-ins`} role="img">
+        {Array.from({ length: reward.required }, (_, i) => (
+          <motion.span
+            key={i}
+            className={`h-4 w-4 rounded-full ${
+              i < done ? 'bg-gradient-to-br from-purple-400 to-pink-400' : 'border-2 border-dashed border-slate-600'
+            }`}
+            initial={{ scale: 0.6, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            transition={{ delay: i * 0.08 }}
+          />
+        ))}
+        <span className="ml-1 text-sm text-gray-300">
+          {done} of {reward.required} check-ins
+        </span>
+      </div>
+      <p className="mt-2 font-semibold text-white">
+        {myRewardLine(reward, reward.inviterFirstName, reward.rewardDays)}
+      </p>
+      {fmtDate(reward.deadline) && (
+        <p className="mt-1 text-xs text-gray-400">Check in by {fmtDate(reward.deadline)} to unlock it.</p>
+      )}
+    </div>
+  );
+}
 
 function HeroRing({ progress, children }: { progress: number; children: React.ReactNode }) {
   const size = 200;

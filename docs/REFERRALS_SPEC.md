@@ -298,3 +298,101 @@ Web: `POST /api/referrals/me/invites` and `POST /api/referrals/me/nudge` (cookie
 - `Referral Nudge Sent {target: invited|joined, channel: push|email|sms}`
 - `Referral Celebration Invite Tapped {kind}`
 - `Referral Invite Sheet Opened {source}`
+
+---
+
+## 10. v3 (2026-10-16): qualify on 3 days, lobby + seats, circle streak + save pool, seasonal circles, invite prompts at high points, activation
+
+### 10.1 A friend counts after 3 check-in days
+- **Rule:** an invitee qualifies once they've completed onboarding and checked in (any non-freeze `streak_claims` day) on **3 different days within 14 days** of attribution. This replaces "first activity / 30 days".
+- **Copy:** "check in on 3 different days" (short form: "Check in 3 days and we both get a free week of Pro"). Clients read the number from `program.qualifyingDays`; never hardcode it.
+- **Hub additions:**
+  - `program.qualifyingDays`, `program.qualifyWindowDays`.
+  - `invitees[].progress: { days, required, deadline }`. Render a progress bar on joined rows ("Sam · 2/3 check-ins").
+  - Invitee side: `myReward: { days, required, deadline, status: 'in_progress'|'unlocked', rewardDays, inviterFirstName } | null`.
+    - Home card state `my_reward` (highest priority while in progress): "2 of 3 check-ins — 1 more unlocks a free week for you and Maya". Shown with three dots.
+    - The welcome sheet shows the same bar.
+- **Push `referral_progress`** (to the invitee, once, when they're one day away): "One more check-in 🎁 — Check in tomorrow and you and {inviter} both unlock a free week of Pro." Screen: `dashboard`.
+
+### 10.2 Seats + Lobby ("starts when your crew is in")
+- **Create** (`POST /api/mobile/circles`) accepts optional `lobby: { minMembers: 2–6 }`. The server then:
+  - sets `start_date` to now + 72h (auto-start) and `end_date = start + requested duration`;
+  - stores `metadata.lobby = { minMembers, durationDays, openedAt, autoStartAt, startedAt: null }`;
+  - leaves status `upcoming` (date-based, so every existing path still works).
+- **Kickoff:**
+  - **Full:** when active members reach `minMembers`, the circle kicks off right away. Start = today in the circle's timezone, end = start + duration, `startedAt` is set, the chat gets a `circle_kickoff` post ("We're 3! {Circle} starts now 🎉"), and every member gets a `circle_kickoff` push.
+  - **Timer:** if the lobby hasn't filled by `autoStartAt`, the hourly cron kicks off anyway ("Let's go! {Circle} starts now — seats stay open for friends").
+- **Circle payloads** (`GET /api/mobile/circles`, `/circles/{id}`, create response) gain `lobby: { minMembers, memberCount, needed, autoStartAt, startedAt } | null`. `null` means a normal circle.
+- **Clients:**
+  - **Lobby card** at the top of circle detail:
+    - a seat ring with `minMembers` highlighted seats (filled avatars, dashed "+" empties);
+    - "Needs 1 more to start" and "Starts automatically in 2d 14h" countdown;
+    - primary "Invite friends" (the invite sheet), plus "Start now" for the creator (calls `POST /api/mobile/circles/{id}/start`).
+  - **Seats:** every circle detail shows seats (filled avatars plus up to `max(5, minMembers)` empty "+" seats, each tap-to-invite), not only lobby circles.
+  - **Wizards** (build-your-circle and create-circle) default to "Start when 3 friends join" (toggle on, `lobby.minMembers = 3`). The toggle says: "We'll kick off the moment your crew is in, or in 3 days, whichever comes first."
+- `POST /api/mobile/circles/{id}/start` (creator only): kicks off now. `reason: 'manual'`.
+
+### 10.3 Circle streak + shared save pool
+- **What counts:** a day counts for a member when they have any real activity that day: a non-freeze `streak_claims` row (every meal, workout or check-in log claims its day), or a calorie-bearing food entry, or a save covering them. The circle day counts when a **strict majority** of active members count (unchanged rule).
+- **Recompute triggers:**
+  - on every new streak claim, for each of the member's active circles (that day);
+  - the hourly cron recomputes the local "yesterday" for every circle with a live streak (so missed days reset);
+  - every save.
+- **Save pool:** every member brings **1 save per week** (Monday-based week in the circle's timezone) to the circle's shared pool. A member may cover someone who hasn't logged today or yesterday.
+  - **Rules:** not themselves; the covered person hasn't logged that day; the saver's weekly save is unused.
+  - **Errors (`error.code`):** `SAVE_USED` (409), `NOT_NEEDED` (400, they already logged), `SELF` (400), `DATE_OUT_OF_RANGE` (400).
+  - **Effects:** chat post `circle_streak_saved` ("Sam covered Jo — the circle streak lives 🛡️") and push `circle_streak_saved` to the covered member ("Sam covered for you today 🛡️ — your circle streak is safe").
+- **Milestones:** 3, 7, 14, 30, 50, 100 days produce a chat post (`circle_streak`, now enabled) and a `circle_streak_milestone` push to every member ("{Circle} hit a 7-day streak 🔥 — keep it rolling").
+- **`GET /api/mobile/circles/{id}/streak`** (additive; old fields unchanged):
+```json
+{ "fitcircleId": "…", "currentStreak": 4, "longestStreak": 9, "lastActiveDate": "2026-10-15", "updatedAt": "…",
+  "today": { "date": "2026-10-16", "loggedCount": 2, "activeCount": 5, "needed": 3, "qualified": false,
+             "members": [ { "userId": "…", "displayName": "Sam", "avatarUrl": null, "logged": false, "covered": false, "coveredBy": null } ] },
+  "saves": { "poolRemaining": 3, "poolSize": 5, "mySaveAvailable": true, "weekResetsAt": "ISO" },
+  "nextMilestone": { "days": 7, "remaining": 3 } | null }
+```
+  `POST …/streak/save {coveredUserId, date?}` responds `{ save, created, streak: <same DTO> }`. **Android must decode `data.streak`** (current bug: it decodes `data` as the streak).
+- **Clients (iOS and Android):** a Circle Streak card on circle detail, near the top:
+  - flame plus `currentStreak`, "2 of 5 checked in today · 1 more keeps it alive";
+  - member chips (✓ logged, 🛡️ covered, empty);
+  - "Cover {name}" on not-logged chips while `mySaveAvailable`, and "Your weekly save is used — resets Monday" otherwise;
+  - pool indicator "🛡️ 3 saves left this week";
+  - next milestone line;
+  - a milestone celebration (confetti) the first time the viewer sees a newly reached milestone.
+- iOS currently doesn't show the circle streak at all; wire `CircleStreakCardView` (or rebuild it) into `CircleDetailView`.
+
+### 10.4 Seasonal circles: `GET /api/mobile/seasonal` (auth)
+```json
+{ "current": Season | null, "upcoming": Season | null }
+Season = { "key": "hold_the_line", "title": "Hold the Line", "emoji": "❄️",
+           "tagline": "Maintain, don't gain — together.",
+           "description": "From Nov 15 to Jan 1, your circle checks in daily and keeps each other steady through the holidays.",
+           "startsAt": "2026-11-15", "endsAt": "2027-01-01", "featuredFrom": "2026-10-20",
+           "circle": { "name": "Hold the Line Crew", "description": "…", "type": "custom", "startDate": "2026-11-15", "endDate": "2027-01-01" },
+           "accent": "#38bdf8" }
+```
+- `current` is the season whose `featuredFrom` ≤ today ≤ `endsAt`. If the season starts in the future, its circle starts on `startsAt` (upcoming, no lobby; seats are promoted as "Fill your seats before Nov 15"). Otherwise it starts now with the lobby default.
+- Seasons are configured in code (`lib/seasonal/seasons.ts`): Hold the Line (Nov 15–Jan 1), New Year Reset (Jan 1–31, featured from Dec 15), Ramadan 2027 (≈Feb 8–Mar 9, featured from Jan 25; copy says dates follow the moon sighting).
+- **Clients** (during the `current` window only):
+  - a seasonal banner on the wizard's hook/name step ("❄️ Hold the Line · Nov 15–Jan 1") that prefills name and dates;
+  - a compact banner on the Circles tab;
+  - home card state `seasonal` (just below `my_reward`).
+  - Tapping opens the wizard with the season prefilled (`CircleWizardStarted source: seasonal`).
+
+### 10.5 Invite prompts at high points (clients)
+- **Moments:**
+  - a streak milestone celebration;
+  - a daily check-in celebration when the streak is ≥ 3;
+  - a challenge progress milestone of 100% (or 50% if it's the first);
+  - a circle streak milestone;
+  - a lobby kickoff seen in-app.
+- **Behaviour:** add a secondary CTA inside the existing celebration, "Bring a friend along →", which opens the invite sheet (`ReferralInviteSheetOpened source: peak_moment`). Never a separate modal.
+- **Frequency:** at most 1 prompt shown per 7 days per user (local pref), never in the first session, never during onboarding, hidden when `hub.enabled` is false.
+- **Analytics:** `Referral Prompt Shown {moment}` / `Referral Prompt Tapped {moment}`.
+
+### 10.6 Activation (north-star input)
+- **Hub** adds `activation: { activated, circleOf3, loggedDays3, reactionReceived, windowEndsAt }`. Each criterion is evaluated within 7 days of signup (circle membership is evaluated live).
+  - `circleOf3`: in any active circle with ≥3 active members.
+  - `loggedDays3`: ≥3 distinct activity days in the first 7 days.
+  - `reactionReceived`: someone else reacted to one of the user's circle messages in the first 7 days.
+- Clients fire `User Activated {}` once per user (persisted) the first time `activated` is true.

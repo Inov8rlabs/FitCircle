@@ -152,3 +152,29 @@ describe('nudge view', () => {
     expect(untilLabel('2026-10-16T11:00:00Z', now)).toBe('now');
   });
 });
+
+describe('3-check-in progress (§10.1)', () => {
+  it('formats progress and fractions, capping at required', async () => {
+    const { progressLabel, progressFraction, checkInPhrase, myRewardLine, mergeFriends } = await import('../invite-form');
+    expect(progressLabel({ days: 2, required: 3, deadline: 'x' })).toBe('2/3 check-ins');
+    expect(progressLabel({ days: 5, required: 3, deadline: 'x' })).toBe('3/3 check-ins');
+    expect(progressFraction({ days: 1, required: 4, deadline: 'x' })).toBe(0.25);
+    expect(progressFraction({ days: 1, required: 0, deadline: 'x' })).toBe(0);
+    expect(checkInPhrase(3)).toBe('check in on 3 different days');
+    expect(checkInPhrase(5)).toBe('check in on 5 different days');
+    expect(checkInPhrase(1)).toBe('check in once');
+    expect(myRewardLine({ days: 2, required: 3, deadline: 'x' }, 'Maya', 7)).toBe(
+      '1 more check-in unlocks a free week for you and Maya'
+    );
+    expect(myRewardLine({ days: 0, required: 3, deadline: 'x' }, '', 5)).toBe(
+      '3 more check-ins unlock 5 free days for you and your friend'
+    );
+
+    const rows = mergeFriends(undefined, [
+      { id: 'a', displayName: 'Sam', avatarUrl: null, status: 'pending', joinedAt: 'x', qualifiedAt: null, circleName: null, progress: { days: 2, required: 3, deadline: 'x' } },
+      { id: 'b', displayName: 'Lee', avatarUrl: null, status: 'qualified', joinedAt: 'x', qualifiedAt: 'y', circleName: null, progress: { days: 3, required: 3, deadline: 'x' } },
+      { id: 'c', displayName: 'Jo', avatarUrl: null, status: 'pending', joinedAt: 'x', qualifiedAt: null, circleName: null },
+    ]);
+    expect(rows.map((r) => r.progress)).toEqual([{ days: 2, required: 3, deadline: 'x' }, null, null]);
+  });
+});

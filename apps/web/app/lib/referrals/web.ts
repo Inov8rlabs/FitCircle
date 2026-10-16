@@ -181,7 +181,7 @@ export function inviteTitle(preview: ReferralPreview | null | undefined): string
 export function rewardLine(days: number | undefined): string | null {
   if (!days || days <= 0) return null;
   const span = days === 7 ? 'a free week' : `${days} free days`;
-  return `Check in once and you both get ${span} of Pro.`;
+  return `Check in on 3 different days and you both get ${span} of Pro.`;
 }
 
 export function inviteDescription(preview: ReferralPreview | null | undefined): string {

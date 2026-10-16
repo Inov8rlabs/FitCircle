@@ -1,6 +1,6 @@
 {
   "$schema": "./tracking-plan.schema.json",
-  "version": 7,
+  "version": 8,
   "updated": "2026-10-16",
   "conventions": {
     "eventNames": "Title Case, '<Object> <Past-tense verb>' (e.g. 'Meal Logged'). Names are frozen once shipped: rename in the analytics tool, never in code.",
@@ -2096,7 +2096,9 @@
             "no_circle",
             "seats",
             "pending_friend",
-            "progress"
+            "progress",
+            "my_reward",
+            "seasonal"
           ],
           "required": true
         }
@@ -2119,7 +2121,9 @@
             "no_circle",
             "seats",
             "pending_friend",
-            "progress"
+            "progress",
+            "my_reward",
+            "seasonal"
           ],
           "required": true
         }
@@ -2142,7 +2146,9 @@
             "no_circle",
             "seats",
             "pending_friend",
-            "progress"
+            "progress",
+            "my_reward",
+            "seasonal"
           ],
           "required": true
         }
@@ -2172,7 +2178,8 @@
             "web_nav",
             "deep_link",
             "app_launch",
-            "hub"
+            "hub",
+            "seasonal"
           ],
           "required": true
         }
@@ -2328,7 +2335,8 @@
             "wizard",
             "celebration",
             "home_card",
-            "welcome"
+            "welcome",
+            "peak_moment"
           ],
           "required": true
         }
@@ -2435,6 +2443,135 @@
           "required": true
         }
       ]
+    },
+    {
+      "name": "Referral Prompt Shown",
+      "category": "acquisition",
+      "platforms": [
+        "ios",
+        "android"
+      ],
+      "description": "Invite CTA shown inside a celebration (≤1/7 days).",
+      "properties": [
+        {
+          "name": "moment",
+          "type": "enum",
+          "values": [
+            "streak_milestone",
+            "check_in",
+            "challenge_milestone",
+            "circle_streak_milestone",
+            "circle_kickoff"
+          ],
+          "required": true
+        }
+      ]
+    },
+    {
+      "name": "Referral Prompt Tapped",
+      "category": "acquisition",
+      "platforms": [
+        "ios",
+        "android"
+      ],
+      "description": "Invite CTA inside a celebration tapped.",
+      "properties": [
+        {
+          "name": "moment",
+          "type": "enum",
+          "values": [
+            "streak_milestone",
+            "check_in",
+            "challenge_milestone",
+            "circle_streak_milestone",
+            "circle_kickoff"
+          ],
+          "required": true
+        }
+      ]
+    },
+    {
+      "name": "Circle Streak Saved",
+      "category": "circles",
+      "platforms": [
+        "ios",
+        "android"
+      ],
+      "description": "Member used their weekly save to cover a friend.",
+      "properties": []
+    },
+    {
+      "name": "Circle Started Now",
+      "category": "circles",
+      "platforms": [
+        "ios",
+        "android"
+      ],
+      "description": "Creator kicked off a lobby circle manually.",
+      "properties": []
+    },
+    {
+      "name": "Seasonal Challenge Viewed",
+      "category": "acquisition",
+      "platforms": [
+        "ios",
+        "android"
+      ],
+      "description": "Seasonal circle banner/card shown.",
+      "properties": [
+        {
+          "name": "season",
+          "type": "enum",
+          "values": [
+            "hold_the_line",
+            "new_year_reset",
+            "ramadan"
+          ],
+          "required": true
+        },
+        {
+          "name": "surface",
+          "type": "enum",
+          "values": [
+            "wizard",
+            "circles",
+            "home_card"
+          ],
+          "required": true
+        }
+      ]
+    },
+    {
+      "name": "Seasonal Challenge Started",
+      "category": "acquisition",
+      "platforms": [
+        "ios",
+        "android"
+      ],
+      "description": "Circle created from a seasonal challenge.",
+      "properties": [
+        {
+          "name": "season",
+          "type": "enum",
+          "values": [
+            "hold_the_line",
+            "new_year_reset",
+            "ramadan"
+          ],
+          "required": true
+        }
+      ]
+    },
+    {
+      "name": "User Activated",
+      "category": "onboarding",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "description": "Reached activation (circle of 3 + 3 logged days + a friend's reaction in the first week). Fired once.",
+      "properties": []
     }
   ]
 }

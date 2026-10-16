@@ -65,8 +65,8 @@ function describe(reward: Reward): { title: string; body: string } {
   return {
     title: `+${days} days of Pro 🎁`,
     body: reward.friendName
-      ? `${reward.friendName} logged their first activity. That's ${amount} of Pro for you.`
-      : `A friend logged their first activity. That's ${amount} of Pro for you.`,
+      ? `${reward.friendName} checked in for the third day. That's ${amount} of Pro for you.`
+      : `A friend checked in for the third day. That's ${amount} of Pro for you.`,
   };
 }
 

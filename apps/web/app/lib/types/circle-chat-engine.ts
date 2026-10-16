@@ -35,6 +35,10 @@ export interface SignalPayload {
   loggedAtCount?: number;         // for circle_streak: "9 days strong"
   checkedIn?: number;             // daily_summary: "{checkedIn} of {total} checked in"
   total?: number;                 // daily_summary: circle member count
+  coveredName?: string;           // circle_streak_saved: who was covered
+  circleName?: string;            // circle_kickoff
+  memberCount?: number;           // circle_kickoff
+  kickoffReason?: 'full' | 'timer' | 'manual'; // circle_kickoff
   // Hard rule: no weight, body measurements, alcohol/beverage, or raw calorie fields ever.
 }
 
@@ -57,7 +61,9 @@ export const EVENT_TAXONOMY: Record<SystemEventType, EventPolicy> = {
   workout_done:        { priority: 'p2', bundleable: true,  cappable: true,  renderHint: 'text',            enabledByDefault: true  },
   notable_meal:        { priority: 'p1', bundleable: true,  cappable: true,  renderHint: 'text',            enabledByDefault: false }, // needs §6.8 Plate Score / nutrition
   streak_milestone:    { priority: 'p0', bundleable: false, cappable: false, renderHint: 'stat_card',       enabledByDefault: true  },
-  circle_streak:       { priority: 'p0', bundleable: false, cappable: false, renderHint: 'stat_card',       enabledByDefault: false }, // needs §6.13 circle streak
+  circle_streak:       { priority: 'p0', bundleable: false, cappable: false, renderHint: 'stat_card',       enabledByDefault: true  }, // milestones only (REFERRALS_SPEC §10.3)
+  circle_streak_saved: { priority: 'p1', bundleable: false, cappable: false, renderHint: 'text',            enabledByDefault: true  },
+  circle_kickoff:      { priority: 'p0', bundleable: false, cappable: false, renderHint: 'completion_card', enabledByDefault: true  },
   quest_done:          { priority: 'p1', bundleable: false, cappable: false, renderHint: 'text',            enabledByDefault: true  },
   challenge_milestone: { priority: 'p0', bundleable: false, cappable: false, renderHint: 'stat_card',       enabledByDefault: true  },
   challenge_resolved:  { priority: 'p0', bundleable: false, cappable: false, renderHint: 'completion_card', enabledByDefault: true  },

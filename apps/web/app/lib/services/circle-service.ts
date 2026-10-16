@@ -1,4 +1,5 @@
 import crypto from 'crypto';
+import { CircleLobbyService } from './circle-lobby-service';
 
 import { createAdminSupabase } from '../supabase-admin';
 import {
@@ -127,6 +128,7 @@ export class CircleService {
         late_join_deadline: data.late_join_deadline ?? 3,
         participant_count: 1,
         status: this.getCircleStatus(data.start_date, data.end_date),
+        ...(data.metadata ? { metadata: data.metadata } : {}),
         // Only written when the caller chose one; otherwise the column default
         // applies, exactly as before `visibility` was read at all.
         ...(data.visibility ? { visibility: data.visibility } : {}),
@@ -190,6 +192,7 @@ export class CircleService {
       participant_count: memberCount || 0, // Update the stored count field
       member_count: memberCount || 0,
       days_remaining: daysRemaining,
+      lobby: CircleLobbyService.view(circle, memberCount || 0),
     };
   }
 
@@ -216,7 +219,8 @@ export class CircleService {
           status,
           participant_count,
           invite_code,
-          creator_id
+          creator_id,
+          metadata
         )
       `)
       .eq('user_id', userId)
@@ -261,6 +265,7 @@ export class CircleService {
         days_remaining: this.calculateDaysRemaining(circle.end_date),
         is_member: true,
         user_progress: membership.progress_percentage,
+        lobby: CircleLobbyService.view(circle, actualMemberCount || 0),
       };
 
       if (status === 'active') active.push(circleWithDetails);
@@ -1487,6 +1492,8 @@ export class CircleService {
     if (invitedBy !== userId) {
       const { ChatActivityHooks } = await import('./chat-activity-hooks');
       ChatActivityHooks.onMemberJoined(circleId, userId).catch(() => {});
+      // A lobby circle kicks off the moment the crew is big enough.
+      void CircleLobbyService.onMemberJoined(circleId);
     }
   }
 

@@ -22,7 +22,9 @@ export type SystemEventType =
   | 'daily_summary'
   | 'meal_logged'
   | 'member_joined'
-  | 'new_challenge';
+  | 'new_challenge'
+  | 'circle_streak_saved'
+  | 'circle_kickoff';
 
 export type MessagePriority = 'p0' | 'p1' | 'p2';
 

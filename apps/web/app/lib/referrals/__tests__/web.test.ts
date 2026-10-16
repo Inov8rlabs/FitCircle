@@ -105,7 +105,7 @@ describe('copy', () => {
   });
 
   it('ties the reward to checking in, and drops it when disabled', () => {
-    expect(inviteDescription(personal)).toContain('Check in once and you both get a free week of Pro.');
+    expect(inviteDescription(personal)).toContain('Check in on 3 different days and you both get a free week of Pro.');
     expect(inviteDescription({ ...personal, inviteeRewardDays: 0 })).not.toMatch(/Pro/);
     expect(inviteDescription(personal)).not.toMatch(/download/i);
   });

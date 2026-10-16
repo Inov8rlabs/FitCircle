@@ -380,7 +380,7 @@ function RewardCard({ inviterName, days }: { inviterName: string; days: number }
             You and {who} both get {span} of Pro
           </p>
           <p className="mt-1 text-sm text-gray-300">
-            It unlocks when you log your first check-in. That&apos;s it. Show up once and you&apos;re both rewarded.
+            It unlocks once you&apos;ve checked in on 3 different days. Show up, and you&apos;re both rewarded.
           </p>
         </div>
       </div>
@@ -392,7 +392,7 @@ function HowItWorks({ inviterName, reward }: { inviterName: string; reward: bool
   const who = inviterName === 'A friend' ? 'your friend' : inviterName;
   const steps = [
     { icon: Smartphone, title: 'Join with this invite', body: `Get FitCircle and sign up. We'll seat you next to ${who}.` },
-    { icon: Check, title: 'Log your first check-in', body: 'A meal, a workout or your steps. Anything counts.' },
+    { icon: Check, title: 'Check in on 3 days', body: 'A meal, a workout or your steps. Anything counts.' },
     reward
       ? { icon: Sparkles, title: 'You both get a week of Pro', body: 'Free Pro time for both of you. Then keep each other honest.' }
       : { icon: Users, title: 'Keep each other honest', body: 'See each other show up, every day.' },

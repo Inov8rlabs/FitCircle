@@ -467,8 +467,8 @@ export class ReferralInviteService {
       emailPreview: {
         subject: preview.subject,
         intro: starter
-          ? `${inviterFirstName} wants you in “${starter.name}”, their circle on FitCircle.${days > 0 ? ' Check in once and you both get a free week of Pro.' : ''}`
-          : `${inviterFirstName} is using FitCircle to stay on track and wants you along.${days > 0 ? ' Check in once and you both get a free week of Pro.' : ''}`,
+          ? `${inviterFirstName} wants you in “${starter.name}”, their circle on FitCircle.${days > 0 ? ' Check in on 3 different days and you both get a free week of Pro.' : ''}`
+          : `${inviterFirstName} is using FitCircle to stay on track and wants you along.${days > 0 ? ' Check in on 3 different days and you both get a free week of Pro.' : ''}`,
       },
     };
   }

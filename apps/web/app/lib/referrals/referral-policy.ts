@@ -11,13 +11,19 @@ export const REFERRAL_POLICY = {
   lifetimeThreshold: 100,
   /** A new account can be attributed this long after it was created. */
   attributionWindowDays: 7,
-  /** The invitee must log a first activity within this many days of attribution. */
-  qualifyWindowDays: 30,
+  /**
+   * A friend counts once they've checked in on this many DIFFERENT days — a
+   * real habit start, not a throwaway signup (and the progress bar gives the
+   * inviter a natural reason to cheer them on).
+   */
+  qualifyingDays: 3,
+  /** …within this many days of attribution. */
+  qualifyWindowDays: 14,
   /** More qualifications than this for one inviter in 24h ⇒ held for review. */
   velocityPer24h: 10,
 } as const;
 
-/** Pro days the invitee earns on their first activity (0 disables). Env-tunable. */
+/** Pro days the invitee earns once they qualify (0 disables). Env-tunable. */
 export function inviteeRewardDays(): number {
   const raw = process.env.REFERRAL_INVITEE_REWARD_DAYS;
   if (raw === undefined || raw === '') return 7;

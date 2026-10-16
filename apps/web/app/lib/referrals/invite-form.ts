@@ -175,6 +175,13 @@ export interface HubInviteeRow {
   qualifiedAt: string | null;
   circleName: string | null;
   nudge?: NudgeState;
+  progress?: CheckInProgress;
+}
+
+export interface CheckInProgress {
+  days: number;
+  required: number;
+  deadline: string;
 }
 
 export type FriendStatus = 'invited_email' | 'invited_sms' | 'joined' | 'qualified' | 'review' | 'rejected';
@@ -189,6 +196,8 @@ export interface FriendRowModel {
   status: FriendStatus;
   channel: 'email' | 'sms' | null;
   nudge: NudgeState | null;
+  /** Check-in progress toward qualifying (joined rows only). */
+  progress: CheckInProgress | null;
 }
 
 export function mergeFriends(invites: HubInviteRow[] | undefined, invitees: HubInviteeRow[] | undefined): FriendRowModel[] {
@@ -204,6 +213,7 @@ export function mergeFriends(invites: HubInviteRow[] | undefined, invitees: HubI
       status: i.channel === 'sms' ? 'invited_sms' : 'invited_email',
       channel: i.channel,
       nudge: i.nudge ?? null,
+      progress: null,
     }));
   const fromInvitees: FriendRowModel[] = (invitees ?? []).map((f) => ({
     key: `referral:${f.id}`,
@@ -215,6 +225,7 @@ export function mergeFriends(invites: HubInviteRow[] | undefined, invitees: HubI
     status: f.status === 'pending' ? 'joined' : f.status,
     channel: null,
     nudge: f.nudge ?? null,
+    progress: f.status === 'pending' && f.progress && f.progress.required > 0 ? f.progress : null,
   }));
   return [...fromInvites, ...fromInvitees];
 }
@@ -222,7 +233,7 @@ export function mergeFriends(invites: HubInviteRow[] | undefined, invitees: HubI
 export const FRIEND_STATUS_LABEL: Record<FriendStatus, string> = {
   invited_email: 'Invited · email',
   invited_sms: 'Invited · text',
-  joined: 'Joined · waiting for first check-in',
+  joined: 'Joined · checking in',
   qualified: 'Week unlocked ✓',
   review: 'Checking…',
   rejected: 'Not eligible',
@@ -256,4 +267,32 @@ export function nudgeView(
 export function nudgeAnalytics(row: FriendRowModel): { target: 'invited' | 'joined'; channel: 'push' | 'email' | 'sms' } {
   if (row.source === 'referral') return { target: 'joined', channel: 'push' };
   return { target: 'invited', channel: row.channel === 'sms' ? 'sms' : 'email' };
+}
+
+// ---------------------------------------------------------------------------
+// 3-check-in rule (§10.1) — the count always comes from program.qualifyingDays
+// ---------------------------------------------------------------------------
+
+/** "2/3 check-ins" (days capped at required). */
+export function progressLabel(p: CheckInProgress): string {
+  const done = Math.min(Math.max(0, p.days), p.required);
+  return `${done}/${p.required} check-ins`;
+}
+
+/** 0..1 fill for a progress bar. */
+export function progressFraction(p: CheckInProgress): number {
+  return p.required > 0 ? Math.min(1, Math.max(0, p.days) / p.required) : 0;
+}
+
+/** "check in on 3 different days" / "check in once". */
+export function checkInPhrase(days: number): string {
+  return days <= 1 ? 'check in once' : `check in on ${days} different days`;
+}
+
+/** Remaining check-ins line for the invitee's own reward card. */
+export function myRewardLine(p: CheckInProgress, inviterFirstName: string, rewardDays: number): string {
+  const remaining = Math.max(0, p.required - p.days);
+  const reward = rewardDays === 7 ? 'a free week' : `${rewardDays} free days`;
+  const who = inviterFirstName?.trim() ? `you and ${inviterFirstName.trim()}` : 'you and your friend';
+  return `${remaining} more ${remaining === 1 ? 'check-in unlocks' : 'check-ins unlock'} ${reward} for ${who}`;
 }

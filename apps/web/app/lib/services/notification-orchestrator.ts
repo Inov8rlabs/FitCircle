@@ -116,7 +116,12 @@ export type NotificationType =
   | 'referral_reward_banked'
   | 'referral_lifetime'
   | 'referral_invitee_welcome'
-  | 'referral_nudge';
+  | 'referral_nudge'
+  | 'referral_progress'
+  // Circle streak + lobby (REFERRALS_SPEC §10)
+  | 'circle_streak_saved'
+  | 'circle_streak_milestone'
+  | 'circle_kickoff';
 
 interface NotificationContent {
   title: string;
@@ -185,8 +190,12 @@ export const TYPE_SCREEN_MAP: Record<NotificationType, NotificationScreen> = {
   referral_reward_banked: 'invite_hub',
   referral_lifetime: 'invite_hub',
   referral_invitee_welcome: 'invite_hub',
-  // The nudged friend should go log their first check-in.
+  // The nudged friend should go log a check-in.
   referral_nudge: 'dashboard',
+  referral_progress: 'dashboard',
+  circle_streak_saved: 'circle_detail',
+  circle_streak_milestone: 'circle_detail',
+  circle_kickoff: 'circle_detail',
 };
 
 export function screenFor(type: NotificationType, data: NotificationData): NotificationScreen {
@@ -417,12 +426,12 @@ export const NOTIFICATION_TEMPLATES: Record<
   // ---- Referrals (docs/REFERRALS_SPEC.md §9.3) ----
   referral_friend_joined: (data) => ({
     title: `${data.friendName || 'Your friend'} just joined FitCircle 🎉`,
-    body: 'Your invite worked! When they log their first check-in, you both get a free week of Pro.',
+    body: 'Your invite worked! Once they check in on 3 days, you both get a free week of Pro.',
     category: 'social',
   }),
   referral_reward_earned: (data) => ({
     title: 'You both just earned a free week of Pro 🎁',
-    body: `${data.friendName || 'Your friend'} checked in for the first time. Invite another friend for another free week.`,
+    body: `${data.friendName || 'Your friend'} checked in for the third day. Invite another friend for another free week.`,
     category: 'celebration',
   }),
   referral_reward_banked: (data) => ({
@@ -440,9 +449,29 @@ export const NOTIFICATION_TEMPLATES: Record<
     body: 'Thanks for showing up! Invite your own friends: every one who checks in earns you another week.',
     category: 'celebration',
   }),
+  referral_progress: (data) => ({
+    title: 'One more check-in 🎁',
+    body: `Check in tomorrow and you and ${data.inviterName || 'your friend'} both unlock a free week of Pro.`,
+    category: 'celebration',
+  }),
+  circle_streak_saved: (data) => ({
+    title: `${data.friendName || 'A friend'} covered for you today 🛡️`,
+    body: `Your ${data.circleName || 'circle'} streak is safe. Pay it forward when someone needs it.`,
+    category: 'circle',
+  }),
+  circle_streak_milestone: (data) => ({
+    title: `${data.circleName || 'Your circle'} hit a ${data.streakDays || 0}-day streak 🔥`,
+    body: 'Most of you showed up every single day. Keep it rolling.',
+    category: 'circle',
+  }),
+  circle_kickoff: (data) => ({
+    title: data.kickoffReason === 'full' ? `Your crew is in! ${data.circleName || 'Your circle'} starts now 🎉` : `${data.circleName || 'Your circle'} starts now 🎉`,
+    body: data.kickoffReason === 'full' ? 'Log something today to get the circle streak going.' : 'Seats stay open, so keep inviting friends. Log something today to get the streak going.',
+    category: 'circle',
+  }),
   referral_nudge: (data) => ({
     title: `${data.inviterName || 'Your friend'} is cheering you on 💪`,
-    body: 'Log your first check-in today and you both get a free week of Pro.',
+    body: 'Check in today. 3 days of check-ins and you both get a free week of Pro.',
     category: 'social',
   }),
 };
@@ -500,6 +529,11 @@ export const CAP_EXEMPT_TYPES: ReadonlySet<NotificationType> = new Set<Notificat
   'referral_invitee_welcome',
   // A friend's explicit, rate-limited nudge (≤3 ever, 48h apart) — never dropped for a system nudge.
   'referral_nudge',
+  // Sent once per referral, the day the friend is one check-in from their reward.
+  'referral_progress',
+  // Something a friend did for you / your crew is in — never dropped for a nudge.
+  'circle_streak_saved',
+  'circle_kickoff',
 ]);
 
 export function isCapExempt(type: NotificationType): boolean {

@@ -18,6 +18,7 @@ export const CIRCLE_TABLE_COLUMNS: Record<string, string[]> = {
     'id', 'creator_id', 'name', 'description', 'type', 'status', 'visibility', 'start_date',
     'end_date', 'participant_count', 'invite_code', 'privacy_mode', 'auto_accept_invites',
     'allow_late_join', 'late_join_deadline', 'is_official', 'created_at', 'updated_at',
+    'metadata', 'timezone',
   ],
   fitcircle_members: [
     'id', 'fitcircle_id', 'user_id', 'status', 'joined_at', 'dropped_at', 'current_value',

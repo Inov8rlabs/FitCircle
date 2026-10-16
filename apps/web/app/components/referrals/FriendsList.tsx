@@ -11,6 +11,8 @@ import {
   mergeFriends,
   nudgeAnalytics,
   nudgeView,
+  progressFraction,
+  progressLabel,
   smsHref,
   type FriendRowModel,
   type FriendStatus,
@@ -176,6 +178,24 @@ function FriendRow({
           </span>
           {row.subtitle && <span className="truncate text-xs text-gray-500">{row.subtitle}</span>}
         </div>
+        {row.progress && (
+          <div className="mt-2 flex items-center gap-2" data-testid="friend-progress">
+            <div
+              className="h-1.5 max-w-[10rem] flex-1 overflow-hidden rounded-full bg-slate-800"
+              role="progressbar"
+              aria-label={`${row.name} check-in progress`}
+              aria-valuemin={0}
+              aria-valuemax={row.progress.required}
+              aria-valuenow={Math.min(row.progress.days, row.progress.required)}
+            >
+              <div
+                className="h-full rounded-full bg-gradient-to-r from-purple-500 to-pink-500 transition-[width] duration-700"
+                style={{ width: `${progressFraction(row.progress) * 100}%` }}
+              />
+            </div>
+            <span className="text-xs text-gray-400">{progressLabel(row.progress)}</span>
+          </div>
+        )}
       </div>
       {view.kind === 'button' && (
         <button

@@ -88,30 +88,47 @@ export interface CircleStreakSaveResultDTO {
 // (Declared as a type so the implementation is structurally checked against it.)
 // ============================================================================
 
+/** Milestones that post to chat + push every member (REFERRALS_SPEC §10.3). */
+export const CIRCLE_STREAK_MILESTONES = [3, 7, 14, 30, 50, 100] as const;
+
+/** GET /streak payload: the DTO plus today's progress and the weekly save pool (additive). */
+export interface CircleStreakView extends CircleStreakDTO {
+  today: {
+    date: string;
+    loggedCount: number;
+    activeCount: number;
+    needed: number;
+    qualified: boolean;
+    members: Array<{
+      userId: string;
+      displayName: string;
+      avatarUrl: string | null;
+      logged: boolean;
+      covered: boolean;
+      coveredBy: string | null;
+    }>;
+  };
+  saves: { poolRemaining: number; poolSize: number; mySaveAvailable: boolean; weekResetsAt: string };
+  nextMilestone: { days: number; remaining: number } | null;
+}
+
 export interface ICircleStreakService {
   /**
-   * Recompute the collective streak for a single calendar day.
-   * Counts active members who logged a calorie-bearing food entry that day (a member
-   * with a streak save for the day counts as logged). If the count >= the strict
-   * majority threshold, the day qualifies: extend current_streak if `date` is the day
-   * after last_active_date, otherwise (re)start at 1; if the day does not qualify and
-   * it is on/after last_active_date, reset to 0. longest_streak is bumped to the max.
-   * Upserts circle_streaks and returns the resulting DTO.
+   * Recompute the collective streak for one calendar day. A member counts if they
+   * showed up (non-freeze streak claim, calorie-bearing food entry, or a save).
+   * A qualifying day extends/starts the streak; a non-qualifying day only resets
+   * it when `final` (the day is over) — today in progress never resets.
    */
-  recomputeForDay(fitcircleId: string, date: string): Promise<CircleStreakDTO>;
+  recomputeForDay(fitcircleId: string, date: string, opts?: { final?: boolean }): Promise<CircleStreakDTO>;
 
-  /** Active-member-gated read of a circle's collective streak. */
-  getStreak(fitcircleId: string, viewerUserId: string): Promise<CircleStreakDTO>;
+  /** Active-member-gated read: streak + today's progress + save pool. */
+  getStreak(fitcircleId: string, viewerUserId: string): Promise<CircleStreakView>;
 
-  /**
-   * Record a pro-social streak save: `saverUserId` covers `coveredUserId` for `date`
-   * (once per covered member per period). Both must be active members of the circle.
-   * The saved member counts as "logged" for that day; the day is recomputed.
-   */
+  /** Spend the saver's weekly save covering a friend (today or yesterday). */
   useSave(
     fitcircleId: string,
     saverUserId: string,
     coveredUserId: string,
-    date: string
+    date?: string | null
   ): Promise<CircleStreakSaveResultDTO>;
 }

@@ -63,7 +63,7 @@ describe('InviteLanding', () => {
 
     expect(screen.getByTestId('invite-headline')).toHaveTextContent('Maya saved you a seat');
     expect(screen.getByTestId('invite-reward')).toHaveTextContent('You and Maya both get a free week of Pro');
-    expect(screen.getByTestId('invite-reward')).toHaveTextContent(/first check-in/);
+    expect(screen.getByTestId('invite-reward')).toHaveTextContent(/checked in on 3 different days/);
     expect(screen.queryByTestId('invite-circle-card')).not.toBeInTheDocument();
     // jsdom's UA is desktop → both stores.
     expect(screen.getByRole('button', { name: /App Store/ })).toBeInTheDocument();

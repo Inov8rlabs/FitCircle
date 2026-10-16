@@ -153,6 +153,52 @@ export class ChatActivityHooks {
     }
   }
 
+  /** The circle streak reached a milestone (3/7/14/30/50/100). Circle-level post. */
+  static async onCircleStreakMilestone(fitcircleId: string, streakDays: number): Promise<void> {
+    try {
+      await this.ingest(
+        this.signal(fitcircleId, fitcircleId, 'circle', 'circle_streak', `streak-${streakDays}`, {
+          streakDays,
+          loggedAtCount: streakDays,
+        })
+      );
+    } catch (err) {
+      this.swallow('onCircleStreakMilestone', err);
+    }
+  }
+
+  /** A member spent their weekly save covering a friend. */
+  static async onCircleStreakSaved(fitcircleId: string, saverUserId: string, coveredUserId: string, saveId: string): Promise<void> {
+    try {
+      const [saver, covered] = await Promise.all([this.actorName(saverUserId), this.actorName(coveredUserId)]);
+      await this.ingest(
+        this.signal(fitcircleId, saverUserId, saver, 'circle_streak_saved', saveId, { coveredName: covered.split(/\s+/)[0] })
+      );
+    } catch (err) {
+      this.swallow('onCircleStreakSaved', err);
+    }
+  }
+
+  /** A lobby circle kicked off (crew filled, timer ran out, or the creator started it). */
+  static async onCircleKickoff(
+    fitcircleId: string,
+    circleName: string,
+    memberCount: number,
+    reason: 'full' | 'timer' | 'manual'
+  ): Promise<void> {
+    try {
+      await this.ingest(
+        this.signal(fitcircleId, fitcircleId, circleName, 'circle_kickoff', `kickoff-${fitcircleId}`, {
+          circleName,
+          memberCount,
+          kickoffReason: reason,
+        })
+      );
+    } catch (err) {
+      this.swallow('onCircleKickoff', err);
+    }
+  }
+
   // ==========================================================================
   // PRIVATE — signal construction + dispatch
   // ==========================================================================

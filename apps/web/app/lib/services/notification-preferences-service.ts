@@ -78,6 +78,10 @@ const TYPE_CATEGORY_MAP: Record<string, NotificationCategory> = {
   referral_lifetime: 'celebration',
   referral_invitee_welcome: 'celebration',
   referral_nudge: 'social',
+  referral_progress: 'celebration',
+  circle_streak_saved: 'circle',
+  circle_streak_milestone: 'circle',
+  circle_kickoff: 'circle',
 };
 
 // ============================================================================

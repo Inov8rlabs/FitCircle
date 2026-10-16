@@ -226,7 +226,9 @@ describe('email-matched signup + delivery to both sides', () => {
 
   it('on first check-in: pushes + emails both people, marks the invite qualified', async () => {
     await inviteThenSignUp();
-    db.rows('streak_claims').push({ id: 'c1', user_id: SAM, claim_method: 'manual_entry' });
+    for (let i = 0; i < 3; i++) {
+      db.rows('streak_claims').push({ id: `c${i}`, user_id: SAM, claim_method: 'manual_entry', claim_date: new Date(Date.now() - i * DAY).toISOString().slice(0, 10) });
+    }
     await ReferralService.onActivity(SAM);
 
     const types = push.sent.map((p) => `${p.userId === MAYA ? 'maya' : 'sam'}:${p.type}`);
@@ -242,7 +244,9 @@ describe('email-matched signup + delivery to both sides', () => {
   it('retries pushes suppressed by quiet hours until delivered', async () => {
     push.outcome = { sent: false, reason: 'quiet_hours' };
     await inviteThenSignUp();
-    db.rows('streak_claims').push({ id: 'c1', user_id: SAM, claim_method: 'manual_entry' });
+    for (let i = 0; i < 3; i++) {
+      db.rows('streak_claims').push({ id: `c${i}`, user_id: SAM, claim_method: 'manual_entry', claim_date: new Date(Date.now() - i * DAY).toISOString().slice(0, 10) });
+    }
     await ReferralService.onActivity(SAM);
     await flush();
     expect(db.rows('referral_rewards').every((r) => r.notified_at === null)).toBe(true);

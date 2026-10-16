@@ -1,3 +1,5 @@
+import type { LobbyView } from '../services/circle-lobby-service';
+
 // FitCircle Type Definitions
 
 // ============================================================================
@@ -15,6 +17,8 @@ export type CircleStatus = 'upcoming' | 'active' | 'completed';
 // ============================================================================
 
 export interface Circle {
+  /** fitcircles.metadata (lobby state lives at metadata.lobby — REFERRALS_SPEC §10.2). */
+  metadata?: Record<string, any> | null;
   id: string;
   name: string;
   description?: string;
@@ -127,6 +131,8 @@ export interface CreateCircleInput {
   visibility?: CircleVisibility;
   start_date: string;
   end_date: string;
+  /** Merged into fitcircles.metadata (e.g. { lobby }). */
+  metadata?: Record<string, unknown>;
   max_participants?: number;
   allow_late_join?: boolean;
   late_join_deadline?: number;
@@ -170,6 +176,8 @@ export interface JoinCircleInput {
 
 export interface CircleWithDetails extends Circle {
   member_count: number;
+  /** "Starts when your crew is in" state; null for normal circles. */
+  lobby?: LobbyView | null;
   days_remaining: number;
   is_member?: boolean;
   user_progress?: number;

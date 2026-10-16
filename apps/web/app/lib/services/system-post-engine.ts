@@ -141,6 +141,14 @@ export class SystemPostEngine {
       case 'circle_streak':
         return `The circle's kept it going ${payload?.loggedAtCount ?? payload?.streakDays ?? 0} days strong 🔥`;
 
+      case 'circle_streak_saved':
+        return `${names[0]} covered ${payload?.coveredName ?? 'a friend'} — the circle streak lives 🛡️`;
+
+      case 'circle_kickoff':
+        return payload?.kickoffReason === 'full'
+          ? `We're ${payload?.memberCount ?? 3}! ${payload?.circleName ?? 'The circle'} starts now 🎉`
+          : `Let's go! ${payload?.circleName ?? 'The circle'} starts now. Seats stay open for friends 🎉`;
+
       case 'quest_done':
         return `${names[0]} finished the ${payload?.questName ?? 'quest'} 🎉`;
 

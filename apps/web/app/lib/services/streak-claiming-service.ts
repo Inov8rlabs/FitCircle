@@ -151,6 +151,10 @@ export class StreakClaimingService {
     import('./referral-service')
       .then(({ ReferralService }) => ReferralService.onActivity(userId))
       .catch((err) => console.error('[StreakClaimingService] referral hook failed:', err?.message));
+    // …and it's a day this member showed up for each of their circles' collective streaks.
+    import('./circle-streak-service')
+      .then(({ CircleStreakService }) => CircleStreakService.onMemberActivity(userId, claimDateStr))
+      .catch((err) => console.error('[StreakClaimingService] circle streak hook failed:', err?.message));
 
     // 5. Recompute the streak including the new claim
     claimDates.add(claimDateStr);

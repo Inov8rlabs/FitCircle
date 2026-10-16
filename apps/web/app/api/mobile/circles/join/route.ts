@@ -135,6 +135,8 @@ export async function POST(request: NextRequest) {
       // posts the "just joined — say hi" chat update. Fire-and-forget; never throws.
       const { ChatActivityHooks } = await import('@/lib/services/chat-activity-hooks');
       ChatActivityHooks.onMemberJoined(circle.id, user.id).catch(() => {});
+      const { CircleLobbyService } = await import('@/lib/services/circle-lobby-service');
+      void CircleLobbyService.onMemberJoined(circle.id);
     }
 
     // Create daily goals for the user based on the challenge

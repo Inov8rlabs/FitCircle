@@ -91,7 +91,8 @@ export class ReferralFakeDb {
 type Filter = (row: Row) => boolean;
 
 class Query implements PromiseLike<any> {
-  private op: 'select' | 'insert' | 'update' | 'delete' = 'select';
+  private op: 'select' | 'insert' | 'update' | 'delete' | 'upsert' = 'select';
+  private conflictCols: string[] = [];
   private filters: Filter[] = [];
   private payload: any = null;
   private returning = false;
@@ -116,16 +117,25 @@ class Query implements PromiseLike<any> {
   }
   insert(row: Row | Row[]) { this.op = 'insert'; this.payload = row; return this; }
   update(patch: Row) { this.op = 'update'; this.payload = patch; return this; }
+  upsert(row: Row, opts?: { onConflict?: string }) {
+    this.op = 'upsert';
+    this.payload = row;
+    this.conflictCols = (opts?.onConflict ?? 'id').split(',').map((c) => c.trim());
+    return this;
+  }
   delete() { this.op = 'delete'; return this; }
 
   eq(col: string, val: any) { this.filters.push((r) => (r[col] ?? null) === (val ?? null)); return this; }
   is(col: string, val: any) { this.filters.push((r) => (r[col] ?? null) === val); return this; }
   neq(col: string, val: any) { this.filters.push((r) => r[col] !== val); return this; }
   in(col: string, vals: any[]) { this.filters.push((r) => vals.includes(r[col])); return this; }
+  gt(col: string, val: any) { this.filters.push((r) => r[col] != null && r[col] > val); return this; }
   gte(col: string, val: any) { this.filters.push((r) => r[col] != null && r[col] >= val); return this; }
   lt(col: string, val: any) { this.filters.push((r) => r[col] != null && r[col] < val); return this; }
   not(col: string, op: string, val: any) {
-    if (op === 'is') this.filters.push((r) => (r[col] ?? null) !== val);
+    // JSON paths ('metadata->lobby') resolve through nested objects.
+    const at = (r: Row) => col.split(/->>?/).reduce<any>((v, k) => (v == null ? v : v[k]), r);
+    if (op === 'is') this.filters.push((r) => (at(r) ?? null) !== val);
     else this.filters.push((r) => r[col] !== val);
     return this;
   }
@@ -184,7 +194,7 @@ class Query implements PromiseLike<any> {
             ? { status: 'invited', referral_id: null, nudge_count: 0, last_nudged_at: null, sent_at: new Date().toISOString(), joined_at: null }
             : {}),
           ...(this.table === 'referrals'
-            ? { attributed_at: new Date().toISOString(), qualified_at: null, status: 'pending', status_reason: null, nudge_count: 0, last_nudged_at: null, inviter_notified_at: null }
+            ? { attributed_at: new Date().toISOString(), qualified_at: null, status: 'pending', status_reason: null, nudge_count: 0, last_nudged_at: null, inviter_notified_at: null, progress_days: 0, progress_notified_days: 0 }
             : {}),
           ...r,
         }));
@@ -197,6 +207,15 @@ class Query implements PromiseLike<any> {
         this.db.log.push({ table: this.table, op: 'insert', payload: list });
         const out = list.map((r: Row) => ({ ...r }));
         return { data: this.returning ? (Array.isArray(this.payload) ? out : out[0]) : null, error: null };
+      }
+      case 'upsert': {
+        const row = this.payload as Row;
+        const all = this.db.rows(this.table);
+        const hit = all.find((r) => this.conflictCols.every((c) => r[c] === row[c]));
+        if (hit) Object.assign(hit, row);
+        else all.push({ updated_at: new Date().toISOString(), ...row });
+        const out = { ...(hit ?? all[all.length - 1]) };
+        return { data: this.returning ? [out] : null, error: null };
       }
       case 'update': {
         const rows = this.matched();

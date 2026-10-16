@@ -117,7 +117,7 @@ describe('FriendsList', () => {
     expect(rows.map((r) => r.textContent)).toEqual([
       expect.stringContaining('Invited · email'),
       expect.stringContaining('Invited · text'),
-      expect.stringContaining('Joined · waiting for first check-in'),
+      expect.stringContaining('Joined · checking in'),
       expect.stringContaining('Checking…'),
     ]);
     expect(rows[0]).toHaveTextContent('Nudge');

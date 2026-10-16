@@ -2,6 +2,7 @@ import { type NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
+import { CircleLobbyService } from '@/lib/services/circle-lobby-service';
 import { CircleService } from '@/lib/services/circle-service';
 import { UsageService } from '@/lib/services/usage-service';
 import { resolveClientTimezone } from '@/lib/streaks/client-timezone';
@@ -202,13 +203,22 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Lobby ("start when N friends join"): only for circles that would start now —
+    // a future-dated (e.g. seasonal) circle already waits for its start date.
+    const today = toCalendarDate(new Date().toISOString(), clientTimezone);
+    const lobbyPlan =
+      parsed.lobby && validatedData.startDate <= today
+        ? CircleLobbyService.plan(validatedData.startDate, validatedData.endDate, parsed.lobby.minMembers)
+        : null;
+
     // Create the circle
     const circle = await CircleService.createCircle(user.id, {
       name: validatedData.name,
       description: validatedData.description,
       type: validatedData.type ?? 'custom',
-      start_date: validatedData.startDate,
-      end_date: validatedData.endDate,
+      start_date: lobbyPlan?.start_date ?? validatedData.startDate,
+      end_date: lobbyPlan?.end_date ?? validatedData.endDate,
+      ...(lobbyPlan ? { metadata: { lobby: lobbyPlan.lobby } } : {}),
       allow_late_join: validatedData.allowLateJoin,
       late_join_deadline: validatedData.lateJoinDeadline,
       // Stored only when the client sent one; otherwise the column default applies.
@@ -227,7 +237,8 @@ export async function POST(request: NextRequest) {
           // Both are served: the circle's own fields at the top level, plus the
           // two original keys (which win if a column is ever named the same).
           ...circle,
-          circle,
+          lobby: CircleLobbyService.view(circle, 1),
+          circle: { ...circle, lobby: CircleLobbyService.view(circle, 1) },
           inviteCode,
         },
         meta: {

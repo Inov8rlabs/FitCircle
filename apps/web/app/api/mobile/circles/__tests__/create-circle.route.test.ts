@@ -242,3 +242,36 @@ describe('POST /api/mobile/circles', () => {
     });
   });
 });
+
+describe('lobby ("start when N friends join")', () => {
+  const todayUtc = () => new Date().toISOString().slice(0, 10);
+  const plusDays = (day: string, n: number) => new Date(Date.parse(`${day}T00:00:00Z`) + n * 86_400_000).toISOString().slice(0, 10);
+
+  it('turns a start-now circle into a 72h lobby that keeps its length', async () => {
+    const start = todayUtc();
+    const res = await post({ ...ANDROID_BODY, startDate: start, endDate: plusDays(start, 30), lobby: { minMembers: 3 } });
+    const body = await res.json();
+    expect(res.status).toBe(201);
+    const stored = db.tables.fitcircles[0];
+    expect(stored.start_date).toBe(plusDays(start, 3));
+    expect(stored.end_date).toBe(plusDays(start, 33));
+    expect(stored.metadata.lobby).toMatchObject({ minMembers: 3, durationDays: 30, startedAt: null });
+    expect(body.data.lobby).toMatchObject({ minMembers: 3, memberCount: 1, needed: 2 });
+    expect(body.data.circle.lobby).toMatchObject({ needed: 2 });
+  });
+
+  it('ignores the lobby for a future-dated (e.g. seasonal) circle', async () => {
+    const res = await post({ ...ANDROID_BODY, lobby: { minMembers: 3 } });
+    const body = await res.json();
+    expect(db.tables.fitcircles[0].start_date).toBe('2030-10-10');
+    expect(db.tables.fitcircles[0].metadata ?? null).toBeNull();
+    expect(body.data.lobby).toBeNull();
+  });
+
+  it('rejects silly crew sizes', async () => {
+    const start = todayUtc();
+    const res = await post({ ...ANDROID_BODY, startDate: start, endDate: plusDays(start, 30), lobby: { minMembers: 40 } });
+    expect(res.status).toBe(400);
+  });
+});
+

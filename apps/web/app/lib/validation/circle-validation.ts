@@ -190,6 +190,8 @@ export const createCircleSchema = z.object({
   lateJoinDeadline: z.number().int().min(1).max(30).optional(),
   // Read leniently by normalizeVisibility(); never a reason to reject the request.
   visibility: z.unknown().optional(),
+  // "Start when N friends join" (REFERRALS_SPEC §10.2). Ignored for future-dated circles.
+  lobby: z.object({ minMembers: z.number().int().min(2).max(6) }).optional(),
 });
 
 export type CreateCircleBody = z.infer<typeof createCircleSchema>;

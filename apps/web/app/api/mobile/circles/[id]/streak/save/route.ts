@@ -1,11 +1,12 @@
 import { type NextRequest, NextResponse } from 'next/server';
 
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
-import { CircleStreakService } from '@/lib/services/circle-streak-service';
+import { CircleStreakError, CircleStreakService } from '@/lib/services/circle-streak-service';
 
 /**
  * POST /api/mobile/circles/[id]/streak/save
- * Body: { coveredUserId: string, date?: string (YYYY-MM-DD, defaults to today UTC) }
+ * Body: { coveredUserId: string, date?: string (YYYY-MM-DD, today or yesterday; defaults to the circle's local today) }
+ * Errors: SAVE_USED 409 (weekly save spent), NOT_NEEDED / SELF / DATE_OUT_OF_RANGE 400.
  *
  * PRD v4 §6.13 — pro-social "streak save": the caller (saver) covers another active
  * member once per period. The covered member then counts as "logged" for that day's
@@ -33,15 +34,18 @@ export async function POST(
       throw new Error('BadRequest:coveredUserId is required');
     }
 
-    let date: string;
+    // Absent → the circle's local today (the service resolves it).
+    let date: string | null = null;
     if (body.date === undefined || body.date === null) {
-      date = new Date().toISOString().split('T')[0];
+      date = null;
     } else if (typeof body.date === 'string' && DATE_RE.test(body.date)) {
       date = body.date;
     } else {
       throw new Error('BadRequest:date must be a YYYY-MM-DD string');
     }
 
+    // `useSave` is a service method, not a React hook.
+    // eslint-disable-next-line react-hooks/rules-of-hooks
     const result = await CircleStreakService.useSave(id, user.id, coveredUserId, date);
 
     return NextResponse.json({
@@ -57,6 +61,12 @@ export async function POST(
 
 function mapError(error: any, label: string) {
   const message: string = error?.message ?? '';
+  if (error instanceof CircleStreakError) {
+    return NextResponse.json(
+      { success: false, data: null, error: { code: error.code, message: error.message, details: {}, timestamp: new Date().toISOString() }, meta: null },
+      { status: error.status }
+    );
+  }
   if (message === 'Unauthorized') {
     return NextResponse.json(
       { success: false, data: null, error: { code: 'UNAUTHORIZED', message: 'Invalid or expired token', details: {}, timestamp: new Date().toISOString() }, meta: null },

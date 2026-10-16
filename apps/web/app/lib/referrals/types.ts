@@ -21,6 +21,14 @@ export const ATTRIBUTION_SOURCES: readonly AttributionSource[] = [
   'circle_join',
 ];
 
+export interface ReferralProgress {
+  /** Distinct check-in days so far (capped at required). */
+  days: number;
+  required: number;
+  /** ISO — after this the invite lapses. */
+  deadline: string;
+}
+
 export interface NudgeState {
   available: boolean;
   nextAt: string | null;
@@ -127,6 +135,8 @@ export interface ReferralHub {
   shareMessage?: string;
   program?: {
     rewardDaysPerFriend: number;
+    qualifyingDays: number;
+    qualifyWindowDays: number;
     lifetimeThreshold: number;
     inviteeRewardDays: number;
     attributionWindowDays: number;
@@ -151,6 +161,7 @@ export interface ReferralHub {
     qualifiedAt: string | null;
     circleName: string | null;
     nudge: NudgeState;
+    progress: ReferralProgress;
   }>;
   invites?: InviteView[];
   smsBody?: string;
@@ -174,6 +185,20 @@ export interface ReferralHub {
   } | null;
   canClaimCode?: boolean;
   referredBy?: { firstName: string; avatarUrl: string | null } | null;
+  /** Activation: circle of 3 + 3 logged days + a friend's reaction in week one (§10.6). */
+  activation?: {
+    activated: boolean;
+    circleOf3: boolean;
+    loggedDays3: boolean;
+    reactionReceived: boolean;
+    windowEndsAt: string;
+  };
+  /** Invitee side: progress toward their own free week. */
+  myReward?: (ReferralProgress & {
+    status: 'in_progress' | 'unlocked';
+    rewardDays: number;
+    inviterFirstName: string;
+  }) | null;
 }
 
 export type ReferralErrorCode =

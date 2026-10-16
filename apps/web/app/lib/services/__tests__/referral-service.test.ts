@@ -43,8 +43,13 @@ function grantsOf(userId: string) {
 function daysLeft(iso: string) {
   return Math.round((new Date(iso).getTime() - Date.now()) / DAY);
 }
-function logActivity(userId: string, method = 'manual_entry') {
-  db.rows('streak_claims').push({ id: `c-${Math.random()}`, user_id: userId, claim_method: method });
+let dayCursor = 0;
+/** Log activity on `days` distinct (today-or-earlier) days. Default = enough to qualify. */
+function logActivity(userId: string, method = 'manual_entry', days = 3) {
+  for (let i = 0; i < days; i++) {
+    const date = new Date(Date.now() - (dayCursor++ % 10) * DAY).toISOString().slice(0, 10);
+    db.rows('streak_claims').push({ id: `c-${Math.random()}`, user_id: userId, claim_method: method, claim_date: date });
+  }
 }
 async function claimPersonal(inviteeId: string, extra: Partial<{ deviceId: string }> = {}) {
   const code = await ReferralService.getOrCreateCode(MAYA);
@@ -55,6 +60,7 @@ beforeEach(() => {
   db = new ReferralFakeDb();
   setReferralDb(db);
   sent.length = 0;
+  dayCursor = 0;
   flags.referrals = true;
   flags.subscriptions = true;
   db.addProfile({ id: MAYA, display_name: 'Maya Rao', created_at: new Date(Date.now() - 90 * DAY).toISOString() });
@@ -186,6 +192,42 @@ describe('qualification + rewards', () => {
     logActivity(SAM, 'freeze');
     await ReferralService.onActivity(SAM);
     expect(referralOf(SAM).status).toBe('pending');
+  });
+
+  it('needs check-ins on 3 different days; shows progress and nudges the invitee once at 2/3', async () => {
+    await claimPersonal(SAM);
+    db.profile(SAM)!.onboarding_completed = true;
+    const today = new Date().toISOString().slice(0, 10);
+    // Two logs the same day still count as one day.
+    db.rows('streak_claims').push(
+      { id: 'a', user_id: SAM, claim_method: 'manual_entry', claim_date: today },
+      { id: 'b', user_id: SAM, claim_method: 'manual_entry', claim_date: today }
+    );
+    await ReferralService.onActivity(SAM);
+    expect(referralOf(SAM)).toMatchObject({ status: 'pending', progress_days: 1 });
+    let hub = await ReferralService.getHub(MAYA);
+    expect(hub.invitees![0].progress).toMatchObject({ days: 1, required: 3 });
+    expect(hub.program).toMatchObject({ qualifyingDays: 3, qualifyWindowDays: 14 });
+
+    const yesterday = new Date(Date.now() - DAY).toISOString().slice(0, 10);
+    db.rows('streak_claims').push({ id: 'c', user_id: SAM, claim_method: 'manual_entry', claim_date: yesterday });
+    await ReferralService.onActivity(SAM);
+    await ReferralService.onActivity(SAM);
+    await flush();
+    expect(referralOf(SAM).progress_days).toBe(2);
+    expect(sent.filter((s) => s.type === 'referral_progress')).toEqual([
+      { userId: SAM, type: 'referral_progress', data: { inviterName: 'Maya' } },
+    ]);
+    const samHub = await ReferralService.getHub(SAM);
+    expect(samHub.myReward).toMatchObject({ days: 2, required: 3, status: 'in_progress', rewardDays: 7, inviterFirstName: 'Maya' });
+
+    const twoDaysAgo = new Date(Date.now() - 2 * DAY).toISOString().slice(0, 10);
+    db.rows('streak_claims').push({ id: 'd', user_id: SAM, claim_method: 'manual_entry', claim_date: twoDaysAgo });
+    await ReferralService.onActivity(SAM);
+    expect(referralOf(SAM).status).toBe('qualified');
+    hub = await ReferralService.getHub(MAYA);
+    expect(hub.invitees![0].progress).toMatchObject({ days: 3, required: 3 });
+    expect((await ReferralService.getHub(SAM)).myReward).toMatchObject({ status: 'unlocked' });
   });
 
   it('pays both sides a week and celebrates', async () => {
@@ -331,7 +373,7 @@ describe('qualification + rewards', () => {
       inviter_id: MAYA,
       code: 'X',
       status: 'pending',
-      attributed_at: new Date(Date.now() - 31 * DAY).toISOString(),
+      attributed_at: new Date(Date.now() - 15 * DAY).toISOString(),
       qualified_at: null,
     });
     const result = await ReferralService.evaluatePending();
@@ -436,5 +478,27 @@ describe('entitlement source', () => {
       { id: 'g2', user_id: MAYA, granted_by: 'referral-lifetime', expires_at: null, revoked_at: null, created_at: new Date(Date.now() - DAY).toISOString() }
     );
     expect((await ComplimentaryGrantService.activeGrant(MAYA))?.id).toBe('g2');
+  });
+});
+
+describe('activation', () => {
+  it('needs a circle of 3, 3 logged days and a friend reaction in week one', async () => {
+    db.rows('fitcircle_members').push(
+      { fitcircle_id: CIRCLE, user_id: SAM, status: 'active' },
+      { fitcircle_id: CIRCLE, user_id: MAYA, status: 'active' }
+    );
+    let a = await ReferralService.activation(SAM, new Date().toISOString());
+    expect(a).toMatchObject({ activated: false, circleOf3: true, loggedDays3: false, reactionReceived: false });
+
+    logActivity(SAM);
+    db.rows('circle_messages').push({ id: 'm1', sender_id: SAM, created_at: new Date().toISOString() });
+    db.rows('circle_message_reactions').push({ message_id: 'm1', user_id: SAM, created_at: new Date().toISOString() });
+    a = await ReferralService.activation(SAM, new Date().toISOString());
+    expect(a).toMatchObject({ loggedDays3: true, reactionReceived: false }); // own reaction doesn't count
+
+    db.rows('circle_message_reactions').push({ message_id: 'm1', user_id: JO, created_at: new Date().toISOString() });
+    a = await ReferralService.activation(SAM, new Date().toISOString());
+    expect(a.activated).toBe(true);
+    expect((await ReferralService.getHub(SAM)).activation?.activated).toBe(true);
   });
 });

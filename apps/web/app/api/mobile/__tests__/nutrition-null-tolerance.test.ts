@@ -280,12 +280,10 @@ describe('group meals', () => {
 });
 
 describe('circle streak save', () => {
-  it('accepts a null date (defaults to today) — already tolerated, kept that way', async () => {
+  it('accepts a null date (the service defaults it to the circle-local today)', async () => {
     const res = await streakSave(req({ coveredUserId: USER, date: null }), circleCtx);
     expect(res.status).toBe(200);
-    const [circleId, saver, covered, date] = calls.useSave[0];
-    expect([circleId, saver, covered]).toEqual([CIRCLE, 'user-1', USER]);
-    expect(date).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    expect(calls.useSave[0]).toEqual([CIRCLE, 'user-1', USER, null]);
   });
 
   it('OLD request shape is unchanged', async () => {
