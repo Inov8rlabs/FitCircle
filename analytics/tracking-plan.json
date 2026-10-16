@@ -2169,7 +2169,9 @@
             "circles_empty",
             "onboarding",
             "web_nav",
-            "deep_link"
+            "deep_link",
+            "app_launch",
+            "hub"
           ],
           "required": true
         }
