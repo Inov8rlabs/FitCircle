@@ -1,6 +1,6 @@
 {
   "$schema": "./tracking-plan.schema.json",
-  "version": 8,
+  "version": 9,
   "updated": "2026-10-16",
   "conventions": {
     "eventNames": "Title Case, '<Object> <Past-tense verb>' (e.g. 'Meal Logged'). Names are frozen once shipped: rename in the analytics tool, never in code.",
@@ -2336,7 +2336,8 @@
             "celebration",
             "home_card",
             "welcome",
-            "peak_moment"
+            "peak_moment",
+            "circle"
           ],
           "required": true
         }
@@ -2374,7 +2375,9 @@
             "wizard",
             "celebration",
             "home_card",
-            "welcome"
+            "welcome",
+            "peak_moment",
+            "circle"
           ],
           "required": true
         }

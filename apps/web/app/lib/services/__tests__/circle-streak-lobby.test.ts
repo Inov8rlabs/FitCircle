@@ -204,10 +204,11 @@ describe('lobby', () => {
 });
 
 describe('seasons', () => {
-  it('promotes Hold the Line from Oct 20, then New Year Reset from Dec 15', () => {
+  it('promotes Hold the Line from Oct 20, then Fresh Start from Dec 16', () => {
     expect(seasonsFor('2026-10-16')).toMatchObject({ current: null, upcoming: { key: 'hold_the_line' } });
-    expect(seasonsFor('2026-10-20').current).toMatchObject({ key: 'hold_the_line', circle: { startDate: '2026-11-15', endDate: '2027-01-01' } });
-    expect(seasonsFor('2026-12-20').current?.key).toBe('hold_the_line'); // still live; earlier season wins
+    expect(seasonsFor('2026-10-20').current).toMatchObject({ key: 'hold_the_line', circle: { startDate: '2026-11-15', endDate: '2026-12-15' } });
+    expect(seasonsFor('2026-12-15').current?.key).toBe('hold_the_line'); // last day; earlier season wins
+    expect(seasonsFor('2026-12-20').current?.key).toBe('new_year_reset');
     expect(seasonsFor('2027-01-02').current?.key).toBe('new_year_reset');
     expect(seasonsFor('2027-03-20')).toEqual({ current: null, upcoming: null });
   });

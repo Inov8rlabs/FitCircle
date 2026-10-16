@@ -372,7 +372,7 @@ Season = { "key": "hold_the_line", "title": "Hold the Line", "emoji": "❄️",
            "accent": "#38bdf8" }
 ```
 - `current` is the season whose `featuredFrom` ≤ today ≤ `endsAt`. If the season starts in the future, its circle starts on `startsAt` (upcoming, no lobby; seats are promoted as "Fill your seats before Nov 15"). Otherwise it starts now with the lobby default.
-- Seasons are configured in code (`lib/seasonal/seasons.ts`): Hold the Line (Nov 15–Jan 1), New Year Reset (Jan 1–31, featured from Dec 15), Ramadan 2027 (≈Feb 8–Mar 9, featured from Jan 25; copy says dates follow the moon sighting).
+- Seasons are configured in code (`lib/seasonal/seasons.ts`): Hold the Line (Nov 15–Dec 15, the pre-holiday push), Fresh Start (key `new_year_reset`; Jan 1–31, featured from Dec 15, promoted once Hold the Line ends), Ramadan 2027 (≈Feb 8–Mar 9, featured from Jan 25; copy says dates follow the moon sighting).
 - **Clients** (during the `current` window only):
   - a seasonal banner on the wizard's hook/name step ("❄️ Hold the Line · Nov 15–Jan 1") that prefills name and dates;
   - a compact banner on the Circles tab;
