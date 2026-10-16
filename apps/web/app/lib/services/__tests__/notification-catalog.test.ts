@@ -23,6 +23,7 @@ const SCREENS = [
   'challenges',
   'streaks',
   'invite_hub',
+  'campaign',
 ];
 
 describe('notification catalog contract', () => {

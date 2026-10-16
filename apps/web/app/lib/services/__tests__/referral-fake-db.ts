@@ -23,6 +23,9 @@ const UNIQUE: Record<string, UniqueIndex[]> = {
   referral_invites: [{ cols: ['inviter_id', 'contact_hash'] }],
   referral_email_optouts: [{ cols: ['email_hash'] }],
   profiles: [{ cols: ['id'] }],
+  campaigns: [{ cols: ['slug'] }],
+  campaign_participants: [{ cols: ['campaign_id', 'user_id'] }],
+  campaign_deliveries: [{ cols: ['campaign_id', 'user_id', 'delivery_key'] }],
 };
 
 let seq = 0;
@@ -44,8 +47,22 @@ export class ReferralFakeDb {
   /** Every update applied, for assertions on profile pinning etc. */
   log: Array<{ table: string; op: string; payload: any }> = [];
 
+  /** Uploaded storage objects, keyed `${bucket}/${path}`. */
+  storage: Record<string, { bytes: unknown; opts: unknown }> = {};
+
   client() {
-    return { from: (table: string) => new Query(this, table) };
+    return {
+      from: (table: string) => new Query(this, table),
+      storage: {
+        from: (bucket: string) => ({
+          upload: async (path: string, bytes: unknown, opts: unknown) => {
+            this.storage[`${bucket}/${path}`] = { bytes, opts };
+            return { data: { path }, error: null };
+          },
+          getPublicUrl: (path: string) => ({ data: { publicUrl: `https://test.supabase.co/storage/v1/object/public/${bucket}/${path}` } }),
+        }),
+      },
+    };
   }
 
   rows(table: string): Row[] {
@@ -100,6 +117,7 @@ class Query implements PromiseLike<any> {
   private headMode = false;
   private orderBy: { col: string; asc: boolean } | null = null;
   private max: number | null = null;
+  private offset = 0;
 
   constructor(
     private db: ReferralFakeDb,
@@ -132,6 +150,7 @@ class Query implements PromiseLike<any> {
   gt(col: string, val: any) { this.filters.push((r) => r[col] != null && r[col] > val); return this; }
   gte(col: string, val: any) { this.filters.push((r) => r[col] != null && r[col] >= val); return this; }
   lt(col: string, val: any) { this.filters.push((r) => r[col] != null && r[col] < val); return this; }
+  lte(col: string, val: any) { this.filters.push((r) => r[col] != null && r[col] <= val); return this; }
   not(col: string, op: string, val: any) {
     // JSON paths ('metadata->lobby') resolve through nested objects.
     const at = (r: Row) => col.split(/->>?/).reduce<any>((v, k) => (v == null ? v : v[k]), r);
@@ -145,6 +164,7 @@ class Query implements PromiseLike<any> {
   }
   order(col: string, opts?: { ascending?: boolean }) { this.orderBy = { col, asc: opts?.ascending !== false }; return this; }
   limit(n: number) { this.max = n; return this; }
+  range(from: number, to: number) { this.offset = from; this.max = to - from + 1; return this; }
 
   async maybeSingle() {
     const res = this.run();
@@ -173,7 +193,7 @@ class Query implements PromiseLike<any> {
       const { col, asc } = this.orderBy;
       rows = [...rows].sort((a, b) => (a[col] === b[col] ? 0 : (a[col] > b[col] ? 1 : -1) * (asc ? 1 : -1)));
     }
-    if (this.max != null) rows = rows.slice(0, this.max);
+    if (this.offset || this.max != null) rows = rows.slice(this.offset, this.max != null ? this.offset + this.max : undefined);
     return rows;
   }
 

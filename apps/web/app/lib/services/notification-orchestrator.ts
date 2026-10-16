@@ -121,7 +121,9 @@ export type NotificationType =
   // Circle streak + lobby (REFERRALS_SPEC §10)
   | 'circle_streak_saved'
   | 'circle_streak_milestone'
-  | 'circle_kickoff';
+  | 'circle_kickoff'
+  // Admin-authored campaign pushes (docs/CAMPAIGNS_SPEC.md §5)
+  | 'campaign';
 
 interface NotificationContent {
   title: string;
@@ -145,7 +147,8 @@ export type NotificationScreen =
   | 'circle_chat'
   | 'challenges'
   | 'streaks'
-  | 'invite_hub';
+  | 'invite_hub'
+  | 'campaign';
 
 export const TYPE_SCREEN_MAP: Record<NotificationType, NotificationScreen> = {
   // Journey
@@ -196,6 +199,8 @@ export const TYPE_SCREEN_MAP: Record<NotificationType, NotificationScreen> = {
   circle_streak_saved: 'circle_detail',
   circle_streak_milestone: 'circle_detail',
   circle_kickoff: 'circle_detail',
+  // Clients route by data.campaignSlug (calendar screen / home card / wizard).
+  campaign: 'campaign',
 };
 
 export function screenFor(type: NotificationType, data: NotificationData): NotificationScreen {
@@ -469,6 +474,13 @@ export const NOTIFICATION_TEMPLATES: Record<
     body: data.kickoffReason === 'full' ? 'Log something today to get the circle streak going.' : 'Seats stay open, so keep inviting friends. Log something today to get the streak going.',
     category: 'circle',
   }),
+  // Copy is authored per campaign and rendered (placeholders filled) by
+  // CampaignDeliveryService before it gets here.
+  campaign: (data) => ({
+    title: String(data.title || 'FitCircle'),
+    body: String(data.body || ''),
+    category: 'challenge',
+  }),
   referral_nudge: (data) => ({
     title: `${data.inviterName || 'Your friend'} is cheering you on 💪`,
     body: 'Check in today. 3 days of check-ins and you both get a free week of Pro.',
@@ -637,6 +649,7 @@ export class NotificationOrchestrator {
     if (data.challengeId) pushData.challengeId = String(data.challengeId);
     if (data.messageId) pushData.messageId = String(data.messageId);
     if (data.deepLink) pushData.deepLink = data.deepLink;
+    if (data.campaignSlug) pushData.campaignSlug = String(data.campaignSlug);
 
     if (isChatType) {
       // Chat wire contract: circleName + preview always; senderName except rallies.

@@ -1,6 +1,6 @@
 {
   "$schema": "./tracking-plan.schema.json",
-  "version": 9,
+  "version": 10,
   "updated": "2026-10-16",
   "conventions": {
     "eventNames": "Title Case, '<Object> <Past-tense verb>' (e.g. 'Meal Logged'). Names are frozen once shipped: rename in the analytics tool, never in code.",
@@ -2179,7 +2179,8 @@
             "deep_link",
             "app_launch",
             "hub",
-            "seasonal"
+            "seasonal",
+            "campaign"
           ],
           "required": true
         }
@@ -2337,7 +2338,8 @@
             "home_card",
             "welcome",
             "peak_moment",
-            "circle"
+            "circle",
+            "campaign"
           ],
           "required": true
         }
@@ -2377,7 +2379,8 @@
             "home_card",
             "welcome",
             "peak_moment",
-            "circle"
+            "circle",
+            "campaign"
           ],
           "required": true
         }
@@ -2575,6 +2578,201 @@
       ],
       "description": "Reached activation (circle of 3 + 3 logged days + a friend's reaction in the first week). Fired once.",
       "properties": []
+    },
+    {
+      "name": "Campaign Viewed",
+      "category": "engagement",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "description": "A campaign surface was shown (CAMPAIGNS_SPEC §11).",
+      "properties": [
+        {
+          "name": "campaign",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "template",
+          "type": "enum",
+          "values": [
+            "seasonal_circle",
+            "daily_calendar",
+            "spotlight"
+          ],
+          "required": true
+        },
+        {
+          "name": "surface",
+          "type": "enum",
+          "values": [
+            "home_card",
+            "circles_banner",
+            "wizard_banner",
+            "calendar",
+            "web_page"
+          ],
+          "required": true
+        },
+        {
+          "name": "phase",
+          "type": "enum",
+          "values": [
+            "teaser",
+            "live",
+            "ended"
+          ],
+          "required": true
+        }
+      ]
+    },
+    {
+      "name": "Campaign CTA Tapped",
+      "category": "engagement",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "description": "The campaign's primary action was tapped.",
+      "properties": [
+        {
+          "name": "campaign",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "template",
+          "type": "enum",
+          "values": [
+            "seasonal_circle",
+            "daily_calendar",
+            "spotlight"
+          ],
+          "required": true
+        },
+        {
+          "name": "action",
+          "type": "enum",
+          "values": [
+            "start_circle",
+            "open_calendar",
+            "invite",
+            "paywall",
+            "circles",
+            "open_url"
+          ],
+          "required": true
+        }
+      ]
+    },
+    {
+      "name": "Campaign Joined",
+      "category": "engagement",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "description": "Joined a campaign (I'm in / reminders on).",
+      "properties": [
+        {
+          "name": "campaign",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "template",
+          "type": "enum",
+          "values": [
+            "seasonal_circle",
+            "daily_calendar",
+            "spotlight"
+          ],
+          "required": true
+        },
+        {
+          "name": "reminders",
+          "type": "bool",
+          "required": true
+        }
+      ]
+    },
+    {
+      "name": "Campaign Reminders Toggled",
+      "category": "engagement",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "description": "Daily campaign reminders switched on or off.",
+      "properties": [
+        {
+          "name": "campaign",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "enabled",
+          "type": "bool",
+          "required": true
+        }
+      ]
+    },
+    {
+      "name": "Campaign Door Opened",
+      "category": "engagement",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "description": "A calendar door's reveal celebration was shown (once per door).",
+      "properties": [
+        {
+          "name": "campaign",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "day",
+          "type": "int",
+          "required": true
+        },
+        {
+          "name": "opened_count",
+          "type": "int",
+          "required": true
+        }
+      ]
+    },
+    {
+      "name": "Campaign Published",
+      "category": "engagement",
+      "platforms": [
+        "web"
+      ],
+      "description": "An admin published a campaign.",
+      "properties": [
+        {
+          "name": "campaign",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "template",
+          "type": "enum",
+          "values": [
+            "seasonal_circle",
+            "daily_calendar",
+            "spotlight"
+          ],
+          "required": true
+        }
+      ]
     }
   ]
 }

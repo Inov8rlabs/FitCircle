@@ -53,6 +53,8 @@ interface CircleCreationWizardProps {
   isOpen: boolean;
   onClose: () => void;
   onSuccess: (circle: any) => void;
+  /** Prefill (e.g. a campaign's circle template, CAMPAIGNS_SPEC §10). Applied each time the wizard opens. */
+  initialValues?: { name?: string; description?: string; startDate?: string; endDate?: string } | null;
 }
 
 type ChallengeType = 'weight_loss' | 'step_count' | 'workout_frequency' | 'custom';
@@ -96,7 +98,7 @@ const CHALLENGE_CATEGORY_FILTERS: { label: string; value: ChallengeCategory | nu
   { label: 'Custom', value: 'custom' },
 ];
 
-export default function CircleCreationWizard({ isOpen, onClose, onSuccess }: CircleCreationWizardProps) {
+export default function CircleCreationWizard({ isOpen, onClose, onSuccess, initialValues }: CircleCreationWizardProps) {
   const { user } = useAuthStore();
 
   useEffect(() => {
@@ -136,6 +138,19 @@ export default function CircleCreationWizard({ isOpen, onClose, onSuccess }: Cir
     customChallengeUnit: 'reps',
     customChallengeLoggingPrompt: '',
   });
+
+  // Campaign prefill: re-applied whenever the wizard opens with initial values.
+  useEffect(() => {
+    if (!isOpen || !initialValues) return;
+    setFormData((prev) => ({
+      ...prev,
+      name: initialValues.name ?? prev.name,
+      description: initialValues.description ?? prev.description,
+      startDate: initialValues.startDate ?? prev.startDate,
+      endDate: initialValues.endDate ?? prev.endDate,
+    }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen]);
 
   const selectedTemplate = formData.selectedTemplateId
     ? CHALLENGE_TEMPLATES.find((t) => t.id === formData.selectedTemplateId) ?? null

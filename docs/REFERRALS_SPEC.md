@@ -362,6 +362,8 @@ Web: `POST /api/referrals/me/invites` and `POST /api/referrals/me/nudge` (cookie
 - iOS currently doesn't show the circle streak at all; wire `CircleStreakCardView` (or rebuild it) into `CircleDetailView`.
 
 ### 10.4 Seasonal circles: `GET /api/mobile/seasonal` (auth)
+
+> **Superseded (2026-10-16) by [CAMPAIGNS_SPEC.md](CAMPAIGNS_SPEC.md).** Seasons are now admin-built campaigns (`campaigns` table, migration 103). This endpoint keeps its exact shape for old clients: `current`/`upcoming` are built from published `seasonal_circle` campaigns that have a `legacy_season_key` (`key = legacy_season_key`), with `lib/seasonal/seasons.ts` used only as a fallback when the campaigns query fails. New clients use `GET /api/mobile/campaigns` (CAMPAIGNS_SPEC §3). The text below describes the original v3 behaviour.
 ```json
 { "current": Season | null, "upcoming": Season | null }
 Season = { "key": "hold_the_line", "title": "Hold the Line", "emoji": "❄️",
@@ -372,7 +374,7 @@ Season = { "key": "hold_the_line", "title": "Hold the Line", "emoji": "❄️",
            "accent": "#38bdf8" }
 ```
 - `current` is the season whose `featuredFrom` ≤ today ≤ `endsAt`. If the season starts in the future, its circle starts on `startsAt` (upcoming, no lobby; seats are promoted as "Fill your seats before Nov 15"). Otherwise it starts now with the lobby default.
-- Seasons are configured in code (`lib/seasonal/seasons.ts`): Hold the Line (Nov 15–Dec 15, the pre-holiday push), Fresh Start (key `new_year_reset`; Jan 1–31, featured from Dec 15, promoted once Hold the Line ends), Ramadan 2027 (≈Feb 8–Mar 9, featured from Jan 25; copy says dates follow the moon sighting).
+- Seasons were configured in code (`lib/seasonal/seasons.ts`, now the fallback; see CAMPAIGNS_SPEC): Hold the Line (Nov 15–Dec 15, the pre-holiday push), Fresh Start (key `new_year_reset`; Jan 1–31, featured from Dec 15, promoted once Hold the Line ends), Ramadan 2027 (≈Feb 8–Mar 9, featured from Jan 25; copy says dates follow the moon sighting).
 - **Clients** (during the `current` window only):
   - a seasonal banner on the wizard's hook/name step ("❄️ Hold the Line · Nov 15–Jan 1") that prefills name and dates;
   - a compact banner on the Circles tab;

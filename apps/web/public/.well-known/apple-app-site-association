@@ -7,9 +7,10 @@
         "appID": "5CM376P74G.com.inov8rlabs.apps.fitcircle",
         "components": [
           { "/": "/i/*", "comment": "Personal invite links" },
-          { "/": "/join/*", "comment": "Circle invite links" }
+          { "/": "/join/*", "comment": "Circle invite links" },
+          { "/": "/c/*", "comment": "Campaign links (docs/CAMPAIGNS_SPEC.md)" }
         ],
-        "paths": ["/i/*", "/join/*"]
+        "paths": ["/i/*", "/join/*", "/c/*"]
       }
     ]
   }

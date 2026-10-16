@@ -82,6 +82,9 @@ const TYPE_CATEGORY_MAP: Record<string, NotificationCategory> = {
   circle_streak_saved: 'circle',
   circle_streak_milestone: 'circle',
   circle_kickoff: 'circle',
+
+  // Campaigns (docs/CAMPAIGNS_SPEC.md §5) — the Challenges toggle silences them.
+  campaign: 'challenge',
 };
 
 // ============================================================================

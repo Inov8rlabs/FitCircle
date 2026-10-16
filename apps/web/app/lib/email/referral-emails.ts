@@ -11,7 +11,7 @@ export interface RenderedEmail {
   text: string;
 }
 
-const esc = (s: string) =>
+export const esc = (s: string) =>
   s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
 function initialAvatar(name: string, avatarUrl: string | null): string {
@@ -40,7 +40,7 @@ function shell(opts: { preheader: string; body: string; footer: string }): strin
 </table></td></tr></table></body></html>`;
 }
 
-function button(href: string, label: string): string {
+export function button(href: string, label: string): string {
   return `<table role="presentation" cellpadding="0" cellspacing="0" style="margin:24px auto 8px auto;"><tr><td align="center" style="border-radius:14px;background:linear-gradient(135deg,#8b5cf6,#ec4899);">
 <a href="${esc(href)}" style="display:inline-block;padding:15px 30px;font-size:16px;font-weight:700;color:#ffffff;text-decoration:none;border-radius:14px;">${esc(label)}</a>
 </td></tr></table>`;

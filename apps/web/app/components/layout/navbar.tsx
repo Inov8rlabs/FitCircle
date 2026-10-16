@@ -10,6 +10,7 @@ import {
   User,
   ChevronDown,
   Gift,
+  Megaphone,
 } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter, usePathname } from 'next/navigation';
@@ -17,6 +18,7 @@ import { useState, useRef, useEffect } from 'react';
 
 import { FitzyLauncher } from '@/components/nutrition/FitzyLauncher';
 import { Logo } from '@/components/ui/logo';
+import { useIsAdmin } from '@/hooks/useIsAdmin';
 import { useAuthStore } from '@/stores/auth-store';
 
 const navigation = [
@@ -31,6 +33,7 @@ export function Navbar() {
   const router = useRouter();
   const pathname = usePathname();
   const { user, logout } = useAuthStore();
+  const isAdmin = useIsAdmin();
 
   // Close profile menu when clicking outside
   useEffect(() => {
@@ -129,6 +132,16 @@ export function Navbar() {
                       <Gift className="w-4 h-4 text-pink-400" />
                       Invite friends
                     </Link>
+                    {isAdmin && (
+                      <Link
+                        href="/admin/campaigns"
+                        onClick={() => setProfileMenuOpen(false)}
+                        className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-gray-300 hover:bg-slate-800 hover:text-white transition-colors"
+                      >
+                        <Megaphone className="w-4 h-4 text-amber-400" />
+                        Admin · Campaigns
+                      </Link>
+                    )}
                     <div className="my-1 border-t border-slate-800" />
                     <button
                       onClick={() => {
@@ -223,6 +236,19 @@ export function Navbar() {
                 <Gift className="w-5 h-5 text-pink-400" />
                 Invite friends
               </Link>
+              {isAdmin && (
+                <Link
+                  href="/admin/campaigns"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className={`flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-colors ${pathname?.startsWith('/admin')
+                      ? 'bg-indigo-500/20 text-indigo-400'
+                      : 'text-gray-300 hover:bg-slate-800 hover:text-white'
+                    }`}
+                >
+                  <Megaphone className="w-5 h-5 text-amber-400" />
+                  Admin · Campaigns
+                </Link>
+              )}
               <FitzyLauncher variant="mobile-row" onOpen={() => setMobileMenuOpen(false)} />
             </div>
           </motion.div>

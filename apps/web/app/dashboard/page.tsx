@@ -35,6 +35,7 @@ import { toast } from 'sonner';
 import { AutoSyncSubmissionCard } from '@/components/AutoSyncSubmissionCard';
 import { BackfillDataDialog } from '@/components/BackfillDataDialog';
 import { BodyCompDashboardCard } from '@/components/body-composition/dashboard-card';
+import { DashboardCampaignCard } from '@/components/campaigns/DashboardCampaignCard';
 import { CheckInCard, CheckInDetailModal, CheckInDetailSheet } from '@/components/check-ins';
 import { DailyProgressMeter } from '@/components/DailyProgressMeter';
 import { EngagementStreakCard } from '@/components/EngagementStreakCard';
@@ -607,6 +608,9 @@ export default function DashboardPage() {
               Track your progress and stay consistent 🎯
             </p>
           </motion.div>
+
+          {/* Campaign card (homeSlug campaign, CAMPAIGNS_SPEC §10) */}
+          <DashboardCampaignCard />
 
           {/* Auto-Sync Submission Card - shown when HealthKit steps need confirmation */}
           <AnimatePresence>

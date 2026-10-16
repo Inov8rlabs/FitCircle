@@ -32,6 +32,7 @@ export const PUBLIC_ROUTES = [
   '/auth',
   '/join',
   '/i', // personal invite landing pages (/i/CODE)
+  '/c', // campaign pages (/c/SLUG): marketing landing when signed out, the campaign when signed in
   '/invite/unsubscribe', // invite-email opt-out; /invite itself stays authed (exact or "/invite/unsubscribe/" prefix only)
   '/.well-known', // apple-app-site-association has no extension, so the matcher doesn't skip it
   '/privacy',
