@@ -77,6 +77,7 @@ const TYPE_CATEGORY_MAP: Record<string, NotificationCategory> = {
   referral_reward_banked: 'celebration',
   referral_lifetime: 'celebration',
   referral_invitee_welcome: 'celebration',
+  referral_nudge: 'social',
 };
 
 // ============================================================================

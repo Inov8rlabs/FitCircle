@@ -12,11 +12,18 @@ const svc = vi.hoisted(() => ({
   preview: vi.fn(),
   markRewardsSeen: vi.fn(),
   recordDevice: vi.fn(),
+  inviteContacts: vi.fn(),
+  nudge: vi.fn(),
 }));
+const invites = vi.hoisted(() => ({ unsubscribe: vi.fn(), verifyUnsubscribeToken: (t: string) => (t === 'ok' ? 'h' : null) }));
+vi.mock('@/lib/services/referral-invite-service', () => ({ ReferralInviteService: invites, verifyUnsubscribeToken: invites.verifyUnsubscribeToken }));
 vi.mock('@/lib/services/referral-service', () => ({ ReferralService: svc }));
 
 import { GET as previewGET } from '../../../referrals/preview/route';
+import { GET as unsubscribeGET, POST as unsubscribePOST } from '../../../referrals/unsubscribe/route';
 import { POST as claimPOST } from '../claim/route';
+import { POST as invitesPOST } from '../invites/route';
+import { POST as nudgePOST } from '../nudge/route';
 import { POST as seenPOST } from '../rewards/seen/route';
 import { GET as hubGET } from '../route';
 
@@ -105,5 +112,52 @@ describe('GET /api/referrals/preview', () => {
     svc.preview.mockResolvedValue({ valid: true, kind: 'circle' });
     await get('?code=FITAB12CD&ref=MAYA7K2');
     expect(svc.preview).toHaveBeenCalledWith('FITAB12CD', 'MAYA7K2');
+  });
+});
+
+describe('POST /api/mobile/referrals/invites', () => {
+  it('validates and forwards contacts', async () => {
+    svc.inviteContacts.mockResolvedValue({ results: [], sentCount: 0 });
+    const res = await invitesPOST(json('http://localhost/x', { contacts: [{ email: 'sam@x.com', name: 'Sam' }, { phone: '+14165550123', channel: 'sms', name: null }] }));
+    expect(res.status).toBe(200);
+    expect(svc.inviteContacts).toHaveBeenCalledWith(USER, {
+      contacts: [{ email: 'sam@x.com', name: 'Sam' }, { phone: '+14165550123', channel: 'sms' }],
+      circleId: null,
+    });
+  });
+
+  it('rejects empty and oversized batches', async () => {
+    expect((await invitesPOST(json('http://localhost/x', { contacts: [] }))).status).toBe(400);
+    const many = Array.from({ length: 11 }, (_, i) => ({ email: `f${i}@x.com` }));
+    expect((await invitesPOST(json('http://localhost/x', { contacts: many }))).status).toBe(400);
+  });
+});
+
+describe('POST /api/mobile/referrals/nudge', () => {
+  it('needs exactly one target', async () => {
+    svc.nudge.mockResolvedValue({ status: 'sent', nextAt: null, remaining: 1, smsBody: null });
+    const id = '00000000-0000-4000-8000-000000000009';
+    expect((await nudgePOST(json('http://localhost/x', { referralId: id }))).status).toBe(200);
+    expect(svc.nudge).toHaveBeenCalledWith(USER, { referralId: id });
+    expect((await nudgePOST(json('http://localhost/x', {}))).status).toBe(400);
+    expect((await nudgePOST(json('http://localhost/x', { referralId: id, inviteId: id }))).status).toBe(400);
+  });
+});
+
+describe('/api/referrals/unsubscribe', () => {
+  const req = (method: string, qs: string) => {
+    const url = `http://localhost/api/referrals/unsubscribe${qs}`;
+    const r = new Request(url, { method }) as any;
+    r.nextUrl = new URL(url);
+    return r;
+  };
+  it('GET only validates (scanner-safe); POST opts out', async () => {
+    const res = await unsubscribeGET(req('GET', '?t=bad.token'));
+    expect(res.status).toBe(400);
+    expect(invites.unsubscribe).not.toHaveBeenCalled();
+    invites.unsubscribe.mockResolvedValueOnce(true).mockResolvedValueOnce(false);
+    expect(await (await unsubscribePOST(req('POST', '?t=ok'))).json()).toMatchObject({ success: true, data: { unsubscribed: true } });
+    expect((await unsubscribePOST(req('POST', '?t=bad'))).status).toBe(400);
+    expect(requireMobileAuth).not.toHaveBeenCalled();
   });
 });

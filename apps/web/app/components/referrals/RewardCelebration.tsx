@@ -78,10 +78,13 @@ export function RewardCelebration({
   rewards,
   weeksEarned,
   onDone,
+  onInvite,
 }: {
   rewards: Reward[];
   weeksEarned: number;
   onDone: () => void;
+  /** Primary CTA (§9.1): "Invite friends — earn a week for each". */
+  onInvite?: (kind: Reward['kind']) => void;
 }) {
   const open = rewards.length > 0;
   const lifetime = rewards.find((r) => r.kind === 'lifetime');
@@ -91,7 +94,7 @@ export function RewardCelebration({
 
   return (
     <AnimatePresence>
-      {open && copy && (
+      {open && copy && headline && (
         <motion.div
           role="dialog"
           aria-modal="true"
@@ -131,13 +134,37 @@ export function RewardCelebration({
                 {weeksEarned} free {weeksEarned === 1 ? 'week' : 'weeks'} earned so far
               </p>
             )}
-            <button
-              type="button"
-              onClick={onDone}
-              className="mt-6 w-full rounded-2xl bg-white px-5 py-3 font-semibold text-purple-700 hover:bg-purple-50"
-            >
-              Nice!
-            </button>
+            {headline.kind === 'invitee_welcome' && (
+              <p className="mt-3 text-xs text-purple-100">
+                Bring your own friends: every one who checks in earns you another free week.
+              </p>
+            )}
+            {onInvite ? (
+              <>
+                <button
+                  type="button"
+                  onClick={() => onInvite(headline.kind)}
+                  className="mt-6 w-full rounded-2xl bg-white px-5 py-3 font-semibold text-purple-700 hover:bg-purple-50"
+                >
+                  Invite friends — earn a week for each
+                </button>
+                <button
+                  type="button"
+                  onClick={onDone}
+                  className="mt-2 w-full rounded-2xl px-5 py-2.5 text-sm font-medium text-white/80 hover:text-white"
+                >
+                  Done
+                </button>
+              </>
+            ) : (
+              <button
+                type="button"
+                onClick={onDone}
+                className="mt-6 w-full rounded-2xl bg-white px-5 py-3 font-semibold text-purple-700 hover:bg-purple-50"
+              >
+                Done
+              </button>
+            )}
           </motion.div>
         </motion.div>
       )}

@@ -7,8 +7,10 @@ export type AttributionSource =
   | 'paste'
   | 'typed'
   | 'web'
-  | 'circle_join';
+  | 'circle_join'
+  | 'email_invite';
 
+/** Sources a client may send to POST claim (email_invite is server-only). */
 export const ATTRIBUTION_SOURCES: readonly AttributionSource[] = [
   'universal_link',
   'app_link',
@@ -18,6 +20,58 @@ export const ATTRIBUTION_SOURCES: readonly AttributionSource[] = [
   'web',
   'circle_join',
 ];
+
+export interface NudgeState {
+  available: boolean;
+  nextAt: string | null;
+  remaining: number;
+}
+
+export interface InviteView {
+  id: string;
+  channel: 'email' | 'sms';
+  name: string | null;
+  contact: string;
+  status: 'invited' | 'joined' | 'qualified';
+  sentAt: string;
+  lastNudgedAt: string | null;
+  nudge: NudgeState;
+}
+
+export type InviteResultStatus =
+  | 'sent'
+  | 'already_invited'
+  | 'already_member'
+  | 'opted_out'
+  | 'invalid'
+  | 'self'
+  | 'rate_limited'
+  | 'failed';
+
+export interface InviteResult {
+  contact: string;
+  channel: 'email' | 'sms';
+  name: string | null;
+  status: InviteResultStatus;
+  inviteId: string | null;
+}
+
+export interface InviteContactsInput {
+  contacts: Array<{ email?: string; phone?: string; name?: string; channel?: 'email' | 'sms' }>;
+  circleId?: string | null;
+}
+
+export interface InviteContactsResult {
+  results: InviteResult[];
+  sentCount: number;
+}
+
+export interface NudgeResult {
+  status: 'sent' | 'too_soon' | 'limit_reached' | 'not_nudgeable';
+  nextAt: string | null;
+  remaining: number;
+  smsBody: string | null;
+}
 
 export type ReferralStatus = 'pending' | 'qualified' | 'review' | 'rejected' | 'revoked';
 export type RewardKind = 'inviter_week' | 'invitee_welcome' | 'lifetime';
@@ -96,7 +150,12 @@ export interface ReferralHub {
     joinedAt: string;
     qualifiedAt: string | null;
     circleName: string | null;
+    nudge: NudgeState;
   }>;
+  invites?: InviteView[];
+  smsBody?: string;
+  emailPreview?: { subject: string; intro: string };
+  pendingCircleInvite?: { circleId: string; name: string; inviteCode: string; ref: string | null } | null;
   pro?: { source: ProSource; expiresAt: string | null; lifetime: boolean; bankedDays: number };
   unseenRewards?: Array<{
     id: string;

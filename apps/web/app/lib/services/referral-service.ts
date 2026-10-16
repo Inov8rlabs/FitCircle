@@ -33,6 +33,9 @@ import {
   ReferralError,
   type ClaimInput,
   type ClaimResult,
+  type InviteContactsInput,
+  type InviteContactsResult,
+  type NudgeResult,
   type ReferralHub,
   type ReferralPreview,
   type ReferralStatus,
@@ -41,6 +44,7 @@ import {
 import { createAdminSupabase } from '../supabase-admin';
 
 import { FeatureFlagService } from './feature-flag-service';
+import { ReferralInviteService, joinedNudgeState } from './referral-invite-service';
 import { ReferralRewardService } from './referral-reward-service';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -91,11 +95,26 @@ export function hashDeviceId(deviceId: string): string {
   return createHash('sha256').update(`${salt}:${deviceId.trim().toLowerCase()}`).digest('hex');
 }
 
-/** Fire-and-forget push; referral pushes must never break the request that caused them. */
+/**
+ * Send a referral push. Resolves true when it is "handled": delivered, or the
+ * user switched that category off (retrying would be noise). Quiet hours, no
+ * registered device, or a failure resolve false so the hourly cron retries.
+ * Never throws — referral pushes must not break the request that caused them.
+ */
+async function deliver(userId: string, type: string, data: Record<string, unknown>): Promise<boolean> {
+  try {
+    const { NotificationOrchestrator } = await import('./notification-orchestrator');
+    const out = await NotificationOrchestrator.send(userId, type as any, data);
+    return out.sent || out.reason === 'category_disabled';
+  } catch (err: any) {
+    console.error('[ReferralService] push failed:', type, err?.message);
+    return false;
+  }
+}
+
+/** Fire-and-forget variant for pushes with no delivery bookkeeping (lifetime, nudges). */
 function notify(userId: string, type: string, data: Record<string, unknown>): void {
-  import('./notification-orchestrator')
-    .then(({ NotificationOrchestrator }) => NotificationOrchestrator.send(userId, type as any, data))
-    .catch((err) => console.error('[ReferralService] push failed:', type, err?.message));
+  void deliver(userId, type, data);
 }
 
 export class ReferralService {
@@ -307,11 +326,17 @@ export class ReferralService {
     }
 
     const referral = inserted as ReferralRow;
-    const [inviter, inviteeProfile] = await Promise.all([
+    const [inviter, inviteeProfile, { data: contact }] = await Promise.all([
       this.profile(resolved.inviterId),
       this.profile(inviteeId),
+      supabase.from('profiles').select('email, phone_number').eq('id', inviteeId).maybeSingle(),
     ]);
-    notify(resolved.inviterId, 'referral_friend_joined', { friendName: firstNameOf(inviteeProfile) });
+    // Their email/text invite (if any) now shows as "Joined" in the inviter's list.
+    await ReferralInviteService.markJoined(resolved.inviterId, referral.id, {
+      email: contact?.email ?? null,
+      phone: contact?.phone_number ?? null,
+    }).catch((err) => console.error('[ReferralService] markJoined failed:', err?.message));
+    void this.notifyFriendJoined(referral.id, resolved.inviterId, firstNameOf(inviteeProfile));
 
     // The invitee may already have logged activity (claim on day 3, say).
     await this.evaluate(referral).catch((err) =>
@@ -494,8 +519,10 @@ export class ReferralService {
 
   private static async payOut(referral: ReferralRow): Promise<void> {
     const supabase = createAdminSupabase();
-    const invitee = await this.profile(referral.invitee_id);
+    const [invitee, inviter] = await Promise.all([this.profile(referral.invitee_id), this.profile(referral.inviter_id)]);
+    await ReferralInviteService.markQualified(referral.id).catch(() => {});
 
+    let inviterBanked = false;
     if (referral.inviter_id) {
       const outcome = await ReferralRewardService.award(
         referral.inviter_id,
@@ -503,12 +530,8 @@ export class ReferralService {
         REFERRAL_POLICY.inviterRewardDays,
         referral.id
       );
-      if (outcome.created) {
-        notify(referral.inviter_id, outcome.banked ? 'referral_reward_banked' : 'referral_reward_earned', {
-          friendName: firstNameOf(invitee),
-          days: REFERRAL_POLICY.inviterRewardDays,
-        });
-      }
+      inviterBanked = outcome.banked;
+      if (outcome.created) await this.deliverReward(referral, 'inviter_week', { banked: outcome.banked });
       const { count } = await supabase
         .from('referrals')
         .select('id', { count: 'exact', head: true })
@@ -516,17 +539,193 @@ export class ReferralService {
         .eq('status', 'qualified');
       if ((count ?? 0) >= REFERRAL_POLICY.lifetimeThreshold) {
         const lifetime = await ReferralRewardService.award(referral.inviter_id, 'lifetime', null, referral.id);
-        if (lifetime.created) notify(referral.inviter_id, 'referral_lifetime', {});
+        if (lifetime.created) await this.deliverReward(referral, 'lifetime', {});
       }
     }
 
     const days = inviteeRewardDays();
     if (days > 0) {
       const outcome = await ReferralRewardService.award(referral.invitee_id, 'invitee_welcome', days, referral.id);
-      if (outcome.created) {
-        const inviter = await this.profile(referral.inviter_id);
-        notify(referral.invitee_id, 'referral_invitee_welcome', { inviterName: firstNameOf(inviter) });
-      }
+      if (outcome.created) await this.deliverReward(referral, 'invitee_welcome', { banked: outcome.banked });
+    }
+
+    // "You and {friend} each earned a week" — one email to each side.
+    await this.emailRewards(referral, inviter, invitee, inviterBanked).catch((err) =>
+      console.error('[ReferralService] reward emails failed:', referral.id, err?.message)
+    );
+  }
+
+  /** Push for a reward; stamps notified_at when handled so the cron stops retrying. */
+  private static async deliverReward(
+    referral: ReferralRow,
+    kind: RewardKind,
+    opts: { banked?: boolean }
+  ): Promise<void> {
+    const supabase = createAdminSupabase();
+    const [invitee, inviter] = await Promise.all([this.profile(referral.invitee_id), this.profile(referral.inviter_id)]);
+    const target = kind === 'invitee_welcome' ? referral.invitee_id : referral.inviter_id;
+    if (!target) return;
+    const type =
+      kind === 'lifetime'
+        ? 'referral_lifetime'
+        : kind === 'invitee_welcome'
+          ? 'referral_invitee_welcome'
+          : opts.banked
+            ? 'referral_reward_banked'
+            : 'referral_reward_earned';
+    const handled = await deliver(target, type, {
+      friendName: firstNameOf(invitee),
+      inviterName: firstNameOf(inviter),
+      days: kind === 'invitee_welcome' ? inviteeRewardDays() : REFERRAL_POLICY.inviterRewardDays,
+    });
+    if (handled) {
+      await supabase
+        .from('referral_rewards')
+        .update({ notified_at: new Date().toISOString() })
+        .eq('referral_id', referral.id)
+        .eq('kind', kind);
+    }
+  }
+
+  private static async notifyFriendJoined(referralId: string, inviterId: string, friendName: string): Promise<void> {
+    const handled = await deliver(inviterId, 'referral_friend_joined', { friendName });
+    if (handled) {
+      await createAdminSupabase()
+        .from('referrals')
+        .update({ inviter_notified_at: new Date().toISOString() })
+        .eq('id', referralId);
+    }
+  }
+
+  private static async emailRewards(
+    referral: ReferralRow,
+    inviter: ProfileLite | null,
+    invitee: ProfileLite | null,
+    inviterBanked: boolean
+  ): Promise<void> {
+    const supabase = createAdminSupabase();
+    const { data: rows } = await supabase
+      .from('referral_rewards')
+      .select('id, user_id, kind, days, emailed_at')
+      .eq('referral_id', referral.id);
+    const ids = [referral.invitee_id, referral.inviter_id].filter((id): id is string => !!id);
+    const { data: contacts } = await supabase.from('profiles').select('id, email').in('id', ids);
+    const emailOf = new Map(((contacts ?? []) as Array<{ id: string; email: string | null }>).map((c) => [c.id, c.email]));
+    for (const row of (rows ?? []) as Array<{ id: string; user_id: string; kind: RewardKind; days: number | null; emailed_at: string | null }>) {
+      if (row.emailed_at || row.kind === 'lifetime' || !row.days) continue;
+      const isInviter = row.kind === 'inviter_week';
+      const me = isInviter ? inviter : invitee;
+      const friend = isInviter ? invitee : inviter;
+      if (!me || !friend) continue;
+      const code = await this.getOrCreateCode(row.user_id);
+      const sent = await ReferralInviteService.sendRewardEmail(emailOf.get(row.user_id), {
+        recipientFirstName: firstNameOf(me),
+        friendFirstName: firstNameOf(friend),
+        days: row.days,
+        role: isInviter ? 'inviter' : 'invitee',
+        banked: isInviter ? inviterBanked : false,
+        inviteLink: personalInviteUrl(code),
+      });
+      if (sent) await supabase.from('referral_rewards').update({ emailed_at: new Date().toISOString() }).eq('id', row.id);
+    }
+  }
+
+  /**
+   * Cron: re-send referral pushes that weren't delivered (quiet hours, no device
+   * yet, transient failure) until handled or 48h old.
+   */
+  static async retryUndeliveredPushes(): Promise<{ rewards: number; joins: number }> {
+    const supabase = createAdminSupabase();
+    const since = new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString();
+    const { data: rewards } = await supabase
+      .from('referral_rewards')
+      .select('referral_id, kind, status, notified_at, created_at')
+      .is('notified_at', null)
+      .neq('status', 'revoked')
+      .gte('created_at', since)
+      .limit(200);
+    let rewardCount = 0;
+    for (const r of (rewards ?? []) as Array<{ referral_id: string | null; kind: RewardKind; status: string }>) {
+      if (!r.referral_id) continue;
+      const referral = await this.referralById(r.referral_id);
+      if (!referral || referral.status !== 'qualified') continue;
+      await this.deliverReward(referral, r.kind, { banked: r.status === 'banked' });
+      rewardCount++;
+    }
+    const { data: joins } = await supabase
+      .from('referrals')
+      .select('*')
+      .is('inviter_notified_at', null)
+      .in('status', ['pending', 'qualified', 'review'])
+      .gte('attributed_at', since)
+      .limit(200);
+    let joinCount = 0;
+    for (const j of (joins ?? []) as ReferralRow[]) {
+      if (!j.inviter_id) continue;
+      const invitee = await this.profile(j.invitee_id);
+      await this.notifyFriendJoined(j.id, j.inviter_id, firstNameOf(invitee));
+      joinCount++;
+    }
+    return { rewards: rewardCount, joins: joinCount };
+  }
+
+  // ==========================================================================
+  // v2: invite by email / text, nudges (docs/REFERRALS_SPEC.md §9)
+  // ==========================================================================
+
+  static async inviteContacts(userId: string, input: InviteContactsInput): Promise<InviteContactsResult> {
+    if (!(await this.isProgramEnabled(userId))) {
+      throw new ReferralError('PROGRAM_DISABLED', 'Invites are not available right now');
+    }
+    return ReferralInviteService.inviteContacts(userId, input, (id) => this.getOrCreateCode(id));
+  }
+
+  static async nudge(userId: string, target: { inviteId?: string; referralId?: string }): Promise<NudgeResult> {
+    if (target.inviteId) return ReferralInviteService.nudgeInvite(userId, target.inviteId, (id) => this.getOrCreateCode(id));
+    if (!target.referralId) return { status: 'not_nudgeable', nextAt: null, remaining: 0, smsBody: null };
+
+    const supabase = createAdminSupabase();
+    const referral = (await this.referralById(target.referralId)) as (ReferralRow & { nudge_count?: number; last_nudged_at?: string | null }) | null;
+    if (!referral || referral.inviter_id !== userId) return { status: 'not_nudgeable', nextAt: null, remaining: 0, smsBody: null };
+    const state = joinedNudgeState(referral);
+    if (referral.status !== 'pending') return { status: 'not_nudgeable', nextAt: null, remaining: 0, smsBody: null };
+    if (state.remaining === 0) return { status: 'limit_reached', nextAt: null, remaining: 0, smsBody: null };
+    if (!state.available) return { status: 'too_soon', nextAt: state.nextAt, remaining: state.remaining, smsBody: null };
+
+    const count = referral.nudge_count ?? 0;
+    const now = new Date().toISOString();
+    const { data: claimed } = await supabase
+      .from('referrals')
+      .update({ nudge_count: count + 1, last_nudged_at: now })
+      .eq('id', referral.id)
+      .eq('nudge_count', count)
+      .select('id');
+    if ((claimed ?? []).length !== 1) return { status: 'too_soon', nextAt: null, remaining: state.remaining, smsBody: null };
+    const inviter = await this.profile(userId);
+    notify(referral.invitee_id, 'referral_nudge', { inviterName: firstNameOf(inviter) });
+    const after = joinedNudgeState({ status: 'pending', nudge_count: count + 1, last_nudged_at: now });
+    return { status: 'sent', nextAt: after.nextAt, remaining: after.remaining, smsBody: null };
+  }
+
+  /** Signed up with an email a member invited? Attribute to the earliest inviter (once, in-window). */
+  static async autoAttributeByEmail(userId: string): Promise<boolean> {
+    if (await this.referralFor(userId)) return false;
+    const supabase = createAdminSupabase();
+    const { data: me } = await supabase.from('profiles').select('email').eq('id', userId).maybeSingle();
+    const invite = await ReferralInviteService.findInviteForEmail(me?.email, userId);
+    if (!invite) return false;
+    const code = await this.getOrCreateCode(invite.inviter_id);
+    let circleCode: string | null = null;
+    if (invite.circle_id) {
+      const { data: c } = await supabase.from('fitcircles').select('invite_code').eq('id', invite.circle_id).maybeSingle();
+      circleCode = c?.invite_code ?? null;
+    }
+    try {
+      await this.claim(userId, circleCode ? { code: circleCode, ref: code, source: 'email_invite' } : { code, source: 'email_invite' });
+      return true;
+    } catch (err) {
+      if (!(err instanceof ReferralError)) console.error('[ReferralService] email attribution failed:', (err as Error)?.message);
+      return false;
     }
   }
 
@@ -572,11 +771,12 @@ export class ReferralService {
     const supabase = createAdminSupabase();
     const code = await this.getOrCreateCode(userId);
     const shareUrl = personalInviteUrl(code);
+    await this.autoAttributeByEmail(userId).catch(() => false);
 
     const [{ data: me }, { data: referralRows }, { data: rewardRows }, asInvitee] = await Promise.all([
       supabase
         .from('profiles')
-        .select('id, created_at, subscription_tier, subscription_platform, subscription_product_id, subscription_expires_at')
+        .select('id, display_name, username, created_at, subscription_tier, subscription_platform, subscription_product_id, subscription_expires_at')
         .eq('id', userId)
         .maybeSingle(),
       supabase
@@ -639,6 +839,7 @@ export class ReferralService {
     const upcoming = MILESTONES.find((m) => qualified < m.count && !(m.key === 'lifetime' && hasLifetime));
 
     const pro = this.proStatus(me, hasLifetime, daysBanked);
+    const starter = await this.starterCircle(userId, code);
     const ageMs = me ? Date.now() - new Date(me.created_at).getTime() : Infinity;
 
     return {
@@ -673,8 +874,12 @@ export class ReferralService {
           joinedAt: r.attributed_at,
           qualifiedAt: r.qualified_at,
           circleName: r.circle_id ? circleName.get(r.circle_id) ?? null : null,
+          nudge: joinedNudgeState(r as ReferralRow & { nudge_count?: number; last_nudged_at?: string | null }),
         };
       }),
+      invites: await ReferralInviteService.listForHub(userId),
+      ...ReferralInviteService.messages(firstNameOf(me as ProfileLite | null), code, starter ?? null),
+      pendingCircleInvite: await this.pendingCircleInvite(userId, asInvitee),
       pro,
       unseenRewards: rewards
         .filter((r) => !r.seen_at && Date.now() - new Date(r.created_at).getTime() < 30 * DAY_MS)
@@ -690,7 +895,7 @@ export class ReferralService {
             createdAt: r.created_at,
           };
         }),
-      starterCircle: await this.starterCircle(userId, code),
+      starterCircle: starter,
       canClaimCode: !asInvitee && ageMs <= REFERRAL_POLICY.attributionWindowDays * DAY_MS,
       referredBy: asInvitee ? await this.inviterSummary(asInvitee.inviter_id) : null,
     };
@@ -748,6 +953,31 @@ export class ReferralService {
       lifetime: hasLifetime || (premium && !me?.subscription_expires_at),
       bankedDays,
     };
+  }
+
+  /** An email-matched (or link) invitee who hasn't joined the inviter's circle yet. */
+  private static async pendingCircleInvite(
+    userId: string,
+    asInvitee: ReferralRow | null
+  ): Promise<ReferralHub['pendingCircleInvite']> {
+    if (!asInvitee?.circle_id || asInvitee.status === 'rejected' || asInvitee.status === 'revoked') return null;
+    const supabase = createAdminSupabase();
+    const [{ data: member }, { data: circle }] = await Promise.all([
+      supabase
+        .from('fitcircle_members')
+        .select('id')
+        .eq('fitcircle_id', asInvitee.circle_id)
+        .eq('user_id', userId)
+        .eq('status', 'active')
+        .maybeSingle(),
+      supabase.from('fitcircles').select('id, name, invite_code, status, end_date').eq('id', asInvitee.circle_id).maybeSingle(),
+    ]);
+    if (member || !circle?.invite_code || circle.status === 'completed') return null;
+    if (circle.end_date && new Date(circle.end_date).getTime() < Date.now()) return null;
+    const ref = asInvitee.inviter_id
+      ? (await supabase.from('referral_codes').select('code').eq('user_id', asInvitee.inviter_id).maybeSingle()).data?.code ?? null
+      : null;
+    return { circleId: circle.id, name: circle.name, inviteCode: circle.invite_code, ref };
   }
 
   private static async starterCircle(userId: string, code: string): Promise<ReferralHub['starterCircle']> {

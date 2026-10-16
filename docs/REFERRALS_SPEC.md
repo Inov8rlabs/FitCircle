@@ -207,3 +207,94 @@ North-star funnel: hub/wizard view → invite shared → link opened → claimed
 
 ## 8. Data model — migration `100_referrals.sql`
 See the migration. Tables: `referral_codes`, `referrals`, `referral_rewards`, `referral_devices`. RLS is on with no client policies, and all logic lives in `lib/services/referral-*.ts`.
+
+---
+
+## 9. v2 (2026-10-16): invite by email or text, live friend status, nudges, reward delivery
+
+### 9.1 Product
+- **Invite by email or phone.** One smart field, "Email or phone number", plus an optional first name. Contacts collect as chips (max 10 per send). There's also a **Pick from contacts** button that uses the system picker (iOS `CNContactPickerViewController`, Android `ACTION_PICK` on the Email/Phone content URIs). No Contacts permission is ever requested.
+  - **Emails:** the server sends a branded invitation via Resend, written as coming from the inviter ("Maya invited you to FitCircle"). It covers what FitCircle is, the circle (if any), the reward line and the personal link.
+  - **Phone numbers:** the app opens the native SMS composer, one friend at a time (never a group text), prefilled with `smsBody`. The user presses Send from their own number. The app records the invite only after the composer reports it was sent (iOS `MessageComposeResult.sent`; on Android, returning from the composer counts). We do not send SMS from servers: there's no provider, and US 10DLC registration plus TCPA risk rule it out.
+  - **Web:** emails as above. A phone number shows the message with Copy and an `sms:` link on mobile browsers.
+- **One friends list with live status.** Sent invites and joined friends are merged:
+  - `invited` (email/text sent, not joined): chip "Invited · email" or "Invited · text".
+  - `joined` (attributed, no first activity yet): "Joined · waiting for first check-in".
+  - `qualified`: "Week unlocked ✓". `review` shows as "Checking…".
+- **Nudge** (optional, rate-limited, never automatic):
+  - **Joined friend:** push to the friend: "{Inviter} is cheering you on 💪 Log your first check-in and you both get a free week of Pro." At most once per 48h per friend, 3 times in total.
+  - **Invited by email:** a reminder email. At most 2 reminders per invite, at least 72h apart.
+  - **Invited by text:** the composer opens with `nudgeSmsBody`; the server records the time. The same limits as email apply.
+  - The UI shows "Nudged · again in 2d" when it's too soon, and no Nudge button once the limit is reached.
+- **Reward delivery to both people, guaranteed.** When a friend qualifies:
+  - **Inviter push:** `referral_reward_earned` / `_banked`.
+  - **Invitee push:** `referral_invitee_welcome`.
+  - **Email to both:** "You and {friend} each earned a free week of Pro 🎉", ending with an invite-more call to action.
+  - **In-app celebration:** comes from `unseenRewards` for both people.
+  - **Retries:** a push suppressed by quiet hours or failed delivery is retried by the hourly cron (`referral_rewards.notified_at`, `referrals.inviter_notified_at`) until it's sent or 48h old.
+  - **Friend joined:** the inviter gets the `referral_friend_joined` push (also retried), and their invite row flips to `joined`.
+- **Every celebration feeds the loop.** Celebrations (inviter week, invitee welcome, lifetime) carry a primary CTA, **"Invite friends — earn a week for each"**, which opens the invite sheet. The secondary action is "Done".
+  - The invitee's welcome sheet after a claim adds a line: "Bring your own friends: every one who checks in earns you another free week."
+  - Push copy (below) ends with a soft invite prompt. Nothing auto-prompts beyond the celebration moment, the home card and the hub.
+- **Automatic attribution by email.** If someone signs up with an email that a member invited (within 30 days) and has no attribution yet, they're attributed to the earliest inviter (`source: 'email_invite'`). That happens on their first hub fetch or activity, within the 7-day window. Their circle invite (if any) is offered via `pendingCircleInvite` in the hub.
+- **Opt-out.** Every invite email has a one-click unsubscribe (`/invite/unsubscribe?t=<signed token>`, plus the List-Unsubscribe header). An opted-out address can never be invited again, and the inviter sees "Can't invite this address".
+- **Limits.**
+  - 25 email invites per inviter per 24h, 200 pending in total.
+  - The same contact can't be re-invited by the same inviter (they can nudge instead).
+  - An email already on FitCircle returns `already_member` (no email is sent). This is rate-limited by the daily cap so it can't be used to enumerate accounts.
+  - The inviter's own email is rejected.
+- **Privacy.**
+  - Emails are stored (needed for reminders), service-role only, and deleted once joined or after 45 days.
+  - Phone numbers are never stored in plaintext: only a salted hash plus the last 4 digits for display.
+  - Names are optional and shown only to the inviter.
+
+### 9.2 API additions
+`POST /api/mobile/referrals/invites` body:
+```json
+{ "contacts": [ { "email": "sam@x.com", "name": "Sam" }, { "phone": "+14165550123", "name": "Jo", "channel": "sms" } ],
+  "circleId": "uuid"? }
+```
+- Max 10 contacts. An email contact is sent by the server. A phone contact means "I texted this person from my composer" (record only).
+- `circleId`: an active circle the user belongs to. It defaults to `starterCircle`, and the email then invites to that circle.
+- 200 `data`:
+```json
+{ "results": [ { "contact": "sa•••@x.com", "channel": "email", "name": "Sam",
+                 "status": "sent" | "already_invited" | "already_member" | "opted_out" | "invalid" | "self" | "rate_limited" | "failed",
+                 "inviteId": "uuid" | null } ],
+  "sentCount": 1 }
+```
+
+`GET /api/mobile/referrals` (hub) additions:
+```json
+"invites": [ { "id": "uuid", "channel": "email" | "sms", "name": "Sam" | null, "contact": "sa•••@x.com" | "•••• 0123",
+               "status": "invited" | "joined" | "qualified", "sentAt": "ISO", "lastNudgedAt": "ISO" | null,
+               "nudge": { "available": true, "nextAt": "ISO" | null, "remaining": 2 } } ],
+"invitees": [ { …existing…, "nudge": { "available": true, "nextAt": null, "remaining": 3 } } ],
+"smsBody": "Hey! I'm using FitCircle … {link}",          // text for the composer (personal or starter-circle link)
+"emailPreview": { "subject": "Maya invited you to FitCircle", "intro": "…first lines…" },
+"pendingCircleInvite": { "circleId": "uuid", "name": "Morning Movers", "inviteCode": "FITAB12CD", "ref": "MAYA7K2" } | null
+```
+- `invites` holds only rows that haven't converted to an attributed referral yet (`status: invited`). Converted ones show up in `invitees`.
+- Clients render one merged list: invites first, then invitees.
+
+`POST /api/mobile/referrals/nudge` body: `{ "inviteId": "uuid" }` or `{ "referralId": "uuid" }`
+- 200 `data`: `{ "status": "sent" | "too_soon" | "limit_reached" | "not_nudgeable", "nextAt": "ISO" | null, "remaining": 1, "smsBody": "…" | null }`
+- For an SMS invite, `status:"sent"` comes with `smsBody`, and the client opens the composer with it.
+
+Web: `POST /api/referrals/me/invites` and `POST /api/referrals/me/nudge` (cookie auth, same shapes). `GET /api/referrals/unsubscribe?t=` is the public endpoint behind the `/invite/unsubscribe` page.
+
+### 9.3 Push copy (v2)
+| type | title | body |
+|---|---|---|
+| `referral_friend_joined` | "{friend} just joined FitCircle 🎉" | "Your invite worked! When they log their first check-in, you both get a free week of Pro." |
+| `referral_reward_earned` | "You both just earned a free week of Pro 🎁" | "{friend} checked in for the first time. Invite another friend for another free week." |
+| `referral_reward_banked` | "+{days} days banked 🎁" | "{friend} checked in! Your free week kicks in when your current plan ends. Invite another friend for more." |
+| `referral_invitee_welcome` | "You and {inviter} just earned a free week of Pro ✨" | "Thanks for showing up! Invite your own friends: every one who checks in earns you another week." |
+| `referral_nudge` (new, to the friend) | "{inviter} is cheering you on 💪" | "Log your first check-in today and you both get a free week of Pro." (screen `dashboard`) |
+
+### 9.4 Analytics (plan v7)
+- `Referral Contacts Invited {channel: email|sms, count, source: hub|wizard|celebration|home_card}`
+- `Referral Contact Picker Opened {}`
+- `Referral Nudge Sent {target: invited|joined, channel: push|email|sms}`
+- `Referral Celebration Invite Tapped {kind}`
+- `Referral Invite Sheet Opened {source}`

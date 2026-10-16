@@ -1,7 +1,7 @@
 {
   "$schema": "./tracking-plan.schema.json",
-  "version": 6,
-  "updated": "2026-10-15",
+  "version": 7,
+  "updated": "2026-10-16",
   "conventions": {
     "eventNames": "Title Case, '<Object> <Past-tense verb>' (e.g. 'Meal Logged'). Names are frozen once shipped: rename in the analytics tool, never in code.",
     "propertyNames": "snake_case. Enum values are lowercase snake_case.",
@@ -90,7 +90,8 @@
       "paste",
       "typed",
       "web",
-      "circle_join"
+      "circle_join",
+      "email_invite"
     ]
   },
   "globalProperties": [
@@ -2296,6 +2297,132 @@
         "web"
       ],
       "description": "A referral reward celebration was shown.",
+      "properties": [
+        {
+          "name": "kind",
+          "type": "enum",
+          "values": [
+            "inviter_week",
+            "invitee_welcome",
+            "lifetime"
+          ],
+          "required": true
+        }
+      ]
+    },
+    {
+      "name": "Referral Invite Sheet Opened",
+      "category": "acquisition",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "description": "Invite-by-email/text sheet opened.",
+      "properties": [
+        {
+          "name": "source",
+          "type": "enum",
+          "values": [
+            "hub",
+            "wizard",
+            "celebration",
+            "home_card",
+            "welcome"
+          ],
+          "required": true
+        }
+      ]
+    },
+    {
+      "name": "Referral Contacts Invited",
+      "category": "acquisition",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "description": "Friends invited by email (server-sent) or text (native composer).",
+      "properties": [
+        {
+          "name": "channel",
+          "type": "enum",
+          "values": [
+            "email",
+            "sms"
+          ],
+          "required": true
+        },
+        {
+          "name": "count",
+          "type": "int",
+          "required": true
+        },
+        {
+          "name": "source",
+          "type": "enum",
+          "values": [
+            "hub",
+            "wizard",
+            "celebration",
+            "home_card",
+            "welcome"
+          ],
+          "required": true
+        }
+      ]
+    },
+    {
+      "name": "Referral Contact Picker Opened",
+      "category": "acquisition",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "description": "System contact picker opened from the invite sheet (no permission).",
+      "properties": []
+    },
+    {
+      "name": "Referral Nudge Sent",
+      "category": "acquisition",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "description": "A friend was nudged.",
+      "properties": [
+        {
+          "name": "target",
+          "type": "enum",
+          "values": [
+            "invited",
+            "joined"
+          ],
+          "required": true
+        },
+        {
+          "name": "channel",
+          "type": "enum",
+          "values": [
+            "push",
+            "email",
+            "sms"
+          ],
+          "required": true
+        }
+      ]
+    },
+    {
+      "name": "Referral Celebration Invite Tapped",
+      "category": "acquisition",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "description": "Invite CTA tapped on a reward celebration.",
       "properties": [
         {
           "name": "kind",

@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from 'next/server';
 
 import { ComplimentaryGrantService } from '@/lib/services/complimentary-grant-service';
+import { ReferralInviteService } from '@/lib/services/referral-invite-service';
 import { ReferralRewardService } from '@/lib/services/referral-reward-service';
 import { ReferralService } from '@/lib/services/referral-service';
 import { SubscriptionService } from '@/lib/services/subscription-service';
@@ -15,6 +16,8 @@ export const dynamic = 'force-dynamic';
  *     without a webhook reaching holdIfGranted.
  *  3. End expired promotional Pro on time: a referral week is a week, not
  *     "a week plus up to 30h" waiting for the daily reconcile.
+ *  4. Re-send referral pushes that weren't delivered (quiet hours, no device).
+ *  5. Forget plaintext emails of invites that never converted (45 days).
  */
 export async function GET(request: NextRequest) {
   if (!verifyCronSecret(request)) {
@@ -89,6 +92,18 @@ export async function GET(request: NextRequest) {
     result.expired = { checked: expired?.length ?? 0, ended };
   } catch (err: any) {
     result.expired = { error: err?.message };
+  }
+
+  try {
+    result.pushRetries = await ReferralService.retryUndeliveredPushes();
+  } catch (err: any) {
+    result.pushRetries = { error: err?.message };
+  }
+
+  try {
+    result.purgedEmails = await ReferralInviteService.purgeStale();
+  } catch (err: any) {
+    result.purgedEmails = { error: err?.message };
   }
 
   return NextResponse.json(result);

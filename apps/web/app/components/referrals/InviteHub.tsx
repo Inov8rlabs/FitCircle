@@ -3,7 +3,6 @@
 import { motion } from 'framer-motion';
 import {
   Check,
-  Clock,
   Gift,
   Hash,
   Link2,
@@ -11,12 +10,12 @@ import {
   Lock,
   Send,
   Share2,
-  ShieldAlert,
   Sparkles,
   Trophy,
+  ArrowRight,
   UserPlus,
-  Users,
 } from 'lucide-react';
+import Link from 'next/link';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 
@@ -30,9 +29,9 @@ import { useTrackOnce } from '@/lib/analytics/react';
 import { copyText } from '@/lib/referrals/clipboard';
 import type { ReferralHub } from '@/lib/referrals/types';
 
+import { FriendsList } from './FriendsList';
+import { InviteByContactForm } from './InviteByContactForm';
 import { RewardCelebration } from './RewardCelebration';
-
-type Invitee = NonNullable<ReferralHub['invitees']>[number];
 
 const FINE_PRINT =
   "A friend counts when they join with your link and log their first activity. Rewards are free Pro time; they're never required for anything you've paid for.";
@@ -95,6 +94,8 @@ export function InviteHub() {
   const [failed, setFailed] = useState(false);
   const [celebrating, setCelebrating] = useState<NonNullable<ReferralHub['unseenRewards']>>([]);
   const celebrated = useRef(false);
+  const [focusInvite, setFocusInvite] = useState(0);
+  const [inviteSource, setInviteSource] = useState<'hub' | 'celebration'>('hub');
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -135,6 +136,14 @@ export function InviteHub() {
       credentials: 'same-origin',
       body: JSON.stringify({ ids: rewards.map((r) => r.id) }),
     }).catch(() => {});
+  };
+
+  const inviteFromCelebration = (kind: NonNullable<ReferralHub['unseenRewards']>[number]['kind']) => {
+    analytics.track(AnalyticsEvents.referralCelebrationInviteTapped({ kind }));
+    analytics.track(AnalyticsEvents.referralInviteSheetOpened({ source: 'celebration' }));
+    finishCelebration();
+    setInviteSource('celebration');
+    setFocusInvite((n) => n + 1);
   };
 
   if (loading && !hub) {
@@ -182,7 +191,12 @@ export function InviteHub() {
 
   return (
     <div className="relative mx-auto w-full max-w-3xl px-4 pb-24 pt-8">
-      <RewardCelebration rewards={celebrating} weeksEarned={weeksEarned} onDone={finishCelebration} />
+      <RewardCelebration
+        rewards={celebrating}
+        weeksEarned={weeksEarned}
+        onDone={finishCelebration}
+        onInvite={inviteFromCelebration}
+      />
 
       {/* Hero */}
       <section className="text-center">
@@ -264,6 +278,33 @@ export function InviteHub() {
           You joined with {hub.referredBy.firstName}&apos;s invite 💜
         </p>
       )}
+
+      {hub.pendingCircleInvite && (
+        <Card className="mt-6 border-pink-500/30">
+          <div className="flex items-center justify-between gap-4">
+            <div className="min-w-0">
+              <p className="text-xs font-medium uppercase tracking-wider text-pink-300">You were invited</p>
+              <p className="mt-1 truncate font-semibold text-white">{hub.pendingCircleInvite.name}</p>
+              <p className="text-sm text-gray-400">A seat is waiting for you in this circle.</p>
+            </div>
+            <Link
+              href={`/join/${encodeURIComponent(hub.pendingCircleInvite.inviteCode)}${
+                hub.pendingCircleInvite.ref ? `?ref=${encodeURIComponent(hub.pendingCircleInvite.ref)}` : ''
+              }`}
+              className="inline-flex shrink-0 items-center gap-1 rounded-xl bg-gradient-to-r from-purple-600 to-pink-600 px-4 py-2.5 text-sm font-semibold text-white"
+            >
+              Join <ArrowRight className="h-4 w-4" />
+            </Link>
+          </div>
+        </Card>
+      )}
+
+      <InviteByContactForm
+        smsBody={hub.smsBody ?? hub.shareMessage ?? null}
+        focusSignal={focusInvite}
+        source={inviteSource}
+        onSent={() => void load()}
+      />
 
       {hub.starterCircle && hub.starterCircle.memberCount < 5 && (
         <Card className="mt-8">
@@ -374,21 +415,11 @@ export function InviteHub() {
       <section className="mt-10">
         <SectionTitle>
           Your friends{' '}
-          {stats.invited > 0 && <span className="text-gray-500">({stats.invited})</span>}
+          {(hub.invites?.length ?? 0) + (hub.invitees?.length ?? 0) > 0 && (
+            <span className="text-gray-500">({(hub.invites?.length ?? 0) + (hub.invitees?.length ?? 0)})</span>
+          )}
         </SectionTitle>
-        {hub.invitees && hub.invitees.length > 0 ? (
-          <ul className="mt-4 space-y-2" data-testid="hub-friends">
-            {hub.invitees.map((f) => (
-              <FriendRow key={f.id} friend={f} />
-            ))}
-          </ul>
-        ) : (
-          <Card className="mt-4 text-center">
-            <Users className="mx-auto h-8 w-8 text-purple-300" />
-            <p className="mt-2 font-medium text-white">No friends yet</p>
-            <p className="text-sm text-gray-400">Fitness is better together. Send your link to get started.</p>
-          </Card>
-        )}
+        <FriendsList invites={hub.invites} invitees={hub.invitees} onChanged={() => void load()} />
       </section>
 
       {hub.canClaimCode && <ClaimCodeForm onClaimed={() => void load()} />}
@@ -440,82 +471,6 @@ function Card({ children, className = '' }: { children: React.ReactNode; classNa
 
 function SectionTitle({ children }: { children: React.ReactNode }) {
   return <h2 className="text-sm font-semibold uppercase tracking-wider text-gray-400">{children}</h2>;
-}
-
-function StatusChip({ status }: { status: Invitee['status'] }) {
-  switch (status) {
-    case 'qualified':
-      return (
-        <span className="inline-flex items-center gap-1 rounded-full bg-green-500/15 px-2.5 py-1 text-xs font-medium text-green-300">
-          Week unlocked <Check className="h-3 w-3" />
-        </span>
-      );
-    case 'review':
-      return (
-        <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/15 px-2.5 py-1 text-xs font-medium text-amber-300">
-          <ShieldAlert className="h-3 w-3" /> Under review
-        </span>
-      );
-    case 'rejected':
-      return (
-        <span className="inline-flex items-center rounded-full bg-slate-700/40 px-2.5 py-1 text-xs font-medium text-gray-400">
-          Not eligible
-        </span>
-      );
-    default:
-      return (
-        <span className="inline-flex items-center gap-1 rounded-full bg-purple-500/15 px-2.5 py-1 text-xs font-medium text-purple-200">
-          <Clock className="h-3 w-3" /> Joined · waiting for first check-in
-        </span>
-      );
-  }
-}
-
-function FriendRow({ friend }: { friend: Invitee }) {
-  const nudge = async () => {
-    const text = `Hey ${friend.displayName}! Log your first check-in on FitCircle so we can keep each other honest 💪`;
-    try {
-      if (typeof navigator !== 'undefined' && typeof navigator.share === 'function') {
-        await navigator.share({ text });
-        analytics.track(AnalyticsEvents.referralInviteShared({ method: 'nudge', context: 'hub' }));
-        return;
-      }
-    } catch (error) {
-      if ((error as DOMException)?.name === 'AbortError') return;
-    }
-    if (await copyText(text)) {
-      toast.success('Nudge copied — send it their way 💪');
-      analytics.track(AnalyticsEvents.referralInviteShared({ method: 'nudge', context: 'hub' }));
-    }
-  };
-  return (
-    <li className="flex items-center gap-3 rounded-2xl border border-slate-800 bg-slate-900/50 p-3">
-      <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-gradient-to-br from-purple-500 to-pink-500 font-semibold text-white">
-        {friend.avatarUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={friend.avatarUrl} alt="" className="h-full w-full object-cover" />
-        ) : (
-          friend.displayName.charAt(0).toUpperCase()
-        )}
-      </div>
-      <div className="min-w-0 flex-1">
-        <p className="truncate font-medium text-white">{friend.displayName}</p>
-        <div className="mt-1 flex flex-wrap items-center gap-2">
-          <StatusChip status={friend.status} />
-          {friend.circleName && <span className="truncate text-xs text-gray-500">in {friend.circleName}</span>}
-        </div>
-      </div>
-      {friend.status === 'pending' && (
-        <button
-          type="button"
-          onClick={() => void nudge()}
-          className="shrink-0 rounded-lg border border-slate-700 px-3 py-1.5 text-xs font-medium text-gray-200 hover:border-purple-500/60"
-        >
-          Nudge
-        </button>
-      )}
-    </li>
-  );
 }
 
 const CLAIM_MESSAGES: Record<string, string> = {

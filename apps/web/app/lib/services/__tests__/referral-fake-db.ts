@@ -20,6 +20,8 @@ const UNIQUE: Record<string, UniqueIndex[]> = {
     { cols: ['user_id'], where: (r) => r.kind === 'lifetime' },
   ],
   referral_devices: [{ cols: ['device_hash', 'user_id'] }],
+  referral_invites: [{ cols: ['inviter_id', 'contact_hash'] }],
+  referral_email_optouts: [{ cols: ['email_hash'] }],
   profiles: [{ cols: ['id'] }],
 };
 
@@ -177,9 +179,12 @@ class Query implements PromiseLike<any> {
           id: nextId(),
           created_at: new Date().toISOString(),
           ...(this.table === 'complimentary_grants' ? { revoked_at: null } : {}),
-          ...(this.table === 'referral_rewards' ? { applied_at: null, seen_at: null } : {}),
+          ...(this.table === 'referral_rewards' ? { applied_at: null, seen_at: null, notified_at: null, emailed_at: null } : {}),
+          ...(this.table === 'referral_invites'
+            ? { status: 'invited', referral_id: null, nudge_count: 0, last_nudged_at: null, sent_at: new Date().toISOString(), joined_at: null }
+            : {}),
           ...(this.table === 'referrals'
-            ? { attributed_at: new Date().toISOString(), qualified_at: null, status: 'pending', status_reason: null }
+            ? { attributed_at: new Date().toISOString(), qualified_at: null, status: 'pending', status_reason: null, nudge_count: 0, last_nudged_at: null, inviter_notified_at: null }
             : {}),
           ...r,
         }));

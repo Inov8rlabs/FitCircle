@@ -115,7 +115,8 @@ export type NotificationType =
   | 'referral_reward_earned'
   | 'referral_reward_banked'
   | 'referral_lifetime'
-  | 'referral_invitee_welcome';
+  | 'referral_invitee_welcome'
+  | 'referral_nudge';
 
 interface NotificationContent {
   title: string;
@@ -184,6 +185,8 @@ export const TYPE_SCREEN_MAP: Record<NotificationType, NotificationScreen> = {
   referral_reward_banked: 'invite_hub',
   referral_lifetime: 'invite_hub',
   referral_invitee_welcome: 'invite_hub',
+  // The nudged friend should go log their first check-in.
+  referral_nudge: 'dashboard',
 };
 
 export function screenFor(type: NotificationType, data: NotificationData): NotificationScreen {
@@ -411,20 +414,20 @@ export const NOTIFICATION_TEMPLATES: Record<
     category: 'social',
   }),
 
-  // ---- Referrals ----
+  // ---- Referrals (docs/REFERRALS_SPEC.md §9.3) ----
   referral_friend_joined: (data) => ({
-    title: `${data.friendName || 'A friend'} joined with your invite 🎉`,
-    body: 'Their first check-in unlocks your free week of Pro. Say hi!',
+    title: `${data.friendName || 'Your friend'} just joined FitCircle 🎉`,
+    body: 'Your invite worked! When they log their first check-in, you both get a free week of Pro.',
     category: 'social',
   }),
   referral_reward_earned: (data) => ({
-    title: 'You just earned a free week of Pro 🎁',
-    body: `${data.friendName || 'Your friend'} logged their first activity. Thanks for bringing a friend.`,
+    title: 'You both just earned a free week of Pro 🎁',
+    body: `${data.friendName || 'Your friend'} checked in for the first time. Invite another friend for another free week.`,
     category: 'celebration',
   }),
   referral_reward_banked: (data) => ({
     title: `+${data.days || 7} days banked 🎁`,
-    body: `${data.friendName || 'Your friend'} is in! Your free week is saved and kicks in when your current plan ends.`,
+    body: `${data.friendName || 'Your friend'} checked in! Your free week kicks in when your current plan ends. Invite another friend for more.`,
     category: 'celebration',
   }),
   referral_lifetime: () => ({
@@ -433,9 +436,14 @@ export const NOTIFICATION_TEMPLATES: Record<
     category: 'celebration',
   }),
   referral_invitee_welcome: (data) => ({
-    title: 'Your week of Pro is unlocked ✨',
-    body: `A gift from ${data.inviterName || 'your friend'} for showing up. Enjoy every Pro feature, on us.`,
+    title: `You and ${data.inviterName || 'your friend'} just earned a free week of Pro ✨`,
+    body: 'Thanks for showing up! Invite your own friends: every one who checks in earns you another week.',
     category: 'celebration',
+  }),
+  referral_nudge: (data) => ({
+    title: `${data.inviterName || 'Your friend'} is cheering you on 💪`,
+    body: 'Log your first check-in today and you both get a free week of Pro.',
+    category: 'social',
   }),
 };
 
@@ -490,6 +498,8 @@ export const CAP_EXEMPT_TYPES: ReadonlySet<NotificationType> = new Set<Notificat
   'referral_reward_banked',
   'referral_lifetime',
   'referral_invitee_welcome',
+  // A friend's explicit, rate-limited nudge (≤3 ever, 48h apart) — never dropped for a system nudge.
+  'referral_nudge',
 ]);
 
 export function isCapExempt(type: NotificationType): boolean {

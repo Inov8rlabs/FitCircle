@@ -23,6 +23,27 @@ function getAllowedOrigins(): string[] {
   return origins;
 }
 
+// Public routes that do NOT require authentication.
+// Everything else under the app is protected-by-default.
+export const PUBLIC_ROUTES = [
+  '/',
+  '/login',
+  '/register',
+  '/auth',
+  '/join',
+  '/i', // personal invite landing pages (/i/CODE)
+  '/invite/unsubscribe', // invite-email opt-out; /invite itself stays authed (exact or "/invite/unsubscribe/" prefix only)
+  '/.well-known', // apple-app-site-association has no extension, so the matcher doesn't skip it
+  '/privacy',
+  '/terms',
+  '/support',
+];
+
+/** Exact match or a "/route/…" sub-path (so '/invite/unsubscribe' never opens '/invite'). */
+export function isPublicPath(pathname: string): boolean {
+  return PUBLIC_ROUTES.some((route) => pathname === route || pathname.startsWith(`${route}/`));
+}
+
 export async function middleware(request: NextRequest) {
   let response = NextResponse.next({
     request: {
@@ -57,20 +78,6 @@ export async function middleware(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  // Public routes that do NOT require authentication.
-  // Everything else under the app is protected-by-default.
-  const publicRoutes = [
-    '/',
-    '/login',
-    '/register',
-    '/auth',
-    '/join',
-    '/i', // personal invite landing pages (/i/CODE)
-    '/.well-known', // apple-app-site-association has no extension, so the matcher doesn't skip it
-    '/privacy',
-    '/terms',
-    '/support',
-  ];
 
   const { pathname } = request.nextUrl;
 
@@ -96,7 +103,8 @@ export async function middleware(request: NextRequest) {
     }
   }
 
-  // API routes are not gated here (each route handles its own auth);
+  // API routes are not gated here (each route handles its own auth), so the
+  // public GET/POST /api/referrals/unsubscribe needs no publicRoutes entry.
   // the matcher already excludes Next.js internals and static assets.
   if (pathname.startsWith('/api/')) {
     if (user) {
@@ -105,9 +113,7 @@ export async function middleware(request: NextRequest) {
     return response;
   }
 
-  const isPublicRoute = publicRoutes.some(
-    route => pathname === route || pathname.startsWith(`${route}/`)
-  );
+  const isPublicRoute = isPublicPath(pathname);
 
   if (!isPublicRoute) {
     if (!user) {
