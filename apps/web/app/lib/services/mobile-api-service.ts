@@ -350,10 +350,15 @@ export class MobileAPIService {
       .from('profiles')
       .select('id, email')
       .eq('id', payload.userId)
-      .single();
+      .maybeSingle();
 
-    if (error || !user) {
-      return null;
+    // A database hiccup is NOT an invalid session: throw (→ 500, which the
+    // apps retry) instead of returning null (→ 401, which signs them out).
+    if (error) {
+      throw new Error(`refreshAccessToken: profile lookup failed: ${error.message}`);
+    }
+    if (!user) {
+      return null; // the account is gone
     }
 
     // Generate new token pair
