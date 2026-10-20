@@ -1,7 +1,7 @@
 import { type NextRequest } from 'next/server';
 import { z } from 'zod';
 
-import { describeFitzyError, readJson } from '@/lib/fitzy/http';
+import { describeFitzyError, fitzyFail, readJson } from '@/lib/fitzy/http';
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { FitzyService, type FitzyStreamEvent } from '@/lib/services/fitzy-service';
 import { safeParseLenient } from '@/lib/validation/lenient-parse';
@@ -27,8 +27,22 @@ const frame = (event: string, data: unknown) => `event: ${event}\ndata: ${JSON.s
  * POST /api/mobile/fitzy/chat/stream → text/event-stream (docs/FITZY_V2_SPEC.md §3.1).
  * Events: meta → delta* → (replace) → done, or a single error. `: ping` every 10 s.
  * Text is guarded sentence by sentence before it leaves the server.
+ * Auth and body validation fail as plain JSON (401/400) before the stream opens, so clients'
+ * 401 → token-refresh → retry path works like every other mobile route.
  */
 export async function POST(request: NextRequest) {
+  let user: Awaited<ReturnType<typeof requireMobileAuth>>;
+  try {
+    user = await requireMobileAuth(request);
+  } catch (error) {
+    return fitzyFail(error);
+  }
+  const parsed = safeParseLenient(bodySchema, await readJson(request));
+  if (!parsed.success) {
+    return fitzyFail({ code: 'VALIDATION_ERROR', message: parsed.error.issues[0]?.message ?? 'Invalid request body' });
+  }
+  const body = parsed.data;
+
   const encoder = new TextEncoder();
   const headers = {
     'Content-Type': 'text/event-stream; charset=utf-8',
@@ -66,13 +80,6 @@ export async function POST(request: NextRequest) {
       };
 
       try {
-        const user = await requireMobileAuth(request);
-        const parsed = safeParseLenient(bodySchema, await readJson(request));
-        if (!parsed.success) {
-          write(frame('error', { code: 'VALIDATION_ERROR', message: parsed.error.issues[0]?.message ?? 'Invalid request body' }));
-          return close();
-        }
-        const body = parsed.data;
         await FitzyService.streamChat(
           user.id,
           {

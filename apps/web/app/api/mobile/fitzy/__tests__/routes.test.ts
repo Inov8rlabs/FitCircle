@@ -98,10 +98,14 @@ describe('POST /api/mobile/fitzy/chat/stream', () => {
       },
     ]);
     expect(events[0].data.paywall.bullets).toHaveLength(3);
-    ({ events } = await sse(await streamChat(req('/api/mobile/fitzy/chat/stream', { as: PRO, method: 'POST', body: { message: '' } }))));
-    expect(events[0]).toMatchObject({ event: 'error', data: { code: 'VALIDATION_ERROR' } });
-    ({ events } = await sse(await streamChat(req('/api/mobile/fitzy/chat/stream', { method: 'POST', body: { message: 'hi' } }))));
-    expect(events[0]).toMatchObject({ event: 'error', data: { code: 'UNAUTHORIZED' } });
+    // Auth + validation fail as plain JSON before the stream opens (clients refresh on HTTP 401).
+    let res = await streamChat(req('/api/mobile/fitzy/chat/stream', { as: PRO, method: 'POST', body: { message: '' } }));
+    expect(res.status).toBe(400);
+    expect(res.headers.get('content-type')).toContain('application/json');
+    expect(JSON.stringify(await res.json())).toContain('VALIDATION_ERROR');
+    res = await streamChat(req('/api/mobile/fitzy/chat/stream', { method: 'POST', body: { message: 'hi' } }));
+    expect(res.status).toBe(401);
+    expect(JSON.stringify(await res.json())).toContain('UNAUTHORIZED');
   });
 });
 
