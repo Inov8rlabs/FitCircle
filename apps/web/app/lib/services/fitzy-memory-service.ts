@@ -117,6 +117,7 @@ export class FitzyMemoryService {
         system: systemMessages(EXTRACT_PROMPT, `ALREADY KNOWN:\n${known}`),
         messages: [{ role: 'user', content: `USER SAID:\n${userMessage}\n\nCOACH REPLIED:\n${answer.slice(0, 1500)}` }],
         maxOutputTokens: 200,
+        thinking: false,
       });
       let parsed: unknown = null;
       try {

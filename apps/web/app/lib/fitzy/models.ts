@@ -24,6 +24,16 @@ export function fallbackFor(model: string): string {
 /** Anthropic prompt-cache breakpoint, as the AI SDK / Gateway expect it on a message. */
 export const CACHE_EPHEMERAL = { anthropic: { cacheControl: { type: 'ephemeral' as const } } };
 
+/**
+ * Structured JSON tasks (plan, preview, daily focus, memory) run with thinking disabled: with a
+ * small maxOutputTokens, adaptive thinking ate most of the budget and truncated the JSON
+ * (bake-off 2026-10-20: 5/10 Sonnet plans and 6/10 Haiku previews fell back).
+ */
+export function thinkingOptions(model: string, thinking: boolean) {
+  if (thinking || !model.startsWith('anthropic/')) return {};
+  return { providerOptions: { anthropic: { thinking: { type: 'disabled' as const } } } };
+}
+
 /** [static (cached) system message, grounding (uncached) system message?]. */
 export function systemMessages(staticPrompt: string, grounding?: string | null): ModelMessage[] {
   const out: ModelMessage[] = [{ role: 'system', content: staticPrompt, providerOptions: CACHE_EPHEMERAL }];
@@ -48,6 +58,8 @@ export async function generateWithFallback(opts: {
   system: ModelMessage[];
   messages: Turn[];
   maxOutputTokens?: number;
+  /** false for structured JSON tasks (see thinkingOptions). Default true. */
+  thinking?: boolean;
 }): Promise<GenerationResult> {
   const order = [opts.primary, fallbackFor(opts.primary)];
   let lastError: unknown = null;
@@ -59,6 +71,7 @@ export async function generateWithFallback(opts: {
         allowSystemInMessages: true,
         timeout: MODEL_TIMEOUT_MS,
         ...(opts.maxOutputTokens ? { maxOutputTokens: opts.maxOutputTokens } : {}),
+        ...thinkingOptions(model, opts.thinking ?? true),
       } as Parameters<typeof generateText>[0]);
       const text = (res.text ?? '').trim();
       if (!text) throw new Error('empty completion');

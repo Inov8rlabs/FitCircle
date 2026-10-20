@@ -18,7 +18,7 @@ import { FitzyLockedError, FitzyNotFoundError } from './fitzy-conversation-servi
 
 const KINDS: readonly CommitmentKind[] = ['move', 'eat', 'hydrate', 'sleep', 'circle', 'mind'];
 /** Beyond the guard: plan items must never carry numeric food/weight targets or restriction. */
-const PLAN_UNSAFE = /\b(calori\w*|kcal|macros?|deficit|weigh\w*|lbs?|pounds?|kgs?|kilos?|body[\s-]?fat|bmi|no\s+(?:sugar|carbs?|snacks?|dessert)|cut\s+out|avoid|restrict\w*|fast(?:ing)?|skip\w*|only\s+eat|less\s+food|eat\s+less)\b/i;
+const PLAN_UNSAFE = /\b(calori\w*|kcal|macros?|deficit|weigh(?:s|ed|ing|-?ins?)?|weight(?!s\b|ed\b|lifting|\s+training)\w*|(?:lbs?|pounds?|kgs?|kilos?)(?!\s+(?:dumbbells?|kettlebells?|weights?|plates?|barbell|bar)\b)|body[\s-]?fat|bmi|no\s+(?:sugar|carbs?|snacks?|dessert)|cut\s+out|avoid|restrict\w*|fast(?:ing)?|skip\w*|only\s+eat|less\s+food|eat\s+less)\b/i;
 
 interface PlanRow {
   id: string;
@@ -140,6 +140,7 @@ export class FitzyPlanService {
         system: systemMessages(PLAN_PROMPT, grounding),
         messages: [{ role: 'user', content: `Week of ${weekOf}. My goal: ${goal?.trim() || 'help me pick one'}` }],
         maxOutputTokens: 900,
+        thinking: false,
       });
       model = res.model;
       const j = looseJson(res.text);
@@ -175,6 +176,7 @@ export class FitzyPlanService {
         system: systemMessages(PLAN_PROMPT, grounding),
         messages: [{ role: 'user', content: `Week of ${weekOf}. My goal: ${goal?.trim() || 'help me pick one'}` }],
         maxOutputTokens: 600,
+        thinking: false,
       });
       model = res.model;
       const j = looseJson(res.text);

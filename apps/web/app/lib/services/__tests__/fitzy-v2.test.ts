@@ -35,12 +35,12 @@ vi.mock('ai', () => ({
 }));
 
 import { META_MARKER, applyGuardrails, growthNudgeAllowed, parseMeta, splitMeta } from '../../fitzy/meta';
-import { CACHE_EPHEMERAL, DEFAULT_CHAT_MODEL, DEFAULT_DEEP_MODEL } from '../../fitzy/models';
+import { CACHE_EPHEMERAL, DEFAULT_CHAT_MODEL, DEFAULT_DEEP_MODEL, thinkingOptions } from '../../fitzy/models';
 import { StreamGuard } from '../../fitzy/stream-guard';
 import { FitzyConversationService } from '../fitzy-conversation-service';
 import { FitzyFocusService } from '../fitzy-focus-service';
 import { FitzyMemoryService, MEMORY_CAP, isExcludedMemory } from '../fitzy-memory-service';
-import { FitzyPlanService } from '../fitzy-plan-service';
+import { FitzyPlanService, sanitizeCommitments } from '../fitzy-plan-service';
 import { FitzyService, SAFE_FALLBACK, SYSTEM_PROMPT, setFitzyBackgroundScheduler, type FitzyStreamEvent } from '../fitzy-service';
 import { UpgradeRequiredError } from '../usage-service';
 
@@ -426,5 +426,26 @@ describe('memory (Pro)', () => {
     expect(await FitzyMemoryService.items(PRO)).toHaveLength(MEMORY_CAP - 1);
     await FitzyMemoryService.clear(PRO);
     expect(await FitzyMemoryService.items(PRO)).toEqual([]);
+  });
+});
+
+describe('bake-off fixes (2026-10-20)', () => {
+  it('structured tasks disable Anthropic thinking; chat keeps the default', () => {
+    expect(thinkingOptions('anthropic/claude-sonnet-5.5', false)).toEqual({ providerOptions: { anthropic: { thinking: { type: 'disabled' } } } });
+    expect(thinkingOptions('anthropic/claude-haiku-5.5', true)).toEqual({});
+    expect(thinkingOptions('google/gemini-3.8-flash', false)).toEqual({});
+  });
+
+  it('plan filter keeps equipment weights but still drops body-weight targets', () => {
+    const c = (title: string) => ({ kind: 'move', title, detail: '', count: 2 });
+    const kept = sanitizeCommitments(
+      { commitments: [c('Strength with your 5 kg weights'), c('Weighted vest walk'), c('Lose 2 kg this week'), c('Daily weigh-in'), c('Hit your weight goal')] },
+      () => false
+    ).map((x) => x.title);
+    expect(kept).toEqual(['Strength with your 5 kg weights', 'Weighted vest walk']);
+  });
+
+  it('prompt tells Fitzy not to echo numbers when declining', () => {
+    expect(SYSTEM_PROMPT).toContain("don't repeat the user's specific numbers");
   });
 });

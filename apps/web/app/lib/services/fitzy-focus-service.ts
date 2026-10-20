@@ -107,6 +107,7 @@ export class FitzyFocusService {
             system: systemMessages(RECAP_PROMPT, grounding),
             messages: [{ role: 'user', content: `Week of ${plan.weekOf}. Goal: ${plan.goal}. Progress: ${FitzyPlanService.progressLine(plan)}` }],
             maxOutputTokens: 300,
+            thinking: false,
           });
           const j = looseJson(res.text);
           focus = this.validate(j, date, tier, 'recap', { label: 'Plan next week', action: { type: 'start_plan', label: 'Plan next week' } });
@@ -116,6 +117,7 @@ export class FitzyFocusService {
             system: systemMessages(FOCUS_PROMPT, grounding),
             messages: [{ role: 'user', content: `Today is ${date}.${plan ? ' The user has a plan this week.' : ' The user has no plan this week.'}` }],
             maxOutputTokens: 300,
+            thinking: false,
           });
           const j = looseJson(res.text);
           const type = (CTA_TYPES as readonly string[]).includes(j?.cta?.type) ? (j.cta.type as FitzyAction['type']) : 'log_workout';
