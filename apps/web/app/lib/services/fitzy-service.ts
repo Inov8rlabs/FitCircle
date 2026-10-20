@@ -2,11 +2,23 @@ import type { ModelMessage } from 'ai';
 import { after } from 'next/server';
 
 import { todayFor } from '../fitzy/dates';
+import {
+  assembleGrounding,
+  bodyCompBlock,
+  circleBlock,
+  extrasLines,
+  foodBlock,
+  plateScoreBlock,
+  prefsBlock,
+  weightTrendBlock,
+  workoutBlock,
+  type BodyCompGrounding,
+  type GroundingExtras,
+} from '../fitzy/grounding';
 import { META_MARKER, applyGuardrails, growthNudgeAllowed, parseMeta, splitMeta, staticSuggestions } from '../fitzy/meta';
 import { chatModel, fallbackFor, generateWithFallback, streamFrom, systemMessages } from '../fitzy/models';
 import { StreamGuard, type GuardEvent } from '../fitzy/stream-guard';
 import { createAdminSupabase } from '../supabase-admin';
-import type { BodyCompDelta } from '../types/body-composition';
 import type { FitzyAction, FitzyChatResponse, FitzyMessage, FitzyTier, IFitzyService } from '../types/fitzy';
 
 import { BodyCompTrendsService, extractBodyFatGoal } from './body-comp-trends-service';
@@ -101,6 +113,12 @@ export const SYSTEM_PROMPT = [
   '- This data is PRIVATE to the user: never reference it in relation to circles, friends,',
   '  challenges, comparisons, or anything shareable.',
   '',
+  'DISORDERED-EATING SIGNALS (very low calorie goals, eating far less, pushing through or suppressing',
+  'hunger, compensating for food with exercise, fear of eating): do NOT give fullness, appetite or',
+  '"curb hunger" tips. Respond with warmth, say you care, gently encourage talking to a doctor or an',
+  'eating-disorder helpline (e.g. NEDA in the US), and offer a non-food way to support them today.',
+  'Keep safety and decline replies short (under ~130 words): warmth, the boundary, one helpful next step.',
+  '',
   'MEDICAL / INJURY / CLINICAL: If the question is medical, clinical, about a diagnosed condition,',
   'medications, an injury or pain, supplements for a condition, or an eating disorder, do NOT answer',
   'it directly — warmly defer to a qualified professional (doctor, registered dietitian, physical',
@@ -120,7 +138,7 @@ export const SYSTEM_PROMPT = [
   '',
   'META (required, never mentioned to the user): after your reply, on its own line, write',
   `${META_MARKER} followed by ONE JSON object and nothing else:`,
-  '{"suggestions": [up to 3 short follow-up questions the USER might ask you next, each ≤ 40 chars],',
+  '{"suggestions": [up to 3 short follow-up questions the USER might ask you next, each ≤ 40 characters (about 6 words)],',
   ' "actions": [up to 2 of {"type": "log_meal"|"log_workout"|"start_plan"|"share_tip"|"invite_buddy"|"open_circle",',
   '  "label": "≤ 28 chars", "payload": {"text": "…", "circleId": "…"}}]}',
   '- log_meal / log_workout: when logging would naturally follow; start_plan: when they want structure;',
@@ -130,6 +148,9 @@ export const SYSTEM_PROMPT = [
   '- invite_buddy: only when the grounding says growthNudgeAllowed: true and a friend would genuinely help.',
   '- Use [] when nothing fits. Actions are suggestions the user can tap; nothing is ever sent automatically.',
 ].join('\n');
+
+/** System messages for a chat turn: cached SYSTEM_PROMPT + the user's grounding. */
+export const chatSystemMessages = (grounding: string): ModelMessage[] => systemMessages(SYSTEM_PROMPT, grounding);
 
 export interface TurnInput {
   message: string;
@@ -340,7 +361,7 @@ export class FitzyService implements IFitzyService {
       conversationId,
       userMessage: message,
       turns: [...history, { role: 'user', content: message }],
-      system: systemMessages(SYSTEM_PROMPT, grounding),
+      system: chatSystemMessages(grounding),
       tier: allowance.tier,
       remaining: allowance.remaining,
       growthAllowed,
@@ -350,15 +371,24 @@ export class FitzyService implements IFitzyService {
   }
 
   /** Meta parsing, guardrails, persistence of the assistant turn, background memory. */
-  static async finishTurn(
-    p: PreparedTurn,
-    r: { answer: string; metaRaw: string | null; tripped: boolean; model: string | null; inputTokens: number | null; outputTokens: number | null }
-  ): Promise<TurnResult> {
+  /** Pure part of finishTurn: chips + guarded actions from the meta block (shared with the live eval). */
+  static resolveMeta(
+    p: Pick<PreparedTurn, 'userMessage' | 'growthAllowed' | 'circleId'>,
+    r: { answer: string; metaRaw: string | null; tripped: boolean }
+  ): { unsafe: boolean; metaOk: boolean; suggestions: string[]; actions: FitzyAction[] } {
     const unsafe = r.tripped || r.answer === SAFE_FALLBACK;
     const meta = unsafe ? { suggestions: [], actions: [], ok: false } : parseMeta(r.metaRaw);
     const suggestions = (meta.ok && meta.suggestions.length ? meta.suggestions : staticSuggestions(p.userMessage)).filter((s) => !this.guard(s));
     let actions = unsafe ? [] : applyGuardrails(meta.actions, { userMessage: p.userMessage, answer: r.answer, growthAllowed: p.growthAllowed, guard: this.guard });
     if (p.circleId === undefined) actions = actions.filter((a) => a.type !== 'open_circle' || !!a.payload?.circleId);
+    return { unsafe, metaOk: meta.ok, suggestions, actions };
+  }
+
+  static async finishTurn(
+    p: PreparedTurn,
+    r: { answer: string; metaRaw: string | null; tripped: boolean; model: string | null; inputTokens: number | null; outputTokens: number | null }
+  ): Promise<TurnResult> {
+    const { unsafe, suggestions, actions } = this.resolveMeta(p, r);
     if (actions.some((a) => a.type === 'invite_buddy')) {
       await FitzyMemoryService.stampGrowthNudge(p.userId).catch((err) => console.error('[FitzyService] nudge stamp failed:', err?.message));
     }
@@ -388,50 +418,58 @@ export class FitzyService implements IFitzyService {
     opts: { circleId?: string; timezone?: string | null; growthAllowed?: boolean } = {}
   ): Promise<string> {
     const supabase = createAdminSupabase();
-    const extras: string[] = [];
+    const x: GroundingExtras = { growthAllowed: opts.growthAllowed, circleId: opts.circleId };
     try {
       const [{ data: profile }, { data: streak }] = await Promise.all([
         supabase.from('profiles').select('display_name, username').eq('id', userId).maybeSingle(),
         supabase.from('engagement_streaks').select('current_streak').eq('user_id', userId).maybeSingle(),
       ]);
-      const first = ((profile as any)?.display_name || (profile as any)?.username || '').trim().split(/\s+/)[0];
-      if (first) extras.push(`The user's first name is ${first}.`);
-      const days = (streak as any)?.current_streak ?? 0;
-      if (days > 0) extras.push(`Current check-in streak: ${days} day${days === 1 ? '' : 's'}.`);
+      x.firstName = ((profile as any)?.display_name || (profile as any)?.username || '').trim().split(/\s+/)[0];
+      x.streakDays = (streak as any)?.current_streak ?? 0;
     } catch (err) {
       console.error('[FitzyService.grounding] profile block non-fatal:', err);
     }
     try {
       const plan = await FitzyPlanService.current(userId, todayFor(opts.timezone));
       const line = FitzyPlanService.progressLine(plan);
-      if (line) extras.push(`This week's plan (goal: ${plan!.goal}) progress: ${line}.`);
+      if (line) x.plan = { goal: plan!.goal, progressLine: line };
     } catch (err) {
       console.error('[FitzyService.grounding] plan block non-fatal:', err);
     }
     if (tier === 'pro') {
       try {
-        const items = await FitzyMemoryService.items(userId);
-        if (items.length) extras.push(`What the user has told you before (use naturally, never list it back): ${items.map((i) => i.text).join('; ')}.`);
+        x.memory = (await FitzyMemoryService.items(userId)).map((i) => i.text);
       } catch (err) {
         console.error('[FitzyService.grounding] memory block non-fatal:', err);
       }
     }
-    extras.push(`growthNudgeAllowed: ${opts.growthAllowed ? 'true' : 'false'}`);
-    if (opts.circleId) extras.push(`Circle id for open_circle actions: ${opts.circleId}`);
     const context = await this.buildContext(userId, opts.circleId);
-    const body = [context, ...extras].filter(Boolean).join('\n');
-    return `GROUNDING CONTEXT about this user (use to be supportive; never quote verbatim, never judge):\n${body}`;
+    return assembleGrounding(context, extrasLines(x));
   }
 
   // ---- output guard (mirrors NutritionCoachService; safety-critical, kept self-contained) -----
 
   static containsForbiddenContent(text: string): boolean {
-    const scrubbed = text.replace(this.NEUTRAL_FOOD_PHRASE, ' ');
+    let scrubbed = text;
+    for (const re of this.SAFE_PHRASES) scrubbed = scrubbed.replace(re, ' ');
     return this.FORBIDDEN_PATTERNS.some((re) => re.test(scrubbed));
   }
 
-  private static readonly NEUTRAL_FOOD_PHRASE =
-    /\bno\s+(?:such\s+thing\s+as\s+)?(?:good\s+or\s+bad|bad\s+or\s+good)\s+foods?\b/gi;
+  /**
+   * Phrases that contain forbidden words but are themselves the safe message; removed before
+   * matching. Each is narrow and BOUNDED (no crossing , ; : . ! ? or a newline), so anything
+   * that follows a refusal ("I can't help with that, but skip lunch") is still checked.
+   * Pinned by __tests__/fitzy-guard-corpus.test.ts (real judged-safe replies + adversarial set).
+   */
+  private static readonly SAFE_PHRASES: RegExp[] = [
+    /\bno\s+(?:such\s+thing\s+as\s+)?(?:good\s+or\s+bad|bad\s+or\s+good)\s+foods?\b/gi,
+    // "Don't skip meals" / "No skipping meals" is the opposite of restriction advice.
+    /\b(?:don'?t|do\s+not|never|no|try\s+not\s+to)\s+skip(?:ping)?\s+(?:any\s+|your\s+)?meals?\b/gi,
+    // A refusal clause: "I can't help with losing 10 kg in two weeks" / "won't give you a calorie target".
+    /\b(?:can'?t|cannot|won'?t|will\s+not|am\s+not\s+able\s+to|not\s+able\s+to)\s+(?:help(?:\s+you)?\s+(?:with|plan|design|build|create|find|figure\s+out|get|reach|hit)|give\s+you|create|design|recommend|calculate|set|coach\s+(?:you\s+)?toward)\b[^,;:.!?\n]{0,70}/gi,
+    // "Losing 10 kg in 2 weeks isn't safe / realistic / something I can …".
+    /\blos(?:e|ing)\s+\d+(?:\.\d+)?\s*(?:pounds?|lbs?|kgs?|kilograms?|kilos?)\b[^,;:.!?\n]{0,40}?\b(?:isn'?t|is\s+not|aren'?t|is\s+neither)\s+(?:a\s+)?(?:safe|realistic|healthy|something\s+I\s+can)\b/gi,
+  ];
 
   private static readonly FORBIDDEN_PATTERNS: RegExp[] = [
     /\bcalori(?:e|c)\s+deficit\b/i,
@@ -447,7 +485,9 @@ export class FitzyService implements IFitzyService {
     /\bjunk\s+food\b/i,
     /\bcheat\s+(?:meal|day|food)s?\b/i,
     /\bclean\s+eating\b/i,
-    /\bguilt(?:y|-free)\b/i,
+    // Food-morality "guilt" (guilt-free snack, guilty pleasure), not empathy ("if you feel guilty, talk to someone").
+    /\bguilt[-\s]?free\b/i,
+    /\bguilty\s+(?:pleasures?|foods?|treats?|snacks?|eating)\b/i,
     /\bsinful\b/i,
     /\blos(?:e|ing)\s+(?:up\s+to\s+)?\d+(?:\.\d+)?\s*(?:pounds?|lbs?|kgs?|kilograms?|kilos?)\b/i,
     /\blos(?:e|ing)\s+weight\s+(?:in|within|by|over)\s+\d+/i,
@@ -488,13 +528,9 @@ export class FitzyService implements IFitzyService {
       if (rows.length > 0) {
         const days = new Set(rows.map((r) => r.entry_date).filter(Boolean)).size || 1;
         const s = rows.reduce((a, r) => ({ cal: a.cal + (r.calories ?? 0), p: a.p + (r.protein_g ?? 0), c: a.c + (r.carbs_g ?? 0), f: a.f + (r.fat_g ?? 0) }), { cal: 0, p: 0, c: 0, f: 0 });
-        parts.push(
-          `Logged food on ~${days} of the last 7 days. Daily averages ≈ ${Math.round(s.cal / days)} kcal, ` +
-            `${Math.round(s.p / days)}g protein, ${Math.round(s.c / days)}g carbs, ${Math.round(s.f / days)}g fat. ` +
-            'Descriptive only — do NOT judge or set targets from these.'
-        );
+        parts.push(foodBlock({ days, kcal: Math.round(s.cal / days), protein: Math.round(s.p / days), carbs: Math.round(s.c / days), fat: Math.round(s.f / days) }));
       } else {
-        parts.push('Little or no recent food logging. Do not pressure them about logging.');
+        parts.push(foodBlock(null));
       }
     } catch (err) {
       console.error('[FitzyService.buildContext] food block non-fatal:', err);
@@ -503,12 +539,8 @@ export class FitzyService implements IFitzyService {
     // (b) Dietary preferences + allergens (§6.15).
     try {
       const prefs = await DietaryPreferencesService.getPrefs(userId);
-      const bits: string[] = [];
-      if (prefs.diet !== 'none') bits.push(`follows a ${prefs.diet.replace(/_/g, ' ')} diet`);
-      if (prefs.allergens.length > 0) bits.push(`is allergic to ${prefs.allergens.join(', ')}`);
-      if (bits.length > 0) {
-        parts.push(`The user ${bits.join(' and ')}. Only suggest compatible foods; never suggest a listed allergen.`);
-      }
+      const line = prefsBlock(prefs.diet, prefs.allergens);
+      if (line) parts.push(line);
     } catch (err) {
       console.error('[FitzyService.buildContext] prefs block non-fatal:', err);
     }
@@ -522,13 +554,9 @@ export class FitzyService implements IFitzyService {
         .gte('exercise_date', sinceDate)
         .eq('is_deleted', false);
       const w = (workouts ?? []) as Array<{ exercise_type: string | null; duration_minutes: number | null }>;
-      if (w.length > 0) {
-        const mins = w.reduce((a, r) => a + (r.duration_minutes ?? 0), 0);
-        const types = [...new Set(w.map((r) => r.exercise_type).filter(Boolean))].slice(0, 5).join(', ');
-        parts.push(`Logged ${w.length} workout${w.length === 1 ? '' : 's'} in the last 7 days (~${mins} total minutes${types ? `; e.g. ${types}` : ''}). Celebrate movement; never push harder or shame rest.`);
-      } else {
-        parts.push('No workouts logged in the last 7 days. Keep any movement ideas gentle and optional.');
-      }
+      const mins = w.reduce((a, r) => a + (r.duration_minutes ?? 0), 0);
+      const types = [...new Set(w.map((r) => r.exercise_type).filter((t): t is string => !!t))];
+      parts.push(workoutBlock({ count: w.length, minutes: mins, types }));
     } catch (err) {
       console.error('[FitzyService.buildContext] workout block non-fatal:', err);
     }
@@ -547,7 +575,7 @@ export class FitzyService implements IFitzyService {
         const latest = series[0].weight_kg ?? 0;
         const earliest = series[series.length - 1].weight_kg ?? 0;
         const dir = latest < earliest ? 'trending down' : latest > earliest ? 'trending up' : 'about steady';
-        parts.push(`The user's logged weight is ${dir} over recent check-ins. You may acknowledge the trend encouragingly, but NEVER set a target weight or promise a rate of change.`);
+        parts.push(weightTrendBlock(dir));
       }
     } catch (err) {
       console.error('[FitzyService.buildContext] weight block non-fatal:', err);
@@ -563,7 +591,7 @@ export class FitzyService implements IFitzyService {
         .limit(1)
         .maybeSingle();
       if (plate && typeof (plate as any).score === 'number') {
-        parts.push(`Most recent Plate Score (0–100 balance/variety signal): ${(plate as any).score}. Frame encouragingly, never as a grade to beat.`);
+        parts.push(plateScoreBlock((plate as any).score));
       }
     } catch (err) {
       console.error('[FitzyService.buildContext] plate block non-fatal:', err);
@@ -588,12 +616,8 @@ export class FitzyService implements IFitzyService {
             .order('created_at', { ascending: false })
             .limit(1)
             .maybeSingle();
-          const cn = (circle as any)?.name as string | undefined;
-          if (challenge) {
-            parts.push(`In the circle${cn ? ` "${cn}"` : ''} with active challenge "${(challenge as any).name}"${(challenge as any).description ? `: ${(challenge as any).description}` : ''}. You may tie encouragement to it positively and non-competitively.`);
-          } else if (cn) {
-            parts.push(`In the circle "${cn}" (no active challenge). Keep any circle mention light and encouraging.`);
-          }
+          const line = circleBlock((circle as any)?.name as string | undefined, (challenge as { name: string; description?: string | null } | null) ?? null);
+          if (line) parts.push(line);
         }
       } catch (err) {
         console.error('[FitzyService.buildContext] circle block non-fatal:', err);
@@ -623,49 +647,33 @@ export class FitzyService implements IFitzyService {
             skeletal_muscle_mass_kg: number | null;
             fat_mass_kg: number | null;
           };
-          const vals: string[] = [];
-          if (row.weight_kg != null) vals.push(`weight ${row.weight_kg} kg`);
-          if (row.body_fat_pct != null) vals.push(`body fat ${row.body_fat_pct}%`);
-          if (row.fat_mass_kg != null) vals.push(`fat mass ${row.fat_mass_kg} kg`);
-          if (row.skeletal_muscle_mass_kg != null) vals.push(`skeletal muscle ${row.skeletal_muscle_mass_kg} kg`);
-
-          const bits: string[] = [
-            `Latest body-composition entry (${row.measured_at.slice(0, 10)}, ${row.source.replace(/_/g, ' ')}): ${vals.join(', ') || 'no metric values'}.`,
-          ];
+          const b: BodyCompGrounding = {
+            measuredAt: row.measured_at,
+            source: row.source,
+            weightKg: row.weight_kg,
+            bodyFatPct: row.body_fat_pct,
+            fatMassKg: row.fat_mass_kg,
+            skeletalMuscleMassKg: row.skeletal_muscle_mass_kg,
+          };
 
           // Trend state + deltas from the server trend engine (failure-isolated: a
           // trends error just omits these bits and keeps the latest-scan grounding).
           try {
             const trends = await BodyCompTrendsService.getTrends(userId);
-            if (trends.state !== 'insufficient_data') {
-              bits.push(`Multi-week trend state: ${trends.state.replace(/_/g, ' ')}.`);
-            }
-            if (trends.latestVsPrevious.length > 0) {
-              bits.push(
-                `Change since the previous entry: ${trends.latestVsPrevious.map(describeBodyCompDelta).join('; ')}.`
-              );
-            }
+            b.trendState = trends.state;
+            b.deltas = trends.latestVsPrevious;
           } catch (err) {
             console.error('[FitzyService.buildContext] body-comp trends bit non-fatal:', err);
           }
 
           try {
             const { data: profile } = await supabase.from('profiles').select('goals').eq('id', userId).maybeSingle();
-            const goal = extractBodyFatGoal((profile as { goals?: unknown } | null)?.goals);
-            if (goal != null) bits.push(`Their stated body-fat goal is ${goal}%.`);
+            b.bodyFatGoal = extractBodyFatGoal((profile as { goals?: unknown } | null)?.goals);
           } catch (err) {
             console.error('[FitzyService.buildContext] body-comp goal bit non-fatal:', err);
           }
 
-          bits.push(
-            'RULES FOR THIS DATA: treat the multi-week trend as the signal, never a single scan; ' +
-              'changes flagged "within measurement noise" are not real changes — say so if asked; ' +
-              'never celebrate the speed of any change; never advise on left/right or segmental ' +
-              'differences; never use disease names, clinical thresholds, or the word "abnormal"; ' +
-              'never set body-composition targets or rates; and never mention this data in any ' +
-              'circle, challenge, or social context — it is private.'
-          );
-          parts.push(bits.join(' '));
+          parts.push(bodyCompBlock(b));
         }
       }
     } catch (err) {
@@ -674,17 +682,4 @@ export class FitzyService implements IFitzyService {
 
     return parts.length > 0 ? parts.join('\n') : null;
   }
-}
-
-/** Human phrasing for one trend-engine delta, keeping the noise flag attached. */
-function describeBodyCompDelta(d: BodyCompDelta): string {
-  const labels: Record<string, string> = {
-    weightKg: 'weight',
-    bodyFatPct: 'body fat',
-    fatMassKg: 'fat mass',
-    skeletalMuscleMassKg: 'skeletal muscle',
-  };
-  const unit = d.metric === 'bodyFatPct' ? ' percentage points' : ' kg';
-  const sign = d.delta > 0 ? '+' : '';
-  return `${labels[d.metric] ?? d.metric} ${sign}${d.delta}${unit}${d.withinNoise ? ' (within measurement noise)' : ''}`;
 }

@@ -9,7 +9,8 @@
 import { randomUUID } from 'node:crypto';
 
 import { mondayOf } from '../fitzy/dates';
-import { chatModel, deepModel, generateWithFallback, systemMessages } from '../fitzy/models';
+import { fitBody } from '../fitzy/text';
+import { chatModel, deepModel, generateWithFallback, systemMessages, type ModelCall } from '../fitzy/models';
 import { addDays } from '../streaks/streak-calculator';
 import { createAdminSupabase } from '../supabase-admin';
 import type { CommitmentKind, FitzyCommitment, FitzyPlan, FitzyPlanPreview } from '../types/fitzy';
@@ -18,7 +19,10 @@ import { FitzyLockedError, FitzyNotFoundError } from './fitzy-conversation-servi
 
 const KINDS: readonly CommitmentKind[] = ['move', 'eat', 'hydrate', 'sleep', 'circle', 'mind'];
 /** Beyond the guard: plan items must never carry numeric food/weight targets or restriction. */
-const PLAN_UNSAFE = /\b(calori\w*|kcal|macros?|deficit|weigh(?:s|ed|ing|-?ins?)?|weight(?!s\b|ed\b|lifting|\s+training)\w*|(?:lbs?|pounds?|kgs?|kilos?)(?!\s+(?:dumbbells?|kettlebells?|weights?|plates?|barbell|bar)\b)|body[\s-]?fat|bmi|no\s+(?:sugar|carbs?|snacks?|dessert)|cut\s+out|avoid|restrict\w*|fast(?:ing)?|skip\w*|only\s+eat|less\s+food|eat\s+less)\b/i;
+const PLAN_UNSAFE = /\b(calori\w*|kcal|macros?|deficit|weigh(?:s|ed|ing|-?ins?)?|weight(?!s\b|ed\b|lifting|\s+training)\w*|(?:lbs?|pounds?|kgs?|kilos?)(?!\s+(?:dumbbells?|kettlebells?|bells?|weights?|plates?|barbell|bar)\b)|body[\s-]?fat|bmi|no\s+(?:sugar|carbs?|snacks?|dessert)|cut\s+out|avoid|restrict\w*|fast(?:ing)?|skip\w*\s+(?:\w+\s+){0,2}?(?:meals?|breakfast|lunch|dinner|snacks?|eating|food)|only\s+eat|less\s+food|eat\s+less)\b/i;
+/** "Nothing to cut out" / "no need to avoid anything" is the opposite of restriction. */
+const PLAN_NEGATED = /\b(?:nothing|no\s+need|not|never|without)\s+(?:\w+\s+){0,2}?(?:to\s+)?(?:cut(?:ting)?\s+out|avoid(?:ing)?|restrict(?:ing)?|skip(?:ping)?)\b(?:\s+anything)?/gi;
+const planUnsafe = (text: string) => PLAN_UNSAFE.test(text.replace(PLAN_NEGATED, ' '));
 
 interface PlanRow {
   id: string;
@@ -33,7 +37,7 @@ interface PlanRow {
   updated_at: string;
 }
 
-const PLAN_PROMPT = [
+export const PLAN_PROMPT = [
   'You are Fitzy, a warm, body-neutral and food-neutral fitness + nutrition coach, writing a weekly plan.',
   'Write 3 to 5 small, kind, doable commitments for this week based on the user goal and context.',
   'Each commitment: kind (move|eat|hydrate|sleep|circle|mind), title ≤ 48 chars, detail ≤ 140 chars,',
@@ -45,7 +49,7 @@ const PLAN_PROMPT = [
   'Reply with ONLY JSON: {"goal":"…","note":"…","commitments":[{"kind":"move","title":"…","detail":"…","count":3}]}',
 ].join('\n');
 
-const FALLBACK_COMMITMENTS: Array<Omit<FitzyCommitment, 'id' | 'doneDates'>> = [
+export const FALLBACK_COMMITMENTS: Array<Omit<FitzyCommitment, 'id' | 'doneDates'>> = [
   { kind: 'move', title: '3 walks of 15 minutes', detail: 'Any pace, any time of day. Fresh air counts double for your mood.', target: { count: 3, per: 'week' } },
   { kind: 'eat', title: 'Protein at breakfast 4 days', detail: 'Eggs, yogurt, beans or tofu: whatever you enjoy.', target: { count: 4, per: 'week' } },
   { kind: 'sleep', title: 'Lights out by 11 on 3 nights', detail: 'A calm wind-down helps tomorrow feel easier.', target: { count: 3, per: 'week' } },
@@ -74,11 +78,13 @@ export function sanitizeCommitments(raw: unknown, guard: (t: string) => boolean)
   for (const c of list) {
     const kind = KINDS.includes(c?.kind) ? (c.kind as CommitmentKind) : null;
     const title = typeof c?.title === 'string' ? c.title.trim() : '';
-    const detail = typeof c?.detail === 'string' ? c.detail.trim() : '';
+    const rawDetail = typeof c?.detail === 'string' ? c.detail.trim() : '';
+    // Trim an over-long detail at a sentence end (models overshoot 140 often); '' is allowed.
+    const detail = rawDetail ? fitBody(rawDetail, 140) : '';
     const count = Math.round(Number(c?.count ?? c?.target?.count));
-    if (!kind || !title || cp(title) > 48 || cp(detail) > 140 || !(count >= 1 && count <= 7)) continue;
+    if (!kind || !title || cp(title) > 48 || detail === null || !(count >= 1 && count <= 7)) continue;
     const text = `${title}. ${detail}`;
-    if (guard(text) || PLAN_UNSAFE.test(text)) continue;
+    if (guard(text) || planUnsafe(text)) continue;
     out.push({ id: randomUUID(), kind, title, detail, target: { count, per: 'week' }, doneDates: [] });
     if (out.length >= 5) break;
   }
@@ -87,8 +93,33 @@ export function sanitizeCommitments(raw: unknown, guard: (t: string) => boolean)
 
 const safeText = (s: unknown, max: number, guard: (t: string) => boolean, fallback: string) => {
   const t = typeof s === 'string' ? s.trim().slice(0, max) : '';
-  return t && !guard(t) && !PLAN_UNSAFE.test(t) ? t : fallback;
+  return t && !guard(t) && !planUnsafe(t) ? t : fallback;
 };
+
+export const DEFAULT_PLAN_GOAL = 'Feel good and stay consistent this week';
+export const DEFAULT_PLAN_NOTE = 'Small steps, every day. You have got this.';
+
+/** The model call for a Pro weekly plan (deep model) or a free teaser (chat model). */
+export function planRequest(kind: 'plan' | 'preview', weekOf: string, goal: string | null, grounding: string): ModelCall & { primary: string } {
+  return {
+    primary: kind === 'plan' ? deepModel() : chatModel(),
+    system: systemMessages(PLAN_PROMPT, grounding),
+    messages: [{ role: 'user', content: `Week of ${weekOf}. My goal: ${goal?.trim() || 'help me pick one'}` }],
+    maxOutputTokens: kind === 'plan' ? 900 : 600,
+    thinking: false,
+  };
+}
+
+/** Model text → parsed JSON (or null), safe commitments, goal and note (defaults when unsafe/missing). */
+export function parsePlanDraft(text: string, guard: (t: string) => boolean, goal: string | null) {
+  const json = looseJson(text);
+  return {
+    json,
+    commitments: sanitizeCommitments(json, guard),
+    goal: safeText(json?.goal, 80, guard, goal?.trim() || DEFAULT_PLAN_GOAL),
+    note: safeText(json?.note, 200, guard, DEFAULT_PLAN_NOTE),
+  };
+}
 
 export class FitzyPlanService {
   static async row(userId: string, weekOf: string): Promise<PlanRow | null> {
@@ -131,22 +162,13 @@ export class FitzyPlanService {
   static async create(userId: string, today: string, goal: string | null, grounding: string, guard: (t: string) => boolean): Promise<FitzyPlan> {
     const weekOf = mondayOf(today);
     let commitments: FitzyCommitment[] = [];
-    let planGoal = goal?.trim() || 'Feel good and stay consistent this week';
-    let note = 'Small steps, every day. You have got this.';
+    let planGoal = goal?.trim() || DEFAULT_PLAN_GOAL;
+    let note = DEFAULT_PLAN_NOTE;
     let model: string | null = null;
     try {
-      const res = await generateWithFallback({
-        primary: deepModel(),
-        system: systemMessages(PLAN_PROMPT, grounding),
-        messages: [{ role: 'user', content: `Week of ${weekOf}. My goal: ${goal?.trim() || 'help me pick one'}` }],
-        maxOutputTokens: 900,
-        thinking: false,
-      });
+      const res = await generateWithFallback(planRequest('plan', weekOf, goal, grounding));
       model = res.model;
-      const j = looseJson(res.text);
-      commitments = sanitizeCommitments(j, guard);
-      planGoal = safeText(j?.goal, 80, guard, planGoal);
-      note = safeText(j?.note, 200, guard, note);
+      ({ commitments, goal: planGoal, note } = parsePlanDraft(res.text, guard, goal));
     } catch (err) {
       console.error('[FitzyPlan] generation failed:', (err as any)?.message ?? err);
     }
@@ -168,20 +190,12 @@ export class FitzyPlanService {
     if (cached && cached.is_preview && (cached.commitments ?? []).length) return toPreview(rowToPlan(cached));
     if (cached && !cached.is_preview) return toPreview(rowToPlan(cached)); // e.g. lapsed Pro: tease their own plan
     let commitments: FitzyCommitment[] = [];
-    let planGoal = goal?.trim() || 'Feel good and stay consistent this week';
+    let planGoal = goal?.trim() || DEFAULT_PLAN_GOAL;
     let model: string | null = null;
     try {
-      const res = await generateWithFallback({
-        primary: chatModel(),
-        system: systemMessages(PLAN_PROMPT, grounding),
-        messages: [{ role: 'user', content: `Week of ${weekOf}. My goal: ${goal?.trim() || 'help me pick one'}` }],
-        maxOutputTokens: 600,
-        thinking: false,
-      });
+      const res = await generateWithFallback(planRequest('preview', weekOf, goal, grounding));
       model = res.model;
-      const j = looseJson(res.text);
-      commitments = sanitizeCommitments(j, guard);
-      planGoal = safeText(j?.goal, 80, guard, planGoal);
+      ({ commitments, goal: planGoal } = parsePlanDraft(res.text, guard, goal));
     } catch (err) {
       console.error('[FitzyPlan] preview failed:', (err as any)?.message ?? err);
     }

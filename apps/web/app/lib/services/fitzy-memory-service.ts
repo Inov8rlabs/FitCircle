@@ -10,7 +10,7 @@
  */
 import { randomUUID } from 'node:crypto';
 
-import { chatModel, generateWithFallback, systemMessages } from '../fitzy/models';
+import { chatModel, generateWithFallback, systemMessages, type ModelCall } from '../fitzy/models';
 import { createAdminSupabase } from '../supabase-admin';
 import type { FitzyMemoryItem, MemoryKind } from '../types/fitzy';
 
@@ -31,7 +31,7 @@ export function isExcludedMemory(text: string): boolean {
   return EXCLUDED.some((re) => re.test(text));
 }
 
-const EXTRACT_PROMPT = [
+export const EXTRACT_PROMPT = [
   'You extract durable facts a fitness coach should remember about the USER, from one chat turn.',
   'Only facts the user stated explicitly about THEMSELVES: goals, food or exercise preferences, dislikes,',
   'schedule/routine, available equipment or time. At most 2 NEW items not already known.',
@@ -41,6 +41,28 @@ const EXTRACT_PROMPT = [
   '"Vegetarian, loves spicy food", "Has dumbbells at home", "Goal: run a 5K in spring".',
   'Reply with ONLY JSON: {"items":[{"text":"…","kind":"goal|preference|routine|constraint"}]}',
 ].join('\n');
+
+/** The background extraction call for one Pro turn. */
+export function extractRequest(known: FitzyMemoryItem[], userMessage: string, answer: string): ModelCall & { primary: string } {
+  const list = known.map((i) => `- ${i.text}`).join('\n') || '(none)';
+  return {
+    primary: chatModel(),
+    system: systemMessages(EXTRACT_PROMPT, `ALREADY KNOWN:\n${list}`),
+    messages: [{ role: 'user', content: `USER SAID:\n${userMessage}\n\nCOACH REPLIED:\n${answer.slice(0, 1500)}` }],
+    maxOutputTokens: 200,
+    thinking: false,
+  };
+}
+
+/** First {...} block of the model reply, or null when there is none / it doesn't parse. */
+export function parseExtraction(text: string): unknown {
+  try {
+    const m = text.match(/\{[\s\S]*\}/);
+    return m ? JSON.parse(m[0]) : null;
+  } catch {
+    return null;
+  }
+}
 
 interface MemoryRow {
   user_id: string;
@@ -111,21 +133,8 @@ export class FitzyMemoryService {
     try {
       const existing = await this.row(userId);
       const items = existing?.items ?? [];
-      const known = items.map((i) => `- ${i.text}`).join('\n') || '(none)';
-      const res = await generateWithFallback({
-        primary: chatModel(),
-        system: systemMessages(EXTRACT_PROMPT, `ALREADY KNOWN:\n${known}`),
-        messages: [{ role: 'user', content: `USER SAID:\n${userMessage}\n\nCOACH REPLIED:\n${answer.slice(0, 1500)}` }],
-        maxOutputTokens: 200,
-        thinking: false,
-      });
-      let parsed: unknown = null;
-      try {
-        const m = res.text.match(/\{[\s\S]*\}/);
-        parsed = m ? JSON.parse(m[0]) : null;
-      } catch {
-        parsed = null;
-      }
+      const res = await generateWithFallback(extractRequest(items, userMessage, answer));
+      const parsed = parseExtraction(res.text);
       const fresh = this.sanitize(parsed, items, guard);
       if (!fresh.length) return items;
       const now = new Date().toISOString();

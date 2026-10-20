@@ -101,3 +101,6 @@ settings.local.json
 # Bulk food-data downloads (OFF/USDA dumps loaded by scripts/load-foods-bulk.mjs).
 # Multi-GB source files — never commit; the load is idempotent and re-downloadable.
 data/
+
+# Fitzy live-model eval results (npm run fitzy:eval) — local run artefacts.
+apps/web/.fitzy-eval/

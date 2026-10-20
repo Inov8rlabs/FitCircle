@@ -7,7 +7,7 @@ vi.mock('../dietary-preferences-service', () => ({ DietaryPreferencesService: { 
 /** Scripted model: each call pops the next behaviour for that model id. */
 const ai = vi.hoisted(() => ({
   calls: [] as Array<{ fn: 'generate' | 'stream'; model: string; messages: any[]; opts: any }>,
-  generate: new Map<string, Array<string | Error>>(),
+  generate: new Map<string, Array<string | Error | { text: string; finishReason: string }>>(),
   stream: new Map<string, Array<string[] | Error | { chunks: string[]; failAfter: number }>>(),
 }));
 vi.mock('ai', () => ({
@@ -16,7 +16,8 @@ vi.mock('ai', () => ({
     const next = ai.generate.get(opts.model)?.shift();
     if (next === undefined) throw new Error(`no scripted reply for ${opts.model}`);
     if (next instanceof Error) throw next;
-    return { text: next, usage: { inputTokens: 1200, outputTokens: 90 } };
+    if (typeof next === 'object') return { text: next.text, finishReason: next.finishReason, usage: { inputTokens: 1200, outputTokens: 900 } };
+    return { text: next, finishReason: 'stop', usage: { inputTokens: 1200, outputTokens: 90 } };
   },
   streamText: (opts: any) => {
     ai.calls.push({ fn: 'stream', model: opts.model, messages: opts.messages, opts });
@@ -38,7 +39,7 @@ import { META_MARKER, applyGuardrails, growthNudgeAllowed, parseMeta, splitMeta 
 import { CACHE_EPHEMERAL, DEFAULT_CHAT_MODEL, DEFAULT_DEEP_MODEL, thinkingOptions } from '../../fitzy/models';
 import { StreamGuard } from '../../fitzy/stream-guard';
 import { FitzyConversationService } from '../fitzy-conversation-service';
-import { FitzyFocusService } from '../fitzy-focus-service';
+import { FitzyFocusService, fitBody } from '../fitzy-focus-service';
 import { FitzyMemoryService, MEMORY_CAP, isExcludedMemory } from '../fitzy-memory-service';
 import { FitzyPlanService, sanitizeCommitments } from '../fitzy-plan-service';
 import { FitzyService, SAFE_FALLBACK, SYSTEM_PROMPT, setFitzyBackgroundScheduler, type FitzyStreamEvent } from '../fitzy-service';
@@ -445,7 +446,114 @@ describe('bake-off fixes (2026-10-20)', () => {
     expect(kept).toEqual(['Strength with your 5 kg weights', 'Weighted vest walk']);
   });
 
+  it('plan filter: kind "skip it" phrasing and kettlebells survive; skipping meals does not', () => {
+    const c = (title: string) => ({ kind: 'move', title, detail: '', count: 2 });
+    const kept = sanitizeCommitments(
+      { commitments: [c('Walk 15 min, win or skip'), c('Skip it any day you need rest'), c('Keep your 12 kg bell going'), c('Skip breakfast twice'), c('Skip your evening snack')] },
+      () => false
+    ).map((x) => x.title);
+    expect(kept).toEqual(['Walk 15 min, win or skip', 'Skip it any day you need rest', 'Keep your 12 kg bell going']);
+  });
+
+  it('plan filter: "nothing to cut out" passes; over-long details are trimmed, not dropped', () => {
+    const kept = sanitizeCommitments(
+      {
+        commitments: [
+          { kind: 'eat', title: 'Add protein at breakfast 4 days', detail: 'Try yogurt, eggs, tofu scramble, or a lentil wrap. Add it in, nothing to cut out.', count: 4 },
+          { kind: 'eat', title: 'Add something you enjoy at breakfast', detail: 'Add one thing you like to your first meal, such as fruit, yogurt, eggs, nuts, or toast with something tasty. Nothing needs to be swapped out.', count: 3 },
+          { kind: 'eat', title: 'Cut out sugar', detail: 'Avoid dessert.', count: 7 },
+        ],
+      },
+      () => false
+    );
+    expect(kept.map((x) => x.title)).toEqual(['Add protein at breakfast 4 days', 'Add something you enjoy at breakfast']);
+    expect([...kept[1].detail].length).toBeLessThanOrEqual(140);
+    expect(kept[1].detail.endsWith('.')).toBe(true);
+  });
+
+  it('daily focus: long bodies are trimmed at a sentence end, not rejected', () => {
+    const long = 'Two short walks today will keep your streak glowing and your energy up. ' + 'A walk after lunch is perfect, even ten minutes counts and adds up nicely over the week. ' + 'Bring a friend along if you can, it makes the time fly and keeps you both going strong.';
+    const out = fitBody(long, 240)!;
+    expect([...out].length).toBeLessThanOrEqual(240);
+    expect(out.endsWith('.')).toBe(true);
+    expect(fitBody('Short and sweet.', 240)).toBe('Short and sweet.');
+    expect(fitBody('x'.repeat(300), 240)).toBeNull();
+  });
+
+  it('prompt handles disordered-eating signals without appetite tips', () => {
+    expect(SYSTEM_PROMPT).toContain('do NOT give fullness, appetite');
+    expect(SYSTEM_PROMPT).toContain('eating-disorder helpline');
+  });
+
   it('prompt tells Fitzy not to echo numbers when declining', () => {
     expect(SYSTEM_PROMPT).toContain("don't repeat the user's specific numbers");
+  });
+});
+
+// ---------------------------------------------------------------- model-call contracts
+// The scripted model above returns whatever it's given, so token budgets and provider options
+// were never exercised (a real model with adaptive thinking truncated plan JSON). These pin the
+// options every call site sends, and what happens when output is cut off.
+describe('model-call contracts', () => {
+  const planJson = JSON.stringify({
+    goal: 'Feel energised',
+    note: 'Small steps.',
+    commitments: [
+      { kind: 'move', title: '3 walks of 15 min', detail: 'Any pace.', count: 3 },
+      { kind: 'eat', title: 'Protein at breakfast', detail: 'Eggs or yogurt.', count: 4 },
+      { kind: 'sleep', title: 'Lights out by 11', detail: 'Wind down.', count: 3 },
+    ],
+  });
+  const DISABLED = { anthropic: { thinking: { type: 'disabled' } } };
+
+  it('structured calls (plan, preview, focus, memory) disable thinking with a real token budget', async () => {
+    ai.generate.set(DEFAULT_DEEP_MODEL, [planJson]);
+    await FitzyPlanService.create(PRO, '2026-10-21', null, 'g', guard);
+    ai.generate.set(DEFAULT_CHAT_MODEL, [planJson]);
+    await FitzyPlanService.preview(FREE, '2026-10-21', null, 'g', guard);
+    db.rows('food_log_entries').push({ id: 'fc', user_id: PRO, entry_date: '2026-10-20', calories: 400, deleted_at: null });
+    ai.generate.set(DEFAULT_CHAT_MODEL, [JSON.stringify({ kind: 'tip', headline: 'Protein at breakfast', body: 'Add eggs today.', cta: { label: 'Log breakfast', type: 'log_meal' } })]);
+    await FitzyFocusService.get(PRO, 'UTC', new Date('2026-10-21T15:00:00Z'));
+    ai.generate.set(DEFAULT_CHAT_MODEL, [JSON.stringify({ items: [] })]);
+    await FitzyMemoryService.extract(PRO, 'I like 6am workouts', 'Nice', guard);
+
+    expect(ai.calls).toHaveLength(4);
+    for (const c of ai.calls) {
+      expect(c.fn).toBe('generate');
+      expect(c.opts.providerOptions).toEqual(DISABLED);
+      expect(c.opts.maxOutputTokens).toBeGreaterThanOrEqual(200);
+    }
+    expect(ai.calls[0].opts.maxOutputTokens).toBeGreaterThanOrEqual(900); // full weekly plan
+  });
+
+  it('chat (stream and non-stream) keeps the model default (no thinking override)', async () => {
+    ai.generate.set(DEFAULT_CHAT_MODEL, ['Hi there.']);
+    await FitzyService.chat(FREE, [{ role: 'user', content: 'hi' }]);
+    ai.stream.set(DEFAULT_CHAT_MODEL, [['Hello! ', 'Nice to see you.']]);
+    await collect(FREE, { message: 'hello' });
+    const chatCalls = ai.calls.filter((c) => c.messages[0]?.content === SYSTEM_PROMPT);
+    expect(chatCalls.length).toBeGreaterThanOrEqual(2);
+    for (const c of chatCalls) expect(c.opts.providerOptions?.anthropic?.thinking).toBeUndefined();
+  });
+
+  it('truncated structured output (finishReason length) tries the other model instead of using defaults', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    ai.generate.set(DEFAULT_DEEP_MODEL, [{ text: planJson.slice(0, 120), finishReason: 'length' }]);
+    ai.generate.set(DEFAULT_CHAT_MODEL, [planJson]);
+    const plan = await FitzyPlanService.create(PRO, '2026-10-21', null, 'g', guard);
+    expect(ai.calls.map((c) => c.model)).toEqual([DEFAULT_DEEP_MODEL, DEFAULT_CHAT_MODEL]);
+    expect(plan.goal).toBe('Feel energised');
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('hit maxOutputTokens'));
+    warn.mockRestore();
+  });
+
+  it('both models truncated → safe defaults (never a half-parsed plan)', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    ai.generate.set(DEFAULT_DEEP_MODEL, [{ text: planJson.slice(0, 120), finishReason: 'length' }]);
+    ai.generate.set(DEFAULT_CHAT_MODEL, [{ text: planJson.slice(0, 150), finishReason: 'length' }]);
+    const plan = await FitzyPlanService.create(PRO, '2026-10-21', null, 'g', guard);
+    expect(plan.commitments).toHaveLength(3);
+    expect(plan.commitments.every((c) => !guard(`${c.title} ${c.detail}`))).toBe(true);
+    warn.mockRestore();
   });
 });

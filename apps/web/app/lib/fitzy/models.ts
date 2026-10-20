@@ -50,33 +50,69 @@ export interface GenerationResult {
 
 type Turn = { role: 'user' | 'assistant'; content: string };
 
-/**
- * generateText on `primary`, then once on the fallback model. Throws only if both fail.
- */
-export async function generateWithFallback(opts: {
-  primary: string;
+/** One model task: messages + budget, independent of which model runs it. */
+export interface ModelCall {
   system: ModelMessage[];
   messages: Turn[];
   maxOutputTokens?: number;
   /** false for structured JSON tasks (see thinkingOptions). Default true. */
   thinking?: boolean;
-}): Promise<GenerationResult> {
+  abortSignal?: AbortSignal;
+}
+
+/**
+ * The exact AI SDK options production sends for `call` on `model`. Shared by generateWithFallback,
+ * streamFrom and the live-model eval (scripts/fitzy-eval) so the eval can't drift from production.
+ */
+export function callOptions(model: string, call: ModelCall) {
+  return {
+    model,
+    messages: [...call.system, ...call.messages],
+    allowSystemInMessages: true,
+    timeout: MODEL_TIMEOUT_MS,
+    ...(call.abortSignal ? { abortSignal: call.abortSignal } : {}),
+    ...(call.maxOutputTokens ? { maxOutputTokens: call.maxOutputTokens } : {}),
+    ...thinkingOptions(model, call.thinking ?? true),
+  };
+}
+
+/** Per-attempt telemetry (used by the live-model eval; production passes no observer). */
+export interface AttemptInfo {
+  model: string;
+  ok: boolean;
+  ms: number;
+  error?: unknown;
+  text?: string;
+  finishReason?: string;
+  usage?: unknown;
+  providerMetadata?: unknown;
+}
+
+/**
+ * generateText on `primary`, then once on the fallback model. Throws only if both fail.
+ */
+export async function generateWithFallback(opts: ModelCall & { primary: string; onAttempt?: (a: AttemptInfo) => void }): Promise<GenerationResult> {
   const order = [opts.primary, fallbackFor(opts.primary)];
   let lastError: unknown = null;
   for (const model of order) {
+    const t0 = Date.now();
+    let reported = false;
     try {
-      const res = await generateText({
-        model,
-        messages: [...opts.system, ...opts.messages],
-        allowSystemInMessages: true,
-        timeout: MODEL_TIMEOUT_MS,
-        ...(opts.maxOutputTokens ? { maxOutputTokens: opts.maxOutputTokens } : {}),
-        ...thinkingOptions(model, opts.thinking ?? true),
-      } as Parameters<typeof generateText>[0]);
+      const res = await generateText(callOptions(model, opts) as Parameters<typeof generateText>[0]);
       const text = (res.text ?? '').trim();
+      reported = true;
+      const truncatedStructured = res.finishReason === 'length' && opts.thinking === false;
+      opts.onAttempt?.({ model, ok: !!text && !truncatedStructured, ms: Date.now() - t0, text, finishReason: res.finishReason, usage: res.usage, providerMetadata: res.providerMetadata });
       if (!text) throw new Error('empty completion');
+      if (res.finishReason === 'length') {
+        // Structured callers can't use a cut-off JSON object: try the other model instead of
+        // silently falling back to defaults. Chat keeps the (complete-sentence) text.
+        console.warn(`[fitzy] ${model} hit maxOutputTokens (${opts.maxOutputTokens ?? 'default'})`);
+        if (opts.thinking === false) throw new Error('truncated structured output');
+      }
       return { text, model, inputTokens: res.usage?.inputTokens ?? null, outputTokens: res.usage?.outputTokens ?? null };
     } catch (err) {
+      if (!reported) opts.onAttempt?.({ model, ok: false, ms: Date.now() - t0, error: err });
       lastError = err;
       console.error(`[fitzy] ${model} failed:`, (err as any)?.message ?? err);
     }
@@ -90,11 +126,7 @@ export async function generateWithFallback(opts: {
  */
 export function streamFrom(opts: { model: string; system: ModelMessage[]; messages: Turn[]; abortSignal?: AbortSignal }) {
   const result = streamText({
-    model: opts.model,
-    messages: [...opts.system, ...opts.messages],
-    allowSystemInMessages: true,
-    timeout: MODEL_TIMEOUT_MS,
-    abortSignal: opts.abortSignal,
+    ...callOptions(opts.model, { system: opts.system, messages: opts.messages, abortSignal: opts.abortSignal }),
     onError: () => {
       /* surfaced through textStream */
     },
@@ -108,6 +140,12 @@ export function streamFrom(opts: { model: string; system: ModelMessage[]; messag
       } catch {
         return { inputTokens: null, outputTokens: null };
       }
+    },
+    /** finishReason / full usage / gateway metadata after the stream ends (eval telemetry). */
+    details: async () => {
+      const r = result as any;
+      const [finishReason, usage, providerMetadata] = await Promise.all([r.finishReason, r.totalUsage ?? r.usage, r.providerMetadata].map((p: any) => Promise.resolve(p).catch(() => undefined)));
+      return { finishReason: finishReason as string | undefined, usage, providerMetadata };
     },
   };
 }

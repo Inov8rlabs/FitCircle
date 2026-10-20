@@ -9,16 +9,16 @@
  * static focus that is NOT cached (so the next open retries).
  */
 import { isSunday, todayFor } from '../fitzy/dates';
-import { chatModel, deepModel, generateWithFallback, systemMessages } from '../fitzy/models';
+import { chatModel, deepModel, generateWithFallback, systemMessages, type ModelCall } from '../fitzy/models';
 import { addDays } from '../streaks/streak-calculator';
 import { createAdminSupabase } from '../supabase-admin';
-import type { FitzyAction, FitzyDailyFocus, FitzyTier } from '../types/fitzy';
+import type { FitzyAction, FitzyDailyFocus, FitzyPlan, FitzyTier } from '../types/fitzy';
 
 import { FitzyPlanService } from './fitzy-plan-service';
 import { FitzyService } from './fitzy-service';
 import { UsageService } from './usage-service';
 
-const FOCUS_PROMPT = [
+export const FOCUS_PROMPT = [
   'You are Fitzy, a warm, body-neutral and food-neutral fitness + nutrition coach.',
   "Write today's focus for the user: ONE small, specific, doable idea for today, grounded in their data.",
   'headline ≤ 70 chars, body ≤ 240 chars (2 short sentences, friendly, no lists), plus one call to action.',
@@ -28,7 +28,7 @@ const FOCUS_PROMPT = [
   '"cta":{"label":"≤ 28 chars","type":"log_meal"|"log_workout"|"start_plan"|"open_circle"}}',
 ].join('\n');
 
-const RECAP_PROMPT = [
+export const RECAP_PROMPT = [
   'You are Fitzy, a warm, body-neutral fitness + nutrition coach. It is Sunday: write a short weekly recap',
   'of the user’s plan progress — celebrate what they did (any amount counts), name one thing to carry into',
   'next week. Never judge misses. headline ≤ 70 chars, body ≤ 240 chars.',
@@ -38,6 +38,8 @@ const RECAP_PROMPT = [
 
 const CTA_TYPES = ['log_meal', 'log_workout', 'start_plan', 'open_circle'] as const;
 const cp = (s: string) => [...s].length;
+export { fitBody } from '../fitzy/text';
+import { fitBody } from '../fitzy/text';
 
 const FREE_CTA = (): FitzyDailyFocus['cta'] => ({ label: 'Make this my plan', action: { type: 'start_plan', label: 'Make this my plan' } });
 
@@ -49,6 +51,28 @@ function looseJson(text: string): any {
   } catch {
     return null;
   }
+}
+
+/** The daily-focus call (chat model). */
+export function focusRequest(date: string, hasPlan: boolean, grounding: string): ModelCall & { primary: string } {
+  return {
+    primary: chatModel(),
+    system: systemMessages(FOCUS_PROMPT, grounding),
+    messages: [{ role: 'user', content: `Today is ${date}.${hasPlan ? ' The user has a plan this week.' : ' The user has no plan this week.'}` }],
+    maxOutputTokens: 300,
+    thinking: false,
+  };
+}
+
+/** The Sunday recap call (deep model, Pro with a plan). */
+export function recapRequest(plan: FitzyPlan, grounding: string): ModelCall & { primary: string } {
+  return {
+    primary: deepModel(),
+    system: systemMessages(RECAP_PROMPT, grounding),
+    messages: [{ role: 'user', content: `Week of ${plan.weekOf}. Goal: ${plan.goal}. Progress: ${FitzyPlanService.progressLine(plan)}` }],
+    maxOutputTokens: 300,
+    thinking: false,
+  };
 }
 
 export function welcomeFocus(date: string, tier: FitzyTier): FitzyDailyFocus {
@@ -102,28 +126,11 @@ export class FitzyFocusService {
       const grounding = await FitzyService.grounding(userId, tier, { timezone });
       try {
         if (tier === 'pro' && plan && isSunday(date)) {
-          const res = await generateWithFallback({
-            primary: deepModel(),
-            system: systemMessages(RECAP_PROMPT, grounding),
-            messages: [{ role: 'user', content: `Week of ${plan.weekOf}. Goal: ${plan.goal}. Progress: ${FitzyPlanService.progressLine(plan)}` }],
-            maxOutputTokens: 300,
-            thinking: false,
-          });
-          const j = looseJson(res.text);
-          focus = this.validate(j, date, tier, 'recap', { label: 'Plan next week', action: { type: 'start_plan', label: 'Plan next week' } });
+          const res = await generateWithFallback(recapRequest(plan, grounding));
+          focus = this.recapFromText(res.text, date, tier);
         } else {
-          const res = await generateWithFallback({
-            primary: chatModel(),
-            system: systemMessages(FOCUS_PROMPT, grounding),
-            messages: [{ role: 'user', content: `Today is ${date}.${plan ? ' The user has a plan this week.' : ' The user has no plan this week.'}` }],
-            maxOutputTokens: 300,
-            thinking: false,
-          });
-          const j = looseJson(res.text);
-          const type = (CTA_TYPES as readonly string[]).includes(j?.cta?.type) ? (j.cta.type as FitzyAction['type']) : 'log_workout';
-          const label = typeof j?.cta?.label === 'string' && j.cta.label.trim() && cp(j.cta.label.trim()) <= 28 ? j.cta.label.trim() : 'Log it';
-          const kind = j?.kind === 'plan_nudge' ? 'plan_nudge' : 'tip';
-          focus = this.validate(j, date, tier, kind, { label, action: { type, label } });
+          const res = await generateWithFallback(focusRequest(date, !!plan, grounding));
+          focus = this.focusFromText(res.text, date, tier);
         }
       } catch (err) {
         console.error('[FitzyFocus] generation failed:', (err as any)?.message ?? err);
@@ -140,11 +147,25 @@ export class FitzyFocusService {
     return this.forTier(focus, tier);
   }
 
+  /** Model text → daily focus (CTA defaults applied), or null when unparseable/unsafe. */
+  static focusFromText(text: string, date: string, tier: FitzyTier): FitzyDailyFocus | null {
+    const j = looseJson(text);
+    const type = (CTA_TYPES as readonly string[]).includes(j?.cta?.type) ? (j.cta.type as FitzyAction['type']) : 'log_workout';
+    const label = typeof j?.cta?.label === 'string' && j.cta.label.trim() && cp(j.cta.label.trim()) <= 28 ? j.cta.label.trim() : 'Log it';
+    const kind = j?.kind === 'plan_nudge' ? 'plan_nudge' : 'tip';
+    return this.validate(j, date, tier, kind, { label, action: { type, label } });
+  }
+
+  /** Model text → Sunday recap focus, or null when unparseable/unsafe. */
+  static recapFromText(text: string, date: string, tier: FitzyTier): FitzyDailyFocus | null {
+    return this.validate(looseJson(text), date, tier, 'recap', { label: 'Plan next week', action: { type: 'start_plan', label: 'Plan next week' } });
+  }
+
   /** Length + guard checks; null when unusable. */
   static validate(j: any, date: string, tier: FitzyTier, kind: FitzyDailyFocus['kind'], cta: FitzyDailyFocus['cta']): FitzyDailyFocus | null {
     const headline = typeof j?.headline === 'string' ? j.headline.trim() : '';
-    const body = typeof j?.body === 'string' ? j.body.trim() : '';
-    if (!headline || !body || cp(headline) > 70 || cp(body) > 240) return null;
+    const body = fitBody(typeof j?.body === 'string' ? j.body.trim() : '', 240);
+    if (!headline || !body || cp(headline) > 70) return null;
     if (FitzyService.containsForbiddenContent(`${headline}\n${body}\n${cta.label}`)) return null;
     return { date, kind, headline, body, cta, tier };
   }
@@ -154,3 +175,4 @@ export class FitzyFocusService {
     return { ...f, tier, cta: tier === 'pro' ? f.cta : FREE_CTA() };
   }
 }
+
