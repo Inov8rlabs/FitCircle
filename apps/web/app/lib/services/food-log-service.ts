@@ -23,6 +23,13 @@ import type {
 
 import { CircleMealPostService } from './circle-meal-post-service';
 
+/**
+ * Runs best-effort work that must not hold up the response. Routes pass Next's
+ * `after()` (see lib/utils/after-response); without one, work runs inline as before.
+ */
+export type DeferFn = (task: () => Promise<unknown> | unknown) => void;
+
+const POSTGRES_UNIQUE_VIOLATION = '23505';
 
 export class FoodLogService {
   /**
@@ -31,8 +38,24 @@ export class FoodLogService {
   static async createEntry(
     userId: string,
     data: CreateFoodLogEntryInput,
-    supabase: SupabaseClient
-  ): Promise<{ data: FoodLogEntry | null; error: Error | null }> {
+    supabase: SupabaseClient,
+    opts: {
+      /**
+       * Client-generated entry id (UUID). Makes the create idempotent: a retry with
+       * the same id returns the stored entry (`duplicate: true`) instead of a copy.
+       */
+      id?: string;
+      /** Where the audit row and the circle meal post run; inline when omitted. */
+      defer?: DeferFn;
+    } = {}
+  ): Promise<{
+    data: FoodLogEntry | null;
+    error: Error | null;
+    /** The id was already stored for this user — `data` is that existing entry. */
+    duplicate?: boolean;
+    /** The id belongs to another user's entry. */
+    conflict?: boolean;
+  }> {
     try {
       // Validate entry type requirements
       this.validateEntryData(data);
@@ -40,6 +63,7 @@ export class FoodLogService {
       const { data: entry, error } = await supabase
         .from('food_log_entries')
         .insert({
+          ...(opts.id ? { id: opts.id } : {}),
           user_id: userId,
           entry_type: data.entry_type,
           logged_at: data.logged_at || new Date().toISOString(),
@@ -68,14 +92,25 @@ export class FoodLogService {
         .single();
 
       if (error) {
+        if (opts.id && error.code === POSTGRES_UNIQUE_VIOLATION) {
+          return this.existingForRetry(opts.id, userId, supabase, error.message);
+        }
         return { data: null, error: new Error(error.message) };
       }
 
-      // Audit log
-      await this.auditLog(userId, entry.id, 'create', supabase);
+      if (opts.defer) {
+        opts.defer(() => this.auditLog(userId, entry.id, 'create', supabase));
+        // Water / supplements never become meal cards — don't even schedule it.
+        if (CircleMealPostService.isShareableMeal(entry as FoodLogEntry)) {
+          opts.defer(() => CircleMealPostService.onMealLogged(entry as FoodLogEntry));
+        }
+      } else {
+        // Audit log
+        await this.auditLog(userId, entry.id, 'create', supabase);
 
-      // Circle chat: shared meals become meal cards (fire-and-forget, never throws).
-      void CircleMealPostService.onMealLogged(entry as FoodLogEntry);
+        // Circle chat: shared meals become meal cards (fire-and-forget, never throws).
+        void CircleMealPostService.onMealLogged(entry as FoodLogEntry);
+      }
 
       return { data: entry, error: null };
     } catch (error) {
@@ -84,6 +119,25 @@ export class FoodLogService {
         error: error instanceof Error ? error : new Error('Unknown error'),
       };
     }
+  }
+
+  /** A create retried with an id that's already stored: hand back that entry. */
+  private static async existingForRetry(
+    id: string,
+    userId: string,
+    supabase: SupabaseClient,
+    insertError: string
+  ): Promise<{ data: FoodLogEntry | null; error: Error | null; duplicate?: boolean; conflict?: boolean }> {
+    const { data: existing } = await supabase
+      .from('food_log_entries')
+      .select('*')
+      .eq('id', id)
+      .maybeSingle();
+    if (!existing) return { data: null, error: new Error(insertError) };
+    if (existing.user_id !== userId) {
+      return { data: null, error: new Error('Entry id is already in use'), conflict: true };
+    }
+    return { data: existing as FoodLogEntry, error: null, duplicate: true };
   }
 
   /**
@@ -581,13 +635,17 @@ export class FoodLogService {
   static async deleteEntry(
     entryId: string,
     userId: string,
-    supabase: SupabaseClient
-  ): Promise<{ success: boolean; error: Error | null }> {
+    supabase: SupabaseClient,
+    opts: { defer?: DeferFn } = {}
+  ): Promise<{ success: boolean; error: Error | null; entryType?: string | null }> {
     try {
-      // Verify ownership
+      // Verify ownership (and learn the entry type: deleting water returns the
+      // new hydration total). Kept as a separate read rather than UPDATE…RETURNING
+      // because the web list calls this with an RLS client whose SELECT policy
+      // hides soft-deleted rows, so RETURNING would come back empty.
       const { data: entry } = await supabase
         .from('food_log_entries')
-        .select('user_id')
+        .select('user_id, entry_type')
         .eq('id', entryId)
         .single();
 
@@ -595,7 +653,8 @@ export class FoodLogService {
         return { success: false, error: new Error('Not authorized') };
       }
 
-      // Soft delete entry
+      // Soft delete entry (re-deleting an already-deleted entry succeeds, so an
+      // undo can be retried safely).
       const { error } = await supabase
         .from('food_log_entries')
         .update({ deleted_at: new Date().toISOString() })
@@ -606,13 +665,18 @@ export class FoodLogService {
         return { success: false, error: new Error(error.message) };
       }
 
-      // Audit log
-      await this.auditLog(userId, entryId, 'delete', supabase);
+      const audit = () => this.auditLog(userId, entryId, 'delete', supabase);
+      if (opts.defer) {
+        opts.defer(audit);
+        // A deleted meal disappears from every circle chat it was posted to.
+        if (entry.entry_type !== 'water') opts.defer(() => CircleMealPostService.onMealDeleted(entryId));
+      } else {
+        await audit();
+        // A deleted meal disappears from every circle chat it was posted to.
+        void CircleMealPostService.onMealDeleted(entryId);
+      }
 
-      // A deleted meal disappears from every circle chat it was posted to.
-      void CircleMealPostService.onMealDeleted(entryId);
-
-      return { success: true, error: null };
+      return { success: true, error: null, entryType: entry.entry_type ?? null };
     } catch (error) {
       return {
         success: false,

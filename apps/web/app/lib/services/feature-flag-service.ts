@@ -18,26 +18,26 @@ export class FeatureFlagService {
   static async isFeatureEnabled(
     featureName: string,
     userId: string,
-    supabase: SupabaseClient
+    supabase: SupabaseClient,
+    /**
+     * The caller's already-loaded profile row (e.g. the user requireMobileAuth
+     * returned). When it carries `subscription_tier`, the profile lookup is
+     * skipped; otherwise it runs in parallel with the flag lookup.
+     */
+    knownProfile?: { subscription_tier?: string | null } | null
   ): Promise<FeatureFlagResult> {
     try {
-      // Get feature flag
-      const { data: flag } = await supabase
-        .from('feature_flags')
-        .select('*')
-        .eq('name', featureName)
-        .single();
+      const profileKnown = !!knownProfile && 'subscription_tier' in knownProfile;
+      const [{ data: flag }, { data: profile }] = await Promise.all([
+        supabase.from('feature_flags').select('*').eq('name', featureName).single(),
+        profileKnown
+          ? Promise.resolve({ data: { subscription_tier: knownProfile!.subscription_tier ?? null } })
+          : supabase.from('profiles').select('subscription_tier').eq('id', userId).single(),
+      ]);
 
       if (!flag || !flag.is_enabled) {
         return { enabled: false, reason: 'disabled', access_level: 'none' };
       }
-
-      // Get user profile
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('subscription_tier')
-        .eq('id', userId)
-        .single();
 
       if (!profile) {
         return { enabled: false, reason: 'disabled', access_level: 'none' };

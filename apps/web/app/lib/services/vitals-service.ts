@@ -13,9 +13,11 @@
  * All day math is in the user's timezone via lib/utils/timezone.
  */
 
+import { resolveClientTimezone } from '../streaks/client-timezone';
 import { createAdminSupabase } from '../supabase-admin';
 import {
   DEFAULT_WATER_GOAL_ML,
+  type HydrationToday,
   type VitalsBmi,
   type VitalsGoalsUpdate,
   type VitalsSummary,
@@ -63,6 +65,58 @@ export class VitalsService {
       bmi: this.buildBmi(profile?.height_cm ?? null, weight?.current_kg ?? null),
       water,
     };
+  }
+
+  /**
+   * Just today's water total + goal — the slice of getSummary() the Hydration card
+   * needs after a log/undo. Same timezone rule and same totals as getSummary.
+   *
+   * `profile` is the caller's already-loaded profile row (requireMobileAuth returns
+   * `profiles.*`); when it carries `preferences`, no profile query is made, so this
+   * costs one round trip (the two water reads run in parallel).
+   */
+  static async getHydrationToday(
+    userId: string,
+    opts: {
+      timezone?: string | null;
+      profile?: { timezone?: string | null; preferences?: unknown } | null;
+    } = {}
+  ): Promise<HydrationToday> {
+    const supabase = createAdminSupabase();
+    let profile = opts.profile ?? null;
+    if (!profile || !('preferences' in profile)) {
+      const { data } = await supabase
+        .from('profiles')
+        .select('preferences, timezone')
+        .eq('id', userId)
+        .maybeSingle();
+      profile = data ?? null;
+    }
+
+    const timezone = opts.timezone || profile?.timezone || 'UTC';
+    const dayList = getLastNDays(1, timezone);
+    const prefs = (profile?.preferences ?? {}) as Record<string, any>;
+    const water = await this.buildWater(supabase, userId, prefs, dayList);
+    return { todayMl: water.today_ml, goalMl: water.goal_ml, date: dayList[0] };
+  }
+
+  /**
+   * getHydrationToday for an API response: the timezone comes from the request
+   * (x-client-timezone header, exactly as GET /vitals/summary resolves it), and
+   * any failure yields undefined so the optional `hydration` field is simply
+   * omitted — it must never fail the log/undo it rides on.
+   */
+  static async hydrationForResponse(
+    userId: string,
+    request: { headers: { get(name: string): string | null } },
+    profile?: { timezone?: string | null; preferences?: unknown } | null
+  ): Promise<HydrationToday | undefined> {
+    try {
+      return await this.getHydrationToday(userId, { timezone: resolveClientTimezone(request), profile });
+    } catch (err: any) {
+      console.error('[VitalsService.hydrationForResponse] skipped:', err?.message ?? err);
+      return undefined;
+    }
   }
 
   // ---------------------------------------------------------------------------

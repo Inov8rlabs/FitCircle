@@ -67,6 +67,21 @@ export interface VitalsSummary {
   water: VitalsWater;
 }
 
+/**
+ * Today's hydration, attached as `data.hydration` to water food-log create and
+ * delete responses so the apps can update the Hydration card without re-fetching
+ * the whole vitals summary. Same numbers as the summary's `water.today_ml` /
+ * `water.goal_ml` (same timezone rule: x-client-timezone header → profile → UTC).
+ */
+export interface HydrationToday {
+  /** Water logged today (ml): food-log water entries + water beverages, soft-deletes excluded. */
+  todayMl: number;
+  /** Daily target (ml): the user's preferences.hydration target, else the default. */
+  goalMl: number;
+  /** "Today" as YYYY-MM-DD in the user's timezone. */
+  date: string;
+}
+
 export interface VitalsGoalsUpdate {
   target_weight_kg?: number | null;
   starting_weight_kg?: number | null;

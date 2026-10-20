@@ -68,7 +68,12 @@ export class StreakClaimingService {
     timezone: string,
     method: 'explicit' | 'manual_entry' | 'retroactive',
     /** Provenance recorded on the claim row (which log triggered it). */
-    opts: { source?: AutoClaimSource; referenceId?: string } = {}
+    opts: {
+      source?: AutoClaimSource;
+      referenceId?: string;
+      /** Claim dates the caller just read (getClaimDates) — saves re-reading them. */
+      claimDates?: Set<string>;
+    } = {}
   ): Promise<ClaimResult> {
     const supabaseAdmin = createAdminSupabase();
     const claimDateStr = toDayStr(claimDate);
@@ -102,7 +107,7 @@ export class StreakClaimingService {
     //    (same ordering the check-in flows use): if yesterday-relative-to-
     //    the-claim is unclaimed but the day before is, auto-protect it so
     //    the streak survives and already-paid milestones don't re-fire.
-    const claimDates = await this.getClaimDates(userId);
+    const claimDates = opts.claimDates ? new Set(opts.claimDates) : await this.getClaimDates(userId);
     const gap = await this.tryAutoProtectYesterday(userId, claimDates, claimDateStr, timezone);
 
     // Streak BEFORE this claim (needed to detect crossed milestones)
@@ -248,10 +253,19 @@ export class StreakClaimingService {
       if (day > todayStr) return { ...base, day, skipped: 'future' };
       if (!isWithinRetroactiveWindow(day, todayStr)) return { ...base, day, skipped: 'outside_window' };
 
+      // Fast path — the common case (2nd+ log of a day: another glass of water,
+      // the next meal): the day is already claimed. One read answers both "is it
+      // claimed?" and "what's the streak?", instead of the full claim pipeline.
+      const claimDates = await this.getClaimDates(userId);
+      if (claimDates.has(day)) {
+        return { ...base, alreadyClaimed: true, day, streakCount: calculateStreak(claimDates, todayStr) };
+      }
+
       try {
         const result = await this.claimStreak(userId, day, timezone, 'manual_entry', {
           source,
           referenceId,
+          claimDates,
         });
         return {
           ...base,
@@ -333,27 +347,30 @@ export class StreakClaimingService {
       };
     }
 
+    // 2b–4 are independent reads: run them in one round trip.
+    const [firstDay, { data: existingClaim }, healthCheck] = await Promise.all([
+      this.firstLocalDay(userId, timezone),
+      supabaseAdmin
+        .from('streak_claims')
+        .select('id')
+        .eq('user_id', userId)
+        .eq('claim_date', dateStr)
+        .maybeSingle(),
+      this.checkHealthData(userId, dateStr),
+    ]);
+
     // 2b. Days before the account existed can't be claimed (a new user must not
     //     be able to backfill a streak for the week before they signed up).
-    const firstDay = await this.firstLocalDay(userId, timezone);
     if (firstDay && dateStr < firstDay) {
       return { canClaim: false, alreadyClaimed: false, reason: BEFORE_JOINED_REASON };
     }
 
     // 3. Already claimed?
-    const { data: existingClaim } = await supabaseAdmin
-      .from('streak_claims')
-      .select('id')
-      .eq('user_id', userId)
-      .eq('claim_date', dateStr)
-      .maybeSingle();
-
     if (existingClaim) {
       return { canClaim: false, alreadyClaimed: true, reason: 'Already claimed for this date' };
     }
 
-    // 4. Health data (informational)
-    const healthCheck = await this.checkHealthData(userId, dateStr);
+    // 4. Health data (informational) — read above.
 
     const isYesterday = dateStr === addDays(todayStr, -1);
     return {

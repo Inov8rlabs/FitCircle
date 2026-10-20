@@ -12,8 +12,10 @@ import { FeatureFlagService } from '@/lib/services/feature-flag-service';
 import { FoodLogService } from '@/lib/services/food-log-service';
 import { NutritionTrainingService } from '@/lib/services/nutrition-training-service';
 import { StreakClaimingService } from '@/lib/services/streak-claiming-service';
+import { VitalsService } from '@/lib/services/vitals-service';
 import { resolveClientTimezone } from '@/lib/streaks/client-timezone';
 import { createAdminSupabase } from '@/lib/supabase-admin';
+import { runAfterResponse } from '@/lib/utils/after-response';
 import { resolveEntryDate } from '@/lib/utils/entry-date';
 import {
   CreateFoodLogEntrySchema,
@@ -216,9 +218,22 @@ export async function GET(request: NextRequest) {
   }
 }
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 /**
  * POST /api/mobile/food-log
  * Create a new food log entry
+ *
+ * - `id` (optional, UUID): client-generated entry id. Honoured on create, so a
+ *   retried request never duplicates: the same id from the same user returns the
+ *   stored entry with 200 (+ meta.duplicate); another user's id → 409. A missing
+ *   or non-UUID id is ignored (server generates one), as before.
+ * - Water entries also return `data.hydration: { todayMl, goalMl, date }` —
+ *   today's total in the user's timezone — so the apps needn't re-fetch
+ *   /vitals/summary. Optional: omitted if it can't be computed.
+ * - Round trips (water, day already claimed): auth (blacklist ∥ profile) → flag
+ *   → insert → (streak ∥ hydration). The audit row, circle meal post and the
+ *   training reconcile run after the response.
  */
 export async function POST(request: NextRequest) {
   const startTime = Date.now();
@@ -227,9 +242,9 @@ export async function POST(request: NextRequest) {
     // Verify authentication
     const user = await requireMobileAuth(request);
 
-    // Check feature flag
+    // Check feature flag (reuses the profile auth just loaded)
     const supabase = createAdminSupabase();
-    const featureAccess = await FeatureFlagService.isFeatureEnabled('food_logging', user.id, supabase);
+    const featureAccess = await FeatureFlagService.isFeatureEnabled('food_logging', user.id, supabase, user);
 
     if (!featureAccess.enabled) {
       return NextResponse.json(
@@ -263,11 +278,36 @@ export async function POST(request: NextRequest) {
       request,
       { entry_date: validatedData.entry_date, logged_at: validatedData.logged_at, timezone: body?.timezone },
       user.id,
-      supabase
+      supabase,
+      user
     );
 
-    // Create entry
-    const result = await FoodLogService.createEntry(user.id, validatedData, supabase);
+    const clientId = typeof body?.id === 'string' && UUID_RE.test(body.id) ? body.id : undefined;
+    const isWater = validatedData.entry_type === 'water';
+
+    // Create entry (idempotent on the client id). The audit row and circle meal
+    // post are scheduled after the response.
+    const result = await FoodLogService.createEntry(user.id, validatedData, supabase, {
+      id: clientId,
+      defer: (task) => runAfterResponse(task, 'food-log create side effect'),
+    });
+
+    if (result.conflict) {
+      return NextResponse.json(
+        {
+          success: false,
+          data: null,
+          error: {
+            code: 'ID_CONFLICT',
+            message: 'This entry id is already in use',
+            details: {},
+            timestamp: new Date().toISOString(),
+          },
+          meta: null,
+        },
+        { status: 409 }
+      );
+    }
 
     if (result.error) {
       throw result.error;
@@ -275,7 +315,8 @@ export async function POST(request: NextRequest) {
 
     // Production accuracy signal: tie this entry back to the AI draft it came from (if
     // any) and score the user's edits. After the response; never affects the create.
-    if (result.data && NutritionTrainingService.enabled) {
+    // (Food only — reconcileEntry ignores water/supplements — and not for a retry.)
+    if (result.data && !result.duplicate && !isWater && NutritionTrainingService.enabled) {
       const saved = result.data;
       const explicit = {
         input_method: validatedData.input_method,
@@ -287,26 +328,35 @@ export async function POST(request: NextRequest) {
 
     // Logging a meal is a manual action → it claims the streak day the meal
     // was eaten on (server-side, so every client and the offline sync queue
-    // get identical behaviour). Never fails the create.
-    const streak = await StreakClaimingService.autoClaimForManualLog(user.id, {
-      // Claim the day the entry was filed under, so the two can never disagree.
-      occurredAt: validatedData.entry_date ?? result.data?.logged_at ?? null,
-      timezone: resolveClientTimezone(request, body?.timezone),
-      source: 'food_log',
-      referenceId: result.data?.id,
-    });
+    // get identical behaviour). Never fails the create. Stays BEFORE the
+    // response: iOS (StreakAutoClaimRelay) and Android (StreakEvents) read
+    // meta.streak to update the streak UI / celebrate milestones. When the day
+    // is already claimed (the usual case for water) it's a single read.
+    // A retried create re-runs it too: idempotent, and the first response was lost.
+    // Today's hydration total is independent of the claim, so it's read in parallel.
+    const [streak, hydration] = await Promise.all([
+      StreakClaimingService.autoClaimForManualLog(user.id, {
+        // Claim the day the entry was filed under, so the two can never disagree.
+        occurredAt: validatedData.entry_date ?? result.data?.logged_at ?? null,
+        timezone: resolveClientTimezone(request, body?.timezone),
+        source: 'food_log',
+        referenceId: result.data?.id,
+      }),
+      isWater ? VitalsService.hydrationForResponse(user.id, request, user) : Promise.resolve(undefined),
+    ]);
 
     return NextResponse.json(
       {
         success: true,
-        data: result.data,
+        data: hydration && result.data ? { ...result.data, hydration } : result.data,
         meta: {
           requestTime: Date.now() - startTime,
           streak,
+          ...(result.duplicate ? { duplicate: true } : {}),
         },
         error: null,
       },
-      { status: 201 }
+      { status: result.duplicate ? 200 : 201 }
     );
   } catch (error: any) {
     console.error('[Mobile API] Create food log entry error:', {

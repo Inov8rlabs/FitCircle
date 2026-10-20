@@ -18,10 +18,13 @@ export async function resolveEntryDate(
   request: { headers: { get(name: string): string | null } },
   input: { entry_date?: string | null; logged_at?: string | null; timezone?: unknown },
   userId: string,
-  supabase: SupabaseClient
+  supabase: SupabaseClient,
+  /** The caller's loaded profile row; its `timezone` saves the profile lookup. */
+  profile?: { timezone?: string | null } | null
 ): Promise<string> {
   if (input.entry_date) return input.entry_date;
   let timezone = resolveClientTimezone(request, input.timezone);
+  if (!timezone && profile && 'timezone' in profile) timezone = profile.timezone || 'UTC';
   if (!timezone) {
     // Never let dating an entry fail the save: any lookup problem means UTC.
     timezone = await getUserTimezone(userId, supabase).catch(() => 'UTC');

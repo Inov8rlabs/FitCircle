@@ -165,19 +165,10 @@ export class MobileAPIService {
    * Checks JWT validity AND blacklist status
    */
   static async verifyAccessToken(token: string): Promise<JWTPayload | null> {
-    const jwtSecret = process.env.JWT_SECRET;
-
-    assertSecretUsable('JWT_SECRET', jwtSecret);
+    const decoded = this.verifyAccessTokenSignature(token);
+    if (!decoded) return null;
 
     try {
-      // Pin the algorithm so a token forged with 'none' or an asymmetric alg
-      // (algorithm-confusion attack) can never validate against our HMAC secret.
-      const decoded = jwt.verify(token, jwtSecret, { algorithms: ['HS256'] }) as JWTPayload;
-
-      if (decoded.type !== 'access') {
-        return null;
-      }
-
       // Check if token is blacklisted
       const isBlacklisted = await this.isTokenBlacklisted(token);
       if (isBlacklisted) {
@@ -186,6 +177,25 @@ export class MobileAPIService {
       }
 
       return decoded;
+    } catch (error) {
+      return null;
+    }
+  }
+
+  /**
+   * The local (no I/O) half of access-token verification: signature, expiry and
+   * token type. The blacklist check still has to pass before the token is trusted.
+   */
+  static verifyAccessTokenSignature(token: string): JWTPayload | null {
+    const jwtSecret = process.env.JWT_SECRET;
+
+    assertSecretUsable('JWT_SECRET', jwtSecret);
+
+    try {
+      // Pin the algorithm so a token forged with 'none' or an asymmetric alg
+      // (algorithm-confusion attack) can never validate against our HMAC secret.
+      const decoded = jwt.verify(token, jwtSecret, { algorithms: ['HS256'] }) as JWTPayload;
+      return decoded.type === 'access' ? decoded : null;
     } catch (error) {
       // Token is invalid or expired
       return null;
@@ -293,7 +303,7 @@ export class MobileAPIService {
     if (process.env.NODE_ENV === 'development') {
       console.log('[authenticateWithToken] Verifying access token...');
     }
-    const payload = await this.verifyAccessToken(accessToken);
+    const payload = this.verifyAccessTokenSignature(accessToken);
 
     if (!payload) {
       if (process.env.NODE_ENV === 'development') {
@@ -306,14 +316,21 @@ export class MobileAPIService {
       console.log('[authenticateWithToken] Token verified, userId:', payload.userId);
     }
 
-    // Fetch user from database
+    // The blacklist check and the profile fetch are independent: run them in
+    // parallel (one round trip instead of two on every authenticated request).
+    // The profile is discarded if the token turns out to be revoked.
     const supabaseAdmin = createAdminSupabase();
 
-    const { data: user, error } = await supabaseAdmin
-      .from('profiles')
-      .select('*')
-      .eq('id', payload.userId)
-      .single();
+    const [isBlacklisted, { data: user, error }] = await Promise.all([
+      // A thrown check rejects the token, exactly as verifyAccessToken does.
+      this.isTokenBlacklisted(accessToken).catch(() => true),
+      supabaseAdmin.from('profiles').select('*').eq('id', payload.userId).single(),
+    ]);
+
+    if (isBlacklisted) {
+      console.log('[authenticateWithToken] Token is blacklisted');
+      return null;
+    }
 
     if (error) {
       console.error('[authenticateWithToken] Database error fetching user:', error);

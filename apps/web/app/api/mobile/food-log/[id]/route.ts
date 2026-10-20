@@ -12,7 +12,9 @@ import { z } from 'zod';
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { FoodLogImageService } from '@/lib/services/food-log-image-service';
 import { FoodLogService } from '@/lib/services/food-log-service';
+import { VitalsService } from '@/lib/services/vitals-service';
 import { createAdminSupabase } from '@/lib/supabase-admin';
+import { runAfterResponse } from '@/lib/utils/after-response';
 import {
   UpdateFoodLogEntrySchema,
   normalizeFoodLogEntryAliases,
@@ -247,7 +249,9 @@ export async function PATCH(
 
 /**
  * DELETE /api/mobile/food-log/[id]
- * Delete food log entry (soft delete)
+ * Delete food log entry (soft delete, owner only — someone else's or a missing
+ * id → 400 DELETE_FAILED). Used for the Hydration card's Undo: deleting a water
+ * entry also returns `data.hydration: { todayMl, goalMl, date }` (optional).
  */
 export async function DELETE(
   request: NextRequest,
@@ -262,8 +266,10 @@ export async function DELETE(
     const entryId = id;
     const supabase = createAdminSupabase();
 
-    // Delete entry
-    const result = await FoodLogService.deleteEntry(entryId, user.id, supabase);
+    // Delete entry (audit row + circle chat tombstone run after the response)
+    const result = await FoodLogService.deleteEntry(entryId, user.id, supabase, {
+      defer: (task) => runAfterResponse(task, 'food-log delete side effect'),
+    });
 
     if (result.error) {
       return NextResponse.json(
@@ -282,9 +288,14 @@ export async function DELETE(
       );
     }
 
+    const hydration =
+      result.entryType === 'water'
+        ? await VitalsService.hydrationForResponse(user.id, request, user)
+        : undefined;
+
     return NextResponse.json({
       success: true,
-      data: { deleted: true, entryId },
+      data: { deleted: true, entryId, ...(hydration ? { hydration } : {}) },
       meta: {
         requestTime: Date.now() - startTime,
       },
