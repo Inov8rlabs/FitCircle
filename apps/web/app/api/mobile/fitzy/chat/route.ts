@@ -1,7 +1,9 @@
 import { type NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 
+import { paywallFor } from '@/lib/fitzy/paywall';
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
+import { FitzyNotFoundError } from '@/lib/services/fitzy-conversation-service';
 import { FitzyService } from '@/lib/services/fitzy-service';
 import { UpgradeRequiredError } from '@/lib/services/usage-service';
 import type { FitzyChatResponse } from '@/lib/types/fitzy';
@@ -12,8 +14,10 @@ import { safeParseLenient } from '@/lib/validation/lenient-parse';
  * Fitzy — the FitCircle AI coach (full fitness + nutrition). Multi-turn; history is held by the
  * client and sent as `messages` (oldest→newest, last turn = the new user message).
  *
- * Body: { messages: [{ role: 'user'|'assistant', content: string }], circleId?: string }
- *   → FitzyChatResponse { answer, disclaimer }  (answer is Markdown)
+ * Body: { messages: [{ role: 'user'|'assistant', content: string }], circleId?: string, conversationId?: uuid }
+ *   → FitzyChatResponse { answer, disclaimer, conversationId, messageId, suggestions, actions, remaining, tier }
+ *   (answer is Markdown). Old clients send only `messages` and read answer/disclaimer — unchanged.
+ *   With `conversationId`, server-held history wins and only the last user message is used.
  *
  * Thin route: all coaching logic + the safety guardrails live in FitzyService, which never
  * returns unsafe content and never throws on bad model output.
@@ -28,6 +32,7 @@ const requestSchema = z.object({
   // Cap inbound history defensively; the service also keeps only the tail.
   messages: z.array(messageSchema).min(1, 'At least one message is required').max(50),
   circleId: z.string().trim().min(1).max(100).optional(),
+  conversationId: z.string().uuid().optional(),
 });
 
 export async function POST(request: NextRequest) {
@@ -61,9 +66,12 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { messages, circleId } = parsed.data;
+    const { messages, circleId, conversationId } = parsed.data;
 
-    const result: FitzyChatResponse = await FitzyService.chat(user.id, messages, circleId);
+    const result: FitzyChatResponse = await FitzyService.chat(user.id, messages, circleId, {
+      conversationId: conversationId ?? null,
+      timezone: request.headers.get('x-client-timezone'),
+    });
 
     return NextResponse.json({
       success: true,
@@ -92,12 +100,19 @@ export async function POST(request: NextRequest) {
           error: {
             code: 'UPGRADE_REQUIRED',
             message: "You've used today's free Fitzy messages — go Pro for unlimited coaching.",
-            details: { feature: error.feature, used: error.used, limit: error.limit },
+            details: { feature: error.feature, used: error.used, limit: error.limit, paywall: paywallFor('fitzy_quota') },
             timestamp: new Date().toISOString(),
           },
           meta: null,
         },
         { status: 429 }
+      );
+    }
+
+    if (error instanceof FitzyNotFoundError) {
+      return NextResponse.json(
+        { success: false, data: null, error: { code: 'NOT_FOUND', message: error.message, details: {}, timestamp: new Date().toISOString() }, meta: null },
+        { status: 404 }
       );
     }
 

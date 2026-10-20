@@ -75,6 +75,25 @@ export class UsageService {
   }
 
   /**
+   * Fitzy tier + messages left today (FITZY_V2_SPEC §6). `remaining` is null
+   * when uncapped for this user (Pro, or the free gate is still dark). Call
+   * after recordFitzyMessage so the count includes the current message.
+   */
+  static async fitzyAllowance(userId: string): Promise<{ tier: 'free' | 'pro'; remaining: number | null; limit: number | null }> {
+    const [gateLive, tier] = await Promise.all([this.isGateLive('fitzy_unlimited'), this.getTier(userId)]);
+    if (tier === 'premium') return { tier: 'pro', remaining: null, limit: null };
+    if (!gateLive) return { tier: 'free', remaining: null, limit: null };
+    const used = await this.countToday('fitzy_message_log', userId);
+    const limit = TIER_LIMITS.free.fitzyMessagesPerDay;
+    return { tier: 'free', remaining: Math.max(0, limit - used), limit };
+  }
+
+  /** 'pro' for premium/enterprise subscribers (Fitzy Pro features: plans, memory, history). */
+  static async fitzyTier(userId: string): Promise<'free' | 'pro'> {
+    return (await this.getTier(userId)) === 'premium' ? 'pro' : 'free';
+  }
+
+  /**
    * Record one Fitzy/coach message. Called BEFORE the model call (insert-before-
    * call closes the check/insert race in the caller's favor, not the abuser's).
    */

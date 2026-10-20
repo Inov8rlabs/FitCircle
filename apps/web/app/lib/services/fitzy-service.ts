@@ -1,12 +1,20 @@
-import { generateText } from 'ai';
+import type { ModelMessage } from 'ai';
+import { after } from 'next/server';
 
+import { todayFor } from '../fitzy/dates';
+import { META_MARKER, applyGuardrails, growthNudgeAllowed, parseMeta, splitMeta, staticSuggestions } from '../fitzy/meta';
+import { chatModel, fallbackFor, generateWithFallback, streamFrom, systemMessages } from '../fitzy/models';
+import { StreamGuard, type GuardEvent } from '../fitzy/stream-guard';
 import { createAdminSupabase } from '../supabase-admin';
 import type { BodyCompDelta } from '../types/body-composition';
-import type { FitzyChatResponse, FitzyMessage, IFitzyService } from '../types/fitzy';
+import type { FitzyAction, FitzyChatResponse, FitzyMessage, FitzyTier, IFitzyService } from '../types/fitzy';
 
 import { BodyCompTrendsService, extractBodyFatGoal } from './body-comp-trends-service';
 import { DietaryPreferencesService } from './dietary-preferences-service';
 import { EntitlementService } from './entitlement-service';
+import { FitzyConversationService, HISTORY_TURNS, LEGACY_REUSE_HOURS } from './fitzy-conversation-service';
+import { FitzyMemoryService } from './fitzy-memory-service';
+import { FitzyPlanService } from './fitzy-plan-service';
 import { UsageService } from './usage-service';
 
 /**
@@ -18,29 +26,30 @@ import { UsageService } from './usage-service';
  * every safety guardrail from the nutrition coach (no medical/clinical advice, no disordered-
  * eating triggers, body-/food-neutral, no restrictive prescriptions).
  *
- * Reuses the AI Gateway integration (import { generateText } from 'ai', model
- * 'anthropic/claude-sonnet-4.6'; auth via AI_GATEWAY_API_KEY or Vercel OIDC).
+ * v2 (docs/FITZY_V2_SPEC.md): Haiku 5.5 for chat via the AI Gateway with Sonnet 5.5 as the
+ * fallback (lib/fitzy/models.ts), prompt caching of the static SYSTEM_PROMPT, SSE streaming
+ * behind a sentence-buffered guard (lib/fitzy/stream-guard.ts), server-held conversations,
+ * suggestions/actions from a stripped meta block with server-enforced growth guardrails.
  *
  * SAFETY is enforced in two layers, identical in spirit to the nutrition coach:
  *  1. SYSTEM_PROMPT encodes the role, the grounding, and the hard prohibitions.
  *  2. containsForbiddenContent() scans the model output; on a hit the answer is dropped and
  *     SAFE_FALLBACK is returned. The user never sees unsafe content even on a jailbreak.
  *
- * History is client-held: the route passes the recent `messages`; we cap + relay them.
+ * History is server-held (fitzy_conversations/fitzy_messages); the old /chat route still
+ * accepts client-held `messages` and appends them to a recent conversation.
  */
 
-const FITZY_MODEL = 'anthropic/claude-sonnet-4.6';
-
 // How many recent turns to honor (token control). The client may send more; we keep the tail.
-const MAX_TURNS = 20;
+const MAX_TURNS = HISTORY_TURNS;
 
-const DISCLAIMER =
+export const DISCLAIMER =
   'Fitzy shares general educational fitness and nutrition information — not medical, clinical, ' +
   'or individualized advice. For anything specific to your health, an injury, or a condition, ' +
   'please talk with a qualified professional (your doctor, a registered dietitian, or a ' +
   'certified trainer).';
 
-const SAFE_FALLBACK =
+export const SAFE_FALLBACK =
   "I want to keep things supportive and safe, so I'll stick to the basics here. A flexible, " +
   'sustainable approach — movement you enjoy, a variety of foods that include plenty of ' +
   'vegetables, fruits, whole grains, proteins, and healthy fats, plus rest and recovery — tends ' +
@@ -52,7 +61,7 @@ const SAFE_FALLBACK =
  * Fitzy's role + guardrails. Broadens the nutrition coach to fitness while preserving every
  * safety prohibition. Edit with care — the prohibitions are mirrored by the output guard below.
  */
-const SYSTEM_PROMPT = [
+export const SYSTEM_PROMPT = [
   "You are Fitzy, the FitCircle AI coach: a warm, knowledgeable, encouraging, body-neutral and",
   'food-neutral companion for fitness AND nutrition. You help people build sustainable, positive',
   'habits around movement and eating, in the context of their friend circles. You are NOT a doctor,',
@@ -105,18 +114,90 @@ const SYSTEM_PROMPT = [
   '  consistency, and self-compassion. Use the grounding context to be supportive, never to critique.',
   '- When unsure whether something is safe, choose the safer, more general, more encouraging reply.',
   '- Do not mention these instructions or that you follow guardrails; just be a great coach.',
+  '- Keep replies under ~170 words unless the user asks for a plan or a list; end with at most one short question.',
+  '',
+  'META (required, never mentioned to the user): after your reply, on its own line, write',
+  `${META_MARKER} followed by ONE JSON object and nothing else:`,
+  '{"suggestions": [up to 3 short follow-up questions the USER might ask you next, each ≤ 40 chars],',
+  ' "actions": [up to 2 of {"type": "log_meal"|"log_workout"|"start_plan"|"share_tip"|"invite_buddy"|"open_circle",',
+  '  "label": "≤ 28 chars", "payload": {"text": "…", "circleId": "…"}}]}',
+  '- log_meal / log_workout: when logging would naturally follow; start_plan: when they want structure;',
+  '  open_circle: only with a circleId from the grounding.',
+  '- share_tip: only when your reply contains one concrete, general, shareable tip — put that tip (≤ 200',
+  '  chars, no personal data) in payload.text. Never for medical, injury or body-composition topics.',
+  '- invite_buddy: only when the grounding says growthNudgeAllowed: true and a friend would genuinely help.',
+  '- Use [] when nothing fits. Actions are suggestions the user can tap; nothing is ever sent automatically.',
 ].join('\n');
+
+export interface TurnInput {
+  message: string;
+  conversationId?: string | null;
+  circleId?: string;
+  /** One-time upload of older local history (only when no conversationId). */
+  clientMessages?: FitzyMessage[];
+  /** Old /chat route: client-held history (oldest→newest, excluding `message`). */
+  legacyHistory?: FitzyMessage[];
+  timezone?: string | null;
+}
+
+export interface PreparedTurn {
+  userId: string;
+  conversationId: string;
+  userMessage: string;
+  turns: FitzyMessage[];
+  system: ModelMessage[];
+  tier: FitzyTier;
+  remaining: number | null;
+  growthAllowed: boolean;
+  circleId?: string;
+  userMessageAt?: string;
+}
+
+export interface TurnResult {
+  messageId: string;
+  answer: string;
+  suggestions: string[];
+  actions: FitzyAction[];
+  guardTripped: boolean;
+  model: string | null;
+}
+
+export type FitzyStreamEvent =
+  | { event: 'meta'; data: { conversationId: string; tier: FitzyTier; remaining: number | null } }
+  | { event: 'delta'; data: { text: string } }
+  | { event: 'replace'; data: { text: string } }
+  | { event: 'done'; data: { messageId: string; answer: string; suggestions: string[]; actions: FitzyAction[]; disclaimer: string; remaining: number | null } };
+
+/** Background work after the response (Next `after`), falling back to fire-and-forget outside a request. */
+let scheduleBackground = (fn: () => Promise<unknown>) => {
+  try {
+    after(fn);
+  } catch {
+    void fn();
+  }
+};
+export function setFitzyBackgroundScheduler(fn: typeof scheduleBackground) {
+  scheduleBackground = fn;
+}
 
 export class FitzyService implements IFitzyService {
   chat(userId: string, messages: FitzyMessage[], circleId?: string): Promise<FitzyChatResponse> {
     return FitzyService.chat(userId, messages, circleId);
   }
 
+  static guard = (text: string) => FitzyService.containsForbiddenContent(text);
+
   /**
-   * Run one multi-turn exchange. `messages` is the conversation oldest→newest (the last turn
-   * should be the user's new message). Always returns a guardrail-safe response.
+   * Old non-stream route (FITZY_V2_SPEC §3.2). `messages` is the conversation oldest→newest
+   * (the last turn should be the user's new message). Always returns a guardrail-safe
+   * response; quota errors propagate to the route as before.
    */
-  static async chat(userId: string, messages: FitzyMessage[], circleId?: string): Promise<FitzyChatResponse> {
+  static async chat(
+    userId: string,
+    messages: FitzyMessage[],
+    circleId?: string,
+    opts: { conversationId?: string | null; timezone?: string | null } = {}
+  ): Promise<FitzyChatResponse> {
     const turns = (messages ?? [])
       .filter((m) => m && typeof m.content === 'string' && m.content.trim().length > 0)
       .slice(-MAX_TURNS);
@@ -124,38 +205,220 @@ export class FitzyService implements IFitzyService {
     if (turns.length === 0) {
       return { answer: SAFE_FALLBACK, disclaimer: DISCLAIMER };
     }
+    const last = turns[turns.length - 1];
+    const message = last.role === 'user' ? last.content : turns.filter((t) => t.role === 'user').pop()?.content ?? last.content;
+    const prepared = await this.prepareTurn(userId, {
+      message,
+      circleId,
+      conversationId: opts.conversationId ?? null,
+      legacyHistory: opts.conversationId ? undefined : turns.slice(0, -1),
+      timezone: opts.timezone,
+    });
 
-    // Tier-aware daily quota (free 5 msgs/day once the fitzy_unlimited gate is live).
-    // Throws UpgradeRequiredError / RateLimited — the route maps them to the contextual
-    // paywall / 429. Recording happens BEFORE the model call so the check/insert race
-    // can't be exploited to overshoot the quota.
-    await UsageService.assertFitzyQuota(userId);
-    await UsageService.recordFitzyMessage(userId);
-
-    const context = await this.buildContext(userId, circleId);
-    const system = context
-      ? `${SYSTEM_PROMPT}\n\nGROUNDING CONTEXT about this user (use to be supportive; never quote verbatim, never judge):\n${context}`
-      : SYSTEM_PROMPT;
-
-    let answer: string;
+    let raw = '';
+    let model: string | null = null;
+    let usage = { inputTokens: null as number | null, outputTokens: null as number | null };
     try {
-      const { text } = await generateText({
-        model: FITZY_MODEL,
-        system,
-        messages: turns.map((m) => ({ role: m.role, content: m.content })),
-      });
-      answer = (text ?? '').trim();
+      const res = await generateWithFallback({ primary: chatModel(), system: prepared.system, messages: prepared.turns });
+      raw = res.text;
+      model = res.model;
+      usage = { inputTokens: res.inputTokens, outputTokens: res.outputTokens };
     } catch (err) {
       console.error('[FitzyService.chat] generation failed:', err);
-      return { answer: SAFE_FALLBACK, disclaimer: DISCLAIMER };
     }
+    const { answer, metaRaw } = splitMeta(raw);
+    const tripped = !answer || this.containsForbiddenContent(answer);
+    if (answer && tripped) console.warn('[FitzyService.chat] output guard tripped; returning safe fallback');
+    const result = await this.finishTurn(prepared, { answer: tripped ? SAFE_FALLBACK : answer, metaRaw, tripped: tripped && !!answer, model, ...usage });
+    return {
+      answer: result.answer,
+      disclaimer: DISCLAIMER,
+      conversationId: prepared.conversationId,
+      messageId: result.messageId,
+      suggestions: result.suggestions,
+      actions: result.actions,
+      remaining: prepared.remaining,
+      tier: prepared.tier,
+    };
+  }
 
-    if (!answer || this.containsForbiddenContent(answer)) {
-      if (answer) console.warn('[FitzyService.chat] output guard tripped; returning safe fallback');
-      return { answer: SAFE_FALLBACK, disclaimer: DISCLAIMER };
+  /**
+   * Streaming turn (FITZY_V2_SPEC §3.1). Emits meta → delta* → (replace) → done. Text is
+   * released sentence by sentence only after the guard passed on everything visible so far.
+   * Quota / auth errors throw BEFORE any event so the route can send a single `error` event.
+   */
+  static async streamChat(
+    userId: string,
+    input: TurnInput,
+    emit: (e: FitzyStreamEvent) => void,
+    abortSignal?: AbortSignal
+  ): Promise<TurnResult> {
+    const prepared = await this.prepareTurn(userId, input);
+    emit({ event: 'meta', data: { conversationId: prepared.conversationId, tier: prepared.tier, remaining: prepared.remaining } });
+
+    const send = (events: GuardEvent[]) => {
+      for (const e of events) emit(e.type === 'delta' ? { event: 'delta', data: { text: e.text } } : { event: 'replace', data: { text: e.text } });
+    };
+    let guard = new StreamGuard(this.guard, SAFE_FALLBACK);
+    let model: string | null = null;
+    let usage = { inputTokens: null as number | null, outputTokens: null as number | null };
+    const order = [chatModel(), fallbackFor(chatModel())];
+    let completed = false;
+    for (const candidate of order) {
+      guard = guard.emittedText ? guard : new StreamGuard(this.guard, SAFE_FALLBACK);
+      try {
+        const stream = streamFrom({ model: candidate, system: prepared.system, messages: prepared.turns, abortSignal });
+        for await (const chunk of stream.textStream) {
+          send(guard.push(chunk));
+          if (guard.isTripped) break;
+        }
+        send(guard.finish());
+        usage = await stream.usage();
+        model = candidate;
+        completed = true;
+        break;
+      } catch (err) {
+        console.error(`[FitzyService.streamChat] ${candidate} failed:`, (err as any)?.message ?? err);
+        if (guard.emittedText) {
+          // Text already on screen: don't splice in another model's answer mid-bubble.
+          send(guard.fail());
+          completed = true;
+          break;
+        }
+      }
     }
+    if (!completed || !guard.emittedText) send(guard.fail());
 
-    return { answer, disclaimer: DISCLAIMER };
+    const tripped = guard.isTripped;
+    const metaRaw = tripped ? null : splitMeta(guard.rawText).metaRaw;
+    const answer = tripped ? SAFE_FALLBACK : guard.emittedText.trim();
+    const result = await this.finishTurn(prepared, { answer, metaRaw, tripped, model, ...usage });
+    emit({
+      event: 'done',
+      data: { messageId: result.messageId, answer: result.answer, suggestions: result.suggestions, actions: result.actions, disclaimer: DISCLAIMER, remaining: prepared.remaining },
+    });
+    return result;
+  }
+
+  /** Quota, conversation, persistence of the user turn, and grounding. */
+  static async prepareTurn(userId: string, input: TurnInput): Promise<PreparedTurn> {
+    const message = (input.message ?? '').trim();
+    // Tier-aware daily quota. Recording happens BEFORE the model call so the check/insert
+    // race can't be exploited to overshoot the quota.
+    await UsageService.assertFitzyQuota(userId);
+    await UsageService.recordFitzyMessage(userId);
+    const allowance = await UsageService.fitzyAllowance(userId);
+
+    let conversationId: string;
+    let history: FitzyMessage[];
+    if (input.conversationId) {
+      const conv = await FitzyConversationService.owned(userId, input.conversationId);
+      conversationId = conv.id;
+      history = await FitzyConversationService.history(conv.id, MAX_TURNS - 1);
+    } else if (input.legacyHistory) {
+      const latest = await FitzyConversationService.latest(userId);
+      const fresh = latest && Date.now() - Date.parse(latest.updated_at) < LEGACY_REUSE_HOURS * 3600_000;
+      conversationId = fresh ? latest.id : (await FitzyConversationService.create(userId, input.legacyHistory.find((m) => m.role === 'user')?.content ?? message)).id;
+      history = input.legacyHistory.slice(-(MAX_TURNS - 1));
+    } else {
+      const seed = (input.clientMessages ?? []).filter((m) => m?.content?.trim()).slice(-(MAX_TURNS - 1));
+      const conv = await FitzyConversationService.create(userId, seed.find((m) => m.role === 'user')?.content ?? message);
+      conversationId = conv.id;
+      if (seed.length) await FitzyConversationService.seed(userId, conv.id, seed);
+      history = seed;
+    }
+    const userMessageAt = new Date().toISOString();
+    await FitzyConversationService.addMessage(userId, conversationId, { role: 'user', content: message, createdAt: userMessageAt });
+
+    const lastNudge = await FitzyMemoryService.lastGrowthNudgeAt(userId).catch(() => null);
+    const growthAllowed = growthNudgeAllowed(message, lastNudge);
+    const grounding = await this.grounding(userId, allowance.tier, { circleId: input.circleId, timezone: input.timezone, growthAllowed });
+    return {
+      userId,
+      conversationId,
+      userMessage: message,
+      turns: [...history, { role: 'user', content: message }],
+      system: systemMessages(SYSTEM_PROMPT, grounding),
+      tier: allowance.tier,
+      remaining: allowance.remaining,
+      growthAllowed,
+      circleId: input.circleId,
+      userMessageAt,
+    };
+  }
+
+  /** Meta parsing, guardrails, persistence of the assistant turn, background memory. */
+  static async finishTurn(
+    p: PreparedTurn,
+    r: { answer: string; metaRaw: string | null; tripped: boolean; model: string | null; inputTokens: number | null; outputTokens: number | null }
+  ): Promise<TurnResult> {
+    const unsafe = r.tripped || r.answer === SAFE_FALLBACK;
+    const meta = unsafe ? { suggestions: [], actions: [], ok: false } : parseMeta(r.metaRaw);
+    const suggestions = (meta.ok && meta.suggestions.length ? meta.suggestions : staticSuggestions(p.userMessage)).filter((s) => !this.guard(s));
+    let actions = unsafe ? [] : applyGuardrails(meta.actions, { userMessage: p.userMessage, answer: r.answer, growthAllowed: p.growthAllowed, guard: this.guard });
+    if (p.circleId === undefined) actions = actions.filter((a) => a.type !== 'open_circle' || !!a.payload?.circleId);
+    if (actions.some((a) => a.type === 'invite_buddy')) {
+      await FitzyMemoryService.stampGrowthNudge(p.userId).catch((err) => console.error('[FitzyService] nudge stamp failed:', err?.message));
+    }
+    const messageId = await FitzyConversationService.addMessage(p.userId, p.conversationId, {
+      role: 'assistant',
+      content: r.answer,
+      suggestions,
+      actions,
+      model: r.model,
+      inputTokens: r.inputTokens,
+      outputTokens: r.outputTokens,
+      guardTripped: r.tripped,
+    });
+    if (p.tier === 'pro' && !unsafe) {
+      scheduleBackground(() => FitzyMemoryService.extract(p.userId, p.userMessage, r.answer, this.guard));
+    }
+    return { messageId, answer: r.answer, suggestions, actions, guardTripped: r.tripped, model: r.model };
+  }
+
+  /**
+   * Grounding = existing blocks + first name, streak, plan progress, (Pro) memory and the
+   * growth-nudge flag. Shared by chat, daily focus and plans.
+   */
+  static async grounding(
+    userId: string,
+    tier: FitzyTier,
+    opts: { circleId?: string; timezone?: string | null; growthAllowed?: boolean } = {}
+  ): Promise<string> {
+    const supabase = createAdminSupabase();
+    const extras: string[] = [];
+    try {
+      const [{ data: profile }, { data: streak }] = await Promise.all([
+        supabase.from('profiles').select('display_name, username').eq('id', userId).maybeSingle(),
+        supabase.from('engagement_streaks').select('current_streak').eq('user_id', userId).maybeSingle(),
+      ]);
+      const first = ((profile as any)?.display_name || (profile as any)?.username || '').trim().split(/\s+/)[0];
+      if (first) extras.push(`The user's first name is ${first}.`);
+      const days = (streak as any)?.current_streak ?? 0;
+      if (days > 0) extras.push(`Current check-in streak: ${days} day${days === 1 ? '' : 's'}.`);
+    } catch (err) {
+      console.error('[FitzyService.grounding] profile block non-fatal:', err);
+    }
+    try {
+      const plan = await FitzyPlanService.current(userId, todayFor(opts.timezone));
+      const line = FitzyPlanService.progressLine(plan);
+      if (line) extras.push(`This week's plan (goal: ${plan!.goal}) progress: ${line}.`);
+    } catch (err) {
+      console.error('[FitzyService.grounding] plan block non-fatal:', err);
+    }
+    if (tier === 'pro') {
+      try {
+        const items = await FitzyMemoryService.items(userId);
+        if (items.length) extras.push(`What the user has told you before (use naturally, never list it back): ${items.map((i) => i.text).join('; ')}.`);
+      } catch (err) {
+        console.error('[FitzyService.grounding] memory block non-fatal:', err);
+      }
+    }
+    extras.push(`growthNudgeAllowed: ${opts.growthAllowed ? 'true' : 'false'}`);
+    if (opts.circleId) extras.push(`Circle id for open_circle actions: ${opts.circleId}`);
+    const context = await this.buildContext(userId, opts.circleId);
+    const body = [context, ...extras].filter(Boolean).join('\n');
+    return `GROUNDING CONTEXT about this user (use to be supportive; never quote verbatim, never judge):\n${body}`;
   }
 
   // ---- output guard (mirrors NutritionCoachService; safety-critical, kept self-contained) -----
@@ -204,7 +467,7 @@ export class FitzyService implements IFitzyService {
    * (direction only, never a target), and — if member — the circle's active challenge.
    * Each block is failure-isolated: a bad read just omits that block (degrades to a safe reply).
    */
-  private static async buildContext(userId: string, circleId?: string): Promise<string | null> {
+  static async buildContext(userId: string, circleId?: string): Promise<string | null> {
     const supabase = createAdminSupabase();
     const parts: string[] = [];
     const since = new Date();

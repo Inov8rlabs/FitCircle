@@ -1,6 +1,6 @@
 {
   "$schema": "./tracking-plan.schema.json",
-  "version": 10,
+  "version": 11,
   "updated": "2026-10-16",
   "conventions": {
     "eventNames": "Title Case, '<Object> <Past-tense verb>' (e.g. 'Meal Logged'). Names are frozen once shipped: rename in the analytics tool, never in code.",
@@ -2339,7 +2339,8 @@
             "welcome",
             "peak_moment",
             "circle",
-            "campaign"
+            "campaign",
+            "fitzy"
           ],
           "required": true
         }
@@ -2769,6 +2770,244 @@
             "seasonal_circle",
             "daily_calendar",
             "spotlight"
+          ],
+          "required": true
+        }
+      ]
+    },
+    {
+      "name": "Fitzy Response Received",
+      "category": "ai",
+      "platforms": [
+        "ios",
+        "android"
+      ],
+      "description": "A Fitzy reply finished streaming (FITZY_V2_SPEC).",
+      "properties": [
+        {
+          "name": "tier",
+          "type": "enum",
+          "values": [
+            "free",
+            "pro"
+          ],
+          "required": true
+        },
+        {
+          "name": "latency_ms",
+          "type": "int",
+          "required": true
+        },
+        {
+          "name": "guard_tripped",
+          "type": "bool",
+          "required": true
+        }
+      ]
+    },
+    {
+      "name": "Fitzy Suggestion Tapped",
+      "category": "ai",
+      "platforms": [
+        "ios",
+        "android"
+      ],
+      "description": "A follow-up suggestion chip was tapped.",
+      "properties": [
+        {
+          "name": "tier",
+          "type": "enum",
+          "values": [
+            "free",
+            "pro"
+          ],
+          "required": true
+        }
+      ]
+    },
+    {
+      "name": "Fitzy Action Tapped",
+      "category": "ai",
+      "platforms": [
+        "ios",
+        "android"
+      ],
+      "description": "An action button under a Fitzy reply was tapped.",
+      "properties": [
+        {
+          "name": "tier",
+          "type": "enum",
+          "values": [
+            "free",
+            "pro"
+          ],
+          "required": true
+        },
+        {
+          "name": "action",
+          "type": "enum",
+          "values": [
+            "log_meal",
+            "log_workout",
+            "start_plan",
+            "share_tip",
+            "invite_buddy",
+            "open_circle"
+          ],
+          "required": true
+        }
+      ]
+    },
+    {
+      "name": "Fitzy Daily Focus Viewed",
+      "category": "ai",
+      "platforms": [
+        "ios",
+        "android"
+      ],
+      "description": "Today's focus card was shown.",
+      "properties": [
+        {
+          "name": "tier",
+          "type": "enum",
+          "values": [
+            "free",
+            "pro"
+          ],
+          "required": true
+        },
+        {
+          "name": "surface",
+          "type": "enum",
+          "values": [
+            "fitzy",
+            "home"
+          ],
+          "required": true
+        }
+      ]
+    },
+    {
+      "name": "Fitzy Plan Created",
+      "category": "ai",
+      "platforms": [
+        "ios",
+        "android"
+      ],
+      "description": "A weekly plan was generated.",
+      "properties": [
+        {
+          "name": "commitments",
+          "type": "int",
+          "required": true
+        }
+      ]
+    },
+    {
+      "name": "Fitzy Commitment Checked",
+      "category": "ai",
+      "platforms": [
+        "ios",
+        "android"
+      ],
+      "description": "A weekly plan commitment was checked off.",
+      "properties": [
+        {
+          "name": "kind",
+          "type": "enum",
+          "values": [
+            "move",
+            "eat",
+            "hydrate",
+            "sleep",
+            "circle",
+            "mind"
+          ],
+          "required": true
+        }
+      ]
+    },
+    {
+      "name": "Fitzy Locked Feature Viewed",
+      "category": "ai",
+      "platforms": [
+        "ios",
+        "android"
+      ],
+      "description": "A free user saw a Pro-only Fitzy feature preview.",
+      "properties": [
+        {
+          "name": "feature",
+          "type": "enum",
+          "values": [
+            "weekly_plan",
+            "memory",
+            "history",
+            "recap",
+            "quota"
+          ],
+          "required": true
+        }
+      ]
+    },
+    {
+      "name": "Fitzy Upgrade Tapped",
+      "category": "ai",
+      "platforms": [
+        "ios",
+        "android"
+      ],
+      "description": "A free user tapped to unlock a Fitzy Pro feature.",
+      "properties": [
+        {
+          "name": "feature",
+          "type": "enum",
+          "values": [
+            "weekly_plan",
+            "memory",
+            "history",
+            "recap",
+            "quota"
+          ],
+          "required": true
+        }
+      ]
+    },
+    {
+      "name": "Fitzy Tip Shared",
+      "category": "ai",
+      "platforms": [
+        "ios",
+        "android"
+      ],
+      "description": "The user shared a Fitzy tip card.",
+      "properties": [
+        {
+          "name": "tier",
+          "type": "enum",
+          "values": [
+            "free",
+            "pro"
+          ],
+          "required": true
+        }
+      ]
+    },
+    {
+      "name": "Fitzy Memory Edited",
+      "category": "ai",
+      "platforms": [
+        "ios",
+        "android"
+      ],
+      "description": "The user removed an item Fitzy remembers, or cleared all.",
+      "properties": [
+        {
+          "name": "change",
+          "type": "enum",
+          "values": [
+            "remove",
+            "clear"
           ],
           "required": true
         }

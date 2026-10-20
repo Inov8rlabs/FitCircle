@@ -353,15 +353,15 @@ describe('Fitzy chat', () => {
   it('accepts circleId: null (chat without a circle)', async () => {
     const res = await fitzyChat(req({ messages, circleId: null }));
     expect(res.status).toBe(200);
-    expect(calls.fitzyChat[0]).toEqual(['user-1', messages, undefined]);
+    expect(calls.fitzyChat[0]).toEqual(['user-1', messages, undefined, { conversationId: null, timezone: null }]);
     expect((await res.json()).data).toEqual({ answer: 'Hi', disclaimer: 'd' });
   });
 
   it('OLD request shapes are unchanged', async () => {
     await fitzyChat(req({ messages }));
-    expect(calls.fitzyChat[0]).toEqual(['user-1', messages, undefined]);
+    expect(calls.fitzyChat[0]).toEqual(['user-1', messages, undefined, { conversationId: null, timezone: null }]);
     await fitzyChat(req({ messages, circleId: CIRCLE }));
-    expect(calls.fitzyChat[1]).toEqual(['user-1', messages, CIRCLE]);
+    expect(calls.fitzyChat[1]).toEqual(['user-1', messages, CIRCLE, { conversationId: null, timezone: null }]);
   });
 
   it('still validates: no messages keeps its own message', async () => {
