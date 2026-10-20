@@ -183,7 +183,15 @@ export interface CampaignView {
   marks: CampaignMark[];
   participant: { joined: boolean; reminders: boolean };
   calendar: CalendarView | null;
+  /** "How it works" steps for the campaign info sheet (template defaults, dates filled in). */
+  howItWorks: CampaignStep[];
   isPreview: boolean;
+}
+
+export interface CampaignStep {
+  emoji: string;
+  title: string;
+  body: string;
 }
 
 export interface CampaignsResponse {

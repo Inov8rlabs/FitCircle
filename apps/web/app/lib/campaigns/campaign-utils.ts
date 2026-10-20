@@ -13,7 +13,9 @@ import type {
   CampaignCtaAction,
   CampaignGlyph,
   CampaignInput,
+  CampaignMark,
   CampaignPhase,
+  CampaignStep,
   CampaignTemplate,
   CampaignView,
 } from './types';
@@ -228,6 +230,7 @@ export function buildPreviewView(
     marks: c.marks,
     participant: { joined: opts.joined ?? false, reminders: opts.reminders ?? false },
     calendar,
+    howItWorks: howItWorksFor(c),
     isPreview: true,
     phaseOrHidden,
   };
@@ -557,3 +560,36 @@ export const ART_SLOT_LABELS: Record<ArtSlot, string> = {
   inAppHero: 'In-app hero',
   emailHeader: 'Email header',
 };
+
+/**
+ * "How it works" for the in-app campaign info sheet. Template defaults with the campaign's own
+ * dates and milestones filled in, so every campaign explains itself without extra admin copy.
+ */
+export function howItWorksFor(c: { template: CampaignTemplate; startsAt: string; endsAt: string; marks?: CampaignMark[] | null }): CampaignStep[] {
+  const range = `${shortDate(c.startsAt)}–${shortDate(c.endsAt)}`;
+  const marks = (c.marks ?? []).filter((m) => m.label && m.date > c.startsAt && m.date < c.endsAt);
+  const milestone: CampaignStep[] = marks.length
+    ? [{ emoji: marks[0].emoji || '🎯', title: 'Hit the milestones together', body: marks.map((m) => `${m.emoji} ${m.label} (${shortDate(m.date)})`).join(' · ') }]
+    : [];
+  switch (c.template) {
+    case 'seasonal_circle':
+      return [
+        { emoji: '👥', title: 'Start your crew', body: `Create a circle and invite up to 4 friends to fill your 5 seats before ${shortDate(c.startsAt)}. Seats stay open after it starts.` },
+        { emoji: '✅', title: 'Check in every day', body: `From ${range}, log anything each day: a meal, a walk, a workout or your water. Small counts.` },
+        { emoji: '🔥', title: 'Keep the streak together', body: 'Your circle streak grows when everyone shows up, and friends can save a missed day for each other.' },
+        ...milestone,
+      ];
+    case 'daily_calendar':
+      return [
+        { emoji: '🗓️', title: 'Open a door a day', body: `From ${range}, a new door unlocks each morning with a small, fun challenge.` },
+        { emoji: '✅', title: 'Do the tiny task', body: 'Each door takes a few minutes. Do it, tap done, and build your streak.' },
+        { emoji: '👯', title: 'See your friends', body: 'Your circle sees who opened today, so you can cheer each other on.' },
+        ...milestone,
+      ];
+    default:
+      return [
+        { emoji: '✨', title: 'Take a look', body: `Running ${range}. Tap below to jump in.` },
+        ...milestone,
+      ];
+  }
+}

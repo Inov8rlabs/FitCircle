@@ -5,6 +5,7 @@
  */
 import { addDays, daysBetween } from '@/lib/streaks/streak-calculator';
 
+import { howItWorksFor } from './campaign-utils';
 import { PHASE_RANK, dateOfDay, totalDaysOf, type CampaignRow } from './model';
 import {
   DEFAULT_CTA_LABEL,
@@ -121,6 +122,7 @@ export function buildCampaignView(row: CampaignRow, ctx: ViewContext): CampaignV
     marks: row.marks ?? [],
     participant: { joined: !!ctx.participant?.joined, reminders: !!ctx.participant?.reminders },
     calendar: row.template === 'daily_calendar' ? buildCalendar(row, ctx) : null,
+    howItWorks: howItWorksFor({ template: row.template, startsAt: row.starts_at, endsAt: row.ends_at, marks: row.marks }),
     isPreview: !!ctx.isPreview,
   };
 }
