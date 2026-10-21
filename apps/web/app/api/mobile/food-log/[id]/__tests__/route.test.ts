@@ -1,3 +1,4 @@
+import { NextRequest } from 'next/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const calls = { update: [] as any[] };
@@ -6,7 +7,11 @@ vi.mock('@/lib/middleware/mobile-auth', () => ({
   requireMobileAuth: async () => ({ id: 'user-1' }),
 }));
 vi.mock('@/lib/supabase-admin', () => ({ createAdminSupabase: () => ({}) }));
-vi.mock('@/lib/services/food-log-image-service', () => ({ FoodLogImageService: {} }));
+vi.mock('@/lib/services/food-log-image-service', () => ({
+  FoodLogImageService: {
+    withPhotoUrls: async (entries: any[]) => entries.map((e) => ({ ...e, image_urls: [] })),
+  },
+}));
 vi.mock('@/lib/services/food-log-service', () => ({
   FoodLogService: {
     updateEntry: async (entryId: string, userId: string, data: any) => {
@@ -33,11 +38,11 @@ import { PATCH } from '../route';
 const ID = '11111111-1111-4111-8111-111111111111';
 const patch = (body: unknown) =>
   PATCH(
-    new Request(`http://localhost/api/mobile/food-log/${ID}`, {
+    new NextRequest(`http://localhost/api/mobile/food-log/${ID}`, {
       method: 'PATCH',
       body: JSON.stringify(body),
       headers: { 'content-type': 'application/json' },
-    }) as any,
+    }),
     { params: Promise.resolve({ id: ID }) }
   );
 

@@ -21,6 +21,26 @@ import {
 } from '@/lib/validation/food-log-validation';
 import { parseLenient, validationMessage } from '@/lib/validation/lenient-parse';
 
+function errorResponse(code: string, message: string, status: number, details: Record<string, unknown> = {}) {
+  return NextResponse.json(
+    {
+      success: false,
+      data: null,
+      error: { code, message, details, timestamp: new Date().toISOString() },
+      meta: null,
+    },
+    { status }
+  );
+}
+
+/** PATCH failure → HTTP status. */
+const UPDATE_FAILURE_STATUS = {
+  VALIDATION_ERROR: 400,
+  FORBIDDEN: 403,
+  NOT_FOUND: 404,
+  DATABASE_ERROR: 500,
+} as const;
+
 /**
  * GET /api/mobile/food-log/[id]
  * Get single food log entry with images
@@ -125,7 +145,14 @@ export async function GET(
 
 /**
  * PATCH /api/mobile/food-log/[id]
- * Update food log entry
+ * Update food log entry.
+ *
+ * 200 → `data` is the updated entry plus `image_urls` (always) / `photo_url`
+ * (when any), same shape as GET /food-log. Errors carry `error.code`:
+ *  - 400 INVALID_JSON / VALIDATION_ERROR (bad body or a value the DB rejects)
+ *  - 404 NOT_FOUND (no such entry, or it was deleted)
+ *  - 403 FORBIDDEN (another user's entry)
+ *  - 500 DATABASE_ERROR / INTERNAL_SERVER_ERROR
  */
 export async function PATCH(
   request: NextRequest,
@@ -144,7 +171,12 @@ export async function PATCH(
     // Tolerant parse: `entry_type: "snack"` means "this is a snack" (meal_type snack
     // unless another meal_type was sent); explicit nulls on optional fields are
     // treated as "not sent".
-    const body = await request.json();
+    let body: any;
+    try {
+      body = await request.json();
+    } catch {
+      return errorResponse('INVALID_JSON', 'Request body must be valid JSON', 400);
+    }
     const validatedData = parseLenient(
       UpdateFoodLogEntrySchema,
       normalizeFoodLogEntryAliases(body)
@@ -163,26 +195,24 @@ export async function PATCH(
     // Update entry
     const result = await FoodLogService.updateEntry(entryId, user.id, validatedData, supabase);
 
-    if (result.error) {
-      return NextResponse.json(
-        {
-          success: false,
-          data: null,
-          error: {
-            code: 'UPDATE_FAILED',
-            message: result.error.message,
-            details: {},
-            timestamp: new Date().toISOString(),
-          },
-          meta: null,
-        },
-        { status: 400 }
-      );
+    if (result.error || !result.data) {
+      const failure = result.failure ?? 'DATABASE_ERROR';
+      if (failure === 'DATABASE_ERROR') {
+        console.error('[Mobile API] Update food log entry DB error:', { message: result.error?.message });
+        return errorResponse('DATABASE_ERROR', 'Could not update the entry', 500);
+      }
+      return errorResponse(failure, result.error?.message ?? 'Update failed', UPDATE_FAILURE_STATUS[failure]);
     }
+
+    // Photo URLs in the list endpoint's shape, so the client can drop local copies.
+    const apiBase = process.env.NEXT_PUBLIC_APP_URL || request.nextUrl.origin;
+    const [entry] = await FoodLogImageService.withPhotoUrls([result.data], supabase, apiBase, {
+      alwaysIncludeList: true,
+    });
 
     return NextResponse.json({
       success: true,
-      data: result.data,
+      data: entry,
       meta: {
         requestTime: Date.now() - startTime,
       },
@@ -249,9 +279,14 @@ export async function PATCH(
 
 /**
  * DELETE /api/mobile/food-log/[id]
- * Delete food log entry (soft delete, owner only — someone else's or a missing
- * id → 400 DELETE_FAILED). Used for the Hydration card's Undo: deleting a water
- * entry also returns `data.hydration: { todayMl, goalMl, date }` (optional).
+ * Delete food log entry (soft delete, owner only). Idempotent, so an offline
+ * outbox can replay it:
+ *  - 200 `{ deleted: true, entryId }`  — this call deleted it
+ *  - 200 `{ deleted: false, entryId }` — already deleted, or no such id
+ *  - 404 NOT_FOUND — another user's entry (never touched)
+ *  - 500 DATABASE_ERROR — retry later
+ * Used for the Hydration card's Undo: a water entry (deleted now or before) also
+ * returns `data.hydration: { todayMl, goalMl, date }` (optional).
  */
 export async function DELETE(
   request: NextRequest,
@@ -271,21 +306,10 @@ export async function DELETE(
       defer: (task) => runAfterResponse(task, 'food-log delete side effect'),
     });
 
-    if (result.error) {
-      return NextResponse.json(
-        {
-          success: false,
-          data: null,
-          error: {
-            code: 'DELETE_FAILED',
-            message: result.error.message,
-            details: {},
-            timestamp: new Date().toISOString(),
-          },
-          meta: null,
-        },
-        { status: 400 }
-      );
+    if (!result.success) {
+      if (result.notFound) return errorResponse('NOT_FOUND', 'Entry not found', 404);
+      console.error('[Mobile API] Delete food log entry DB error:', { message: result.error?.message });
+      return errorResponse('DATABASE_ERROR', 'Could not delete the entry', 500);
     }
 
     const hydration =
@@ -295,7 +319,7 @@ export async function DELETE(
 
     return NextResponse.json({
       success: true,
-      data: { deleted: true, entryId, ...(hydration ? { hydration } : {}) },
+      data: { deleted: result.deleted === true, entryId, ...(hydration ? { hydration } : {}) },
       meta: {
         requestTime: Date.now() - startTime,
       },

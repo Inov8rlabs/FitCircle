@@ -4,6 +4,8 @@
  * Business logic for image uploads, processing, and management
  */
 
+import { createHash, randomUUID } from 'crypto';
+
 import { type SupabaseClient } from '@supabase/supabase-js';
 import sharp from 'sharp';
 
@@ -12,17 +14,102 @@ import type { FoodLogImage } from '@/lib/types/food-log';
 
 import { CircleMealPostService } from './circle-meal-post-service';
 
+/** A client-supplied per-file idempotency key: 1–128 chars of [A-Za-z0-9._:-]. */
+const IMAGE_KEY_RE = /^[A-Za-z0-9._:-]{1,128}$/;
+const POSTGRES_UNIQUE_VIOLATION = '23505';
+
+/** Same shape as the list endpoint's per-entry photo fields. */
+export interface EntryPhotoUrls {
+  /** First image (back-compat). Only present when the entry has images. */
+  photo_url?: string;
+  /** Every live image, ordered by display_order (medium size). */
+  image_urls: string[];
+}
+
 export class FoodLogImageService {
+  static isValidImageKey(key: unknown): key is string {
+    return typeof key === 'string' && IMAGE_KEY_RE.test(key);
+  }
+
   /**
-   * Upload and process image for food log entry
+   * The batch endpoint's optional per-file `image_keys` form values: none →
+   * undefined (content-hash dedupe); otherwise exactly one valid key per file,
+   * either as repeated fields or one JSON array string ('' / null = no key).
+   */
+  static parseImageKeys(
+    values: string[],
+    fileCount: number
+  ): { keys?: (string | undefined)[]; error?: string } {
+    let raw = values;
+    if (raw.length === 0) return {};
+    if (raw.length === 1 && raw[0].trim().startsWith('[')) {
+      try {
+        const parsed = JSON.parse(raw[0]);
+        if (!Array.isArray(parsed)) return { error: 'image_keys must be an array' };
+        raw = parsed.map((k) => (k == null ? '' : String(k)));
+      } catch {
+        return { error: 'image_keys is not valid JSON' };
+      }
+    }
+    if (raw.length !== fileCount) {
+      return { error: `image_keys has ${raw.length} values for ${fileCount} images` };
+    }
+    const keys = raw.map((k) => (k === '' ? undefined : k));
+    if (keys.some((k) => k !== undefined && !this.isValidImageKey(k))) {
+      return { error: 'Each image key must be 1-128 characters of A-Z a-z 0-9 . _ : -' };
+    }
+    return { keys };
+  }
+
+  /**
+   * The image row id for an upload, derived from the entry and the upload's key —
+   * so a retried upload of the same file maps to the same row (primary key) and
+   * is recognised instead of stored twice. The key is the client's `image_key`
+   * when sent, else the SHA-256 of the file's bytes.
+   */
+  static deterministicImageId(entryId: string, key: string): string {
+    // uuid ids are case-insensitive (iOS sends uppercase, Postgres reads back lowercase).
+    const b = createHash('sha256').update(`food-log-image:${entryId.toLowerCase()}:${key}`).digest();
+    b[6] = (b[6] & 0x0f) | 0x50; // version nibble (name-based)
+    b[8] = (b[8] & 0x3f) | 0x80; // RFC 4122 variant
+    const hex = b.subarray(0, 16).toString('hex');
+    return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+  }
+
+  /** The live image row with this id on this entry, if any. */
+  private static async findLiveImage(
+    imageId: string,
+    entryId: string,
+    supabase: SupabaseClient
+  ): Promise<{ image: FoodLogImage | null; softDeleted: boolean }> {
+    const { data } = await supabase
+      .from('food_log_images')
+      .select('*')
+      .eq('id', imageId)
+      .maybeSingle();
+    // Compare as uuids: the path id may be uppercase (iOS), the column reads back lowercase.
+    if (!data || String(data.food_log_entry_id).toLowerCase() !== entryId.toLowerCase()) {
+      return { image: null, softDeleted: false };
+    }
+    if (data.deleted_at) return { image: null, softDeleted: true };
+    return { image: data as FoodLogImage, softDeleted: false };
+  }
+
+  /**
+   * Upload and process image for food log entry.
+   *
+   * Idempotent per entry + key (`opts.imageKey`, else the file's content hash):
+   * re-uploading the same file returns the stored image with `duplicate: true`
+   * and changes nothing (no new row, no image_count bump, no audit row).
    */
   static async uploadImage(
     entryId: string,
     userId: string,
     file: File,
     displayOrder: number,
-    supabase: SupabaseClient
-  ): Promise<{ success: boolean; image?: FoodLogImage; error?: Error }> {
+    supabase: SupabaseClient,
+    opts: { imageKey?: string } = {}
+  ): Promise<{ success: boolean; image?: FoodLogImage; error?: Error; duplicate?: boolean; imageKey?: string }> {
     try {
       // Validate file
       this.validateImage(file);
@@ -38,8 +125,20 @@ export class FoodLogImageService {
         throw new Error('Not authorized to upload images to this entry');
       }
 
+      // Read the bytes once: they're hashed for the idempotency key and processed below.
+      const buffer = await file.arrayBuffer();
+      const imageKey =
+        opts.imageKey ?? `sha256:${createHash('sha256').update(Buffer.from(buffer)).digest('hex')}`;
+
+      // Retry of an upload that already landed → hand back the stored image.
+      let imageId = this.deterministicImageId(entryId, imageKey);
+      const prior = await this.findLiveImage(imageId, entryId, supabase);
+      if (prior.image) return { success: true, image: prior.image, duplicate: true, imageKey };
+      // The same photo was attached before and then removed: this is a fresh attach.
+      if (prior.softDeleted) imageId = randomUUID();
+      const deterministic = !prior.softDeleted;
+
       // Generate paths
-      const imageId = crypto.randomUUID();
       const date = new Date();
       const year = date.getFullYear();
       const month = String(date.getMonth() + 1).padStart(2, '0');
@@ -50,7 +149,6 @@ export class FoodLogImageService {
       const thumbnailPath = `${basePath}/${imageId}_thumbnail.jpg`;
 
       // Process image
-      const buffer = await file.arrayBuffer();
       const image = sharp(Buffer.from(buffer));
       const metadata = await image.metadata();
 
@@ -70,17 +168,18 @@ export class FoodLogImageService {
         supabase.storage.from(bucket).upload(originalPath, original, {
           contentType: 'image/jpeg',
           cacheControl: '31536000', // 1 year
-          upsert: false,
+          // Deterministic paths: an earlier attempt may have stored the files but not the row.
+          upsert: deterministic,
         }),
         supabase.storage.from(bucket).upload(mediumPath, medium, {
           contentType: 'image/jpeg',
           cacheControl: '31536000',
-          upsert: false,
+          upsert: deterministic,
         }),
         supabase.storage.from(bucket).upload(thumbnailPath, thumbnail, {
           contentType: 'image/jpeg',
           cacheControl: '31536000',
-          upsert: false,
+          upsert: deterministic,
         }),
       ]);
 
@@ -106,11 +205,23 @@ export class FoodLogImageService {
           height: metadata.height,
           thumbnail_path: thumbnailPath,
           display_order: displayOrder,
+          metadata: { image_key: imageKey },
         })
         .select()
         .single();
 
       if (error) {
+        // A concurrent retry of the same upload won the insert: return its row.
+        if (error.code === POSTGRES_UNIQUE_VIOLATION && deterministic) {
+          const winner = await this.findLiveImage(imageId, entryId, supabase);
+          if (winner.image) {
+            // Same id → same paths, unless the winner ran in another month.
+            if (winner.image.storage_path !== originalPath) {
+              await this.cleanupStorageFiles(bucket, [originalPath, mediumPath, thumbnailPath], supabase);
+            }
+            return { success: true, image: winner.image, duplicate: true, imageKey };
+          }
+        }
         // Cleanup storage on error
         await this.cleanupStorageFiles(bucket, [originalPath, mediumPath, thumbnailPath], supabase);
         return { success: false, error: new Error(error.message) };
@@ -142,10 +253,10 @@ export class FoodLogImageService {
         food_log_entry_id: entryId,
         user_id: userId,
         action: 'image_upload',
-        metadata: { image_id: imageId, file_name: file.name },
+        metadata: { image_id: imageId, file_name: file.name, image_key: imageKey },
       });
 
-      return { success: true, image: imageRecord };
+      return { success: true, image: imageRecord, duplicate: false, imageKey };
     } catch (error) {
       return {
         success: false,
@@ -159,19 +270,26 @@ export class FoodLogImageService {
    * processed independently — partial success is possible. The returned
    * payload describes which files succeeded and which failed.
    *
+   * Idempotent: each file is keyed by `imageKeys[i]` when given, else by its
+   * content hash, so retrying a batch whose response was lost returns the
+   * stored images (`duplicates`) instead of attaching them twice.
+   *
    * `display_order` is auto-assigned starting from the current image_count
-   * on the entry, in the order the files are provided.
+   * on the entry, in the order the files are provided (duplicates don't take
+   * a slot).
    */
   static async uploadImages(
     entryId: string,
     userId: string,
     files: File[],
-    supabase: SupabaseClient
+    supabase: SupabaseClient,
+    imageKeys?: (string | undefined)[]
   ): Promise<{
-    uploaded: FoodLogImage[];
-    failed: { file_name: string; error: string }[];
+    uploaded: (FoodLogImage & { image_key?: string; duplicate?: boolean })[];
+    failed: { file_name: string; error: string; image_key?: string }[];
+    duplicates: number;
   }> {
-    if (files.length === 0) return { uploaded: [], failed: [] };
+    if (files.length === 0) return { uploaded: [], failed: [], duplicates: 0 };
 
     // Snapshot the starting display_order so the batch lays out in order
     // even if a sibling upload happens mid-flight.
@@ -182,21 +300,78 @@ export class FoodLogImageService {
       .single();
     const startOrder = entry?.image_count ?? 0;
 
-    const uploaded: FoodLogImage[] = [];
-    const failed: { file_name: string; error: string }[] = [];
+    const uploaded: (FoodLogImage & { image_key?: string; duplicate?: boolean })[] = [];
+    const failed: { file_name: string; error: string; image_key?: string }[] = [];
+    let created = 0;
+    let duplicates = 0;
 
     // Serialize per file: parallelism here can race the image_count update
     // and produce duplicate display_orders.
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
-      const result = await this.uploadImage(entryId, userId, file, startOrder + i, supabase);
+      const clientKey = imageKeys?.[i];
+      const result = await this.uploadImage(entryId, userId, file, startOrder + created, supabase, {
+        imageKey: clientKey,
+      });
       if (result.success && result.image) {
-        uploaded.push(result.image);
+        if (result.duplicate) duplicates++;
+        else created++;
+        uploaded.push({
+          ...result.image,
+          image_key: result.imageKey,
+          ...(result.duplicate ? { duplicate: true } : {}),
+        });
       } else {
-        failed.push({ file_name: file.name, error: result.error?.message ?? 'Unknown error' });
+        failed.push({
+          file_name: file.name,
+          error: result.error?.message ?? 'Unknown error',
+          ...(clientKey ? { image_key: clientKey } : {}),
+        });
       }
     }
-    return { uploaded, failed };
+    return { uploaded, failed, duplicates };
+  }
+
+  /**
+   * Attach `photo_url` / `image_urls` to entries — the shape GET /food-log
+   * returns — reading images only for entries that have any. With
+   * `alwaysIncludeList`, entries without images get `image_urls: []` (create /
+   * PATCH responses, so a client can tell "no photos" from "not reported").
+   */
+  static async withPhotoUrls<T extends { id: string; has_images?: boolean | null; image_count?: number | null }>(
+    entries: T[],
+    supabase: SupabaseClient,
+    apiBase: string,
+    opts: { alwaysIncludeList?: boolean } = {}
+  ): Promise<(T & Partial<EntryPhotoUrls>)[]> {
+    const withImages = entries.filter((e) => e.has_images && (e.image_count ?? 0) > 0);
+
+    const idsByEntry = new Map<string, string[]>();
+    if (withImages.length > 0) {
+      const { data: images } = await supabase
+        .from('food_log_images')
+        .select('id, food_log_entry_id, display_order')
+        .in('food_log_entry_id', withImages.map((e) => e.id))
+        .is('deleted_at', null)
+        .order('display_order', { ascending: true });
+
+      for (const img of images || []) {
+        const list = idsByEntry.get(img.food_log_entry_id) ?? [];
+        list.push(img.id);
+        idsByEntry.set(img.food_log_entry_id, list);
+      }
+    }
+
+    return entries.map((entry) => {
+      const ids = idsByEntry.get(entry.id) ?? [];
+      if (ids.length === 0) return opts.alwaysIncludeList ? { ...entry, image_urls: [] } : entry;
+      const image_urls = ids.map((id) => `${apiBase}/api/mobile/food-log/images/${id}?size=medium`);
+      return {
+        ...entry,
+        photo_url: image_urls[0], // back-compat: first image
+        image_urls, // full ordered list for carousels
+      };
+    });
   }
 
   /**

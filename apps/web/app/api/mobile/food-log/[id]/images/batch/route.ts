@@ -8,6 +8,13 @@
  *
  * The per-file endpoint at /api/mobile/food-log/[id]/images is still
  * supported for one-at-a-time uploads and backwards compatibility.
+ *
+ * Idempotent: a retried batch never attaches the same photo twice. Each file is
+ * keyed by an optional client `image_keys` value (repeated form field, one per
+ * file in the same order, or a single JSON array string), else by the SHA-256
+ * of its bytes. Already-stored files come back in `uploaded` with
+ * `duplicate: true`; `counts.duplicates` counts them. 201 when anything new was
+ * stored, 200 when the whole batch was already there, 400 when nothing stored.
  */
 
 import { type NextRequest, NextResponse } from 'next/server';
@@ -66,15 +73,38 @@ export async function POST(
       );
     }
 
-    const { uploaded, failed } = await FoodLogImageService.uploadImages(
+    const imageKeys = FoodLogImageService.parseImageKeys(
+      formData.getAll('image_keys').filter((v): v is string => typeof v === 'string'),
+      fileEntries.length
+    );
+    if (imageKeys.error) {
+      return NextResponse.json(
+        {
+          success: false,
+          data: null,
+          error: {
+            code: 'INVALID_IMAGE_KEYS',
+            message: imageKeys.error,
+            details: {},
+            timestamp: new Date().toISOString(),
+          },
+          meta: null,
+        },
+        { status: 400 }
+      );
+    }
+
+    const { uploaded, failed, duplicates } = await FoodLogImageService.uploadImages(
       entryId,
       user.id,
       fileEntries,
-      supabase
+      supabase,
+      imageKeys.keys
     );
 
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL || request.nextUrl.origin;
     const uploadedWithUrls = FoodLogImageService.addImageUrlsToMany(uploaded, baseUrl);
+    const created = uploaded.length - duplicates;
 
     return NextResponse.json(
       {
@@ -82,13 +112,14 @@ export async function POST(
         data: {
           uploaded: uploadedWithUrls,
           failed,
-          counts: { uploaded: uploaded.length, failed: failed.length },
+          counts: { uploaded: uploaded.length, failed: failed.length, duplicates },
         },
         meta: { requestTime: Date.now() - startTime },
         error: null,
       },
-      // 201 if anything was created; 207-style payload signals partial failure.
-      { status: uploaded.length > 0 ? 201 : 400 }
+      // 201 if anything was created, 200 if everything was already stored (a
+      // retry); a non-empty `failed` signals partial failure.
+      { status: created > 0 ? 201 : uploaded.length > 0 ? 200 : 400 }
     );
   } catch (error: any) {
     console.error('[Mobile API] Batch upload food log images error:', {

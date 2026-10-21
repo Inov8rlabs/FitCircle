@@ -377,21 +377,23 @@ describe('DELETE /api/mobile/food-log/[id] — Undo', () => {
     expect(mealPosts.deleted).toEqual([]); // water never had a meal card
   });
 
-  it('a retried Undo succeeds again', async () => {
+  it('a retried Undo succeeds again (deleted: false — nothing left to delete — with the hydration total)', async () => {
     seed({ claimedToday: true });
     await post({ id: ENTRY_ID, entry_type: 'water', water_ml: 250 });
     await del(ENTRY_ID);
     const again = await del(ENTRY_ID);
     expect(again.status).toBe(200);
-    expect((await again.json()).data.hydration.todayMl).toBe(750);
+    const body = await again.json();
+    expect(body.data).toMatchObject({ deleted: false, entryId: ENTRY_ID });
+    expect(body.data.hydration.todayMl).toBe(750);
   });
 
   it('is owner-only: another user\'s entry is not deleted and no hydration leaks', async () => {
     seed({ claimedToday: true });
     const res = await del('e-4'); // OTHER's water
     const body = await res.json();
-    expect(res.status).toBe(400);
-    expect(body.error.code).toBe('DELETE_FAILED');
+    expect(res.status).toBe(404);
+    expect(body.error.code).toBe('NOT_FOUND');
     expect(body.data).toBeNull();
     expect(rows('food_log_entries').find((r) => r.id === 'e-4')!.deleted_at).toBeNull();
   });

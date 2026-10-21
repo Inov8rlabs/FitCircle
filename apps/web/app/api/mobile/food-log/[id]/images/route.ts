@@ -16,6 +16,9 @@ import { createAdminSupabase } from '@/lib/supabase-admin';
  * Content-Type: multipart/form-data
  * Max file size: 10MB per image
  * Allowed types: image/jpeg, image/png, image/webp, image/heic
+ * Optional `image_key` (1-128 chars [A-Za-z0-9._:-]): idempotency key. Re-uploading
+ * the same key (or, without a key, the same bytes) to the same entry returns the
+ * stored image with 200 + meta.duplicate instead of attaching a copy.
  */
 export async function POST(
   request: NextRequest,
@@ -34,6 +37,25 @@ export async function POST(
     const formData = await request.formData();
     const file = formData.get('image') as File;
     const displayOrder = parseInt(formData.get('display_order') as string) || 0;
+    // Optional idempotency key; without one the file's content hash is used.
+    const rawKey = formData.get('image_key');
+    const imageKey = typeof rawKey === 'string' && rawKey !== '' ? rawKey : undefined;
+    if (imageKey !== undefined && !FoodLogImageService.isValidImageKey(imageKey)) {
+      return NextResponse.json(
+        {
+          success: false,
+          data: null,
+          error: {
+            code: 'INVALID_IMAGE_KEY',
+            message: 'image_key must be 1-128 characters of A-Z a-z 0-9 . _ : -',
+            details: {},
+            timestamp: new Date().toISOString(),
+          },
+          meta: null,
+        },
+        { status: 400 }
+      );
+    }
 
     if (!file) {
       return NextResponse.json(
@@ -58,7 +80,8 @@ export async function POST(
       user.id,
       file,
       displayOrder,
-      supabase
+      supabase,
+      { imageKey }
     );
 
     if (result.error) {
@@ -90,10 +113,12 @@ export async function POST(
         data: imageWithUrls,
         meta: {
           requestTime: Date.now() - startTime,
+          ...(result.duplicate ? { duplicate: true } : {}),
         },
         error: null,
       },
-      { status: 201 }
+      // A re-upload of a photo already on the entry returns the stored image.
+      { status: result.duplicate ? 200 : 201 }
     );
   } catch (error: any) {
     console.error('[Mobile API] Upload food log image error:', {

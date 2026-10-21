@@ -30,6 +30,15 @@ import { CircleMealPostService } from './circle-meal-post-service';
 export type DeferFn = (task: () => Promise<unknown> | unknown) => void;
 
 const POSTGRES_UNIQUE_VIOLATION = '23505';
+/** invalid_text_representation — e.g. a non-UUID id. */
+const POSTGRES_INVALID_TEXT_REPRESENTATION = '22P02';
+/** Postgres errors caused by the values sent (bad type/format, check/not-null/FK). */
+const POSTGRES_CLIENT_VALUE_ERRORS = new Set(['22P02', '22007', '22008', '22003', '23502', '23503', '23514']);
+/** PostgREST: `.single()` matched no row. */
+const POSTGREST_NO_ROWS = 'PGRST116';
+
+/** Why an update failed — routes map it to a status code. */
+export type UpdateFailure = 'NOT_FOUND' | 'FORBIDDEN' | 'VALIDATION_ERROR' | 'DATABASE_ERROR';
 
 export class FoodLogService {
   /**
@@ -296,18 +305,27 @@ export class FoodLogService {
     userId: string,
     data: UpdateFoodLogEntryInput,
     supabase: SupabaseClient
-  ): Promise<{ data: FoodLogEntry | null; error: Error | null }> {
+  ): Promise<{ data: FoodLogEntry | null; error: Error | null; failure?: UpdateFailure }> {
     try {
-      // Verify ownership
-      const { data: existing } = await supabase
+      // Verify ownership. Missing / deleted → NOT_FOUND; someone else's → FORBIDDEN.
+      const { data: existing, error: readError } = await supabase
         .from('food_log_entries')
         .select('user_id')
         .eq('id', entryId)
         .is('deleted_at', null)
-        .single();
+        .maybeSingle();
 
-      if (!existing || existing.user_id !== userId) {
-        return { data: null, error: new Error('Not authorized') };
+      if (readError) {
+        if (readError.code === POSTGRES_INVALID_TEXT_REPRESENTATION) {
+          return { data: null, error: new Error('Entry not found'), failure: 'NOT_FOUND' };
+        }
+        return { data: null, error: new Error(readError.message), failure: 'DATABASE_ERROR' };
+      }
+      if (!existing) {
+        return { data: null, error: new Error('Entry not found'), failure: 'NOT_FOUND' };
+      }
+      if (existing.user_id !== userId) {
+        return { data: null, error: new Error('Not authorized to edit this entry'), failure: 'FORBIDDEN' };
       }
 
       // Build update payload — only include keys the caller actually provided
@@ -347,7 +365,15 @@ export class FoodLogService {
         .single();
 
       if (error) {
-        return { data: null, error: new Error(error.message) };
+        // Deleted between the ownership read and the update.
+        if (error.code === POSTGREST_NO_ROWS) {
+          return { data: null, error: new Error('Entry not found'), failure: 'NOT_FOUND' };
+        }
+        // A value Postgres rejected (bad format, check / not-null / FK) is the client's.
+        if (error.code && POSTGRES_CLIENT_VALUE_ERRORS.has(error.code)) {
+          return { data: null, error: new Error(error.message), failure: 'VALIDATION_ERROR' };
+        }
+        return { data: null, error: new Error(error.message), failure: 'DATABASE_ERROR' };
       }
 
       // Audit log
@@ -361,6 +387,7 @@ export class FoodLogService {
       return {
         data: null,
         error: error instanceof Error ? error : new Error('Unknown error'),
+        failure: 'DATABASE_ERROR',
       };
     }
   }
@@ -630,39 +657,69 @@ export class FoodLogService {
   }
 
   /**
-   * Soft delete food log entry (images handled separately)
+   * Soft delete food log entry (images handled separately). Idempotent for the
+   * owner:
+   *  - live entry            → soft-deleted, `deleted: true`
+   *  - already deleted / missing id → `success: true, deleted: false` (no side effects re-run)
+   *  - another user's entry  → `notFound: true` (callers answer 404; never touched)
+   *  - database failure      → `error` + `dbError: true` (callers answer 500)
    */
   static async deleteEntry(
     entryId: string,
     userId: string,
     supabase: SupabaseClient,
     opts: { defer?: DeferFn } = {}
-  ): Promise<{ success: boolean; error: Error | null; entryType?: string | null }> {
+  ): Promise<{
+    success: boolean;
+    error: Error | null;
+    /** A row was soft-deleted by this call. */
+    deleted?: boolean;
+    /** The id is someone else's entry. */
+    notFound?: boolean;
+    /** The failure is a database/server error, not a client one. */
+    dbError?: boolean;
+    entryType?: string | null;
+  }> {
     try {
       // Verify ownership (and learn the entry type: deleting water returns the
       // new hydration total). Kept as a separate read rather than UPDATE…RETURNING
       // because the web list calls this with an RLS client whose SELECT policy
       // hides soft-deleted rows, so RETURNING would come back empty.
-      const { data: entry } = await supabase
+      const { data: entry, error: readError } = await supabase
         .from('food_log_entries')
-        .select('user_id, entry_type')
+        .select('user_id, entry_type, deleted_at')
         .eq('id', entryId)
-        .single();
+        .maybeSingle();
 
-      if (!entry || entry.user_id !== userId) {
-        return { success: false, error: new Error('Not authorized') };
+      if (readError) {
+        // A malformed id can't name a row: treat it as missing, not a server error.
+        if (readError.code === POSTGRES_INVALID_TEXT_REPRESENTATION) {
+          return { success: true, error: null, deleted: false, entryType: null };
+        }
+        return { success: false, error: new Error(readError.message), dbError: true };
       }
 
-      // Soft delete entry (re-deleting an already-deleted entry succeeds, so an
-      // undo can be retried safely).
+      // Missing (never synced, or hidden from an RLS client once deleted): nothing to do.
+      if (!entry) return { success: true, error: null, deleted: false, entryType: null };
+
+      if (entry.user_id !== userId) {
+        return { success: false, error: new Error('Entry not found'), notFound: true };
+      }
+
+      // Already deleted: a retried delete / undo succeeds without re-running side effects.
+      if (entry.deleted_at) {
+        return { success: true, error: null, deleted: false, entryType: entry.entry_type ?? null };
+      }
+
       const { error } = await supabase
         .from('food_log_entries')
         .update({ deleted_at: new Date().toISOString() })
         .eq('id', entryId)
-        .eq('user_id', userId);
+        .eq('user_id', userId)
+        .is('deleted_at', null);
 
       if (error) {
-        return { success: false, error: new Error(error.message) };
+        return { success: false, error: new Error(error.message), dbError: true };
       }
 
       const audit = () => this.auditLog(userId, entryId, 'delete', supabase);
@@ -676,11 +733,12 @@ export class FoodLogService {
         void CircleMealPostService.onMealDeleted(entryId);
       }
 
-      return { success: true, error: null, entryType: entry.entry_type ?? null };
+      return { success: true, error: null, deleted: true, entryType: entry.entry_type ?? null };
     } catch (error) {
       return {
         success: false,
         error: error instanceof Error ? error : new Error('Unknown error'),
+        dbError: true,
       };
     }
   }

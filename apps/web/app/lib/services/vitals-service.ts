@@ -109,10 +109,13 @@ export class VitalsService {
   static async hydrationForResponse(
     userId: string,
     request: { headers: { get(name: string): string | null } },
-    profile?: { timezone?: string | null; preferences?: unknown } | null
+    profile?: { timezone?: string | null; preferences?: unknown } | null,
+    /** Used when the request has no client timezone header (e.g. the body's log-time zone). */
+    fallbackTimezone?: string | null
   ): Promise<HydrationToday | undefined> {
     try {
-      return await this.getHydrationToday(userId, { timezone: resolveClientTimezone(request), profile });
+      const timezone = resolveClientTimezone(request) ?? fallbackTimezone ?? null;
+      return await this.getHydrationToday(userId, { timezone, profile });
     } catch (err: any) {
       console.error('[VitalsService.hydrationForResponse] skipped:', err?.message ?? err);
       return undefined;

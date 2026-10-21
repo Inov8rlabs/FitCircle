@@ -9,14 +9,14 @@ import { z } from 'zod';
 
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { FeatureFlagService } from '@/lib/services/feature-flag-service';
+import { FoodLogImageService } from '@/lib/services/food-log-image-service';
 import { FoodLogService } from '@/lib/services/food-log-service';
 import { NutritionTrainingService } from '@/lib/services/nutrition-training-service';
 import { StreakClaimingService } from '@/lib/services/streak-claiming-service';
 import { VitalsService } from '@/lib/services/vitals-service';
-import { resolveClientTimezone } from '@/lib/streaks/client-timezone';
 import { createAdminSupabase } from '@/lib/supabase-admin';
 import { runAfterResponse } from '@/lib/utils/after-response';
-import { resolveEntryDate } from '@/lib/utils/entry-date';
+import { entryDateIn, resolveEntryTimezone } from '@/lib/utils/entry-date';
 import {
   CreateFoodLogEntrySchema,
   FoodLogQuerySchema,
@@ -105,38 +105,7 @@ export async function GET(request: NextRequest) {
     // display_order). Clients show the first as a thumbnail and use the
     // full list for carousels in the detail view.
     const apiBase = process.env.NEXT_PUBLIC_APP_URL || request.nextUrl.origin;
-    const entriesWithImages = result.data.filter(
-      (e) => e.has_images && e.image_count > 0
-    );
-
-    const imagesByEntry = new Map<string, { id: string; display_order: number }[]>();
-    if (entriesWithImages.length > 0) {
-      const { data: images } = await supabase
-        .from('food_log_images')
-        .select('id, food_log_entry_id, display_order')
-        .in('food_log_entry_id', entriesWithImages.map((e) => e.id))
-        .is('deleted_at', null)
-        .order('display_order', { ascending: true });
-
-      for (const img of images || []) {
-        const list = imagesByEntry.get(img.food_log_entry_id) ?? [];
-        list.push({ id: img.id, display_order: img.display_order });
-        imagesByEntry.set(img.food_log_entry_id, list);
-      }
-    }
-
-    const entriesWithImageUrls = result.data.map((entry) => {
-      const imgs = imagesByEntry.get(entry.id);
-      if (!imgs || imgs.length === 0) return entry;
-      const image_urls = imgs.map(
-        (i) => `${apiBase}/api/mobile/food-log/images/${i.id}?size=medium`
-      );
-      return {
-        ...entry,
-        photo_url: image_urls[0], // back-compat: first image
-        image_urls,               // full ordered list for carousels
-      };
-    });
+    const entriesWithImageUrls = await FoodLogImageService.withPhotoUrls(result.data, supabase, apiBase);
 
     const response = NextResponse.json({
       success: true,
@@ -231,6 +200,13 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
  * - Water entries also return `data.hydration: { todayMl, goalMl, date }` —
  *   today's total in the user's timezone — so the apps needn't re-fetch
  *   /vitals/summary. Optional: omitted if it can't be computed.
+ * - `timezone` (optional, IANA): the zone the entry was logged in. Dates the
+ *   entry (when no entry_date is sent) and its streak claim, so an entry queued
+ *   offline and synced after travel lands on the day it was logged. Invalid →
+ *   ignored (meta.ignoredTimezone) and the header / profile zone is used, as
+ *   before. meta.entryTimezone reports the zone used and its source.
+ * - `data.image_urls` (always, may be []) and `data.photo_url` (when any): the
+ *   entry's photos, same shape as GET.
  * - Round trips (water, day already claimed): auth (blacklist ∥ profile) → flag
  *   → insert → (streak ∥ hydration). The audit row, circle meal post and the
  *   training reconcile run after the response.
@@ -273,14 +249,11 @@ export async function POST(request: NextRequest) {
       normalizeFoodLogEntryAliases(body)
     );
 
-    // File the entry under the day it was eaten in the person's timezone.
-    validatedData.entry_date = await resolveEntryDate(
-      request,
-      { entry_date: validatedData.entry_date, logged_at: validatedData.logged_at, timezone: body?.timezone },
-      user.id,
-      supabase,
-      user
-    );
+    // File the entry under the day it was eaten in the person's timezone AT LOG
+    // TIME (body `timezone`, for entries synced later, e.g. after travel), else
+    // the request's / profile's zone. The streak claim uses the same zone.
+    const entryTz = await resolveEntryTimezone(request, body?.timezone, user.id, supabase, user);
+    validatedData.entry_date = entryDateIn(validatedData, entryTz.timezone);
 
     const clientId = typeof body?.id === 'string' && UUID_RE.test(body.id) ? body.id : undefined;
     const isWater = validatedData.entry_type === 'water';
@@ -338,20 +311,34 @@ export async function POST(request: NextRequest) {
       StreakClaimingService.autoClaimForManualLog(user.id, {
         // Claim the day the entry was filed under, so the two can never disagree.
         occurredAt: validatedData.entry_date ?? result.data?.logged_at ?? null,
-        timezone: resolveClientTimezone(request, body?.timezone),
+        // With no zone from the client or profile, the claim keeps its own
+        // fallback (the last claim's zone).
+        timezone: entryTz.source === 'default' ? null : entryTz.timezone,
         source: 'food_log',
         referenceId: result.data?.id,
       }),
-      isWater ? VitalsService.hydrationForResponse(user.id, request, user) : Promise.resolve(undefined),
+      isWater
+        ? VitalsService.hydrationForResponse(user.id, request, user, entryTz.source === 'body' ? entryTz.timezone : null)
+        : Promise.resolve(undefined),
     ]);
+
+    // Photo URLs in the list endpoint's shape (`image_urls`, always; `photo_url`
+    // when there is one). A fresh entry has none, so this reads nothing; a retried
+    // create reports the photos already uploaded.
+    const apiBase = process.env.NEXT_PUBLIC_APP_URL || request.nextUrl.origin;
+    const entry = result.data
+      ? (await FoodLogImageService.withPhotoUrls([result.data], supabase, apiBase, { alwaysIncludeList: true }))[0]
+      : null;
 
     return NextResponse.json(
       {
         success: true,
-        data: hydration && result.data ? { ...result.data, hydration } : result.data,
+        data: hydration && entry ? { ...entry, hydration } : entry,
         meta: {
           requestTime: Date.now() - startTime,
           streak,
+          entryTimezone: { timezone: entryTz.timezone, source: entryTz.source },
+          ...(entryTz.rejected !== undefined ? { ignoredTimezone: entryTz.rejected } : {}),
           ...(result.duplicate ? { duplicate: true } : {}),
         },
         error: null,
