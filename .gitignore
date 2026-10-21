@@ -104,3 +104,6 @@ data/
 
 # Fitzy live-model eval results (npm run fitzy:eval) — local run artefacts.
 apps/web/.fitzy-eval/
+
+# Local test reports (scripts/ci/run-tests.sh)
+.ci-reports/

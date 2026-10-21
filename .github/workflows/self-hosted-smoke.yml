@@ -1,0 +1,77 @@
+name: Post-deploy smoke (self-hosted Mac)
+
+# Runs scripts/smoke/prod-smoke.mjs on the always-on FitCircle Mac runner
+# (labels: self-hosted, macOS, fitcircle). See docs/TEST_PLAN.md → "Always-on runner".
+#
+# - deployment_status: Vercel reports each deployment to GitHub. Production
+#   deployments are smoked against www.fitcircle.ai; preview deployments against
+#   their own URL (unauthenticated checks only unless the preview shares prod auth).
+# - schedule: every 6 hours, as a heartbeat for prod.
+# - workflow_dispatch: manual, optional base URL.
+#
+# The QA account credentials live on the runner in ~/FitCircleCI/secrets.env
+# (never in GitHub secrets), so forks and PRs cannot read them. This workflow
+# never runs on pull_request.
+
+on:
+  deployment_status:
+  schedule:
+    - cron: '17 */6 * * *'
+  workflow_dispatch:
+    inputs:
+      base_url:
+        description: 'Base URL to smoke'
+        required: false
+        default: 'https://www.fitcircle.ai'
+
+concurrency:
+  group: self-hosted-smoke-${{ github.event.deployment_status.environment_url || github.event.inputs.base_url || 'prod' }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    if: >-
+      github.event_name != 'deployment_status' ||
+      github.event.deployment_status.state == 'success'
+    runs-on: [self-hosted, macOS, fitcircle]
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            scripts/smoke
+            scripts/ci
+          sparse-checkout-cone-mode: false
+
+      - name: Resolve target
+        id: target
+        env:
+          EVENT: ${{ github.event_name }}
+          DEPLOY_ENV: ${{ github.event.deployment_status.environment }}
+          DEPLOY_URL: ${{ github.event.deployment_status.environment_url }}
+          INPUT_URL: ${{ github.event.inputs.base_url }}
+        run: |
+          base="https://www.fitcircle.ai"
+          if [ "$EVENT" = "deployment_status" ] && [ "$DEPLOY_ENV" != "Production" ] && [ -n "$DEPLOY_URL" ]; then
+            base="$DEPLOY_URL"
+          fi
+          if [ "$EVENT" = "workflow_dispatch" ] && [ -n "$INPUT_URL" ]; then base="$INPUT_URL"; fi
+          echo "base=$base" >> "$GITHUB_OUTPUT"
+          echo "Smoke target: $base"
+
+      - name: Smoke
+        env:
+          SMOKE_BASE_URL: ${{ steps.target.outputs.base }}
+          FC_REPORT_DIR: ${{ runner.temp }}/smoke
+        run: scripts/ci/run-tests.sh smoke
+
+      - name: Upload JUnit
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-smoke-${{ github.run_id }}
+          path: ${{ runner.temp }}/smoke/
+          retention-days: 14
