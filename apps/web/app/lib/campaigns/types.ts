@@ -179,6 +179,8 @@ export interface CampaignView {
   daysUntilStart: number | null;
   daysLeft: number | null;
   art: { inAppHero: string | null; appStoreCard: string | null; appStoreDetails: string | null; emailHeader: string | null };
+  /** width / height of art.inAppHero (e.g. 1.778 for 1200x675) so clients can size it without cropping. */
+  heroAspect: number | null;
   circle: CircleTemplate | null;
   marks: CampaignMark[];
   participant: { joined: boolean; reminders: boolean };

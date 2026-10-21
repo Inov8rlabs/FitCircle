@@ -226,6 +226,7 @@ export function buildPreviewView(
       appStoreDetails: art.appStoreDetails?.url ?? null,
       emailHeader: art.emailHeader?.url ?? null,
     },
+    heroAspect: art.inAppHero?.width && art.inAppHero?.height ? Math.round((art.inAppHero.width / art.inAppHero.height) * 1000) / 1000 : null,
     circle: c.circle,
     marks: c.marks,
     participant: { joined: opts.joined ?? false, reminders: opts.reminders ?? false },
@@ -566,30 +567,22 @@ export const ART_SLOT_LABELS: Record<ArtSlot, string> = {
  * dates and milestones filled in, so every campaign explains itself without extra admin copy.
  */
 export function howItWorksFor(c: { template: CampaignTemplate; startsAt: string; endsAt: string; marks?: CampaignMark[] | null }): CampaignStep[] {
+  // Milestones (marks) are shown as the sheet's timeline, so they aren't repeated here.
   const range = `${shortDate(c.startsAt)}–${shortDate(c.endsAt)}`;
-  const marks = (c.marks ?? []).filter((m) => m.label && m.date > c.startsAt && m.date < c.endsAt);
-  const milestone: CampaignStep[] = marks.length
-    ? [{ emoji: marks[0].emoji || '🎯', title: 'Hit the milestones together', body: marks.map((m) => `${m.emoji} ${m.label} (${shortDate(m.date)})`).join(' · ') }]
-    : [];
   switch (c.template) {
     case 'seasonal_circle':
       return [
-        { emoji: '👥', title: 'Start your crew', body: `Create a circle and invite up to 4 friends to fill your 5 seats before ${shortDate(c.startsAt)}. Seats stay open after it starts.` },
-        { emoji: '✅', title: 'Check in every day', body: `From ${range}, log anything each day: a meal, a walk, a workout or your water. Small counts.` },
-        { emoji: '🔥', title: 'Keep the streak together', body: 'Your circle streak grows when everyone shows up, and friends can save a missed day for each other.' },
-        ...milestone,
+        { emoji: '👥', title: 'Fill 5 seats', body: `Invite 4 friends before ${shortDate(c.startsAt)}.` },
+        { emoji: '✅', title: 'Check in daily', body: `${range}. A meal, a walk, water: it all counts.` },
+        { emoji: '🔥', title: 'Keep the streak', body: 'Show up together. Friends can save a missed day.' },
       ];
     case 'daily_calendar':
       return [
-        { emoji: '🗓️', title: 'Open a door a day', body: `From ${range}, a new door unlocks each morning with a small, fun challenge.` },
-        { emoji: '✅', title: 'Do the tiny task', body: 'Each door takes a few minutes. Do it, tap done, and build your streak.' },
-        { emoji: '👯', title: 'See your friends', body: 'Your circle sees who opened today, so you can cheer each other on.' },
-        ...milestone,
+        { emoji: '🗓️', title: 'A door a day', body: `${range}. A new mini challenge each morning.` },
+        { emoji: '✅', title: 'Do the tiny task', body: 'A few minutes, then tap done.' },
+        { emoji: '👯', title: 'Cheer friends on', body: 'See who opened today.' },
       ];
     default:
-      return [
-        { emoji: '✨', title: 'Take a look', body: `Running ${range}. Tap below to jump in.` },
-        ...milestone,
-      ];
+      return [{ emoji: '✨', title: 'Jump in', body: `Running ${range}.` }];
   }
 }

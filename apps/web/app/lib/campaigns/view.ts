@@ -18,6 +18,9 @@ import {
 
 export const FRIENDS_SHOWN = 8;
 
+const aspectOf = (a?: { width?: number; height?: number } | null) =>
+  a?.width && a?.height ? Math.round((a.width / a.height) * 1000) / 1000 : null;
+
 export interface ViewContext {
   today: string;
   phase: CampaignPhase;
@@ -118,6 +121,7 @@ export function buildCampaignView(row: CampaignRow, ctx: ViewContext): CampaignV
       appStoreDetails: art.appStoreDetails?.url ?? null,
       emailHeader: art.emailHeader?.url ?? null,
     },
+    heroAspect: aspectOf(art.inAppHero),
     circle: row.circle_template ?? null,
     marks: row.marks ?? [],
     participant: { joined: !!ctx.participant?.joined, reminders: !!ctx.participant?.reminders },
