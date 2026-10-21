@@ -18,6 +18,45 @@ export interface PushNotification {
    * alert + apns-priority 10 + thread-id (= circleId, groups per circle) on iOS.
    */
   chat?: { threadId: string };
+  /**
+   * iOS rich-notification fields (see push-presentation.ts). Additive: merged
+   * into `aps` for both wire shapes; `custom` keys sit beside `aps` in the
+   * APNs payload (objects allowed — unlike FCM `data`, which is strings only).
+   * Android ignores all of it.
+   */
+  apns?: ApnsExtras;
+}
+
+export interface ApnsExtras {
+  category?: string;
+  mutableContent?: boolean;
+  interruptionLevel?: 'passive' | 'active' | 'time-sensitive';
+  relevanceScore?: number;
+  custom?: Record<string, unknown>;
+}
+
+type ApsDictionary = {
+  alert?: { title: string; body: string };
+  badge?: number;
+  sound?: string;
+  'thread-id'?: string;
+  category?: string;
+  'mutable-content'?: 1;
+  'interruption-level'?: 'passive' | 'active' | 'time-sensitive';
+  'relevance-score'?: number;
+};
+
+/** The `aps` additions for `extras` (absent fields stay absent). Pure; unit-tested. */
+export function apsExtras(extras: ApnsExtras | undefined): Partial<ApsDictionary> {
+  if (!extras) return {};
+  const out: Partial<ApsDictionary> = {};
+  if (extras.category) out.category = extras.category;
+  if (extras.mutableContent) out['mutable-content'] = 1;
+  if (extras.interruptionLevel) out['interruption-level'] = extras.interruptionLevel;
+  if (typeof extras.relevanceScore === 'number' && Number.isFinite(extras.relevanceScore)) {
+    out['relevance-score'] = Math.min(1, Math.max(0, extras.relevanceScore));
+  }
+  return out;
 }
 
 export interface PushToken {
@@ -43,12 +82,8 @@ interface FCMMessage {
     apns?: {
       headers?: Record<string, string>;
       payload: {
-        aps: {
-          alert?: { title: string; body: string };
-          badge?: number;
-          sound?: string;
-          'thread-id'?: string;
-        };
+        aps: ApsDictionary;
+        [custom: string]: unknown;
       };
     };
     android?: {
@@ -118,6 +153,76 @@ async function getFCMAccessToken(): Promise<string> {
   };
 
   return cachedAccessToken.token;
+}
+
+// ============================================================================
+// WIRE SHAPE
+// ============================================================================
+
+/**
+ * Build the FCM v1 message for one token. Pure; unit-tested.
+ *
+ * Chat: data-only for Android (the app renders/suppresses its own
+ * notification), while iOS still gets an alert via apns — required for
+ * apns-priority 10 — grouped per circle by thread-id.
+ * Everything else: the legacy notification + data shape.
+ * Both carry the optional iOS rich-notification extras (category,
+ * mutable-content, interruption-level, relevance-score, custom keys).
+ */
+export function buildFCMMessage(token: string, notification: PushNotification): FCMMessage {
+  const extras = apsExtras(notification.apns);
+  const custom = notification.apns?.custom ?? {};
+  if (notification.chat) {
+    return {
+      message: {
+        token,
+        data: notification.data,
+        android: {
+          priority: 'HIGH',
+        },
+        apns: {
+          headers: { 'apns-priority': '10' },
+          payload: {
+            ...custom,
+            aps: {
+              alert: {
+                title: notification.title,
+                body: notification.body,
+              },
+              sound: notification.sound || 'default',
+              ...(notification.chat.threadId ? { 'thread-id': notification.chat.threadId } : {}),
+              ...extras,
+            },
+          },
+        },
+      },
+    };
+  }
+  return {
+    message: {
+      token,
+      notification: {
+        title: notification.title,
+        body: notification.body,
+      },
+      data: notification.data,
+      apns: {
+        payload: {
+          ...custom,
+          aps: {
+            badge: notification.badge,
+            sound: notification.sound || 'default',
+            ...extras,
+          },
+        },
+      },
+      android: {
+        notification: {
+          sound: notification.sound || 'default',
+        },
+      },
+    },
+  };
 }
 
 // ============================================================================
@@ -315,58 +420,7 @@ export class PushService {
     try {
       const accessToken = await getFCMAccessToken();
 
-      const message: FCMMessage = notification.chat
-        ? {
-            // Chat wire shape: data-only for Android (the app renders/suppresses
-            // its own notification), while iOS still gets an alert via apns —
-            // required for apns-priority 10 — grouped per circle by thread-id.
-            message: {
-              token: tokenRecord.token,
-              data: notification.data,
-              android: {
-                priority: 'HIGH',
-              },
-              apns: {
-                headers: { 'apns-priority': '10' },
-                payload: {
-                  aps: {
-                    alert: {
-                      title: notification.title,
-                      body: notification.body,
-                    },
-                    sound: notification.sound || 'default',
-                    ...(notification.chat.threadId
-                      ? { 'thread-id': notification.chat.threadId }
-                      : {}),
-                  },
-                },
-              },
-            },
-          }
-        : {
-            // Legacy shape for all non-chat notifications (unchanged).
-            message: {
-              token: tokenRecord.token,
-              notification: {
-                title: notification.title,
-                body: notification.body,
-              },
-              data: notification.data,
-              apns: {
-                payload: {
-                  aps: {
-                    badge: notification.badge,
-                    sound: notification.sound || 'default',
-                  },
-                },
-              },
-              android: {
-                notification: {
-                  sound: notification.sound || 'default',
-                },
-              },
-            },
-          };
+      const message = buildFCMMessage(tokenRecord.token, notification);
 
       const response = await fetch(
         `https://fcm.googleapis.com/v1/projects/${projectId}/messages:send`,

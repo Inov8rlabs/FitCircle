@@ -45,6 +45,7 @@ export class ChatNotificationService {
 
       const truncatedPreview = this.truncatePreview(preview);
       const deepLink = `fitcircle://circles/${circleId}/chat`;
+      const senderAvatarUrl = await this.avatarUrlOf(senderId);
 
       // Resolve display names of recipients so we can match @mentions.
       const mentionedIds = await this.resolveMentionedMemberIds(
@@ -67,6 +68,8 @@ export class ChatNotificationService {
           circleName,
           friendName: senderName,
           senderName,
+          senderId,
+          senderAvatarUrl,
           preview: truncatedPreview,
           deepLink,
           messageId,
@@ -130,6 +133,8 @@ export class ChatNotificationService {
         circleName: params.circleName,
         friendName: params.reactorName,
         senderName: params.reactorName,
+        senderId: params.reactorId,
+        senderAvatarUrl: await this.avatarUrlOf(params.reactorId),
         emoji: params.emoji,
         preview: this.truncatePreview(params.preview),
         deepLink: `fitcircle://circles/${params.circleId}/chat`,
@@ -163,11 +168,13 @@ export class ChatNotificationService {
       if (recipients.length === 0) return;
       const preview = this.truncatePreview(body);
       const deepLink = `fitcircle://circles/${circleId}/chat`;
+      const senderAvatarUrl = actorUserId ? await this.avatarUrlOf(actorUserId) : null;
       for (const member of recipients) {
         void NotificationOrchestrator.send(member.userId, 'chat_message', {
           circleName,
           friendName: actorName,
           senderName: actorName,
+          ...(actorUserId ? { senderId: actorUserId, senderAvatarUrl } : {}),
           preview,
           deepLink,
           circleId,
@@ -262,6 +269,24 @@ export class ChatNotificationService {
       userId,
       muted: mutedById.get(userId) ?? false,
     }));
+  }
+
+  /**
+   * The sender's public avatar URL for the iOS Communication Notification, or
+   * null. One lookup per message (not per recipient); never throws.
+   */
+  private static async avatarUrlOf(userId: string): Promise<string | null> {
+    try {
+      const { data } = await createAdminSupabase()
+        .from('profiles')
+        .select('avatar_url')
+        .eq('id', userId)
+        .maybeSingle();
+      const url = (data as { avatar_url?: string | null } | null)?.avatar_url ?? null;
+      return typeof url === 'string' && url.startsWith('https://') ? url : null;
+    } catch {
+      return null;
+    }
   }
 
   /**
