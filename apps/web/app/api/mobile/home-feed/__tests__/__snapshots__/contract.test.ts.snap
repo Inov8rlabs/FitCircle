@@ -1,0 +1,369 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`GET /api/mobile/home-feed — 1.0.8 client fixtures > Android 1.0.8 (no circle, morning) 1`] = `
+{
+  "cards": [
+    {
+      "id": "offline_banner",
+      "type": "offline_banner",
+      "version": 1,
+    },
+    {
+      "id": "header",
+      "type": "header",
+      "version": 1,
+    },
+    {
+      "id": "health_sync_banner",
+      "type": "health_sync_banner",
+      "version": 1,
+    },
+    {
+      "id": "hydration",
+      "type": "hydration",
+      "version": 1,
+    },
+    {
+      "id": "referral",
+      "type": "referral",
+      "version": 1,
+    },
+    {
+      "id": "streak_warning",
+      "type": "streak_warning",
+      "version": 1,
+    },
+    {
+      "id": "pro_upsell",
+      "type": "pro_upsell",
+      "version": 1,
+    },
+    {
+      "id": "daily_goals",
+      "type": "daily_goals",
+      "version": 1,
+    },
+    {
+      "id": "fitzy_focus",
+      "type": "fitzy_focus",
+      "version": 1,
+    },
+    {
+      "id": "progress",
+      "type": "progress",
+      "version": 1,
+    },
+    {
+      "id": "vitals",
+      "type": "vitals",
+      "version": 1,
+    },
+    {
+      "id": "body_comp",
+      "type": "body_comp",
+      "version": 1,
+    },
+    {
+      "id": "past_date_log",
+      "type": "past_date_log",
+      "version": 1,
+    },
+    {
+      "id": "native_ad",
+      "type": "native_ad",
+      "version": 1,
+    },
+    {
+      "id": "charts",
+      "type": "charts",
+      "version": 1,
+    },
+  ],
+  "decision_id": "<uuid>",
+  "experiment": null,
+  "generated_at": "2026-10-23T02:30:00.000Z",
+  "layout_key": "default-v1",
+  "schema": 1,
+  "ttl_seconds": 900,
+}
+`;
+
+exports[`GET /api/mobile/home-feed — 1.0.8 client fixtures > Android 1.0.8 with the featured campaign in teaser 1`] = `
+{
+  "cards": [
+    {
+      "id": "offline_banner",
+      "type": "offline_banner",
+      "version": 1,
+    },
+    {
+      "id": "header",
+      "type": "header",
+      "version": 1,
+    },
+    {
+      "id": "health_sync_banner",
+      "type": "health_sync_banner",
+      "version": 1,
+    },
+    {
+      "id": "campaign:advent_2026",
+      "props": {
+        "slug": "advent_2026",
+      },
+      "type": "campaign",
+      "version": 1,
+    },
+    {
+      "id": "streak_warning",
+      "type": "streak_warning",
+      "version": 1,
+    },
+    {
+      "id": "pro_upsell",
+      "type": "pro_upsell",
+      "version": 1,
+    },
+    {
+      "id": "daily_goals",
+      "type": "daily_goals",
+      "version": 1,
+    },
+    {
+      "id": "fitzy_focus",
+      "type": "fitzy_focus",
+      "version": 1,
+    },
+    {
+      "id": "progress",
+      "type": "progress",
+      "version": 1,
+    },
+    {
+      "id": "hydration",
+      "type": "hydration",
+      "version": 1,
+    },
+    {
+      "id": "referral",
+      "type": "referral",
+      "version": 1,
+    },
+    {
+      "id": "vitals",
+      "type": "vitals",
+      "version": 1,
+    },
+    {
+      "id": "body_comp",
+      "type": "body_comp",
+      "version": 1,
+    },
+    {
+      "id": "past_date_log",
+      "type": "past_date_log",
+      "version": 1,
+    },
+    {
+      "id": "native_ad",
+      "type": "native_ad",
+      "version": 1,
+    },
+    {
+      "id": "charts",
+      "type": "charts",
+      "version": 1,
+    },
+  ],
+  "decision_id": "<uuid>",
+  "experiment": null,
+  "generated_at": "2026-10-23T02:30:00.000Z",
+  "layout_key": "default-v1",
+  "schema": 1,
+  "ttl_seconds": 900,
+}
+`;
+
+exports[`GET /api/mobile/home-feed — 1.0.8 client fixtures > iOS 1.0.8 (no campaign, free, evening, not checked in) 1`] = `
+{
+  "cards": [
+    {
+      "id": "offline_banner",
+      "type": "offline_banner",
+      "version": 1,
+    },
+    {
+      "id": "header",
+      "type": "header",
+      "version": 1,
+    },
+    {
+      "id": "health_sync_banner",
+      "type": "health_sync_banner",
+      "version": 1,
+    },
+    {
+      "id": "hydration",
+      "type": "hydration",
+      "version": 1,
+    },
+    {
+      "id": "referral",
+      "type": "referral",
+      "version": 1,
+    },
+    {
+      "id": "streak_warning",
+      "type": "streak_warning",
+      "version": 1,
+    },
+    {
+      "id": "pro_upsell",
+      "type": "pro_upsell",
+      "version": 1,
+    },
+    {
+      "id": "daily_goals",
+      "type": "daily_goals",
+      "version": 1,
+    },
+    {
+      "id": "fitzy_focus",
+      "type": "fitzy_focus",
+      "version": 1,
+    },
+    {
+      "id": "progress",
+      "type": "progress",
+      "version": 1,
+    },
+    {
+      "id": "vitals",
+      "type": "vitals",
+      "version": 1,
+    },
+    {
+      "id": "body_comp",
+      "type": "body_comp",
+      "version": 1,
+    },
+    {
+      "id": "past_date_log",
+      "type": "past_date_log",
+      "version": 1,
+    },
+    {
+      "id": "native_ad",
+      "type": "native_ad",
+      "version": 1,
+    },
+    {
+      "id": "charts",
+      "type": "charts",
+      "version": 1,
+    },
+  ],
+  "decision_id": "<uuid>",
+  "experiment": null,
+  "generated_at": "2026-10-23T02:30:00.000Z",
+  "layout_key": "default-v1",
+  "schema": 1,
+  "ttl_seconds": 900,
+}
+`;
+
+exports[`GET /api/mobile/home-feed — 1.0.8 client fixtures > iOS 1.0.8 with the featured campaign live 1`] = `
+{
+  "cards": [
+    {
+      "id": "offline_banner",
+      "type": "offline_banner",
+      "version": 1,
+    },
+    {
+      "id": "header",
+      "type": "header",
+      "version": 1,
+    },
+    {
+      "id": "health_sync_banner",
+      "type": "health_sync_banner",
+      "version": 1,
+    },
+    {
+      "id": "campaign:hold_the_line",
+      "props": {
+        "slug": "hold_the_line",
+      },
+      "type": "campaign",
+      "version": 1,
+    },
+    {
+      "id": "streak_warning",
+      "type": "streak_warning",
+      "version": 1,
+    },
+    {
+      "id": "pro_upsell",
+      "type": "pro_upsell",
+      "version": 1,
+    },
+    {
+      "id": "daily_goals",
+      "type": "daily_goals",
+      "version": 1,
+    },
+    {
+      "id": "fitzy_focus",
+      "type": "fitzy_focus",
+      "version": 1,
+    },
+    {
+      "id": "progress",
+      "type": "progress",
+      "version": 1,
+    },
+    {
+      "id": "hydration",
+      "type": "hydration",
+      "version": 1,
+    },
+    {
+      "id": "referral",
+      "type": "referral",
+      "version": 1,
+    },
+    {
+      "id": "vitals",
+      "type": "vitals",
+      "version": 1,
+    },
+    {
+      "id": "body_comp",
+      "type": "body_comp",
+      "version": 1,
+    },
+    {
+      "id": "past_date_log",
+      "type": "past_date_log",
+      "version": 1,
+    },
+    {
+      "id": "native_ad",
+      "type": "native_ad",
+      "version": 1,
+    },
+    {
+      "id": "charts",
+      "type": "charts",
+      "version": 1,
+    },
+  ],
+  "decision_id": "<uuid>",
+  "experiment": null,
+  "generated_at": "2026-10-23T02:30:00.000Z",
+  "layout_key": "default-v1",
+  "schema": 1,
+  "ttl_seconds": 900,
+}
+`;

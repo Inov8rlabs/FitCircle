@@ -1,0 +1,17 @@
+{
+  "description": "Exact GET the Android 1.0.8 HomeFeedRepository sends (HOME_FEED_SPEC §2). AuthInterceptor also adds X-Platform.",
+  "method": "GET",
+  "path": "/api/mobile/home-feed",
+  "query": {
+    "cards": "header@1,campaign@1,hydration@1,referral@1,pro_upsell@1,streak_warning@1,daily_goals@1,progress@1,vitals@1,body_comp@1,past_date_log@1,native_ad@1,charts@1,fitzy_focus@1,health_sync_banner@1,offline_banner@1"
+  },
+  "headers": {
+    "Accept": "application/json",
+    "X-Feed-Schema": "1",
+    "X-App-Platform": "android",
+    "X-Platform": "android",
+    "X-App-Version": "1.0.8",
+    "X-App-Build": "17",
+    "x-client-timezone": "Asia/Kolkata"
+  }
+}
