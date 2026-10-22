@@ -9,7 +9,7 @@ export const metadata: Metadata = {
 
 // Update this date whenever the policy text changes. It must never be computed
 // at render time: a policy that always shows today's date is misleading.
-const LAST_UPDATED = 'October 5, 2026';
+const LAST_UPDATED = 'October 22, 2026';
 const POLICY_VERSION = '1.2';
 
 function ThirdParty({
@@ -232,6 +232,31 @@ export default function PrivacyPolicyPage() {
                   Google&apos;s consent form before any ad is requested.
                 </li>
                 <li>
+                  <strong className="text-white">Measuring our own ads.</strong> When we advertise FitCircle
+                  on other services, we use software from{' '}
+                  <strong className="text-white">Meta</strong> (Facebook and Instagram),{' '}
+                  <strong className="text-white">Google</strong> (Firebase Analytics and Google Ads), and{' '}
+                  <strong className="text-white">Apple Search Ads</strong> to learn which ads lead to
+                  installs and subscriptions. These partners may receive your device&apos;s advertising
+                  identifier, device and app information (such as model, operating system and app version),
+                  your IP address, and a small set of in-app events: opening the app, completing sign-up,
+                  becoming an active member, joining or creating a FitCircle, starting a free trial, and
+                  purchases (product, price and currency). They use this to attribute installs, measure and optimize our campaigns, and
+                  may combine it with information they hold about you under their own privacy policies.
+                </li>
+                <li>
+                  On iOS, the advertising identifier is shared only if you allow tracking in the App Tracking
+                  Transparency prompt. If you do not, partners receive only aggregated, privacy-preserving
+                  measurement from Apple (SKAdNetwork) and limited event data without that identifier. On
+                  Android, you can delete or reset your advertising ID in your device settings.
+                </li>
+                <li>
+                  Some U.S. state privacy laws treat sharing identifiers with advertising partners for ad
+                  measurement as &ldquo;sharing&rdquo; or &ldquo;targeted advertising.&rdquo; You can opt out
+                  by declining tracking on iOS, deleting your advertising ID on Android, or emailing{' '}
+                  <a href="mailto:privacy@fitcircle.ai" className="text-cyan-400 hover:underline">privacy@fitcircle.ai</a>.
+                </li>
+                <li>
                   <strong className="text-white">
                     We never use or share your health and fitness data, food logs, photos, or messages for
                     advertising.
@@ -258,15 +283,21 @@ export default function PrivacyPolicyPage() {
                 <ThirdParty name="Anthropic" purpose="AI models" href="https://www.anthropic.com/legal/privacy">
                   Processes the content described in section 4 to produce nutrition estimates and Fitzy replies.
                 </ThirdParty>
-                <ThirdParty name="Google" purpose="AI models, ads, sign-in, purchases, push notifications, speech" href="https://policies.google.com/privacy">
+                <ThirdParty name="Google" purpose="AI models, ads, ad measurement, sign-in, purchases, push notifications, speech" href="https://policies.google.com/privacy">
                   Gemini models process the content described in section 4. AdMob serves ads in the free mobile
-                  apps (section 5). Google Sign-In authenticates you if you choose it. Firebase Cloud Messaging
+                  apps, and Firebase Analytics and Google Ads measure our own ad campaigns (section 5). Google Sign-In authenticates you if you choose it. Firebase Cloud Messaging
                   delivers push notifications. Google Play processes Android purchases. If Google is your
                   configured Android speech provider, it also processes speech for voice logging.
                 </ThirdParty>
-                <ThirdParty name="Apple" purpose="sign-in, purchases, push notifications, speech" href="https://www.apple.com/legal/privacy/">
+                <ThirdParty name="Apple" purpose="sign-in, purchases, push notifications, speech, ad measurement" href="https://www.apple.com/legal/privacy/">
                   Sign in with Apple authenticates you if you choose it. App Store purchases are processed by
                   Apple. Apple delivers push notifications on iOS and transcribes speech for voice logging.
+                  Apple Search Ads tells us which of our App Store ads led to an install (section 5).
+                </ThirdParty>
+                <ThirdParty name="Meta" purpose="ad measurement" href="https://www.facebook.com/privacy/policy/">
+                  Measures which of our Facebook and Instagram ads lead to installs and subscriptions, using
+                  the advertising identifier (on iOS only if you allow tracking) and the in-app events listed
+                  in section 5. Never receives your health, food, or fitness data.
                 </ThirdParty>
                 <ThirdParty name="RevenueCat" purpose="subscription management" href="https://www.revenuecat.com/privacy">
                   Validates FitCircle Pro purchases and keeps your subscription status in sync. Receives an
