@@ -44,7 +44,9 @@ case "$SUITE" in
   unit)
     ensure_deps || { echo "SUMMARY suite=unit passed=0 failed=1 skipped=0"; exit 1; }
     JUNIT="$REPORT_DIR/backend-unit.junit.xml"
-    (cd "$ROOT/apps/web" && npx vitest run \
+    # A shared CI Mac can be heavily loaded; the default 5 s per-test timeout then fails
+    # tests that are merely slow. FC_VITEST_TIMEOUT_MS overrides.
+    (cd "$ROOT/apps/web" && npx vitest run --testTimeout="${FC_VITEST_TIMEOUT_MS:-30000}" \
         --reporter=default --reporter=junit --reporter=html \
         --outputFile.junit="$JUNIT" --outputFile.html="$REPORT_DIR/vitest-html/index.html") \
       > "$REPORT_DIR/backend-unit.log" 2>&1

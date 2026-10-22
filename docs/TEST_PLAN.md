@@ -365,7 +365,19 @@ Expected spend: **$0–30/mo** now with FTL, Sentry Size Analysis and the pre-la
 
 ---
 
-## 13. Maintenance
+## 13. Findings from building the automation (2026-10-21)
+
+| # | Finding | Platform | Severity | Action |
+|---|---|---|---|---|
+| F1 | The login screen uses fixed `.system(size:)` fonts, so it **doesn't scale with Dynamic Type** (snapshot `testLoginAccessibilityXXL` captures this today) | iOS | a11y P1 | move to `AppTheme.Typography` text styles, then re-record |
+| F2 | The meal-entry form's multi-line Notes field had **no way to dismiss the keyboard**, which covered "Estimate with AI". Fixed on `feat/test-automation` with `.scrollDismissesKeyboard(.immediately)` | iOS | UX P1 | review and keep |
+| F3 | The dashboard holds about **60% CPU on the simulator while idle** (observed with Instruments off, so it needs profiling on device). Animations or timers are suspected | iOS | perf P2 | Instruments Time Profiler on device, check against the §9 budget |
+| F4 | The water Undo window is 5 s, and an automated (or slow) tap after it expires lands on the "Custom" chip that takes its place. The tests use the DEBUG-only `FCUITestLongUndo` launch argument (30 s) | iOS | test hook | none for users; consider keeping the row's position stable |
+| F5 | Prod `/api/mobile/auth/login` allows **5 attempts per 15 minutes per IP**, shared by everything on the runner Mac | BE | test infra | flows sign in only when signed out; smoke uses a refresh token |
+| F6 | Backend vitest cases time out at the default 5 s on a heavily loaded Mac (streak claim, body-comp import, referral entitlement) | BE | flake | `run-tests.sh` uses `--testTimeout=30000` |
+| F7 | Hosted GitHub Actions jobs are refused for the private iOS and Android repos (failed payment). Backend CI runs but fails on import-order lint errors already on `main` | infra | P1 | fix billing; `bun run lint --fix` on the backend |
+
+## 14. Maintenance
 
 - **New screen**: add identifiers on both platforms and at least one snapshot/screenshot state. Add a Maestro flow only if it's on a P0 path.
 - **Re-recording**: snapshots must be re-recorded on the CI simulator or emulator. Never accept a re-record without looking at the diff.
