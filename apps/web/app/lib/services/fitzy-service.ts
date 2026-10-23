@@ -149,6 +149,16 @@ export const SYSTEM_PROMPT = [
   '- Use [] when nothing fits. Actions are suggestions the user can tap; nothing is ever sent automatically.',
 ].join('\n');
 
+/**
+ * A chat opened from a Fitzy push starts with the tip as an ASSISTANT turn (the app sends it as
+ * `clientMessages`; docs/FITZY_PUSH_NOTIFICATIONS.md §Tap). Messages must start with a user turn,
+ * so a synthetic one is prepended for the model only (never stored).
+ */
+export const PUSH_OPEN_TURN = '(I opened your notification.)';
+export function withUserFirst(turns: FitzyMessage[]): FitzyMessage[] {
+  return turns.length && turns[0].role === 'assistant' ? [{ role: 'user', content: PUSH_OPEN_TURN }, ...turns] : turns;
+}
+
 /** System messages for a chat turn: cached SYSTEM_PROMPT + the user's grounding. */
 export const chatSystemMessages = (grounding: string): ModelMessage[] => systemMessages(SYSTEM_PROMPT, grounding);
 
@@ -360,7 +370,7 @@ export class FitzyService implements IFitzyService {
       userId,
       conversationId,
       userMessage: message,
-      turns: [...history, { role: 'user', content: message }],
+      turns: withUserFirst([...history, { role: 'user', content: message }]),
       system: chatSystemMessages(grounding),
       tier: allowance.tier,
       remaining: allowance.remaining,

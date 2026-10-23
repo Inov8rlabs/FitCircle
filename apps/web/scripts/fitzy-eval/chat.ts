@@ -7,7 +7,7 @@
 import { META_MARKER, growthNudgeAllowed, parseMeta, splitMeta } from '../../app/lib/fitzy/meta';
 import { chatModel, streamFrom } from '../../app/lib/fitzy/models';
 import { StreamGuard } from '../../app/lib/fitzy/stream-guard';
-import { FitzyService, SAFE_FALLBACK, chatSystemMessages } from '../../app/lib/services/fitzy-service';
+import { FitzyService, SAFE_FALLBACK, chatSystemMessages, withUserFirst } from '../../app/lib/services/fitzy-service';
 import type { FitzyAction } from '../../app/lib/types/fitzy';
 
 import { runChecks } from './checks';
@@ -83,7 +83,8 @@ async function runOnce(k: ChatCase, f: Fixtures, rep: number) {
   const persona = f.personas[k.persona];
   const growthAllowed = growthNudgeAllowed(k.message, null);
   const grounding = groundingFor(persona, { growthAllowed, circleId: persona.circle?.id });
-  const turns = [...(k.history ?? []), { role: 'user' as const, content: k.message }];
+  // withUserFirst: production prepends a synthetic user turn when the history starts with a Fitzy push tip.
+  const turns = withUserFirst([...(k.history ?? []), { role: 'user' as const, content: k.message }]);
   const model = chatModel();
   const guard = new StreamGuard(FitzyService.guard, SAFE_FALLBACK);
   const t0 = Date.now();

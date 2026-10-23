@@ -11,6 +11,8 @@ const updateSchema = z.object({
   challenge_enabled: z.boolean().optional(),
   social_enabled: z.boolean().optional(),
   celebration_enabled: z.boolean().optional(),
+  // "Coaching tips from Fitzy" (migration 107).
+  coach_enabled: z.boolean().optional(),
   quiet_hours_start: z.string().regex(/^\d{2}:\d{2}$/).nullable().optional(),
   quiet_hours_end: z.string().regex(/^\d{2}:\d{2}$/).nullable().optional(),
   quiet_hours_timezone: z.string().optional(),

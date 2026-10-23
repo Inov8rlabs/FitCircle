@@ -6,6 +6,7 @@
  * parsed into something usable without the static fallback.
  */
 import { generateWithFallback, type AttemptInfo, type ModelCall } from '../../app/lib/fitzy/models';
+import { focusPushCopy, lockScreenSafe, nudgeRequest, parseNudge, proteinIdeas, BODY_MAX, FOCUS_BODY_MAX, TITLE_MAX } from '../../app/lib/fitzy/push';
 import { FitzyFocusService, focusRequest, recapRequest } from '../../app/lib/services/fitzy-focus-service';
 import { FitzyMemoryService, extractRequest, parseExtraction } from '../../app/lib/services/fitzy-memory-service';
 import { DEFAULT_PLAN_NOTE, parsePlanDraft, planRequest } from '../../app/lib/services/fitzy-plan-service';
@@ -15,7 +16,7 @@ import type { FitzyMemoryItem } from '../../app/lib/types/fitzy';
 import { groundingFor, personaPlan, type Fixtures } from './fixtures';
 import { classifyError, errorText, telemetry, withRetries, type ErrorClass, type Telemetry } from './util';
 
-export type StructuredKind = 'plan' | 'preview' | 'focus' | 'recap' | 'memory';
+export type StructuredKind = 'plan' | 'preview' | 'focus' | 'recap' | 'memory' | 'push_focus' | 'push_protein';
 
 export interface StructuredResult {
   kind: StructuredKind;
@@ -170,4 +171,36 @@ export function memoryJobs(f: Fixtures) {
         };
       });
   });
+}
+
+/**
+ * Push suite (docs/FITZY_PUSH_NOTIFICATIONS.md): the production daily-focus request → focusFromText →
+ * focusPushCopy (lock-screen copy), and the production protein-nudge request → parseNudge. Usable =
+ * the AI text survived every production check (no template fallback) and the lock-screen copy is
+ * within limits and free of health values.
+ */
+export function pushJobs(f: Fixtures) {
+  const jobs: Array<(rep: number) => Promise<StructuredResult>> = [];
+  const within = (t: string, b: string, max = BODY_MAX) => [...t].length <= TITLE_MAX && [...b].length <= max && lockScreenSafe(`${t}\n${b}`);
+  for (const id of f.focus.personas) {
+    const persona = f.personas[id];
+    const plan = personaPlan(persona, WEEK_OF);
+    const grounding = groundingFor(persona, { growthAllowed: false });
+    jobs.push((rep) =>
+      run('push_focus', id, rep, () => focusRequest(f.focus.date, !!plan, grounding), (text) => {
+        const focus = FitzyFocusService.focusFromText(text, f.focus.date, persona.tier);
+        if (!focus) return { parsed: /\{[\s\S]*\}/.test(text), usable: false, detail: { reason: 'focus failed validation' } };
+        const copy = focusPushCopy(focus, guard, 'ai');
+        const usedCard = copy.body !== 'One small, doable idea for today is waiting for you.';
+        return { parsed: true, usable: within(copy.title, copy.body, FOCUS_BODY_MAX) && usedCard, detail: { title: copy.title, body: copy.body, usedCard, card: `${focus.headline} — ${focus.body}` } };
+      })
+    );
+    jobs.push((rep) =>
+      run('push_protein', id, rep, () => nudgeRequest(grounding, proteinIdeas(persona.diet ?? 'none', persona.allergens ?? [], 3, `${id}:${rep}`)), (text) => {
+        const copy = parseNudge(text, guard, persona.allergens ?? []);
+        return { parsed: /\{[\s\S]*\}/.test(text), usable: !!copy && within(copy.title, copy.body), detail: copy ? { title: copy.title, body: copy.body } : { reason: 'rejected by parseNudge (length / lock-screen / judging / guard / allergen)', raw: text.slice(0, 300) } };
+      })
+    );
+  }
+  return jobs;
 }

@@ -8,6 +8,7 @@ import {
   MessageSquare,
   PartyPopper,
   BarChart,
+  Sparkles,
   Moon,
   Smartphone,
   Loader2,
@@ -42,7 +43,8 @@ type CategoryKey =
   | 'challenge_enabled'
   | 'social_enabled'
   | 'celebration_enabled'
-  | 'journey_enabled';
+  | 'journey_enabled'
+  | 'coach_enabled';
 
 interface PushPreferences {
   momentum_enabled: boolean;
@@ -51,6 +53,7 @@ interface PushPreferences {
   social_enabled: boolean;
   celebration_enabled: boolean;
   journey_enabled: boolean;
+  coach_enabled: boolean;
   quiet_hours_start: string | null; // "HH:MM"
   quiet_hours_end: string | null;
   quiet_hours_timezone: string;
@@ -66,6 +69,7 @@ const DEFAULT_PREFERENCES: PushPreferences = {
   social_enabled: true,
   celebration_enabled: true,
   journey_enabled: true,
+  coach_enabled: true,
   quiet_hours_start: null,
   quiet_hours_end: null,
   quiet_hours_timezone: 'America/New_York',
@@ -123,6 +127,13 @@ const CATEGORIES: Array<{
     icon: BarChart,
     color: 'text-pink-400',
   },
+  {
+    key: 'coach_enabled',
+    label: 'Coaching tips from Fitzy',
+    description: "Today's focus each morning and the occasional well-timed tip from your coach",
+    icon: Sparkles,
+    color: 'text-violet-400',
+  },
 ];
 
 /** Row shape of notification_preferences as returned by Supabase. */
@@ -133,6 +144,8 @@ interface PreferencesRow {
   social_enabled: boolean | null;
   celebration_enabled: boolean | null;
   journey_enabled: boolean | null;
+  /** Migration 107; absent on databases that don't have it yet. */
+  coach_enabled?: boolean | null;
   quiet_hours_start: string | null;
   quiet_hours_end: string | null;
   quiet_hours_timezone: string | null;
@@ -148,6 +161,8 @@ export default function NotificationSettingsPage() {
   const [userId, setUserId] = useState<string | null>(null);
   const [preferences, setPreferences] = useState<PushPreferences>(DEFAULT_PREFERENCES);
   const [savingKey, setSavingKey] = useState<string | null>(null);
+  // The coach toggle needs migration 107; until the column exists it is hidden and never written.
+  const [coachSupported, setCoachSupported] = useState(false);
 
   useEffect(() => {
     const load = async () => {
@@ -172,6 +187,8 @@ export default function NotificationSettingsPage() {
         if (error) throw error;
         const data = row as PreferencesRow | null;
 
+        // No row yet: the column can't be detected, so keep the toggle hidden until one exists.
+        setCoachSupported(!!data && 'coach_enabled' in data);
         if (data) {
           setPreferences({
             momentum_enabled: data.momentum_enabled ?? true,
@@ -180,6 +197,7 @@ export default function NotificationSettingsPage() {
             social_enabled: data.social_enabled ?? true,
             celebration_enabled: data.celebration_enabled ?? true,
             journey_enabled: data.journey_enabled ?? true,
+            coach_enabled: data.coach_enabled ?? true,
             quiet_hours_start: toHHMM(data.quiet_hours_start),
             quiet_hours_end: toHHMM(data.quiet_hours_end),
             quiet_hours_timezone: data.quiet_hours_timezone || browserTimezone(),
@@ -214,10 +232,12 @@ export default function NotificationSettingsPage() {
       setSavingKey(savingLabel);
       try {
         const supabase = createBrowserSupabase();
+        const { coach_enabled, ...rest } = next;
+        const row = coachSupported ? { ...rest, coach_enabled } : rest;
         const { error } = await supabase
           .from('notification_preferences')
           .upsert(
-            { user_id: userId, ...next, updated_at: new Date().toISOString() },
+            { user_id: userId, ...row, updated_at: new Date().toISOString() },
             { onConflict: 'user_id' }
           );
         if (error) throw error;
@@ -243,7 +263,7 @@ export default function NotificationSettingsPage() {
         setSavingKey(null);
       }
     },
-    [preferences, userId]
+    [preferences, userId, coachSupported]
   );
 
   const quietHoursOn = preferences.quiet_hours_start !== null && preferences.quiet_hours_end !== null;
@@ -309,7 +329,7 @@ export default function NotificationSettingsPage() {
               <CardDescription>Turn off any group you don&apos;t want</CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
-              {CATEGORIES.map(({ key, label, description, icon: Icon, color }) => (
+              {CATEGORIES.filter((c) => c.key !== 'coach_enabled' || coachSupported).map(({ key, label, description, icon: Icon, color }) => (
                 <div
                   key={key}
                   className="flex items-center justify-between gap-4 p-3 rounded-lg bg-slate-800/30"
