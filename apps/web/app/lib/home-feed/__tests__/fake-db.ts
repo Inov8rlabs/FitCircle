@@ -1,7 +1,7 @@
 /**
  * Minimal in-memory Supabase stand-in for the home-feed route tests: the
  * query shapes HomeFeedService + the context loaders use (select / eq / order
- * / limit / count-head / insert / update / maybeSingle / single).
+ * / in / limit / count-head / insert / update / maybeSingle / single).
  */
 type Row = Record<string, any>;
 
@@ -13,9 +13,12 @@ export class HomeFeedFakeDb {
     home_feed_events: [],
     fitcircle_members: [],
     streak_claims: [],
+    feature_flags: [],
   };
   /** Tables whose next query errors (simulate outages). */
   failing = new Set<string>();
+  /** Queries run per table (latency tests: warm requests must not re-read shared tables). */
+  queries: Record<string, number> = {};
   private seq = 0;
 
   rows(table: string): Row[] {
@@ -64,6 +67,10 @@ class FakeQuery implements PromiseLike<any> {
     this.filters.push([col, val]);
     return this;
   }
+  in(col: string, vals: any[]) {
+    this.inFilters.push([col, vals]);
+    return this;
+  }
   order() {
     return this;
   }
@@ -71,9 +78,11 @@ class FakeQuery implements PromiseLike<any> {
     return this;
   }
 
-  private matches = (r: Row) => this.filters.every(([c, v]) => r[c] === v);
+  private inFilters: Array<[string, any[]]> = [];
+  private matches = (r: Row) => this.filters.every(([c, v]) => r[c] === v) && this.inFilters.every(([c, vs]) => vs.includes(r[c]));
 
   private run(): { data: any; error: any; count?: number } {
+    this.db.queries[this.table] = (this.db.queries[this.table] ?? 0) + 1;
     if (this.db.failing.has(this.table)) return { data: null, error: { message: `${this.table} unavailable` } };
     const rows = this.db.rows(this.table);
     if (this.op === 'insert') {

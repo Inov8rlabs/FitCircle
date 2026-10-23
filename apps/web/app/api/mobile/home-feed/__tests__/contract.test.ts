@@ -37,11 +37,14 @@ vi.mock('@/lib/middleware/mobile-auth', async () => {
 vi.mock('@/lib/middleware/mobile-auto-refresh', () => ({ addAutoRefreshHeaders: async (_req: unknown, res: unknown) => res }));
 vi.mock('@/lib/utils/after-response', () => ({ runAfterResponse: (task: () => unknown) => void h.tasks.push(task) }));
 vi.mock('@/lib/services/campaign-service', () => ({
-  CampaignService: { listForViewer: async () => ({ campaigns: h.campaign ? [h.campaign] : [], homeSlug: h.campaign?.slug ?? null }) },
+  CampaignService: { fetchActiveRows: async () => [] },
+  featuredCampaign: () => h.campaign,
+  viewerToday: () => '2026-10-22',
 }));
-vi.mock('@/lib/services/referral-service', () => ({ ReferralService: { isProgramEnabled: async () => h.referrals } }));
+vi.mock('@/lib/services/feature-flag-service', () => ({
+  FeatureFlagService: { evaluate: (flag: { name: string } | undefined) => ({ enabled: flag?.name === 'referrals' ? h.referrals : flag?.name === 'subscriptions' ? h.subs : false }) },
+}));
 vi.mock('@/lib/services/entitlement-service', () => ({
-  EntitlementService: { areSubscriptionsEnabled: async () => h.subs },
   normalizeTier: (raw: string | null | undefined) => (raw === 'premium' || raw === 'enterprise' ? 'premium' : 'free'),
 }));
 vi.mock('@/lib/services/vitals-service', () => ({
@@ -118,7 +121,8 @@ beforeEach(() => {
   vi.setSystemTime(NOW);
   db = new HomeFeedFakeDb();
   setHomeFeedDb(db);
-  HomeFeedService.clearRulesCache();
+  HomeFeedService.clearCaches();
+  db.rows('feature_flags').push({ name: 'referrals', is_enabled: true }, { name: 'subscriptions', is_enabled: true });
   h.tasks.length = 0;
   h.campaign = null;
   h.referrals = true;
@@ -276,6 +280,23 @@ describe('GET /api/mobile/home-feed — rules, kill switches, decisions', () => 
     });
     expect(row.cards.map((c: any) => c.id)).toEqual(body.cards.map((c: any) => c.id));
     expect(row.context).toMatchObject({ local_hour: 19, has_circle: true, checked_in_today: false, streak_at_risk: true, is_pro: false, app_build: 63 });
+  });
+
+  it('reports Server-Timing and stores server_ms on the decision', async () => {
+    const res = await GET(fromFixture(IOS, IOS_USER));
+    expect(res.headers.get('server-timing')).toMatch(/^auth;dur=\d+, ctx;dur=\d+, total;dur=\d+$/);
+    await flushAfter();
+    expect(db.rows('home_feed_decisions')[0].server_ms).toEqual(expect.any(Number));
+  });
+
+  it('a warm request reads no shared tables (rules + flags served from the instance cache)', async () => {
+    await GET(fromFixture(IOS, IOS_USER));
+    const before = { ...db.queries };
+    expect(before.home_feed_rules).toBe(1);
+    expect(before.feature_flags).toBe(1);
+    await GET(fromFixture(ANDROID, ANDROID_USER));
+    expect(db.queries.home_feed_rules).toBe(1);
+    expect(db.queries.feature_flags).toBe(1);
   });
 
   it('applies the water_first experiment from the DB (treatment)', async () => {

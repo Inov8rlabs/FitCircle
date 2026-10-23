@@ -70,6 +70,24 @@ export function visibleFor(rows: CampaignRow[], userId: string | null, today: st
   return out;
 }
 
+/**
+ * The campaign the home screen would lead with (= listForViewer's first view)
+ * from already-loaded rows: visibility + phase + ordering only, none of the
+ * per-viewer joins (participation, doors, friends) that buildViews adds. The
+ * home feed uses this so its context costs no campaign round trips when warm.
+ */
+export function featuredCampaign(rows: CampaignRow[], userId: string | null, today: string): { slug: string; phase: string } | null {
+  const visible = visibleFor(rows, userId, today);
+  if (visible.length === 0) return null;
+  const top = [...visible].sort((a, b) =>
+    compareViews(
+      { phase: a.phase, priority: a.row.priority ?? 0, startsAt: a.row.starts_at },
+      { phase: b.phase, priority: b.row.priority ?? 0, startsAt: b.row.starts_at }
+    )
+  )[0];
+  return { slug: top.row.slug, phase: top.phase };
+}
+
 export class CampaignService {
   // -------------------------------------------------------------------------
   // Reads

@@ -24,13 +24,35 @@ import {
   type FeedRule,
   type HomeFeedResponse,
 } from '@/lib/home-feed';
-import { buildFeedContext, readRequestInfo, softly, type ContextLoaders, type FeedProfile, type FeedRequestInfo } from '@/lib/home-feed/context';
+import { swrCache } from '@/lib/home-feed/cache';
+import {
+  activeCampaignsCache,
+  buildFeedContext,
+  feedFlagsCache,
+  readRequestInfo,
+  softly,
+  type ContextLoaders,
+  type FeedProfile,
+  type FeedRequestInfo,
+} from '@/lib/home-feed/context';
 import { HomeFeedError } from '@/lib/home-feed/http';
 import { createAdminSupabase } from '@/lib/supabase-admin';
 import { runAfterResponse } from '@/lib/utils/after-response';
 
-const RULES_CACHE_MS = 60_000;
-const RULES_LOAD_TIMEOUT_MS = 800;
+/** Rules: fresh 30 s, then served stale (≤ 10 min) while one refresh runs — never blocks a warm request. */
+const RULES_TTL_MS = 30_000;
+const RULES_MAX_STALE_MS = 600_000;
+/** Cold instance only: how long a request waits for the first rules load before ranking without rules. */
+const RULES_LOAD_TIMEOUT_MS = 250;
+/** Requests slower than this log a timing breakdown (Vercel runtime logs). */
+export const SLOW_FEED_MS = 300;
+
+/** Filled in by the route + getFeed; sent as Server-Timing and stored on the decision row. */
+export interface FeedTiming {
+  authMs?: number;
+  contextMs?: number;
+  totalMs?: number;
+}
 
 export interface RuleRow {
   id: string;
@@ -128,12 +150,29 @@ export function contextSnapshot(ctx: FeedContext | null): Record<string, unknown
   };
 }
 
-let rulesCache: { at: number; rules: FeedRule[] } | null = null;
 
 export class HomeFeedService {
   /** Test hook / admin writes: drop this instance's rules cache. */
   static clearRulesCache(): void {
-    rulesCache = null;
+    enabledRulesCache.clear();
+  }
+
+  /** Test hook: drop every per-instance feed cache (rules, campaigns, flags). */
+  static clearCaches(): void {
+    enabledRulesCache.clear();
+    activeCampaignsCache.clear();
+    feedFlagsCache.clear();
+  }
+
+  /**
+   * Start loading the shared caches (rules, campaigns, flags) — the route calls
+   * this before auth so a cold instance overlaps them with the auth round trip.
+   */
+  static prewarm(): void {
+    const quiet = (p: Promise<unknown>) => p.catch(() => undefined);
+    if (areRulesEnabled()) void quiet(enabledRulesCache.get());
+    void quiet(activeCampaignsCache.get());
+    void quiet(feedFlagsCache.get());
   }
 
   /** All rule rows (enabled or not), newest config first. */
@@ -146,19 +185,20 @@ export class HomeFeedService {
     return (data ?? []) as RuleRow[];
   }
 
-  /** Valid rules for ranking (invalid rows are skipped + logged). Cached per instance for 60 s. */
+  /** Valid rules for ranking (invalid rows are skipped + logged). Enabled rules are cached per instance (stale-while-revalidate). */
   static async loadRules(opts: { includeDisabled?: boolean; fresh?: boolean } = {}): Promise<FeedRule[]> {
-    if (!opts.fresh && !opts.includeDisabled && rulesCache && Date.now() - rulesCache.at < RULES_CACHE_MS) return rulesCache.rules;
-    const rows = await this.fetchRuleRows();
+    if (!opts.fresh && !opts.includeDisabled) return enabledRulesCache.get();
+    return this.parseRules(await this.fetchRuleRows(), opts.includeDisabled === true);
+  }
+
+  static parseRules(rows: RuleRow[], includeDisabled: boolean): FeedRule[] {
     const rules: FeedRule[] = [];
     for (const row of rows) {
       const parsed = parseRuleRow(row);
       if (parsed.rule) rules.push(parsed.rule);
       else console.warn(`[home-feed] rule "${row.key}" skipped (invalid): ${parsed.issues.join('; ')}`);
     }
-    const result = opts.includeDisabled ? rules : rules.filter((r) => r.enabled);
-    if (!opts.includeDisabled) rulesCache = { at: Date.now(), rules: result };
-    return result;
+    return includeDisabled ? rules : rules.filter((r) => r.enabled);
   }
 
   /**
@@ -169,9 +209,11 @@ export class HomeFeedService {
     profile: FeedProfile,
     info: FeedRequestInfo,
     support: ClientCardSupport,
-    opts: { loaders?: ContextLoaders; now?: Date; record?: boolean } = {}
+    opts: { loaders?: ContextLoaders; now?: Date; record?: boolean; timing?: FeedTiming } = {}
   ): Promise<HomeFeedResponse> {
     const now = opts.now ?? new Date();
+    const timing = opts.timing ?? {};
+    const started = performance.now();
     if (!isFeedEnabled(info.platform)) {
       return composeFeed({ support, ctx: null, now }).response;
     }
@@ -179,14 +221,16 @@ export class HomeFeedService {
       buildFeedContext(profile, info, { loaders: opts.loaders, now }),
       areRulesEnabled() ? softly(() => this.loadRules(), RULES_LOAD_TIMEOUT_MS) : Promise.resolve([] as FeedRule[]),
     ]);
+    timing.contextMs = Math.round(performance.now() - started);
     const result = composeFeed({ support, ctx, rules: rules ?? [], now });
     if (opts.record !== false) {
-      runAfterResponse(() => this.recordDecision(profile.id, info, ctx, result), 'home-feed decision');
+      // Runs after the response, by which time the route has set timing.totalMs.
+      runAfterResponse(() => this.recordDecision(profile.id, info, ctx, result, timing), 'home-feed decision');
     }
     return result.response;
   }
 
-  static async recordDecision(userId: string, info: FeedRequestInfo, ctx: FeedContext | null, result: ComposeResult): Promise<void> {
+  static async recordDecision(userId: string, info: FeedRequestInfo, ctx: FeedContext | null, result: ComposeResult, timing: FeedTiming = {}): Promise<void> {
     const { response, trace } = result;
     const { error } = await createAdminSupabase()
       .from('home_feed_decisions')
@@ -201,6 +245,7 @@ export class HomeFeedService {
         context: contextSnapshot(ctx),
         platform: info.platform,
         app_version: info.appVersion,
+        server_ms: timing.totalMs ?? null,
         created_at: response.generated_at,
       });
     if (error) throw error;
@@ -307,3 +352,9 @@ export class HomeFeedService {
     };
   }
 }
+
+const enabledRulesCache = swrCache<FeedRule[]>(async () => HomeFeedService.parseRules(await HomeFeedService.fetchRuleRows(), false), {
+  ttlMs: RULES_TTL_MS,
+  maxStaleMs: RULES_MAX_STALE_MS,
+  label: 'rules',
+});

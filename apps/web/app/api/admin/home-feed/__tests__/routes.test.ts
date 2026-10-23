@@ -17,10 +17,9 @@ vi.mock('@/lib/middleware/mobile-auth', async () => {
     },
   };
 });
-vi.mock('@/lib/services/campaign-service', () => ({ CampaignService: { listForViewer: async () => ({ campaigns: [], homeSlug: null }) } }));
-vi.mock('@/lib/services/referral-service', () => ({ ReferralService: { isProgramEnabled: async () => true } }));
+vi.mock('@/lib/services/campaign-service', () => ({ CampaignService: { fetchActiveRows: async () => [] }, featuredCampaign: () => null, viewerToday: () => '2026-10-22' }));
+vi.mock('@/lib/services/feature-flag-service', () => ({ FeatureFlagService: { evaluate: () => ({ enabled: true }) } }));
 vi.mock('@/lib/services/entitlement-service', () => ({
-  EntitlementService: { areSubscriptionsEnabled: async () => true },
   normalizeTier: (raw: string | null | undefined) => (raw === 'premium' || raw === 'enterprise' ? 'premium' : 'free'),
 }));
 vi.mock('@/lib/services/vitals-service', () => ({ VitalsService: { getHydrationToday: async () => ({ todayMl: 0, goalMl: 2000, date: '2026-10-22' }) } }));
@@ -65,7 +64,7 @@ const WATER_FIRST = {
 beforeEach(() => {
   db = new HomeFeedFakeDb();
   setHomeFeedDb(db);
-  HomeFeedService.clearRulesCache();
+  HomeFeedService.clearCaches();
   db.rows('profiles').push(
     { id: ADMIN, is_admin: true, timezone: 'UTC', subscription_tier: 'free', created_at: '2026-01-01T00:00:00Z' },
     { id: USER, is_admin: false, timezone: 'America/New_York', subscription_tier: 'free', created_at: '2026-10-01T00:00:00Z' }

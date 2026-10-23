@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('@/lib/supabase-admin', () => ({ createAdminSupabase: () => ({}) }));
 
-import { buildFeedContext, daysSince, localParts, parsePlatform, readRequestInfo, resolveTimezone, softly, type ContextLoaders } from '../context';
+import { CONTEXT_LOADER_TIMEOUT_MS, buildFeedContext, daysSince, localParts, parsePlatform, readRequestInfo, resolveTimezone, softly, type ContextLoaders } from '../context';
 
 const USER = '11111111-1111-4111-8111-111111111111';
 const profile = { id: USER, timezone: 'Asia/Kolkata', created_at: '2026-10-01T00:00:00Z', subscription_tier: 'free', preferences: {} };
@@ -159,6 +159,17 @@ describe('buildFeedContext', () => {
       waterLoggedToday: null,
       isPro: false,
     });
+  });
+
+  it('default budget: a hung loader costs at most CONTEXT_LOADER_TIMEOUT_MS (250 ms), not the request', async () => {
+    expect(CONTEXT_LOADER_TIMEOUT_MS).toBeLessThanOrEqual(250);
+    const hang = () => new Promise<never>(() => {});
+    const t0 = performance.now();
+    const ctx = await buildFeedContext(profile, info, { now: NOW, loaders: loaders({ campaign: hang, waterTodayMl: hang }) });
+    const took = performance.now() - t0;
+    expect(took).toBeLessThan(CONTEXT_LOADER_TIMEOUT_MS + 100);
+    expect(ctx.campaign).toBeNull();
+    expect(ctx.referralProgramEnabled).toBe(true);
   });
 
   it('runs loaders in parallel (one round)', async () => {

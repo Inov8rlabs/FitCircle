@@ -34,7 +34,7 @@ import { appStoreIssues, appStoreSchedule, campaignInputSchema, publishIssues } 
 import { campaignUnsubscribeToken, verifyCampaignUnsubscribeToken } from '../../campaigns/unsubscribe';
 import { buildCampaignView } from '../../campaigns/view';
 import { CampaignDeliveryService, recipientTimezone } from '../campaign-delivery-service';
-import { CampaignService, visibleFor } from '../campaign-service';
+import { CampaignService, featuredCampaign, viewerToday, visibleFor } from '../campaign-service';
 
 import { advent, baseRow, freshStart, holdTheLine } from './campaign-fixtures';
 import { ReferralFakeDb, getReferralDb, setReferralDb } from './referral-fake-db';
@@ -183,6 +183,16 @@ describe('CampaignService viewer endpoints', () => {
     expect(view.calendar!.friends.total).toBe(3);
     expect(view.calendar!.friends.openedToday).toBe(2);
     expect(view.calendar!.friends.members.map((m) => m.name)).toEqual(['Dee', 'Eli', 'Ben']);
+  });
+
+  it('featuredCampaign (home feed hint) matches listForViewer’s first campaign on every day of the season', async () => {
+    const rows = db.rows('campaigns') as any[];
+    for (const asOf of ['2026-11-01', '2026-11-20', '2026-12-01', '2026-12-07', '2026-12-16', '2026-12-28', '2027-01-05', '2027-02-01']) {
+      const viewer = me({ is_admin: true, preferences: { campaignPreview: { asOf } } });
+      const list = await CampaignService.listForViewer(viewer, 'UTC');
+      const hint = featuredCampaign(rows, ME, viewerToday(viewer as any, 'UTC'));
+      expect(hint, asOf).toEqual(list.campaigns[0] ? { slug: list.campaigns[0].slug, phase: list.campaigns[0].phase } : null);
+    }
   });
 
   it('ignores asOf for non-admins and uses the client timezone', async () => {

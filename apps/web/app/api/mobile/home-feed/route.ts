@@ -6,7 +6,7 @@ import { fail, feedFailFrom } from '@/lib/home-feed/http';
 import { SUPPORTED_FEED_SCHEMAS } from '@/lib/home-feed/types';
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { addAutoRefreshHeaders } from '@/lib/middleware/mobile-auto-refresh';
-import { HomeFeedService } from '@/lib/services/home-feed-service';
+import { HomeFeedService, SLOW_FEED_MS, type FeedTiming } from '@/lib/services/home-feed-service';
 
 export const dynamic = 'force-dynamic';
 
@@ -18,10 +18,18 @@ export const dynamic = 'force-dynamic';
  * 200 → the schema-1 layout (not the {success,data} envelope — the spec body).
  * 400 → missing/unsupported X-Feed-Schema or empty `cards`. Errors use the
  * standard envelope; clients fall back to their cached/default layout.
+ *
+ * Latency: this is the apps' first screen. Shared tables (rules, campaigns,
+ * flags) are cached per instance and prewarmed alongside auth; per-user context
+ * is one parallel round capped at 250 ms. Server-Timing reports auth / context
+ * / total, slow requests log a breakdown, and each decision row stores server_ms.
  */
 export async function GET(request: NextRequest) {
+  const started = performance.now();
+  HomeFeedService.prewarm();
   try {
     const user = await requireMobileAuth(request);
+    const timing: FeedTiming = { authMs: Math.round(performance.now() - started) };
 
     const schemaHeader = request.headers.get('x-feed-schema')?.trim();
     if (!schemaHeader) {
@@ -38,8 +46,18 @@ export async function GET(request: NextRequest) {
       return fail(400, 'CARDS_REQUIRED', 'cards query is required: comma-separated type@version the client can render, e.g. cards=header@1,hydration@1');
     }
 
-    const feed = await HomeFeedService.getFeed(user, readRequestInfo(request), support);
-    const response = NextResponse.json(feed, { headers: { 'Cache-Control': 'private, no-store' } });
+    const info = readRequestInfo(request);
+    const feed = await HomeFeedService.getFeed(user, info, support, { timing });
+    timing.totalMs = Math.round(performance.now() - started);
+    const response = NextResponse.json(feed, {
+      headers: {
+        'Cache-Control': 'private, no-store',
+        'Server-Timing': `auth;dur=${timing.authMs}, ctx;dur=${timing.contextMs ?? 0}, total;dur=${timing.totalMs}`,
+      },
+    });
+    if (timing.totalMs > SLOW_FEED_MS) {
+      console.warn(`[home-feed] slow total=${timing.totalMs}ms auth=${timing.authMs}ms ctx=${timing.contextMs}ms platform=${info.platform ?? '-'}`);
+    }
     return await addAutoRefreshHeaders(request, response, user);
   } catch (error) {
     return feedFailFrom(error, 'get');

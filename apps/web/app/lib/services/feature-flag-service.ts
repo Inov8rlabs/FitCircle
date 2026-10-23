@@ -35,39 +35,45 @@ export class FeatureFlagService {
           : supabase.from('profiles').select('subscription_tier').eq('id', userId).single(),
       ]);
 
-      if (!flag || !flag.is_enabled) {
-        return { enabled: false, reason: 'disabled', access_level: 'none' };
-      }
-
-      if (!profile) {
-        return { enabled: false, reason: 'disabled', access_level: 'none' };
-      }
-
-      // Check explicit allowlist
-      if (flag.allowed_user_ids && flag.allowed_user_ids.includes(userId)) {
-        return { enabled: true, reason: 'explicit', access_level: 'full' };
-      }
-
-      // Check tier allowlist
-      if (flag.allowed_tiers && flag.allowed_tiers.includes(profile.subscription_tier)) {
-        return { enabled: true, reason: 'tier', access_level: 'full' };
-      }
-
-      // Check rollout percentage
-      if (flag.rollout_percentage > 0) {
-        const userHash = this.hashUserId(userId);
-        const userPercentile = userHash % 100;
-
-        if (userPercentile < flag.rollout_percentage) {
-          return { enabled: true, reason: 'rollout', access_level: 'full' };
-        }
-      }
-
-      return { enabled: false, reason: 'disabled', access_level: 'none' };
+      return this.evaluate(flag, userId, profile ? profile.subscription_tier ?? null : undefined);
     } catch (error) {
       console.error('Feature flag check error:', error);
       return { enabled: false, reason: 'disabled', access_level: 'none' };
     }
+  }
+
+  /**
+   * Pure flag decision for an already-loaded `feature_flags` row. `tier`
+   * undefined = the user's profile could not be loaded (→ disabled, as before).
+   */
+  static evaluate(
+    flag: { is_enabled?: boolean | null; allowed_user_ids?: string[] | null; allowed_tiers?: string[] | null; rollout_percentage?: number | null } | null | undefined,
+    userId: string,
+    tier: string | null | undefined
+  ): FeatureFlagResult {
+    if (!flag || !flag.is_enabled || tier === undefined) {
+      return { enabled: false, reason: 'disabled', access_level: 'none' };
+    }
+
+    // Check explicit allowlist
+    if (flag.allowed_user_ids && flag.allowed_user_ids.includes(userId)) {
+      return { enabled: true, reason: 'explicit', access_level: 'full' };
+    }
+
+    // Check tier allowlist
+    if (flag.allowed_tiers && flag.allowed_tiers.includes(tier as string)) {
+      return { enabled: true, reason: 'tier', access_level: 'full' };
+    }
+
+    // Check rollout percentage
+    if ((flag.rollout_percentage ?? 0) > 0) {
+      const userPercentile = this.hashUserId(userId) % 100;
+      if (userPercentile < (flag.rollout_percentage ?? 0)) {
+        return { enabled: true, reason: 'rollout', access_level: 'full' };
+      }
+    }
+
+    return { enabled: false, reason: 'disabled', access_level: 'none' };
   }
 
   /**

@@ -41,6 +41,10 @@ create table if not exists public.home_feed_decisions (
   context         jsonb,
   platform        text,
   app_version     text,
+  -- Server time to build this response (auth → JSON), for P95 tracking:
+  --   select percentile_cont(0.95) within group (order by server_ms)
+  --   from home_feed_decisions where created_at > now() - interval '1 day';
+  server_ms       integer,
   created_at      timestamptz not null default now()
 );
 create index if not exists home_feed_decisions_user_created_idx on public.home_feed_decisions (user_id, created_at desc);

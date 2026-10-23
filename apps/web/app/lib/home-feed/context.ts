@@ -6,17 +6,55 @@
  * The profile comes from the auth middleware (`profiles.*`), so timezone,
  * created_at and subscription tier cost nothing extra.
  */
-import { CampaignService } from '@/lib/services/campaign-service';
-import { EntitlementService, normalizeTier } from '@/lib/services/entitlement-service';
-import { ReferralService } from '@/lib/services/referral-service';
+import type { CampaignRow } from '@/lib/campaigns/model';
+import { CampaignService, featuredCampaign, viewerToday } from '@/lib/services/campaign-service';
+import { normalizeTier } from '@/lib/services/entitlement-service';
+import { FeatureFlagService } from '@/lib/services/feature-flag-service';
 import { VitalsService } from '@/lib/services/vitals-service';
 import { isValidTimezone } from '@/lib/streaks/streak-calculator';
 import { createAdminSupabase } from '@/lib/supabase-admin';
 
+import { swrCache } from './cache';
 import type { AppPlatform, FeedContext } from './types';
 
-/** Per-loader budget. The whole context costs one parallel round ≈ the slowest loader. */
-export const CONTEXT_LOADER_TIMEOUT_MS = 700;
+/**
+ * Context budget. The loaders run in one parallel round; anything slower than
+ * this is treated as unknown (null) so the feed answers on time — the home
+ * feed is the apps' first screen and must keep a tight P95.
+ */
+export const CONTEXT_LOADER_TIMEOUT_MS = 250;
+
+/**
+ * User-independent tables, cached per instance (fresh 30 s, served stale up
+ * to 10 min while refreshing). Warm requests spend no round trips on them.
+ */
+export const activeCampaignsCache = swrCache<CampaignRow[]>(() => CampaignService.fetchActiveRows(), {
+  ttlMs: 30_000,
+  maxStaleMs: 600_000,
+  label: 'campaigns',
+});
+
+const FEED_FLAGS = ['referrals', 'subscriptions'] as const;
+type FlagRow = { name: string; is_enabled: boolean | null; allowed_user_ids: string[] | null; allowed_tiers: string[] | null; rollout_percentage: number | null };
+
+export const feedFlagsCache = swrCache<Map<string, FlagRow>>(
+  async () => {
+    const { data, error } = await createAdminSupabase()
+      .from('feature_flags')
+      .select('name, is_enabled, allowed_user_ids, allowed_tiers, rollout_percentage')
+      .in('name', [...FEED_FLAGS]);
+    if (error) throw error;
+    return new Map(((data ?? []) as FlagRow[]).map((r) => [r.name, r]));
+  },
+  { ttlMs: 30_000, maxStaleMs: 600_000, label: 'feature flags' }
+);
+
+/** Same decision FeatureFlagService.isFeatureEnabled makes, from the cached row + the auth profile. */
+async function flagOn(name: (typeof FEED_FLAGS)[number], profile: FeedProfile): Promise<boolean> {
+  const flags = await feedFlagsCache.get();
+  const tier = 'subscription_tier' in profile ? ((profile.subscription_tier as string | null) ?? null) : undefined;
+  return FeatureFlagService.evaluate(flags.get(name), profile.id, tier).enabled === true;
+}
 
 /** Local hour from which a not-yet-checked-in streak counts as "at risk". */
 export const STREAK_AT_RISK_HOUR = 18;
@@ -40,8 +78,8 @@ export interface CampaignHint {
 /** Injected I/O so the builder is unit-testable. */
 export interface ContextLoaders {
   campaign(profile: FeedProfile, timezone: string): Promise<CampaignHint>;
-  referralProgramEnabled(userId: string): Promise<boolean>;
-  subscriptionsEnabled(userId: string): Promise<boolean>;
+  referralProgramEnabled(profile: FeedProfile): Promise<boolean>;
+  subscriptionsEnabled(profile: FeedProfile): Promise<boolean>;
   activeCircleCount(userId: string): Promise<number>;
   checkedIn(userId: string, localDate: string): Promise<boolean>;
   waterTodayMl(userId: string, timezone: string, profile: FeedProfile): Promise<number>;
@@ -49,12 +87,17 @@ export interface ContextLoaders {
 
 export const defaultContextLoaders: ContextLoaders = {
   async campaign(profile, timezone) {
-    const { campaigns } = await CampaignService.listForViewer(profile as any, timezone);
-    const home = campaigns[0];
+    const rows = await activeCampaignsCache.get();
+    const home = featuredCampaign(rows, profile.id, viewerToday(profile as any, timezone));
     return home ? { present: true, slug: home.slug, phase: home.phase } : { present: false, slug: null, phase: null };
   },
-  referralProgramEnabled: (userId) => ReferralService.isProgramEnabled(userId),
-  subscriptionsEnabled: (userId) => EntitlementService.areSubscriptionsEnabled(userId),
+  // = ReferralService.isProgramEnabled: referrals AND subscriptions.
+  async referralProgramEnabled(profile) {
+    const [referrals, subscriptions] = await Promise.all([flagOn('referrals', profile), flagOn('subscriptions', profile)]);
+    return referrals && subscriptions;
+  },
+  // = EntitlementService.areSubscriptionsEnabled.
+  subscriptionsEnabled: (profile) => flagOn('subscriptions', profile),
   async activeCircleCount(userId) {
     const { count, error } = await createAdminSupabase()
       .from('fitcircle_members')
@@ -187,8 +230,8 @@ export async function buildFeedContext(
 
   const [campaign, referralProgramEnabled, subscriptionsEnabled, circleCount, checkedInToday, waterMl] = await Promise.all([
     softly(() => loaders.campaign(profile, timezone), t),
-    softly(() => loaders.referralProgramEnabled(userId), t),
-    softly(() => loaders.subscriptionsEnabled(userId), t),
+    softly(() => loaders.referralProgramEnabled(profile), t),
+    softly(() => loaders.subscriptionsEnabled(profile), t),
     softly(() => loaders.activeCircleCount(userId), t),
     softly(() => loaders.checkedIn(userId, local.date), t),
     softly(() => loaders.waterTodayMl(userId, timezone, profile), t),

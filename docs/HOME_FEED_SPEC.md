@@ -239,3 +239,25 @@ Preview query: `userId` (required), `cards` (default: the full v1 catalog), `pla
 - `home_feed_events`: impressions/taps/dismissals/CTAs; join on `decision_id`.
 - Retention 90 days; no cleanup cron yet — purge with the SQL in the header of `supabase/migrations/106_home_feed.sql`.
 - Experiment readout: `home_feed_decisions` grouped by `experiment_arm` ⨝ `home_feed_events` (CTR per card), or Amplitude `Home Feed Card *` split by `experiment_arm`.
+
+## 10. Latency budget (first screen)
+
+The home feed is the first request both apps make, so the server is built for a tight P95 and the clients never block on it.
+
+| Stage | Budget | How |
+|---|---|---|
+| Auth | 1 round trip | JWT verify + profile/blacklist in parallel (existing `requireMobileAuth`). |
+| Shared tables (rules, active campaigns, `referrals`/`subscriptions` flags) | 0 round trips warm | Per-instance stale-while-revalidate caches (`lib/home-feed/cache.ts`): fresh 30 s, served stale ≤ 10 min while one background refresh runs. `HomeFeedService.prewarm()` starts them before auth so a cold instance overlaps them with the auth round trip. Rules wait ≤ 250 ms on a cold instance, then rank without rules. |
+| Per-user context (circles, today's check-in, today's water) | 1 parallel round, hard cap 250 ms | `CONTEXT_LOADER_TIMEOUT_MS`; a slow loader becomes `null` (unknown → its hint doesn't fire), never a slow response. Campaign context uses `featuredCampaign()` (visibility + phase + order only, no per-viewer joins) — parity-tested against `listForViewer`. Flags use `FeatureFlagService.evaluate()` against the cached rows and the auth profile's tier. |
+| Compose + guardrails | < 2 ms | Pure, in memory. |
+| Decision logging | 0 (after response) | `runAfterResponse`. |
+
+Target: **P95 server time ≤ 150 ms warm; worst case ≈ auth + 250 ms.**
+
+Observability:
+- `Server-Timing: auth;dur=…, ctx;dur=…, total;dur=…` on every 200.
+- Requests over `SLOW_FEED_MS` (300 ms) log `[home-feed] slow total=… auth=… ctx=…` (Vercel runtime logs).
+- `home_feed_decisions.server_ms` (migration 106) — P95 per day:
+  `select percentile_cont(0.95) within group (order by server_ms) from home_feed_decisions where created_at > now() - interval '1 day';`
+
+Clients: paint the cached (or built-in) layout immediately, request the feed in parallel with the dashboard data (≈ 3 s timeout, silent fallback), and never reorder cards in front of the user (§6).
