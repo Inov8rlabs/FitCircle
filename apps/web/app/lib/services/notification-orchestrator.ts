@@ -4,6 +4,15 @@ import {
   NotificationPreferencesService,
   type NotificationCategory,
 } from './notification-preferences-service';
+import {
+  APNS_PAYLOAD_BUDGET_BYTES,
+  CIRCLE_CARD_TYPES,
+  buildCircleCard,
+  byteLength,
+  isHttpsUrl,
+  presentationFor,
+  type CircleCard,
+} from './push-presentation';
 import { PushService, type PushNotification } from './push-service';
 
 // ============================================================================
@@ -51,6 +60,12 @@ export interface NotificationData {
   emoji?: string; // chat_reaction: the reaction glyph
   body?: string;
   senderName?: string;
+  /** Chat sender (Communication Notifications on iOS: name + avatar). */
+  senderId?: string;
+  senderAvatarUrl?: string | null;
+
+  /** Optional https image the iOS service extension attaches (`image_url`). */
+  imageUrl?: string;
 
   // Entity ids forwarded into the push data payload (as strings) when present
   circleId?: string;
@@ -710,6 +725,23 @@ export class NotificationOrchestrator {
       if (senderName && type !== 'chat_rally') pushData.senderName = String(senderName);
       const preview = data.preview ?? data.body;
       if (preview) pushData.preview = String(preview);
+      // Communication Notification sender (iOS service extension). Rallies have none.
+      if (type !== 'chat_rally') {
+        if (data.senderId) pushData.senderId = String(data.senderId);
+        if (isHttpsUrl(data.senderAvatarUrl)) pushData.senderAvatarUrl = data.senderAvatarUrl;
+      }
+    }
+    if (isHttpsUrl(data.imageUrl)) pushData.image_url = data.imageUrl;
+
+    // iOS rich presentation: category / mutable-content / interruption level /
+    // relevance, plus the circle card for the Circle Ring content extension.
+    const presentation = presentationFor(type, data);
+    const custom: Record<string, unknown> = {};
+    if (CIRCLE_CARD_TYPES.has(type) && data.circleId) {
+      const card = await this.circleCardFor(String(data.circleId), userId, data.circleName);
+      if (card && byteLength(card) + byteLength(pushData) <= APNS_PAYLOAD_BUDGET_BYTES) {
+        custom.fc = card;
+      }
     }
 
     const pushNotification: PushNotification = {
@@ -721,6 +753,13 @@ export class NotificationOrchestrator {
         ? { chat: { threadId: data.circleId ? String(data.circleId) : '' } }
         : {}),
       ...(content.category === 'coach' ? { androidChannelId: ANDROID_COACH_CHANNEL_ID } : {}),
+      apns: {
+        category: presentation.category,
+        mutableContent: presentation.mutableContent,
+        interruptionLevel: presentation.interruptionLevel,
+        relevanceScore: presentation.relevanceScore,
+        ...(Object.keys(custom).length ? { custom } : {}),
+      },
     };
 
     const sentCount = await PushService.sendPush(userId, pushNotification);
@@ -870,6 +909,26 @@ export class NotificationOrchestrator {
     }
 
     return { suppressed: false };
+  }
+
+  /**
+   * The recipient's view of today's circle ring (member initials + check-in
+   * states), or null — a missing card only costs the extension its ring, so
+   * this never fails the send.
+   */
+  static async circleCardFor(
+    circleId: string,
+    recipientId: string,
+    circleName?: string | null
+  ): Promise<CircleCard | null> {
+    try {
+      const { CircleStreakService } = await import('./circle-streak-service');
+      const view = await CircleStreakService.getStreak(circleId, recipientId);
+      return buildCircleCard(view, recipientId, circleName);
+    } catch (err: any) {
+      console.warn('[NotificationOrchestrator.circleCardFor] skipped:', circleId, err?.message);
+      return null;
+    }
   }
 
   /**
