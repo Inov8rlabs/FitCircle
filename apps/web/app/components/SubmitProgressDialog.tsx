@@ -102,7 +102,7 @@ export function SubmitProgressDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="bg-slate-900/95 border-slate-800 backdrop-blur-xl max-w-3xl">
+      <DialogContent className="bg-surface/95 border-hairline backdrop-blur-xl max-w-3xl">
         <DialogHeader className="pb-2">
           <DialogTitle className="text-2xl sm:text-3xl font-bold text-white flex items-center gap-3">
             <div className="p-2 bg-green-500/10 rounded-lg">

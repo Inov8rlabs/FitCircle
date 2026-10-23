@@ -7,13 +7,12 @@
  * account, plus auto-claim preferences.
  */
 
-import { ArrowLeft, Heart, Smartphone, RefreshCcw, Apple, Activity } from 'lucide-react';
-import Link from 'next/link';
+import { Activity, Apple, Heart, Smartphone } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
-import { Navbar } from '@/components/layout/navbar';
-import { Card, CardContent } from '@/components/ui/card';
-import { Switch } from '@/components/ui/switch';
+import { GetAppButton } from '@/components/app-links/GetAppButton';
+import { SettingsScreen, ToggleRow } from '@/components/profile/settings-shell';
+import { ListGroup, ListRow, type Tone } from '@/components/ui/ios';
 import { useAuthStore } from '@/stores/auth-store';
 
 interface SyncSource {
@@ -21,6 +20,12 @@ interface SyncSource {
   lastSyncedAt: string | null;
   count: number;
 }
+
+const SOURCE_META: Record<SyncSource['source'], { icon: typeof Apple; label: string; tone: Tone }> = {
+  ios: { icon: Apple, label: 'Apple Health (iOS)', tone: 'slate' },
+  android: { icon: Smartphone, label: 'Health Connect (Android)', tone: 'green' },
+  manual: { icon: Activity, label: 'Manual entry', tone: 'orange' },
+};
 
 export default function HealthSettingsPage() {
   const { user } = useAuthStore();
@@ -40,70 +45,42 @@ export default function HealthSettingsPage() {
   }, [user]);
 
   return (
-    <div className="min-h-screen bg-background pb-24">
-      <Navbar />
-      <main className="mx-auto max-w-2xl px-4 py-6 space-y-6">
-        <Link href="/settings" className="inline-flex items-center text-sm text-muted-foreground hover:text-foreground">
-          <ArrowLeft className="h-4 w-4 mr-1" /> Back to settings
-        </Link>
-        <h1 className="text-2xl font-bold">Health & Data</h1>
+    <SettingsScreen title="Health & Data" subtitle="Where your steps, workouts and weight come from">
+      <ListGroup title="Streak">
+        <ToggleRow
+          id="auto-claim"
+          icon={Heart}
+          tone="red"
+          title="Auto-claim streak"
+          description="When new step data syncs from your phone, automatically claim today's streak."
+          checked={autoClaim}
+          onCheckedChange={setAutoClaim}
+        />
+      </ListGroup>
 
-        {/* Auto-claim */}
-        <Card>
-          <CardContent className="p-4 flex items-center gap-3">
-            <Heart className="h-5 w-5 text-red-400" />
-            <div className="flex-1">
-              <p className="font-semibold">Auto-claim streak</p>
-              <p className="text-xs text-muted-foreground">
-                When new step data syncs from your phone, automatically claim today&apos;s streak.
-              </p>
-            </div>
-            <Switch checked={autoClaim} onCheckedChange={setAutoClaim} />
-          </CardContent>
-        </Card>
+      <ListGroup
+        title="Connected sources"
+        footer="Connect FitCircle on your phone to start syncing steps and weight automatically."
+      >
+        {sources.map((src) => {
+          const meta = SOURCE_META[src.source];
+          return (
+            <ListRow
+              key={src.source}
+              icon={meta.icon}
+              tone={meta.tone}
+              title={meta.label}
+              subtitle={
+                src.lastSyncedAt ? `Last sync ${new Date(src.lastSyncedAt).toLocaleDateString()}` : 'Not connected yet'
+              }
+            />
+          );
+        })}
+      </ListGroup>
 
-        {/* Sources */}
-        <Card>
-          <CardContent className="p-4 space-y-3">
-            <h2 className="font-semibold flex items-center gap-2">
-              <RefreshCcw className="h-4 w-4 text-cyan-400" /> Connected sources
-            </h2>
-            <div className="space-y-2">
-              {sources.map(src => (
-                <SourceRow key={src.source} source={src} />
-              ))}
-            </div>
-            <p className="text-xs text-muted-foreground pt-2">
-              Connect FitCircle on your phone to start syncing steps and weight automatically.
-              Visit the App Store or Play Store to download the mobile app.
-            </p>
-          </CardContent>
-        </Card>
-      </main>
-    </div>
-  );
-}
-
-function SourceRow({ source }: { source: SyncSource }) {
-  const meta = {
-    ios:     { icon: <Apple className="h-4 w-4" />,     label: 'Apple Health (iOS)',    color: 'text-zinc-300' },
-    android: { icon: <Smartphone className="h-4 w-4" />, label: 'Health Connect (Android)', color: 'text-emerald-400' },
-    manual:  { icon: <Activity className="h-4 w-4" />,   label: 'Manual entry',          color: 'text-orange-400' },
-  }[source.source];
-
-  return (
-    <div className="flex items-center gap-3 rounded-lg bg-zinc-800/40 px-3 py-2">
-      <div className={`h-8 w-8 rounded-md bg-zinc-900 flex items-center justify-center ${meta.color}`}>
-        {meta.icon}
+      <div className="flex justify-center">
+        <GetAppButton placement="settings_health" variant="secondary" label="Get the phone app" />
       </div>
-      <div className="flex-1">
-        <p className="font-medium">{meta.label}</p>
-        <p className="text-xs text-muted-foreground">
-          {source.lastSyncedAt
-            ? `Last sync ${new Date(source.lastSyncedAt).toLocaleDateString()}`
-            : 'Not connected yet'}
-        </p>
-      </div>
-    </div>
+    </SettingsScreen>
   );
 }

@@ -124,7 +124,7 @@ export function EngagementStreakCard({ onOpenHistory, onOpenCheckIn }: Engagemen
 
   if (isLoading || !streak) {
     return (
-      <Card className="bg-slate-900/50 border-slate-800 backdrop-blur-xl h-full">
+      <Card className="bg-surface-raised/50 border-hairline backdrop-blur-xl h-full">
         <CardContent className="p-4 sm:p-6 flex items-center justify-center h-full min-h-[200px]">
           <div className="text-gray-400 text-sm">Loading streak...</div>
         </CardContent>
@@ -148,7 +148,7 @@ export function EngagementStreakCard({ onOpenHistory, onOpenCheckIn }: Engagemen
       transition={{ delay: 0.1 }}
     >
       <Card
-        className="bg-slate-900/50 border-slate-800 backdrop-blur-xl hover:border-orange-500/50 transition-all duration-300 cursor-pointer group shadow-lg"
+        className="bg-surface-raised/50 border-hairline backdrop-blur-xl hover:border-orange-500/50 transition-all duration-300 cursor-pointer group shadow-lg"
         onClick={handleCardClick}
       >
         <CardContent className="p-4 sm:p-6 lg:p-8">

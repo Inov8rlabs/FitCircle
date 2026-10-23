@@ -1,33 +1,24 @@
 'use client';
 
 import {
-  Bell,
-  Flame,
-  Users,
-  Trophy,
-  MessageSquare,
-  PartyPopper,
   BarChart,
-  Sparkles,
+  Flame,
+  MessageSquare,
   Moon,
+  PartyPopper,
   Smartphone,
-  Loader2,
-  ArrowLeft,
+  Sparkles,
+  Trophy,
+  Users,
+  type LucideIcon,
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useState, useEffect, useCallback } from 'react';
 import { toast } from 'sonner';
 
-import DashboardNav from '@/components/DashboardNav';
-import { Button } from '@/components/ui/button';
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card';
-import { Switch } from '@/components/ui/switch';
+import { InfoNote, SettingsScreen, ToggleRow } from '@/components/profile/settings-shell';
+import { ListGroup, type Tone } from '@/components/ui/ios';
+import { Skeleton } from '@/components/ui/skeleton';
 import { AnalyticsEvents, analytics } from '@/lib/analytics';
 import { createBrowserSupabase } from '@/lib/supabase';
 
@@ -82,57 +73,57 @@ const CATEGORIES: Array<{
   key: CategoryKey;
   label: string;
   description: string;
-  icon: React.ComponentType<{ className?: string }>;
-  color: string;
+  icon: LucideIcon;
+  tone: Tone;
 }> = [
   {
     key: 'momentum_enabled',
     label: 'Streak reminders',
     description: "Lunch and dinner logging nudges, a heads-up when your streak is at risk, and when a streak is lost or a shield saves it",
     icon: Flame,
-    color: 'text-orange-400',
+    tone: 'orange',
   },
   {
     key: 'circle_enabled',
     label: 'Circle activity',
     description: 'When your circle has a perfect day or someone joins',
     icon: Users,
-    color: 'text-green-400',
+    tone: 'green',
   },
   {
     key: 'challenge_enabled',
     label: 'Challenges',
     description: 'Daily challenge drops and challenge results',
     icon: Trophy,
-    color: 'text-indigo-400',
+    tone: 'indigo',
   },
   {
     key: 'social_enabled',
     label: 'Chat and invites',
     description: 'Messages and mentions in circle chat, circle invites',
     icon: MessageSquare,
-    color: 'text-cyan-400',
+    tone: 'cyan',
   },
   {
     key: 'celebration_enabled',
     label: 'Celebrations',
     description: 'Milestones, shields earned, and circle rallies',
     icon: PartyPopper,
-    color: 'text-purple-400',
+    tone: 'purple',
   },
   {
     key: 'journey_enabled',
     label: 'Tips and summaries',
     description: 'Your weekly review and occasional tips',
     icon: BarChart,
-    color: 'text-pink-400',
+    tone: 'pink',
   },
   {
     key: 'coach_enabled',
     label: 'Coaching tips from Fitzy',
     description: "Today's focus each morning and the occasional well-timed tip from your coach",
     icon: Sparkles,
-    color: 'text-violet-400',
+    tone: 'purple',
   },
 ];
 
@@ -144,7 +135,7 @@ interface PreferencesRow {
   social_enabled: boolean | null;
   celebration_enabled: boolean | null;
   journey_enabled: boolean | null;
-  /** Migration 107; absent on databases that don't have it yet. */
+  /** Migration 107. */
   coach_enabled?: boolean | null;
   quiet_hours_start: string | null;
   quiet_hours_end: string | null;
@@ -161,8 +152,6 @@ export default function NotificationSettingsPage() {
   const [userId, setUserId] = useState<string | null>(null);
   const [preferences, setPreferences] = useState<PushPreferences>(DEFAULT_PREFERENCES);
   const [savingKey, setSavingKey] = useState<string | null>(null);
-  // The coach toggle needs migration 107; until the column exists it is hidden and never written.
-  const [coachSupported, setCoachSupported] = useState(false);
 
   useEffect(() => {
     const load = async () => {
@@ -187,8 +176,6 @@ export default function NotificationSettingsPage() {
         if (error) throw error;
         const data = row as PreferencesRow | null;
 
-        // No row yet: the column can't be detected, so keep the toggle hidden until one exists.
-        setCoachSupported(!!data && 'coach_enabled' in data);
         if (data) {
           setPreferences({
             momentum_enabled: data.momentum_enabled ?? true,
@@ -232,12 +219,10 @@ export default function NotificationSettingsPage() {
       setSavingKey(savingLabel);
       try {
         const supabase = createBrowserSupabase();
-        const { coach_enabled, ...rest } = next;
-        const row = coachSupported ? { ...rest, coach_enabled } : rest;
         const { error } = await supabase
           .from('notification_preferences')
           .upsert(
-            { user_id: userId, ...row, updated_at: new Date().toISOString() },
+            { user_id: userId, ...next, updated_at: new Date().toISOString() },
             { onConflict: 'user_id' }
           );
         if (error) throw error;
@@ -263,7 +248,7 @@ export default function NotificationSettingsPage() {
         setSavingKey(null);
       }
     },
-    [preferences, userId, coachSupported]
+    [preferences, userId]
   );
 
   const quietHoursOn = preferences.quiet_hours_start !== null && preferences.quiet_hours_end !== null;
@@ -277,142 +262,91 @@ export default function NotificationSettingsPage() {
     );
   };
 
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 flex items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-purple-500" />
-      </div>
-    );
-  }
-
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950">
-      <DashboardNav />
-      <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-8 lg:py-12">
-        <div className="mb-8 flex items-center gap-4">
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => {
-              void router.push('/profile');
-            }}
-            className="text-gray-400 hover:text-white"
+    <SettingsScreen
+      title="Notifications"
+      subtitle="Choose which push notifications reach your phone"
+    >
+      <InfoNote icon={Smartphone} tone="indigo">
+        Push notifications are delivered to the FitCircle app on your iPhone or Android phone. Changes
+        here apply everywhere you&apos;re signed in. Chat messages are never held back by the daily limit.
+      </InfoNote>
+
+      {loading ? (
+        <div role="status" aria-label="Loading" className="space-y-2">
+          {Array.from({ length: 7 }).map((_, i) => (
+            <Skeleton key={i} className="h-[64px] rounded-xl" />
+          ))}
+        </div>
+      ) : (
+        <>
+          <ListGroup title="What you get notified about" footer="Turn off any group you don't want.">
+            {CATEGORIES.map(({ key, label, description, icon, tone }) => (
+              <ToggleRow
+                key={key}
+                id={key}
+                icon={icon}
+                tone={tone}
+                title={label}
+                description={description}
+                checked={preferences[key]}
+                disabled={savingKey === key}
+                onCheckedChange={(checked) => {
+                  void save({ [key]: checked } as Partial<PushPreferences>, key);
+                }}
+              />
+            ))}
+          </ListGroup>
+
+          <ListGroup
+            title="Quiet hours"
+            footer={`Nothing is sent during this window, in your local time (${preferences.quiet_hours_timezone}).`}
           >
-            <ArrowLeft className="h-6 w-6" />
-          </Button>
-          <div>
-            <h1 className="text-3xl font-bold text-white flex items-center gap-3">
-              <Bell className="h-8 w-8 text-purple-400" />
-              Notifications
-            </h1>
-            <p className="text-gray-400 mt-1">Choose which push notifications reach your phone</p>
-          </div>
-        </div>
-
-        <div className="space-y-6">
-          <Card className="bg-slate-900/50 border-slate-800 backdrop-blur-xl">
-            <CardContent className="pt-6">
-              <div className="flex items-start gap-3 text-sm text-gray-400">
-                <Smartphone className="h-5 w-5 text-indigo-400 shrink-0 mt-0.5" />
-                <p>
-                  Push notifications are delivered to the FitCircle app on your iPhone or
-                  Android phone. Changes here apply everywhere you&apos;re signed in. Chat
-                  messages are never held back by the daily limit.
-                </p>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="bg-slate-900/50 border-slate-800 backdrop-blur-xl">
-            <CardHeader>
-              <CardTitle className="text-white text-lg">What you get notified about</CardTitle>
-              <CardDescription>Turn off any group you don&apos;t want</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              {CATEGORIES.filter((c) => c.key !== 'coach_enabled' || coachSupported).map(({ key, label, description, icon: Icon, color }) => (
-                <div
-                  key={key}
-                  className="flex items-center justify-between gap-4 p-3 rounded-lg bg-slate-800/30"
-                >
-                  <div className="flex items-start gap-3 min-w-0">
-                    <Icon className={`h-5 w-5 ${color} shrink-0 mt-0.5`} />
-                    <div className="min-w-0">
-                      <p className="text-white font-medium">{label}</p>
-                      <p className="text-sm text-gray-400">{description}</p>
-                    </div>
-                  </div>
-                  <Switch
-                    id={key}
-                    checked={preferences[key]}
-                    disabled={savingKey === key}
-                    onCheckedChange={(checked) => {
-                      void save({ [key]: checked } as Partial<PushPreferences>, key);
+            <ToggleRow
+              id="quiet_hours_enabled"
+              icon={Moon}
+              tone="indigo"
+              title="Pause notifications overnight"
+              description={
+                quietHoursOn
+                  ? `Quiet from ${preferences.quiet_hours_start} to ${preferences.quiet_hours_end}`
+                  : 'Off'
+              }
+              checked={quietHoursOn}
+              disabled={savingKey === 'quiet'}
+              onCheckedChange={toggleQuietHours}
+            />
+            {quietHoursOn && (
+              <li className="grid grid-cols-2 gap-3 px-4 py-3">
+                <label className="flex flex-col gap-1 text-footnote text-fg-secondary">
+                  Start
+                  <input
+                    id="quiet_hours_start"
+                    type="time"
+                    value={preferences.quiet_hours_start ?? DEFAULT_QUIET_START}
+                    onChange={(e) => {
+                      if (e.target.value) void save({ quiet_hours_start: e.target.value }, 'quiet');
                     }}
+                    className="h-11 rounded-lg border border-hairline bg-white/5 px-3 text-body text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-purple/40"
                   />
-                </div>
-              ))}
-            </CardContent>
-          </Card>
-
-          <Card className="bg-slate-900/50 border-slate-800 backdrop-blur-xl">
-            <CardHeader>
-              <CardTitle className="text-white text-lg flex items-center gap-2">
-                <Moon className="h-5 w-5 text-indigo-400" />
-                Quiet hours
-              </CardTitle>
-              <CardDescription>
-                Nothing is sent during this window, in your local time ({preferences.quiet_hours_timezone})
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="flex items-center justify-between gap-4 p-3 rounded-lg bg-slate-800/30">
-                <div>
-                  <p className="text-white font-medium">Pause notifications overnight</p>
-                  <p className="text-sm text-gray-400">
-                    {quietHoursOn
-                      ? `Quiet from ${preferences.quiet_hours_start} to ${preferences.quiet_hours_end}`
-                      : 'Off'}
-                  </p>
-                </div>
-                <Switch
-                  id="quiet_hours_enabled"
-                  checked={quietHoursOn}
-                  disabled={savingKey === 'quiet'}
-                  onCheckedChange={toggleQuietHours}
-                />
-              </div>
-              {quietHoursOn && (
-                <div className="grid grid-cols-2 gap-3 p-3 rounded-lg bg-slate-800/30">
-                  <label className="flex flex-col gap-1 text-sm text-gray-400">
-                    Start
-                    <input
-                      id="quiet_hours_start"
-                      type="time"
-                      value={preferences.quiet_hours_start ?? DEFAULT_QUIET_START}
-                      onChange={(e) => {
-                        if (e.target.value) void save({ quiet_hours_start: e.target.value }, 'quiet');
-                      }}
-                      className="rounded-md bg-slate-900 border border-slate-700 px-3 py-2 text-white"
-                    />
-                  </label>
-                  <label className="flex flex-col gap-1 text-sm text-gray-400">
-                    End
-                    <input
-                      id="quiet_hours_end"
-                      type="time"
-                      value={preferences.quiet_hours_end ?? DEFAULT_QUIET_END}
-                      onChange={(e) => {
-                        if (e.target.value) void save({ quiet_hours_end: e.target.value }, 'quiet');
-                      }}
-                      className="rounded-md bg-slate-900 border border-slate-700 px-3 py-2 text-white"
-                    />
-                  </label>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </div>
-      </div>
-    </div>
+                </label>
+                <label className="flex flex-col gap-1 text-footnote text-fg-secondary">
+                  End
+                  <input
+                    id="quiet_hours_end"
+                    type="time"
+                    value={preferences.quiet_hours_end ?? DEFAULT_QUIET_END}
+                    onChange={(e) => {
+                      if (e.target.value) void save({ quiet_hours_end: e.target.value }, 'quiet');
+                    }}
+                    className="h-11 rounded-lg border border-hairline bg-white/5 px-3 text-body text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-purple/40"
+                  />
+                </label>
+              </li>
+            )}
+          </ListGroup>
+        </>
+      )}
+    </SettingsScreen>
   );
 }

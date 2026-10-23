@@ -15,7 +15,7 @@ interface EmptyCirclesStateProps {
 export default function EmptyCirclesState({ onCreateClick, onJoinClick, isLoading }: EmptyCirclesStateProps) {
   if (isLoading) {
     return (
-      <Card className="bg-slate-900/50 border-slate-800 backdrop-blur-xl">
+      <Card className="bg-surface-raised/50 border-hairline backdrop-blur-xl">
         <CardContent className="p-12 text-center">
           <div className="animate-pulse">
             <div className="mb-6 inline-flex">
@@ -32,7 +32,7 @@ export default function EmptyCirclesState({ onCreateClick, onJoinClick, isLoadin
   }
 
   return (
-    <Card className="bg-slate-900/50 border-slate-800 backdrop-blur-xl overflow-hidden">
+    <Card className="bg-surface-raised/50 border-hairline backdrop-blur-xl overflow-hidden">
       {/* Top gradient bar */}
       <div className="h-1 bg-gradient-to-r from-orange-500 via-purple-500 to-cyan-500" />
       

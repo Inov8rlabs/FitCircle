@@ -137,7 +137,7 @@ export function BodyCompPageClient({
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 overflow-x-hidden">
+    <div className="min-h-screen bg-canvas bg-hero-glow overflow-x-hidden">
       {/* Subtle circle background decoration */}
       <div className="fixed inset-0 overflow-hidden pointer-events-none">
         <div className="absolute top-20 left-10 w-96 h-96 bg-indigo-500/5 rounded-full blur-3xl" />

@@ -242,7 +242,7 @@ export default function ChallengeDetailView({
             <Calendar className="w-3.5 h-3.5" />
             {challenge.duration_days}d challenge
           </span>
-          {challenge.status === 'active' && (
+          {challenge.status === 'active' && challenge.days_remaining != null && (
             <span className="flex items-center gap-1">
               <Clock className="w-3.5 h-3.5" />
               {challenge.days_remaining}d left

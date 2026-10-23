@@ -155,7 +155,7 @@ export function PrivacyModal({ open, onClose }: PrivacyModalProps) {
         </ScrollArea>
 
         <div className="flex justify-end pt-4 border-t border-slate-700">
-          <Button onClick={onClose} className="bg-purple-600 hover:bg-purple-700">
+          <Button onClick={onClose} className="bg-gradient-brand shadow-glow transition hover:brightness-110">
             Close
           </Button>
         </div>

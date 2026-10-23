@@ -17,7 +17,7 @@ import {
   Loader2,
 } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { useState, useEffect, Suspense } from 'react';
+import { useState, useEffect, useMemo, Suspense } from 'react';
 import { useForm } from 'react-hook-form';
 import * as z from 'zod';
 
@@ -101,11 +101,15 @@ function RegisterForm() {
     },
   });
 
-  const formData = watch();
+  const name = watch('name');
+  const email = watch('email');
+  const termsAccepted = watch('termsAccepted');
   const password = watch('password', '');
 
-  // Form persistence
-  const { loadForm, clearForm } = useFormPersistence(FORM_STORAGE_KEY, formData, {
+  // Draft persistence (sessionStorage). The password is never part of the
+  // draft: only name, email and the terms checkbox are saved.
+  const draft = useMemo(() => ({ name, email, termsAccepted }), [name, email, termsAccepted]);
+  const { loadForm, clearForm } = useFormPersistence(FORM_STORAGE_KEY, draft, {
     enabled: true,
     clearOnUnmount: false,
   });
@@ -136,10 +140,8 @@ function RegisterForm() {
   useEffect(() => {
     const savedData = loadForm();
     if (savedData) {
-      console.log('📝 Restoring saved form data');
       if (savedData.name) setValue('name', savedData.name);
       if (savedData.email) setValue('email', savedData.email);
-      if (savedData.password) setValue('password', savedData.password);
       if (savedData.termsAccepted) setValue('termsAccepted', savedData.termsAccepted);
     }
   }, [loadForm, setValue]);
@@ -207,7 +209,7 @@ function RegisterForm() {
       <TermsModal open={showTermsModal} onClose={() => setShowTermsModal(false)} />
       <PrivacyModal open={showPrivacyModal} onClose={() => setShowPrivacyModal(false)} />
 
-      <div className="min-h-screen flex bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950">
+      <div className="min-h-screen flex bg-canvas bg-hero-glow">
         {/* Subtle circle background decoration */}
         <div className="fixed inset-0 overflow-hidden pointer-events-none">
           <div className="absolute top-20 left-0 w-[600px] h-[600px] bg-indigo-500/5 rounded-full blur-3xl" />
@@ -375,7 +377,7 @@ function RegisterForm() {
                 size="lg"
                 disabled={isSubmitting || isLoading}
                 loading={isSubmitting || isLoading}
-                className="group bg-purple-600 hover:bg-purple-700 shadow-lg hover:shadow-purple-500/50 transition-all"
+                className="group bg-gradient-brand shadow-glow transition hover:brightness-110"
               >
                 Create Account
                 <ArrowRight className="ml-2 h-4 w-4 transition-transform group-hover:translate-x-1" />
@@ -441,7 +443,7 @@ export default function RegisterPage() {
   return (
     <Suspense
       fallback={
-        <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950">
+        <div className="min-h-screen flex items-center justify-center bg-canvas bg-hero-glow">
           <Loader2 className="h-8 w-8 animate-spin text-purple-400" />
         </div>
       }

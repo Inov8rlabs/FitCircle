@@ -1,11 +1,10 @@
 'use client';
 
-import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { Check, Sparkles } from 'lucide-react';
+import { useState } from 'react';
 import { toast } from 'sonner';
 
-import { Card, CardContent } from '@/components/ui/card';
 import { AnalyticsEvents, analytics, toErrorKind, type Plan } from '@/lib/analytics';
 import { rememberCheckout, webProductId } from '@/lib/analytics/checkout';
 
@@ -83,63 +82,78 @@ export function PricingCards({ source = 'pricing_page' }: { source?: string }) {
     price: React.ReactNode,
     caption: string,
     badge?: string
-  ) => (
-    <button
-      type="button"
-      onClick={() => selectPlan(plan)}
-      aria-pressed={selected === plan}
-      className={`relative w-full rounded-xl border p-4 text-left transition-colors ${
-        selected === plan
-          ? 'border-purple-500 bg-purple-500/10'
-          : 'border-border bg-zinc-900/40 hover:border-zinc-600'
-      }`}
-    >
-      {badge && (
-        <span className="absolute -top-2.5 right-4 rounded-full bg-purple-500 px-2 py-0.5 text-[11px] font-bold text-white">
-          {badge}
+  ) => {
+    const isSelected = selected === plan;
+    return (
+      <button
+        type="button"
+        onClick={() => selectPlan(plan)}
+        aria-pressed={isSelected}
+        data-testid={`plan-${plan}`}
+        className={`relative flex w-full items-center gap-3 rounded-xl border-2 p-4 text-left transition duration-200 ease-ios ${
+          isSelected
+            ? 'border-brand-purple bg-brand-purple/10 shadow-glow'
+            : 'border-glass bg-surface-raised/50 hover:border-white/20'
+        }`}
+      >
+        {/* iOS radio: filled check disc when selected, ring when not */}
+        <span
+          aria-hidden
+          className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full ${
+            isSelected ? 'bg-brand-purple text-white' : 'border-2 border-white/25'
+          }`}
+        >
+          {isSelected && <Check className="h-3.5 w-3.5" strokeWidth={3} />}
         </span>
-      )}
-      <div className="flex items-baseline justify-between gap-2">
-        <p className="font-semibold">{title}</p>
-        <div className="text-right">{price}</div>
-      </div>
-      <p className="mt-1 text-xs text-muted-foreground">{caption}</p>
-    </button>
-  );
+        <span className="min-w-0 flex-1">
+          <span className="flex flex-wrap items-center gap-2">
+            <span className="text-headline text-white">{title}</span>
+            {badge && (
+              <span className="rounded-full bg-gradient-brand px-2 py-0.5 text-[11px] font-bold tracking-wide text-white">
+                {badge}
+              </span>
+            )}
+          </span>
+          <span className="mt-0.5 block text-footnote text-fg-secondary">{caption}</span>
+        </span>
+        <span className="shrink-0 text-right text-headline text-white">{price}</span>
+      </button>
+    );
+  };
 
   return (
     <div className="space-y-3">
       {planCard(
         'annual',
         'Annual',
-        <p className="font-bold">
+        <p className="font-bold tabular-nums">
           {PROMO_ANNUAL !== null && (
-            <span className="mr-2 text-sm font-medium text-muted-foreground line-through">
+            <span className="mr-2 text-subhead font-medium text-fg-tertiary line-through">
               ${PRICE_ANNUAL}
             </span>
           )}
           ${PROMO_ANNUAL ?? PRICE_ANNUAL}
-          <span className="text-xs font-medium text-muted-foreground">/yr</span>
+          <span className="text-footnote font-medium text-fg-secondary">/yr</span>
         </p>,
         PROMO_ANNUAL !== null
           ? `Launch offer — $${annualPerMonth}/mo billed yearly for your first year, then $${PRICE_ANNUAL}/yr.`
-          : `$${annualPerMonth}/mo billed yearly. Cancel anytime.`,
+          : `$${annualPerMonth}/mo, billed yearly. Renews automatically; cancel any time to stop the next renewal.`,
         'BEST VALUE'
       )}
       {planCard(
         'monthly',
         'Monthly',
-        <p className="font-bold">
+        <p className="font-bold tabular-nums">
           ${PRICE_MONTHLY}
-          <span className="text-xs font-medium text-muted-foreground">/mo</span>
+          <span className="text-footnote font-medium text-fg-secondary">/mo</span>
         </p>,
-        'Billed monthly. Cancel anytime.'
+        'Billed monthly. Renews automatically; cancel any time to stop the next renewal.'
       )}
       {SHOW_LIFETIME &&
         planCard(
           'lifetime',
           'Lifetime',
-          <p className="font-bold">${PRICE_LIFETIME}</p>,
+          <p className="font-bold tabular-nums">${PRICE_LIFETIME}</p>,
           'One-time payment, Pro forever. Launch-window only.',
           'LIMITED'
         )}
@@ -149,13 +163,15 @@ export function PricingCards({ source = 'pricing_page' }: { source?: string }) {
         type="button"
         disabled={busy}
         onClick={startCheckout}
-        className="w-full rounded-xl bg-purple-500 py-3.5 font-bold text-white transition-colors hover:bg-purple-600 disabled:opacity-60"
+        data-testid="checkout-button"
+        className="h-14 w-full rounded-xl bg-gradient-brand text-headline text-white shadow-glow transition hover:brightness-110 disabled:opacity-60"
       >
         {busy ? 'Opening checkout…' : selected === 'lifetime' ? 'Get Pro forever' : 'Continue to checkout'}
       </motion.button>
-      <p className="text-center text-[11px] leading-relaxed text-muted-foreground">
-        Subscriptions renew automatically until cancelled. Manage or cancel anytime in
-        Settings → Billing.{' '}
+      <p className="text-center text-caption leading-relaxed text-fg-tertiary">
+        Subscriptions renew automatically. Cancel any time in Settings → Billing to stop the next
+        renewal; you keep Pro until the end of the period you&apos;ve paid for. No refunds for partial
+        periods.{' '}
         <a href="/terms" className="underline">Terms</a> ·{' '}
         <a href="/privacy" className="underline">Privacy</a>
       </p>
@@ -166,38 +182,38 @@ export function PricingCards({ source = 'pricing_page' }: { source?: string }) {
 /** Free vs Pro comparison rows (MONETIZATION-PLAN gating matrix). */
 export function PlanComparison() {
   const rows: Array<[string, string, string]> = [
-    ['AI food logging', '5 scans/day', 'Unlimited'],
-    ['Fitzy AI coach', '5 messages/day', 'Unlimited + weekly insights'],
+    ['AI food logging', '5 scans/day', 'Fair-use limits'],
+    ['Fitzy AI coach', '5 messages/day', 'Fair-use limits + weekly plan'],
     ['Body composition', 'Logging', 'Photo scan, trends, coach'],
-    ['History & analytics', 'Last 14 days', 'Unlimited + export'],
+    ['History & analytics', 'Last 14 days', 'Full history'],
     ['Circles', 'Join unlimited · create 2', 'Create unlimited'],
-    ['Streak shields', 'Earn with XP', 'Bonus shields'],
+    ['Streak shields', 'Earn with XP', 'Unlimited'],
     ['Ads', 'Shown', 'Ad-free'],
     ['Style', '—', 'Pro badge + custom share themes'],
   ];
   return (
-    <Card>
-      <CardContent className="p-0">
-        <div className="grid grid-cols-[1.4fr_1fr_1fr] gap-x-2 px-4 py-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+    <div className="overflow-hidden rounded-xl border border-glass bg-surface-raised/50" data-testid="plan-comparison">
+      <div>
+        <div className="grid grid-cols-[1.4fr_1fr_1fr] gap-x-2 border-b border-white/[0.06] px-4 py-3 text-footnote font-semibold uppercase tracking-wide text-fg-tertiary">
           <span>Feature</span>
           <span>Free</span>
-          <span className="flex items-center gap-1 text-purple-400">
+          <span className="flex items-center gap-1 text-brand-purple">
             <Sparkles className="h-3 w-3" /> Pro
           </span>
         </div>
-        <div className="divide-y divide-border text-sm">
+        <div className="divide-y divide-white/[0.06] text-subhead">
           {rows.map(([feature, free, pro]) => (
             <div key={feature} className="grid grid-cols-[1.4fr_1fr_1fr] gap-x-2 px-4 py-2.5">
-              <span className="font-medium">{feature}</span>
-              <span className="text-muted-foreground">{free}</span>
-              <span className="flex items-start gap-1 text-foreground">
-                <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-purple-400" />
+              <span className="font-medium text-white">{feature}</span>
+              <span className="text-fg-secondary">{free}</span>
+              <span className="flex items-start gap-1 text-white">
+                <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-brand-purple" />
                 {pro}
               </span>
             </div>
           ))}
         </div>
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   );
 }

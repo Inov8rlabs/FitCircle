@@ -1,43 +1,74 @@
 'use client';
 
+/**
+ * Profile — mirrors iOS ProfileView: avatar header with Edit Profile, a stats
+ * strip, then inset grouped sections (Account, Goals, Health, Invite friends,
+ * Settings, Support & legal) and Sign out. Goal and profile edits open sheets.
+ */
+
 import {
-  User,
-  Mail,
-  Calendar,
-  Edit,
-  Settings,
-  LogOut,
+  Activity,
   Bell,
-  Shield,
-  Palette,
-  Save,
-  X,
-  Scale,
-  Target,
-  Loader2,
+  Calendar,
+  Crown,
+  Flame,
   Footprints,
+  Gift,
+  HelpCircle,
+  Loader2,
+  Lock,
+  LogOut,
+  Mail,
+  Ruler,
+  Scale,
+  Settings,
+  Shield,
+  Sparkles,
+  Star,
+  Target,
+  User,
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useState, useEffect } from 'react';
 import { toast } from 'sonner';
 
-import DashboardNav from '@/components/DashboardNav';
+import { ProBadge } from '@/components/billing/ProBadge';
+import { GroupButton, SettingsScreen } from '@/components/profile/settings-shell';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import { AvatarCircle, GlassCard, ListGroup, ListRow, ToneDisc, type Tone } from '@/components/ui/ios';
 import { Label } from '@/components/ui/label';
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+} from '@/components/ui/sheet';
 import { UnitToggle } from '@/components/ui/unit-toggle';
 import { useUnitPreference } from '@/hooks/useUnitPreference';
 import { supabase } from '@/lib/supabase';
 import { parseWeightToKg, weightKgToDisplay, getWeightUnit } from '@/lib/utils/units';
 import { useAuthStore } from '@/stores/auth-store';
 
+type ProfileSheet = 'edit' | 'goal-weight' | 'steps' | null;
+
+function StatCell({ icon, tone, value, label }: { icon: typeof Flame; tone: Tone; value: React.ReactNode; label: string }) {
+  return (
+    <div className="flex flex-col items-center gap-1.5 px-2 py-3 text-center">
+      <ToneDisc icon={icon} tone={tone} size="sm" />
+      <span className="text-title3 font-bold tabular-nums text-white">{value}</span>
+      <span className="text-caption text-fg-secondary">{label}</span>
+    </div>
+  );
+}
 
 export default function ProfilePage() {
   const router = useRouter();
   const { user, logout } = useAuthStore();
   const { unitSystem, setUnitSystem, isLoading: isLoadingUnits } = useUnitPreference();
-  const [isEditing, setIsEditing] = useState(false);
+  const [sheet, setSheet] = useState<ProfileSheet>(null);
   const [goalWeight, setGoalWeight] = useState('');
   const [dailyStepsGoal, setDailyStepsGoal] = useState('10000');
   const [isSavingGoal, setIsSavingGoal] = useState(false);
@@ -120,6 +151,7 @@ export default function ProfilePage() {
       if (updateError) throw updateError;
 
       toast.success('Goal weight saved successfully!');
+      setSheet(null);
     } catch (error) {
       console.error('Error saving goal weight:', error);
       toast.error('Failed to save goal weight');
@@ -166,6 +198,7 @@ export default function ProfilePage() {
       if (updateError) throw updateError;
 
       toast.success('Steps goal saved successfully!');
+      setSheet(null);
     } catch (error) {
       console.error('Error saving steps goal:', error);
       toast.error('Failed to save steps goal');
@@ -177,7 +210,7 @@ export default function ProfilePage() {
   const handleSave = async () => {
     // TODO: Implement profile update
     toast.success('Profile updated successfully!');
-    setIsEditing(false);
+    setSheet(null);
   };
 
   const handleLogout = async () => {
@@ -185,376 +218,185 @@ export default function ProfilePage() {
     router.push('/');
   };
 
+  const memberSince = (user as any)?.created_at ?? user?.joinedAt;
+  const memberSinceLabel = memberSince ? new Date(memberSince).toLocaleDateString('en-US', { month: 'short', year: 'numeric' }) : 'Unknown';
+  const unitLabel = getWeightUnit(unitSystem);
+
   return (
-    <>
-      <DashboardNav />
-      <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950">
-        {/* Subtle circle background decoration */}
-        <div className="fixed inset-0 overflow-hidden pointer-events-none">
-          <div className="absolute top-20 left-10 w-96 h-96 bg-indigo-500/5 rounded-full blur-3xl" />
-          <div className="absolute top-40 right-20 w-[500px] h-[500px] bg-purple-500/5 rounded-full blur-3xl" />
-          <div className="absolute bottom-20 left-1/3 w-[400px] h-[400px] bg-orange-500/5 rounded-full blur-3xl" />
-        </div>
-
-        <div className="relative max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 lg:py-12">
-          <div className="mb-8">
-            <h1 className="text-3xl sm:text-4xl lg:text-5xl font-bold bg-gradient-to-r from-indigo-300 via-fuchsia-400 to-orange-400 bg-clip-text text-transparent mb-2">
-              Profile
-            </h1>
-            <p className="text-gray-400 text-sm sm:text-base">
-              Manage your account settings and preferences
+    <SettingsScreen title="Profile" backHref={null} fitzy>
+      <div className="space-y-4">
+        {/* Header card */}
+        <GlassCard className="flex flex-col items-center text-center sm:flex-row sm:text-left" data-testid="profile-header">
+          <AvatarCircle name={user?.name || 'User'} src={user?.avatar} size={76} className="ring-4 ring-brand-purple/30" />
+          <div className="mt-3 min-w-0 flex-1 sm:ml-4 sm:mt-0">
+            <p className="flex items-center justify-center gap-2 text-title2 text-white sm:justify-start">
+              <span className="truncate">{user?.name || 'User'}</span>
+              {user?.isPremium && <ProBadge />}
             </p>
+            {user?.username && <p className="text-subhead text-fg-secondary">@{user.username}</p>}
           </div>
+          <Button
+            variant="outline"
+            size="sm"
+            className="mt-4 rounded-full px-4 sm:mt-0"
+            onClick={() => setSheet('edit')}
+            data-testid="edit-profile"
+          >
+            Edit Profile
+          </Button>
+        </GlassCard>
 
-          <div className="space-y-6">
-            {/* Profile Card */}
-            <Card className="bg-slate-900/50 border-slate-800 backdrop-blur-xl">
-              <CardHeader className="border-b border-slate-800">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-4">
-                    <div className="w-20 h-20 rounded-full bg-gradient-to-r from-indigo-500 to-purple-600 flex items-center justify-center">
-                      <span className="text-white font-bold text-3xl">
-                        {user?.name?.[0]?.toUpperCase() || 'U'}
-                      </span>
-                    </div>
-                    <div>
-                      <CardTitle className="text-white text-2xl">{user?.name || 'User'}</CardTitle>
-                      <CardDescription className="text-gray-400">{user?.email}</CardDescription>
-                    </div>
-                  </div>
-                  {!isEditing && (
-                    <Button
-                      variant="outline"
-                      onClick={() => setIsEditing(true)}
-                      className="bg-slate-900/50 border-slate-700 text-gray-300 hover:bg-slate-800 hover:text-white"
-                    >
-                      <Edit className="w-4 h-4 mr-2" />
-                      Edit Profile
-                    </Button>
-                  )}
-                </div>
-              </CardHeader>
-
-              <CardContent className="pt-6">
-                {isEditing ? (
-                  <div className="space-y-4">
-                    <div>
-                      <Label htmlFor="name" className="text-gray-300">Full Name</Label>
-                      <Input
-                        id="name"
-                        value={formData.name}
-                        onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                        className="mt-1.5"
-                      />
-                    </div>
-                    <div>
-                      <Label htmlFor="username" className="text-gray-300">Username</Label>
-                      <Input
-                        id="username"
-                        value={formData.username}
-                        onChange={(e) => setFormData({ ...formData, username: e.target.value })}
-                        className="mt-1.5"
-                      />
-                    </div>
-                    <div>
-                      <Label htmlFor="email" className="text-gray-300">Email</Label>
-                      <Input
-                        id="email"
-                        type="email"
-                        value={formData.email}
-                        onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                        className="mt-1.5"
-                      />
-                    </div>
-                    <div className="flex gap-3 pt-4">
-                      <Button
-                        onClick={handleSave}
-                        className="bg-purple-600 hover:bg-purple-700 shadow-lg hover:shadow-purple-500/50"
-                      >
-                        <Save className="w-4 h-4 mr-2" />
-                        Save Changes
-                      </Button>
-                      <Button
-                        variant="outline"
-                        onClick={() => setIsEditing(false)}
-                        className="bg-slate-900/50 border-slate-700 text-gray-300 hover:bg-slate-800"
-                      >
-                        <X className="w-4 h-4 mr-2" />
-                        Cancel
-                      </Button>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="space-y-4">
-                    <div className="flex items-center gap-3 text-gray-300">
-                      <User className="w-5 h-5 text-gray-500" />
-                      <div>
-                        <p className="text-xs text-gray-500">Full Name</p>
-                        <p className="text-sm font-medium">{user?.name || 'Not set'}</p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-3 text-gray-300">
-                      <Mail className="w-5 h-5 text-gray-500" />
-                      <div>
-                        <p className="text-xs text-gray-500">Email</p>
-                        <p className="text-sm font-medium">{user?.email || 'Not set'}</p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-3 text-gray-300">
-                      <Calendar className="w-5 h-5 text-gray-500" />
-                      <div>
-                        <p className="text-xs text-gray-500">Member Since</p>
-                        <p className="text-sm font-medium">
-                          {(user as any)?.created_at ? new Date((user as any).created_at).toLocaleDateString() : 'Unknown'}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
-            {/* Preferences */}
-            <div className="space-y-4">
-              <h2 className="text-xl font-semibold text-white">Preferences</h2>
-
-              {/* Units & Measurements */}
-              <Card className="bg-slate-900/50 border-slate-800 backdrop-blur-xl">
-                <CardHeader>
-                  <div className="flex items-center gap-4">
-                    <div className="w-12 h-12 rounded-lg bg-slate-800 flex items-center justify-center text-indigo-400">
-                      <Scale className="w-6 h-6" />
-                    </div>
-                    <div className="flex-1">
-                      <CardTitle className="text-white text-lg">Units & Measurements</CardTitle>
-                      <CardDescription className="text-gray-400">
-                        Choose your preferred measurement system
-                      </CardDescription>
-                    </div>
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-4">
-                    <div>
-                      <Label className="text-sm font-medium text-gray-300 mb-3 block">
-                        Weight Units
-                      </Label>
-                      <div className="flex items-center gap-4">
-                        <UnitToggle
-                          value={unitSystem}
-                          onChange={setUnitSystem}
-                          isLoading={isLoadingUnits}
-                          size="md"
-                        />
-                        <span className="text-sm text-gray-400">
-                          {unitSystem === 'metric'
-                            ? 'Using kilograms (kg)'
-                            : 'Using pounds (lbs)'}
-                        </span>
-                      </div>
-                      <p className="text-xs text-gray-500 mt-2">
-                        This will affect how weight is displayed throughout the app
-                      </p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* Goal Weight */}
-              <Card className="bg-slate-900/50 border-slate-800 backdrop-blur-xl">
-                <CardHeader>
-                  <div className="flex items-center gap-4">
-                    <div className="w-12 h-12 rounded-lg bg-slate-800 flex items-center justify-center text-purple-400">
-                      <Target className="w-6 h-6" />
-                    </div>
-                    <div className="flex-1">
-                      <CardTitle className="text-white text-lg">Goal Weight</CardTitle>
-                      <CardDescription className="text-gray-400">
-                        Set your target weight to track progress
-                      </CardDescription>
-                    </div>
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-4">
-                    <div>
-                      <Label htmlFor="goalWeight" className="text-sm font-medium text-gray-300 mb-3 block">
-                        Target Weight ({getWeightUnit(unitSystem)})
-                      </Label>
-                      <div className="flex gap-3">
-                        <div className="flex-1">
-                          <Input
-                            id="goalWeight"
-                            type="number"
-                            step="0.01"
-                            placeholder={unitSystem === 'metric' ? 'e.g., 75' : 'e.g., 165'}
-                            value={goalWeight}
-                            onChange={(e) => setGoalWeight(e.target.value)}
-                            className="bg-slate-800/50 border-slate-700 text-white placeholder:text-gray-500"
-                          />
-                        </div>
-                        <Button
-                          onClick={handleSaveGoalWeight}
-                          disabled={isSavingGoal || !goalWeight}
-                          className="bg-purple-600 hover:bg-purple-700"
-                        >
-                          {isSavingGoal ? (
-                            <>
-                              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                              Saving...
-                            </>
-                          ) : (
-                            <>
-                              <Save className="w-4 h-4 mr-2" />
-                              Save Goal
-                            </>
-                          )}
-                        </Button>
-                      </div>
-                      <p className="text-xs text-gray-500 mt-2">
-                        This will appear on your dashboard to track your progress
-                      </p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* Daily Steps Goal */}
-              <Card className="bg-slate-900/50 border-slate-800 backdrop-blur-xl">
-                <CardHeader>
-                  <div className="flex items-center gap-4">
-                    <div className="w-12 h-12 rounded-lg bg-slate-800 flex items-center justify-center text-indigo-400">
-                      <Footprints className="w-6 h-6" />
-                    </div>
-                    <div className="flex-1">
-                      <CardTitle className="text-white text-lg">Daily Steps Goal</CardTitle>
-                      <CardDescription className="text-gray-400">
-                        Set your daily walking target
-                      </CardDescription>
-                    </div>
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-4">
-                    <div>
-                      <Label htmlFor="stepsGoal" className="text-sm font-medium text-gray-300 mb-3 block">
-                        Target Steps per Day
-                      </Label>
-                      <div className="flex gap-3">
-                        <div className="flex-1">
-                          <Input
-                            id="stepsGoal"
-                            type="number"
-                            step="100"
-                            placeholder="e.g., 10000"
-                            value={dailyStepsGoal}
-                            onChange={(e) => setDailyStepsGoal(e.target.value)}
-                            className="bg-slate-800/50 border-slate-700 text-white placeholder:text-gray-500"
-                          />
-                        </div>
-                        <Button
-                          onClick={handleSaveStepsGoal}
-                          disabled={isSavingStepsGoal || !dailyStepsGoal}
-                          className="bg-indigo-600 hover:bg-indigo-700"
-                        >
-                          {isSavingStepsGoal ? (
-                            <>
-                              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                              Saving...
-                            </>
-                          ) : (
-                            <>
-                              <Save className="w-4 h-4 mr-2" />
-                              Save Goal
-                            </>
-                          )}
-                        </Button>
-                      </div>
-                      <p className="text-xs text-gray-500 mt-2">
-                        Track your daily walking progress on the dashboard
-                      </p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-              {/* Settings */}
-              <Card className="bg-slate-900/50 border-slate-800 backdrop-blur-xl">
-                <CardHeader>
-                  <div className="flex items-center gap-4">
-                    <div className="w-12 h-12 rounded-lg bg-slate-800 flex items-center justify-center text-gray-400">
-                      <Settings className="w-6 h-6" />
-                    </div>
-                    <div className="flex-1">
-                      <CardTitle className="text-white text-lg">App Settings</CardTitle>
-                      <CardDescription className="text-gray-400">
-                        Manage notifications and privacy
-                      </CardDescription>
-                    </div>
-                  </div>
-                </CardHeader>
-                <CardContent className="space-y-2">
-                  <Button
-                    variant="ghost"
-                    className="w-full justify-between text-white hover:bg-slate-800 h-14 px-4"
-                    onClick={() => router.push('/settings/notifications')}
-                  >
-                    <div className="flex items-center gap-3">
-                      <Bell className="w-5 h-5 text-purple-400" />
-                      <div className="text-left">
-                        <p className="font-medium">Notifications</p>
-                        <p className="text-xs text-gray-400">Push, email, and social alerts</p>
-                      </div>
-                    </div>
-                    <div className="text-gray-500">→</div>
-                  </Button>
-
-                  <div className="h-px bg-slate-800 mx-2" />
-
-                  <Button
-                    variant="ghost"
-                    className="w-full justify-between text-white hover:bg-slate-800 h-14 px-4"
-                    onClick={() => router.push('/settings/privacy')}
-                  >
-                    <div className="flex items-center gap-3">
-                      <Shield className="w-5 h-5 text-indigo-400" />
-                      <div className="text-left">
-                        <p className="font-medium">Privacy & Data</p>
-                        <p className="text-xs text-gray-400">Data usage, cookies, and export</p>
-                      </div>
-                    </div>
-                    <div className="text-gray-500">→</div>
-                  </Button>
-                </CardContent>
-              </Card>
-            </div>
-
-            {/* Logout Section */}
-            <Card className="bg-slate-900/50 border-slate-800 backdrop-blur-xl border-red-900/20">
-              <CardContent className="p-6">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-4">
-                    <div className="w-12 h-12 rounded-lg bg-red-500/10 flex items-center justify-center text-red-400">
-                      <LogOut className="w-6 h-6" />
-                    </div>
-                    <div>
-                      <h3 className="text-white font-semibold">Sign Out</h3>
-                      <p className="text-sm text-gray-400">Sign out of your account</p>
-                    </div>
-                  </div>
-                  <Button
-                    variant="outline"
-                    onClick={handleLogout}
-                    className="bg-red-500/10 border-red-900/30 text-red-400 hover:bg-red-500/20 hover:text-red-300"
-                  >
-                    <LogOut className="w-4 h-4 mr-2" />
-                    Logout
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-        </div>
+        {/* Stats strip */}
+        <GlassCard padded={false} className="grid grid-cols-3 divide-x divide-white/[0.06]" data-testid="profile-stats">
+          <StatCell icon={Flame} tone="orange" value={user?.streak ?? 0} label="Day streak" />
+          <StatCell icon={Star} tone="purple" value={user?.level ?? 1} label="Level" />
+          <StatCell icon={Sparkles} tone="cyan" value={(user?.xp ?? 0).toLocaleString()} label="XP" />
+        </GlassCard>
       </div>
-    </>
+
+      <div className="mt-6">
+        <ListGroup title="Account">
+          <ListRow icon={User} tone="purple" title="Name" value={user?.name || 'Not set'} />
+          <ListRow icon={Mail} tone="indigo" title="Email" value={<span className="block max-w-[180px] truncate sm:max-w-none">{user?.email || 'Not set'}</span>} />
+          <ListRow icon={Calendar} tone="slate" title="Member since" value={memberSinceLabel} />
+        </ListGroup>
+
+        <ListGroup title="Goals" footer="Goals appear on your dashboard to track your progress.">
+          <ListRow
+            onClick={() => setSheet('goal-weight')}
+            icon={Target}
+            tone="green"
+            title="Goal weight"
+            value={goalWeight ? `${goalWeight} ${unitLabel}` : 'Set'}
+            chevron
+            testId="row-goal-weight"
+          />
+          <ListRow
+            onClick={() => setSheet('steps')}
+            icon={Footprints}
+            tone="indigo"
+            title="Daily steps"
+            value={dailyStepsGoal ? parseInt(dailyStepsGoal, 10).toLocaleString() : 'Set'}
+            chevron
+            testId="row-steps-goal"
+          />
+          <ListRow
+            icon={Ruler}
+            tone="cyan"
+            title="Units"
+            subtitle={unitSystem === 'metric' ? 'Using kilograms (kg)' : 'Using pounds (lbs)'}
+            trailing={<UnitToggle value={unitSystem} onChange={setUnitSystem} isLoading={isLoadingUnits} size="sm" />}
+          />
+        </ListGroup>
+
+        <ListGroup title="Health">
+          <ListRow href="/settings/health" icon={Activity} tone="red" title="Health sources" subtitle="Apple Health and Health Connect" />
+          <ListRow href="/body-composition" icon={Scale} tone="cyan" title="Body composition" subtitle="Private measurements and trends" />
+        </ListGroup>
+
+        <ListGroup title="Invite friends">
+          <ListRow href="/invite" icon={Gift} tone="pink" title="Better together" subtitle="Invite friends and earn rewards" />
+        </ListGroup>
+
+        <ListGroup title="Settings">
+          <ListRow href="/settings" icon={Settings} tone="slate" title="Settings" />
+          <ListRow href="/settings/notifications" icon={Bell} tone="orange" title="Notifications" subtitle="Push and quiet hours" />
+          <ListRow href="/settings/privacy" icon={Lock} tone="green" title="Privacy & Ad Choices" subtitle="Cookies, analytics and data sharing" />
+          <ListRow href="/settings/billing" icon={Crown} tone="yellow" title="FitCircle Pro" subtitle="Plan and billing" />
+        </ListGroup>
+
+        <ListGroup title="Support & legal">
+          <ListRow href="/support" icon={HelpCircle} tone="purple" title="Help & Support" />
+          <ListRow href="/terms" icon={Shield} tone="slate" title="Terms of Use" />
+          <ListRow href="/privacy" icon={Lock} tone="slate" title="Privacy Policy" />
+        </ListGroup>
+
+        <GroupButton onClick={() => void handleLogout()} destructive icon={LogOut} testId="profile-sign-out">
+          Sign out
+        </GroupButton>
+      </div>
+
+      {/* Edit profile */}
+      <Sheet open={sheet === 'edit'} onOpenChange={(o) => setSheet(o ? 'edit' : null)}>
+        <SheetContent>
+          <SheetHeader>
+            <SheetTitle>Edit Profile</SheetTitle>
+            <SheetDescription>How you appear to your circles.</SheetDescription>
+          </SheetHeader>
+          <div className="space-y-4">
+            <div>
+              <Label htmlFor="name" className="mb-1.5 block text-subhead text-fg-secondary">Full Name</Label>
+              <Input id="name" value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} />
+            </div>
+            <div>
+              <Label htmlFor="username" className="mb-1.5 block text-subhead text-fg-secondary">Username</Label>
+              <Input id="username" value={formData.username} onChange={(e) => setFormData({ ...formData, username: e.target.value })} />
+            </div>
+            <div>
+              <Label htmlFor="email" className="mb-1.5 block text-subhead text-fg-secondary">Email</Label>
+              <Input id="email" type="email" value={formData.email} onChange={(e) => setFormData({ ...formData, email: e.target.value })} />
+            </div>
+          </div>
+          <SheetFooter>
+            <Button variant="ghost" onClick={() => setSheet(null)}>Cancel</Button>
+            <Button onClick={() => void handleSave()}>Save changes</Button>
+          </SheetFooter>
+        </SheetContent>
+      </Sheet>
+
+      {/* Goal weight */}
+      <Sheet open={sheet === 'goal-weight'} onOpenChange={(o) => setSheet(o ? 'goal-weight' : null)}>
+        <SheetContent>
+          <SheetHeader>
+            <SheetTitle>Goal weight</SheetTitle>
+            <SheetDescription>This will appear on your dashboard to track your progress.</SheetDescription>
+          </SheetHeader>
+          <Label htmlFor="goalWeight" className="mb-1.5 block text-subhead text-fg-secondary">
+            Target Weight ({unitLabel})
+          </Label>
+          <Input
+            id="goalWeight"
+            type="number"
+            inputMode="decimal"
+            step="0.01"
+            placeholder={unitSystem === 'metric' ? 'e.g., 75' : 'e.g., 165'}
+            value={goalWeight}
+            onChange={(e) => setGoalWeight(e.target.value)}
+          />
+          <SheetFooter>
+            <Button variant="ghost" onClick={() => setSheet(null)}>Cancel</Button>
+            <Button onClick={() => void handleSaveGoalWeight()} disabled={isSavingGoal || !goalWeight}>
+              {isSavingGoal ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Saving...</> : 'Save Goal'}
+            </Button>
+          </SheetFooter>
+        </SheetContent>
+      </Sheet>
+
+      {/* Daily steps */}
+      <Sheet open={sheet === 'steps'} onOpenChange={(o) => setSheet(o ? 'steps' : null)}>
+        <SheetContent>
+          <SheetHeader>
+            <SheetTitle>Daily steps goal</SheetTitle>
+            <SheetDescription>Used for your daily progress ring and weekly bars.</SheetDescription>
+          </SheetHeader>
+          <Label htmlFor="stepsGoal" className="mb-1.5 block text-subhead text-fg-secondary">Steps per day</Label>
+          <Input
+            id="stepsGoal"
+            type="number"
+            inputMode="numeric"
+            step="100"
+            placeholder="e.g., 10000"
+            value={dailyStepsGoal}
+            onChange={(e) => setDailyStepsGoal(e.target.value)}
+          />
+          <SheetFooter>
+            <Button variant="ghost" onClick={() => setSheet(null)}>Cancel</Button>
+            <Button onClick={() => void handleSaveStepsGoal()} disabled={isSavingStepsGoal || !dailyStepsGoal}>
+              {isSavingStepsGoal ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Saving...</> : 'Save Goal'}
+            </Button>
+          </SheetFooter>
+        </SheetContent>
+      </Sheet>
+    </SettingsScreen>
   );
 }

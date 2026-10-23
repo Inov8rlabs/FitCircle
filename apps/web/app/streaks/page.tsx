@@ -15,16 +15,17 @@
 
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  Flame, Sparkles, Shield, Check, X, RefreshCcw, AlertTriangle,
+  Flame, Sparkles, Shield, Check, X, RefreshCcw, AlertTriangle, ChevronRight,
 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 
 import Celebration from '@/components/Celebration';
-import { MilestoneBadge } from '@/components/streaks/MilestoneBadge';
 import { Navbar } from '@/components/layout/navbar';
+import { MilestoneBadge } from '@/components/streaks/MilestoneBadge';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
+import { GlassCard, Screen, ScreenHeader, ToneDisc } from '@/components/ui/ios';
+import { Skeleton } from '@/components/ui/skeleton';
 import { AnalyticsEvents, analytics } from '@/lib/analytics';
 import { useTrackOnce } from '@/lib/analytics/react';
 import {
@@ -161,17 +162,18 @@ export default function StreaksPage() {
 
   if (!isAuthenticated) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <p className="text-muted-foreground">Sign in to view your streak.</p>
+      <div className="min-h-screen bg-canvas flex items-center justify-center">
+        <p className="text-fg-secondary">Sign in to view your streak.</p>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-background pb-24">
+    <div className="min-h-screen bg-canvas">
       <Navbar />
 
-      <main className="mx-auto max-w-2xl px-4 py-6 space-y-6">
+      <Screen className="space-y-5">
+        <ScreenHeader title="Daily Streak" subtitle="Shields cover the day you miss." className="mb-0" />
         {/* Hero */}
         <HeroCard
           currentStreak={currentStreak}
@@ -202,13 +204,14 @@ export default function StreaksPage() {
 
         {/* Shield widget */}
         {shield && <ShieldWidget shield={shield} onUseShield={() => {/* opens via retroactive */}} />}
+        {!shield && isLoading && <Skeleton className="h-[72px] w-full rounded-xl" />}
 
         {/* Milestone grid */}
         <MilestoneGrid milestones={[...MILESTONES]} currentStreak={currentStreak} />
 
         {/* History */}
         {history.length > 0 && <HistoryFeed entries={history.slice(0, 21)} />}
-      </main>
+      </Screen>
 
       {/* Confetti */}
       <AnimatePresence>
@@ -264,72 +267,72 @@ function HeroCard({
   onClaim: () => void;
 }) {
   return (
-    <Card className="bg-card border-border">
-      <CardContent className="p-6 space-y-6 text-center">
-        <div className="space-y-1 text-left">
-          <p className="text-sm font-semibold text-muted-foreground">Keep your streak alive</p>
-          <p className="text-4xl font-bold">{currentStreak} day streak</p>
-        </div>
-
-        <div className="flex justify-center">
-          <button
-            type="button"
-            disabled={!canClaimToday || isClaiming || isLoading}
-            onClick={onClaim}
-            className={`
-              relative w-44 h-44 rounded-full flex flex-col items-center justify-center
-              text-white font-bold shadow-2xl transition-transform
-              ${isTodayClaimed
-                ? 'bg-gradient-to-br from-emerald-500 to-cyan-500'
-                : canClaimToday
-                  ? 'bg-gradient-to-br from-orange-500 to-orange-400 hover:scale-105 animate-pulse'
-                  : 'bg-gradient-to-br from-zinc-700 to-zinc-800 opacity-60 cursor-not-allowed'}
-            `}
-          >
-            {isClaiming ? (
-              <div className="h-10 w-10 border-4 border-white/30 border-t-white rounded-full animate-spin" />
-            ) : isTodayClaimed ? (
-              <>
-                <Check className="h-12 w-12" />
-                <span className="text-2xl mt-1">{currentStreak}</span>
-                <span className="text-xs">days claimed</span>
-              </>
-            ) : (
-              <>
-                <Flame className="h-12 w-12" />
-                <span className="text-3xl">{currentStreak}</span>
-                <span className="text-xs px-3 line-clamp-2">{subtitle}</span>
-              </>
-            )}
-          </button>
-        </div>
-
-        {longestStreak > currentStreak && (
-          <div className="inline-flex items-center gap-1 mx-auto rounded-full bg-cyan-500/15 px-3 py-1.5 text-cyan-400 text-xs font-semibold">
-            <Sparkles className="h-3 w-3" />
-            Best streak: {longestStreak} days
-          </div>
+    <GlassCard className="p-5 sm:p-6" data-testid="streak-hero">
+      <div className="space-y-1">
+        <p className="text-subhead text-fg-secondary">Keep your streak alive</p>
+        {isLoading ? (
+          <Skeleton className="h-9 w-48" />
+        ) : (
+          <p className="text-title1 font-bold text-white">{currentStreak} day streak</p>
         )}
-      </CardContent>
-    </Card>
+      </div>
+
+      <div className="flex justify-center py-6">
+        <button
+          type="button"
+          disabled={!canClaimToday || isClaiming || isLoading}
+          onClick={onClaim}
+          data-testid="streak-claim"
+          aria-label={isTodayClaimed ? `${currentStreak} days, today claimed` : canClaimToday ? 'Claim today' : subtitle}
+          className={`
+            relative flex h-48 w-48 flex-col items-center justify-center rounded-full font-bold text-white
+            transition duration-300 ease-ios
+            ${isTodayClaimed
+              ? 'bg-gradient-green shadow-[0_12px_40px_-8px_rgba(16,185,129,0.6)]'
+              : canClaimToday
+                ? 'bg-gradient-orange shadow-[0_12px_48px_-6px_rgba(249,115,22,0.75)] hover:scale-[1.03] active:scale-95'
+                : 'bg-gradient-orange shadow-[0_12px_40px_-10px_rgba(249,115,22,0.5)] cursor-default'}
+          `}
+        >
+          {isClaiming ? (
+            <div className="h-10 w-10 animate-spin rounded-full border-4 border-white/30 border-t-white" />
+          ) : isTodayClaimed ? (
+            <>
+              <Check className="h-12 w-12" strokeWidth={3} />
+              <span className="mt-1 text-[40px] leading-none">{currentStreak}</span>
+              <span className="mt-1 text-footnote font-semibold">Claimed today</span>
+            </>
+          ) : (
+            <>
+              <Flame className="h-14 w-14 fill-white/90" />
+              <span className="mt-1 text-[40px] leading-none">{currentStreak}</span>
+              <span className="mt-1 line-clamp-2 px-6 text-center text-footnote font-semibold">{subtitle}</span>
+            </>
+          )}
+        </button>
+      </div>
+
+      <div className="flex justify-center">
+        <span className="inline-flex items-center gap-1.5 rounded-full bg-brand-cyan/15 px-3.5 py-1.5 text-footnote font-semibold text-brand-cyan">
+          <Sparkles className="h-3.5 w-3.5" aria-hidden />
+          Best streak: {Math.max(longestStreak, currentStreak)} days
+        </span>
+      </div>
+    </GlassCard>
   );
 }
 
 function HealthSyncCard() {
   return (
-    <Card className="border-orange-500/30 bg-orange-500/5">
-      <CardContent className="p-4 flex items-start gap-3">
-        <div className="h-10 w-10 rounded-full bg-orange-500/20 flex items-center justify-center flex-shrink-0">
-          <AlertTriangle className="h-5 w-5 text-orange-400" />
-        </div>
-        <div className="flex-1">
-          <p className="font-semibold">Health data missing</p>
-          <p className="text-sm text-muted-foreground">
-            Log today&apos;s steps or weight to unlock streak claiming.
-          </p>
-        </div>
-      </CardContent>
-    </Card>
+    <GlassCard className="flex items-start gap-3 border-brand-orange/30 bg-brand-orange/5">
+      <ToneDisc icon={AlertTriangle} tone="orange" />
+      <div className="flex-1">
+        <p className="text-headline text-white">Health data missing</p>
+        <p className="text-subhead text-fg-secondary">
+          Log today&apos;s steps or weight to unlock streak claiming.
+        </p>
+      </div>
+    </GlassCard>
   );
 }
 
@@ -343,10 +346,9 @@ function RetroactivePanel({
   onRefresh: () => void;
 }) {
   return (
-    <Card>
-      <CardContent className="p-4">
+    <GlassCard data-testid="streak-last7">
         <div className="flex items-center justify-between mb-3">
-          <h2 className="text-lg font-semibold">Last 7 Days</h2>
+          <h2 className="text-title3 text-white">Last 7 Days</h2>
           <Button
             variant="ghost"
             size="sm"
@@ -357,7 +359,7 @@ function RetroactivePanel({
             <RefreshCcw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
           </Button>
         </div>
-        <div className="flex gap-2 overflow-x-auto pb-2 -mx-1 px-1">
+        <div className="no-scrollbar -mx-1 flex gap-2 overflow-x-auto px-1 pb-1 sm:grid sm:grid-cols-7 sm:overflow-visible">
           {days.map((day) => (
             <DayPill
               key={day.date}
@@ -369,8 +371,7 @@ function RetroactivePanel({
             />
           ))}
         </div>
-      </CardContent>
-    </Card>
+    </GlassCard>
   );
 }
 
@@ -379,21 +380,21 @@ function DayPill({ day, onTap }: { day: ClaimableDay; onTap: () => void }) {
   const dayOfWeek = date.toLocaleDateString(undefined, { weekday: 'short' });
   const dayNumber = date.getDate();
 
-  let bg = 'bg-gradient-to-br from-zinc-700 to-zinc-800';
+  let bg = 'bg-white/10';
   let icon: React.ReactNode = '—';
   let canTap = false;
   if (day.isFrozen) {
-    bg = 'bg-gradient-to-br from-blue-500 to-blue-600';
+    bg = 'bg-brand-indigo';
     icon = <Shield className="h-4 w-4 text-white" />;
   } else if (day.claimed) {
-    bg = 'bg-gradient-to-br from-emerald-500 to-emerald-600';
+    bg = 'bg-brand-green/80';
     icon = <Check className="h-5 w-5 text-white" />;
   } else if (day.canClaim) {
-    bg = 'bg-gradient-to-br from-orange-500 to-orange-400 animate-pulse';
+    bg = 'bg-gradient-orange animate-pulse';
     icon = '🔥';
     canTap = true;
   } else {
-    bg = 'bg-gradient-to-br from-red-500 to-red-600';
+    bg = 'bg-brand-red';
     icon = <X className="h-4 w-4 text-white" />;
     canTap = true; // tap opens shield dialog
   }
@@ -404,20 +405,20 @@ function DayPill({ day, onTap }: { day: ClaimableDay; onTap: () => void }) {
       disabled={day.claimed || day.isFrozen}
       onClick={onTap}
       className={`
-        flex flex-col items-center gap-1 min-w-[64px] rounded-xl bg-card px-3 py-3
-        ${canTap ? 'hover:scale-105' : ''} transition-transform
+        flex min-w-[64px] flex-col items-center gap-1 rounded-xl bg-white/[0.04] px-2 py-3
+        ${canTap ? 'hover:bg-white/[0.08]' : ''} transition-colors
       `}
     >
       <div className={`h-12 w-12 rounded-full flex items-center justify-center text-xl shadow-lg ${bg}`}>
         {icon}
       </div>
-      <span className="text-xs font-semibold text-muted-foreground">{dayOfWeek}</span>
-      <span className="text-xs font-bold">{dayNumber}</span>
+      <span className="text-subhead font-bold text-white">{dayNumber}</span>
+      <span className="text-caption font-semibold text-fg-tertiary">{dayOfWeek}</span>
       {day.hasHealthData && (
-        <span className="text-[10px] text-emerald-500 font-medium">✓ Synced</span>
+        <span className="text-[10px] font-medium text-brand-green">✓ Synced</span>
       )}
       {typeof day.stepCount === 'number' && (
-        <span className="text-[10px] text-muted-foreground">
+        <span className="text-[10px] text-fg-tertiary">
           {day.stepCount >= 10_000 ? `${(day.stepCount / 1_000).toFixed(1)}k` : day.stepCount}
         </span>
       )}
@@ -427,75 +428,64 @@ function DayPill({ day, onTap }: { day: ClaimableDay; onTap: () => void }) {
 
 function ShieldWidget({ shield }: { shield: ShieldStatus; onUseShield: () => void }) {
   return (
-    <Card>
-      <CardContent className="p-4 flex items-center gap-4">
-        <div className="h-12 w-12 rounded-full bg-indigo-500/15 flex items-center justify-center">
-          <Shield className="h-6 w-6 text-indigo-400" />
-        </div>
-        <div className="flex-1">
-          <p className="font-semibold">Streak shields</p>
-          <p className="text-sm text-muted-foreground">
-            {shield.unlimited
-              ? 'Unlimited with Pro — your streak is always protected'
-              : `${shield.available} / ${shield.max} available — protect missed days`}
-          </p>
-        </div>
-        <div className="text-2xl font-bold text-indigo-400">
-          {shield.unlimited ? '∞' : shield.available}
-        </div>
-      </CardContent>
-    </Card>
+    <GlassCard className="flex items-center gap-4" data-testid="streak-shields">
+      <ToneDisc icon={Shield} tone={shield.unlimited || shield.available > 0 ? 'indigo' : 'slate'} size="lg" />
+      <div className="min-w-0 flex-1">
+        <p className="text-headline text-white">Streak Shields</p>
+        <p className="text-subhead text-fg-secondary">
+          {shield.unlimited
+            ? 'Unlimited with Pro: your streak is always protected'
+            : `${shield.available} of ${shield.max} available · tap a missed day to use one`}
+        </p>
+      </div>
+      <span className="text-title2 font-bold tabular-nums text-brand-indigo">{shield.unlimited ? '∞' : shield.available}</span>
+      <ChevronRight className="h-4 w-4 text-fg-tertiary" aria-hidden />
+    </GlassCard>
   );
 }
 
 function MilestoneGrid({ milestones, currentStreak }: { milestones: Milestone[]; currentStreak: number }) {
   return (
-    <Card>
-      <CardContent className="p-4">
-        <h2 className="text-lg font-semibold mb-3">Milestones</h2>
-        <div className="grid grid-cols-3 gap-2">
+    <GlassCard>
+        <h2 className="mb-3 text-title3 text-white">Milestones</h2>
+        <div className="grid grid-cols-3 gap-2 sm:grid-cols-5">
           {milestones.map(m => {
             const achieved = currentStreak >= m.days;
             return (
-              <div key={m.days} className="rounded-xl p-3 text-center bg-card-foreground/5">
+              <div key={m.days} className="rounded-xl bg-white/[0.04] p-3 text-center">
                 <div className={`flex justify-center ${achieved ? '' : 'opacity-70'}`}>
                   <MilestoneBadge days={m.days} achieved={achieved} size={52} />
                 </div>
-                <p className={`mt-2 text-xs font-semibold ${achieved ? '' : 'text-muted-foreground'}`}>{m.days} days</p>
-                <p className="text-[10px] text-muted-foreground line-clamp-2 min-h-[30px]">{m.title}</p>
+                <p className={`mt-2 text-footnote font-semibold ${achieved ? 'text-white' : 'text-fg-secondary'}`}>{m.days} days</p>
+                <p className="min-h-[30px] text-[11px] text-fg-tertiary line-clamp-2">{m.title}</p>
               </div>
             );
           })}
         </div>
-      </CardContent>
-    </Card>
+    </GlassCard>
   );
 }
 
 function HistoryFeed({ entries }: { entries: EngagementHistoryEntry[] }) {
   return (
-    <Card>
-      <CardContent className="p-4">
-        <h2 className="text-lg font-semibold mb-3">Recent activity</h2>
-        <div className="space-y-2">
+    <GlassCard>
+        <h2 className="mb-2 text-title3 text-white">Recent activity</h2>
+        <div>
           {entries.map((entry) => {
             const d = new Date(`${entry.date}T00:00:00`);
             const label = d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
             return (
-              <div key={entry.date} className="flex items-center justify-between py-2 border-b border-border last:border-0">
+              <div key={entry.date} className="flex items-center justify-between border-b border-white/[0.06] py-2.5 last:border-0">
                 <div className="flex items-center gap-3">
-                  <div className="h-8 w-8 rounded-full bg-emerald-500/15 flex items-center justify-center">
-                    <Flame className="h-4 w-4 text-emerald-500" />
-                  </div>
-                  <span className="text-sm">{label}</span>
+                  <ToneDisc icon={Flame} tone="green" size="sm" />
+                  <span className="text-body text-white">{label}</span>
                 </div>
-                <span className="text-xs text-muted-foreground">{entry.activity_count} activities</span>
+                <span className="text-footnote text-fg-secondary">{entry.activity_count} activities</span>
               </div>
             );
           })}
         </div>
-      </CardContent>
-    </Card>
+    </GlassCard>
   );
 }
 
@@ -504,12 +494,12 @@ function MilestoneCelebration({
 }: { milestone: Milestone; currentStreak: number; onDismiss: () => void }) {
   return (
     <motion.div
-      className="fixed inset-0 z-[60] bg-background/95 backdrop-blur-sm flex items-center justify-center p-4"
+      className="fixed inset-0 z-[60] bg-black/70 backdrop-blur-sm flex items-center justify-center p-4"
       initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
       onClick={onDismiss}
     >
       <motion.div
-        className="bg-card border border-border rounded-2xl p-8 max-w-md w-full text-center space-y-4"
+        className="bg-surface border border-hairline rounded-2xl shadow-ios-lg p-8 max-w-md w-full text-center space-y-4"
         initial={{ scale: 0.7, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
         exit={{ scale: 0.7, opacity: 0 }}
@@ -520,8 +510,8 @@ function MilestoneCelebration({
           <MilestoneBadge days={milestone.days} achieved size={120} />
         </div>
         <h2 className="text-3xl font-bold">{milestone.title}</h2>
-        <p className="text-4xl font-extrabold text-orange-500">{currentStreak} days</p>
-        <p className="text-muted-foreground">{milestone.message}</p>
+        <p className="text-4xl font-extrabold text-brand-orange">{currentStreak} days</p>
+        <p className="text-fg-secondary">{milestone.message}</p>
         <Button onClick={onDismiss} className="w-full">Continue</Button>
       </motion.div>
     </motion.div>
@@ -536,12 +526,12 @@ function ShieldDialog({
   useTrackOnce(AnalyticsEvents.proCardShown({ source: 'streak_shield' }), !canUse);
   return (
     <motion.div
-      className="fixed inset-0 z-[60] bg-background/95 backdrop-blur-sm flex items-center justify-center p-4"
+      className="fixed inset-0 z-[60] bg-black/70 backdrop-blur-sm flex items-center justify-center p-4"
       initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
       onClick={onCancel}
     >
       <motion.div
-        className="bg-card border border-border rounded-2xl p-6 max-w-sm w-full space-y-4"
+        className="bg-surface border border-hairline rounded-2xl shadow-ios-lg p-6 max-w-sm w-full space-y-4"
         initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }}
         onClick={e => e.stopPropagation()}
       >
@@ -549,7 +539,7 @@ function ShieldDialog({
           <Shield className="h-8 w-8 text-indigo-400" />
           <h2 className="text-xl font-bold">Streak Shield</h2>
         </div>
-        <p className="text-sm text-muted-foreground">
+        <p className="text-subhead text-fg-secondary">
           {unlimited
             ? `Pro includes unlimited shields. Use one to reclaim ${formatDay(date)}?`
             : available > 0
@@ -560,7 +550,7 @@ function ShieldDialog({
           {canUse ? (
             <>
               <Button variant="ghost" className="flex-1" onClick={onCancel}>Cancel</Button>
-              <Button className="flex-1 bg-indigo-500 hover:bg-indigo-600" onClick={onConfirm}>Use Shield</Button>
+              <Button className="flex-1" onClick={onConfirm}>Use Shield</Button>
             </>
           ) : (
             <>
@@ -574,7 +564,7 @@ function ShieldDialog({
               >
                 Maybe later
               </Button>
-              <Button asChild className="flex-1 bg-gradient-to-r from-purple-500 to-indigo-500 hover:from-purple-600 hover:to-indigo-600">
+              <Button asChild className="flex-1">
                 <a
                   href="/upgrade?source=pro_card"
                   onClick={() => analytics.track(AnalyticsEvents.proCardTapped({ source: 'streak_shield' }))}

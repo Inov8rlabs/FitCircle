@@ -83,7 +83,9 @@ export default function ChallengeCard({ challenge, onClick, index = 0 }: Challen
               <Calendar className="w-3 h-3" />
               <span>
                 {challenge.status === 'active'
-                  ? `${challenge.days_remaining}d left`
+                  ? challenge.days_remaining != null
+                    ? `${challenge.days_remaining}d left`
+                    : 'Active'
                   : challenge.status === 'scheduled'
                   ? `Starts ${new Date(challenge.starts_at).toLocaleDateString()}`
                   : 'Ended'}

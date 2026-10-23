@@ -38,6 +38,9 @@ export const PUBLIC_ROUTES = [
   '/privacy',
   '/terms',
   '/support',
+  '/get', // smart "get the app" link: 307 to the store on phones, QR page on desktop
+  '/open', // "open in app" fallback (claimed by the iOS app via AASA); forwards to /get
+  '/welcome/app', // post-signup "get the app" handoff; shows no account data
 ];
 
 /** Exact match or a "/route/…" sub-path (so '/invite/unsubscribe' never opens '/invite'). */

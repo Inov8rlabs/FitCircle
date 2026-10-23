@@ -216,7 +216,7 @@ export default function OnboardingAssessmentPage() {
 
   if (!isAuthenticated) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
+      <div className="min-h-screen bg-canvas flex items-center justify-center">
         <p className="text-muted-foreground">Sign in to start your assessment.</p>
       </div>
     );

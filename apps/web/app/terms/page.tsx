@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 
 export default function TermsPage() {
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-canvas">
       <div className="container mx-auto px-4 py-8 max-w-4xl">
         <Button variant="ghost" size="sm" className="mb-6" asChild>
           <Link href="/">

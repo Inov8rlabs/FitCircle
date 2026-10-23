@@ -168,7 +168,7 @@ export default function Celebration({ onComplete, userName = 'Champion' }: Celeb
               <Button
                 onClick={onComplete}
                 size="lg"
-                className="bg-purple-600 hover:bg-purple-700 text-white font-bold py-4 px-8 rounded-full transform transition hover:scale-105 shadow-2xl shadow-purple-500/50"
+                className="bg-gradient-brand shadow-glow transition hover:brightness-110 text-white font-bold py-4 px-8 rounded-full transform transition hover:scale-105 shadow-2xl shadow-purple-500/50"
               >
                 <PartyPopper className="w-5 h-5 mr-2" />
                 Start Your Journey

@@ -30,26 +30,6 @@ import { Button } from '@/components/ui/button';
 import { type CheckInWithProfile } from '@/lib/services/check-in-service';
 
 
-// Mood mapping (same as modal)
-const MOOD_MAP: Record<number, { emoji: string; label: string; color: string }> = {
-  1: { emoji: '😫', label: 'Terrible', color: 'text-red-400' },
-  2: { emoji: '😔', label: 'Bad', color: 'text-red-400' },
-  3: { emoji: '😕', label: 'Poor', color: 'text-orange-400' },
-  4: { emoji: '😐', label: 'Below Average', color: 'text-yellow-400' },
-  5: { emoji: '🙂', label: 'Okay', color: 'text-yellow-400' },
-  6: { emoji: '😊', label: 'Good', color: 'text-green-400' },
-  7: { emoji: '😁', label: 'Great', color: 'text-green-400' },
-  8: { emoji: '🤩', label: 'Amazing', color: 'text-green-400' },
-  9: { emoji: '🎉', label: 'Fantastic', color: 'text-green-400' },
-  10: { emoji: '🔥', label: 'On Fire!', color: 'text-green-400' },
-};
-
-const ENERGY_MAP: Record<number, string> = {
-  1: 'Very Low', 2: 'Low', 3: 'Low', 4: 'Below Average',
-  5: 'Moderate', 6: 'Moderate', 7: 'High', 8: 'High',
-  9: 'Very High', 10: 'Maximum',
-};
-
 interface CheckInDetailSheetProps {
   checkIn: CheckInWithProfile | null;
   isOpen: boolean;
@@ -97,13 +77,11 @@ export function CheckInDetailSheet({
     : null;
 
   // Format date
-  const date = new Date(checkIn.tracking_date);
+  // tracking_date is a calendar day (YYYY-MM-DD): parse it as local, not UTC midnight.
+  const date = new Date(`${checkIn.tracking_date.slice(0, 10)}T00:00:00`);
   const dateStr = format(date, 'EEEE, MMM d, yyyy');
   const timeStr = format(new Date(checkIn.created_at), 'h:mm a');
 
-  // Mood/Energy data
-  const moodData = checkIn.mood_score ? MOOD_MAP[checkIn.mood_score] : null;
-  const energyLabel = checkIn.energy_level ? ENERGY_MAP[checkIn.energy_level] : null;
 
   // Handle delete
   const handleDelete = async () => {
@@ -185,7 +163,7 @@ export function CheckInDetailSheet({
 
           {/* Bottom Sheet */}
           <motion.div
-            className="fixed bottom-0 left-0 right-0 z-50 bg-slate-900 rounded-t-3xl max-h-[90vh] overflow-y-auto"
+            className="fixed bottom-0 left-0 right-0 z-50 bg-surface border-t border-hairline rounded-t-3xl max-h-[90vh] overflow-y-auto"
             variants={sheetVariants}
             initial="hidden"
             animate="visible"
@@ -196,7 +174,7 @@ export function CheckInDetailSheet({
             onDragEnd={handleDragEnd}
           >
             {/* Pull Handle */}
-            <div className="flex justify-center py-3 sticky top-0 bg-slate-900 z-10">
+            <div className="flex justify-center py-3 sticky top-0 bg-surface z-10">
               <div className="w-12 h-1.5 bg-slate-600 rounded-full" />
             </div>
 
@@ -269,44 +247,6 @@ export function CheckInDetailSheet({
                 </div>
               </div>
 
-              {/* Mood & Energy */}
-              {(moodData || energyLabel) && (
-                <div className="grid grid-cols-2 gap-3">
-                  {/* Mood */}
-                  {moodData && (
-                    <div className="p-3 bg-slate-800/50 rounded-lg border border-slate-700">
-                      <p className="text-xs text-slate-400 mb-2">Mood</p>
-                      <div className="flex items-center gap-2">
-                        <span className="text-2xl">{moodData.emoji}</span>
-                        <div>
-                          <p className={`text-sm font-medium ${moodData.color}`}>{moodData.label}</p>
-                          <p className="text-xs text-slate-400">{checkIn.mood_score}/10</p>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Energy */}
-                  {energyLabel && (
-                    <div className="p-3 bg-slate-800/50 rounded-lg border border-slate-700">
-                      <p className="text-xs text-slate-400 mb-2">Energy</p>
-                      <div>
-                        <p className="text-sm font-medium text-orange-400">{energyLabel}</p>
-                        <div className="flex gap-0.5 mt-2">
-                          {Array.from({ length: 10 }).map((_, i) => (
-                            <div
-                              key={i}
-                              className={`h-1.5 w-1.5 rounded-full ${
-                                i < checkIn.energy_level! ? 'bg-orange-400' : 'bg-slate-600'
-                              }`}
-                            />
-                          ))}
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
 
               {/* Notes */}
               {checkIn.notes && (

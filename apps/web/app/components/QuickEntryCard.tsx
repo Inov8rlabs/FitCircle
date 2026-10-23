@@ -108,7 +108,7 @@ export function QuickEntryCard({
     >
       <Card
         className={cn(
-          'bg-slate-900/50 border-slate-800 backdrop-blur-xl transition-all duration-300',
+          'bg-surface-raised/50 border-hairline backdrop-blur-xl transition-all duration-300',
           isFocused && `ring-2 ${colors.ring} ${colors.border}`,
           showSuccess && 'ring-2 ring-green-500 border-green-500'
         )}

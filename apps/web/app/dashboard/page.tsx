@@ -1,1075 +1,234 @@
 'use client';
 
-import { motion, AnimatePresence } from 'framer-motion';
-import {
-  Scale,
-  Footprints,
-  TrendingUp,
-  TrendingDown,
-  Activity,
-  Target,
-  Calendar,
-  Trophy,
-  Flame,
-  Check,
-  Loader2,
-  Utensils
-} from 'lucide-react';
-import Link from 'next/link';
-import { useState, useEffect } from 'react';
-import {
-  LineChart,
-  Line,
-  AreaChart,
-  Area,
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-} from 'recharts';
+/**
+ * Home: the iOS dashboard feed (FitCircle-iOS DashboardView + HomeFeed).
+ *
+ * Card order comes from GET /api/mobile/home-feed (schema 1, cookie auth via
+ * verifyMobileAuth) when the server answers within 3 s, else the built-in
+ * default the apps use (docs/HOME_FEED_SPEC.md §5). Each card renders from the
+ * same sources the old dashboard used (daily_tracking, /api/mobile/vitals/summary,
+ * /api/streaks/engagement, campaigns, referrals, Fitzy) and collapses when it
+ * has nothing to show. Logging happens in sheets, not inline forms.
+ */
+import { AnimatePresence } from 'framer-motion';
+import { Fragment, useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 
+import { CheckInHistoryList } from '@/components/activity';
 import { AutoSyncSubmissionCard } from '@/components/AutoSyncSubmissionCard';
-import { BackfillDataDialog } from '@/components/BackfillDataDialog';
 import { BodyCompDashboardCard } from '@/components/body-composition/dashboard-card';
 import { DashboardCampaignCard } from '@/components/campaigns/DashboardCampaignCard';
-import { CheckInCard, CheckInDetailModal, CheckInDetailSheet } from '@/components/check-ins';
-import { DailyProgressMeter } from '@/components/DailyProgressMeter';
-import { EngagementStreakCard } from '@/components/EngagementStreakCard';
-import { GoalProgressIndicator } from '@/components/GoalProgressIndicator';
-import { BathroomScale } from '@/components/icons/BathroomScale';
+import { FitzyFocusCard, PastDateRow, ProUpsellCard, ReferralHomeCard } from '@/components/home/ExtraCards';
+import { HydrationCard, HydrationCardSkeleton } from '@/components/home/HydrationCard';
+import { ProgressCards } from '@/components/home/ProgressCards';
+import { QuickLogSheet, type QuickLogKind } from '@/components/home/QuickLogSheet';
+import { StreakCard } from '@/components/home/StreakCard';
+import { WeightTrendCard } from '@/components/home/TrendsCard';
+import { isoDay, useTracking } from '@/components/home/useTracking';
+import { WeekStepsCard } from '@/components/home/WeekStepsCard';
 import { Navbar } from '@/components/layout/navbar';
-import { QuickEntryCard } from '@/components/QuickEntryCard';
-import { StepsGoalCard } from '@/components/StepsGoalCard';
-import { StreakHistoryModal } from '@/components/StreakHistoryModal';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { CircularProgress, ActivityRing, CircularSlider } from '@/components/ui/circular-progress';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { UnitToggle } from '@/components/ui/unit-toggle';
+import { Screen, ScreenHeader } from '@/components/ui/ios';
+import { Skeleton } from '@/components/ui/skeleton';
 import { BmiScaleCard } from '@/components/vitals/BmiScaleCard';
 import { useVitals } from '@/components/vitals/useVitals';
 import { VitalsGoalDialog } from '@/components/vitals/VitalsGoalDialog';
-import { WaterWeekCard } from '@/components/vitals/WaterWeekCard';
-import { WeightVitalsCard } from '@/components/vitals/WeightVitalsCard';
-import { useDailyGoals } from '@/hooks/useDailyGoals';
+import { useEntitlements } from '@/hooks/useEntitlements';
 import { useUnitPreference } from '@/hooks/useUnitPreference';
-import { AnalyticsEvents, analytics } from '@/lib/analytics';
+import { defaultLayout, fetchHomeFeed, type HomeCardType, type HomeFeedLayout } from '@/lib/home-feed/feed-layout';
 import { supabase } from '@/lib/supabase';
-import {
-  parseWeightToKg,
-  weightKgToDisplay,
-  getWeightUnit,
-  getWeightPlaceholder,
-  isValidWeight,
-  getWeightValidationMessage,
-  detectWrongUnit,
-} from '@/lib/utils/units';
 import { useAuthStore } from '@/stores/auth-store';
 
-interface CheckIn {
-  id: string;
-  tracking_date: string;
-  weight_kg?: number;
-  steps?: number;
-  mood_score?: number;
-  energy_level?: number;
-  notes?: string;
-  created_at: string;
+/** Server layout if it arrives in time, else the built-in default (never reorders after first paint). */
+function useHomeLayout(): HomeFeedLayout {
+  const [layout, setLayout] = useState<HomeFeedLayout>(() => defaultLayout(false));
+  useEffect(() => {
+    let cancelled = false;
+    void fetchHomeFeed().then((server) => {
+      if (!cancelled && server) setLayout(server);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  return layout;
 }
 
-interface DailyStats {
-  todaySteps: number;
-  todayWeight?: number;
-  weeklyAvgSteps: number;
-  weightChange: number;
-  currentStreak: number;
-  totalCheckIns: number;
-  lastWeightDate?: string;
+function firstName(name: string | null | undefined): string | null {
+  const n = (name ?? '').trim().split(/\s+/)[0];
+  return n || null;
 }
 
 export default function DashboardPage() {
-  const { user } = useAuthStore();
-  const { unitSystem, setUnitSystem, isLoading: isLoadingUnits } = useUnitPreference();
-  const { goals, progress, streak, isLoading: isLoadingGoals, error: goalsError, refresh: refreshGoals } = useDailyGoals();
-  // Dashboard vitals (Weight / BMI / Water cards) — one server payload, VITALS_CLIENT_CONTRACT.md
+  const user = useAuthStore((s) => s.user);
+  const { unitSystem, setUnitSystem, isLoading: unitLoading } = useUnitPreference();
   const vitals = useVitals();
-  const [showVitalsGoals, setShowVitalsGoals] = useState(false);
-  const [checkIns, setCheckIns] = useState<CheckIn[]>([]);
-  const [isLoadingCheckIns, setIsLoadingCheckIns] = useState(true);
-  const [goalWeightKg, setGoalWeightKg] = useState<number | undefined>();
-  const [startingWeightKg, setStartingWeightKg] = useState<number | undefined>();
-  const [dailyStepsGoal, setDailyStepsGoal] = useState<number>(10000); // Default 10k steps
-  const [dailyStats, setDailyStats] = useState<DailyStats>({
-    todaySteps: 0,
-    todayWeight: undefined,
-    weeklyAvgSteps: 0,
-    weightChange: 0,
-    currentStreak: 0,
-    totalCheckIns: 0,
-  });
+  const tracking = useTracking();
+  const { isPro, isLoading: entLoading } = useEntitlements();
+  const layout = useHomeLayout();
 
-  // Quick entry states
-  const [quickWeight, setQuickWeight] = useState('');
-  const [quickSteps, setQuickSteps] = useState('');
-  const [previousUnitSystem, setPreviousUnitSystem] = useState(unitSystem);
-  const [showBackfillDialog, setShowBackfillDialog] = useState(false);
-  const [showStreakHistory, setShowStreakHistory] = useState(false);
+  const [goalSheet, setGoalSheet] = useState(false);
+  const [quickLog, setQuickLog] = useState<{ open: boolean; kind: QuickLogKind; past: boolean }>({ open: false, kind: 'weight', past: false });
+  const openLog = (kind: QuickLogKind, past = false) => setQuickLog({ open: true, kind, past });
 
-  // Check-in detail modal states
-  const [selectedCheckIn, setSelectedCheckIn] = useState<CheckIn | null>(null);
-  const [showCheckInDetail, setShowCheckInDetail] = useState(false);
-
-  // Auto-sync submission states
-  const [pendingAutoSyncSteps, setPendingAutoSyncSteps] = useState<number | null>(null);
-  const [isSubmittingAutoSync, setIsSubmittingAutoSync] = useState(false);
-  const [autoSyncUnlocked, setAutoSyncUnlocked] = useState(false);
-
-  // Convert weight value when unit system changes
+  // HealthKit-synced steps awaiting confirmation (same rule as before: today's
+  // row has steps from healthkit and the user hasn't confirmed them).
+  const [autoSync, setAutoSync] = useState<{ steps: number; submitting: boolean } | null>(null);
   useEffect(() => {
-    if (quickWeight && unitSystem !== previousUnitSystem) {
-      // Convert the displayed weight to the new unit system
-      const currentValue = parseFloat(quickWeight);
-      if (!isNaN(currentValue)) {
-        let convertedValue: number;
-
-        if (previousUnitSystem === 'metric' && unitSystem === 'imperial') {
-          // kg to lbs
-          convertedValue = currentValue * 2.20462;
-        } else if (previousUnitSystem === 'imperial' && unitSystem === 'metric') {
-          // lbs to kg
-          convertedValue = currentValue / 2.20462;
-        } else {
-          convertedValue = currentValue;
-        }
-
-        setQuickWeight(convertedValue.toFixed(1));
-      }
-      setPreviousUnitSystem(unitSystem);
-    } else if (unitSystem !== previousUnitSystem) {
-      setPreviousUnitSystem(unitSystem);
-    }
-  }, [unitSystem, quickWeight, previousUnitSystem]);
-
-  // Fetch check-ins and profile on mount
-  useEffect(() => {
-    if (user) {
-      void fetchCheckIns();
-      void fetchDailyStats();
-      void fetchGoalWeight();
-      void checkPendingAutoSync();
-    }
-  }, [user]);
-
-  // Check if today has unconfirmed auto-synced steps
-  const checkPendingAutoSync = async () => {
-    if (!user) return;
-
+    const row = tracking.today;
+    let confirmed = false;
     try {
-      const today = new Date().toISOString().split('T')[0];
-
-      // Check localStorage for unlock status
-      const unlockKey = `stepsConfirmed-${today}`;
-      if (localStorage.getItem(unlockKey) === 'true') {
-        setAutoSyncUnlocked(true);
-        return;
-      }
-
-      // Fetch today's tracking data
-      const { data, error } = await supabase
-        .from('daily_tracking')
-        .select('steps, steps_source')
-        .eq('user_id', user.id)
-        .eq('tracking_date', today)
-        .maybeSingle() as { data: any; error: any };
-
-      if (error) {
-        console.error('Error checking auto-sync status:', error);
-        return;
-      }
-
-      // If steps exist and source is healthkit, show the confirmation card
-      if (data?.steps && data?.steps > 0 && data?.steps_source === 'healthkit') {
-        setPendingAutoSyncSteps(data.steps);
-      }
-    } catch (error) {
-      console.error('Error checking pending auto-sync:', error);
+      confirmed = localStorage.getItem(`stepsConfirmed-${isoDay()}`) === 'true';
+    } catch {
+      // storage blocked: just show the card
     }
-  };
+    if (!confirmed && row?.steps && row.steps > 0 && row.steps_source === 'healthkit') setAutoSync({ steps: row.steps, submitting: false });
+    else setAutoSync(null);
+  }, [tracking.today]);
 
-  // Handle auto-sync steps confirmation
-  const handleAutoSyncSubmit = async () => {
-    if (!user || !pendingAutoSyncSteps) return;
-
-    setIsSubmittingAutoSync(true);
-
+  const confirmAutoSync = async () => {
+    if (!user || !autoSync) return;
+    setAutoSync({ ...autoSync, submitting: true });
     try {
-      const today = new Date().toISOString().split('T')[0];
-
-      // Update the steps_source to 'manual' to indicate user confirmed
       const { error } = await (supabase as any)
         .from('daily_tracking')
         .update({ steps_source: 'manual' })
         .eq('user_id', user.id)
-        .eq('tracking_date', today);
-
+        .eq('tracking_date', isoDay());
       if (error) throw error;
-
-      // Mark today as unlocked in localStorage
-      localStorage.setItem(`stepsConfirmed-${today}`, 'true');
-
-      setAutoSyncUnlocked(true);
-      setPendingAutoSyncSteps(null);
+      try {
+        localStorage.setItem(`stepsConfirmed-${isoDay()}`, 'true');
+      } catch {
+        // ignore
+      }
+      setAutoSync(null);
       toast.success('Steps logged! Your streak is safe 🔥');
-
-      // Refresh data
-      void fetchCheckIns();
-      void fetchDailyStats();
-      void refreshGoals();
-    } catch (error) {
-      console.error('Error confirming auto-sync:', error);
+      void tracking.reload();
+    } catch {
+      setAutoSync({ ...autoSync, submitting: false });
       toast.error('Failed to confirm steps');
-    } finally {
-      setIsSubmittingAutoSync(false);
     }
   };
 
-  // Listen for food/beverage log events to unlock auto-sync
-  useEffect(() => {
-    const handleStreakAutoClaimed = () => {
-      const today = new Date().toISOString().split('T')[0];
-      localStorage.setItem(`stepsConfirmed-${today}`, 'true');
-      setAutoSyncUnlocked(true);
-      setPendingAutoSyncSteps(null);
-    };
-
-    window.addEventListener('streak-auto-claimed', handleStreakAutoClaimed);
-    return () => window.removeEventListener('streak-auto-claimed', handleStreakAutoClaimed);
-  }, []);
-
-  const fetchGoalWeight = async () => {
-    if (!user) return;
-
-    try {
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('goals')
-        .eq('id', user.id)
-        .single();
-
-      if (error) throw error;
-
-      // Extract goals from goals array
-      const profileData = data as any;
-      if (profileData?.goals && Array.isArray(profileData.goals)) {
-        const goals = profileData.goals;
-        const weightGoal = goals.find((goal: any) => goal.type === 'weight');
-        if (weightGoal?.target_weight_kg) {
-          setGoalWeightKg(weightGoal.target_weight_kg);
-          setStartingWeightKg(weightGoal.starting_weight_kg);
-        }
-
-        const stepsGoal = goals.find((goal: any) => goal.type === 'steps');
-        if (stepsGoal?.daily_steps_target) {
-          setDailyStepsGoal(stepsGoal.daily_steps_target);
-        }
-      }
-    } catch (error) {
-      console.error('Error fetching goals:', error);
-    }
+  const saveDay = async (date: string, values: { weight_kg?: number; steps?: number }) => {
+    await tracking.saveDay(date, values);
+    if (values.weight_kg) void vitals.refresh({ silent: true });
   };
 
-  const fetchCheckIns = async () => {
-    if (!user) return;
+  const hasData = !tracking.loading;
+  const name = firstName(user?.name);
 
-    setIsLoadingCheckIns(true);
-    try {
-      const { data, error } = await supabase
-        .from('daily_tracking')
-        .select('*')
-        .eq('user_id', user.id)
-        .order('tracking_date', { ascending: false })
-        .limit(30);
-
-      if (error) {
-        console.error('Supabase error:', error);
-        throw error;
-      }
-
-      setCheckIns(data || []);
-    } catch (error: any) {
-      console.error('Error fetching check-ins:', error);
-      if (error.code !== 'PGRST116' && error.code !== '42P01') {
-        toast.error('Failed to load check-ins');
-      }
-    } finally {
-      setIsLoadingCheckIns(false);
-    }
-  };
-
-  const fetchDailyStats = async () => {
-    if (!user) return;
-
-    try {
-      const today = new Date().toISOString().split('T')[0];
-      const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-
-      // Get the most recent weight entry (not just today's)
-      const { data: latestWeightData } = await supabase
-        .from('daily_tracking')
-        .select('weight_kg, steps, tracking_date')
-        .eq('user_id', user.id)
-        .not('weight_kg', 'is', null)
-        .order('tracking_date', { ascending: false })
-        .limit(1)
-        .maybeSingle() as { data: any };
-
-      // Also get today's data for steps
-      const { data: todayData } = await supabase
-        .from('daily_tracking')
-        .select('steps')
-        .eq('user_id', user.id)
-        .eq('tracking_date', today)
-        .maybeSingle() as { data: any };
-
-      const { data: weekData } = await supabase
-        .from('daily_tracking')
-        .select('steps, weight_kg, tracking_date')
-        .eq('user_id', user.id)
-        .gte('tracking_date', weekAgo)
-        .order('tracking_date', { ascending: false });
-
-      const weekDataTyped = weekData as any[] || [];
-      const weeklySteps = weekDataTyped.map(d => d.steps || 0).filter(s => s > 0);
-      const weeklyAvgSteps = weeklySteps.length > 0
-        ? Math.round(weeklySteps.reduce((a, b) => a + b, 0) / weeklySteps.length)
-        : 0;
-
-      let weightChange = 0;
-      if (weekDataTyped.length > 1) {
-        const weights = weekDataTyped.map(d => d.weight_kg).filter(w => w);
-        if (weights.length > 1) {
-          // Calculate change in kg first
-          const changeInKg = Math.round((weights[0]! - weights[weights.length - 1]!) * 10) / 10;
-          // Store raw kg value (will be converted for display later if needed)
-          weightChange = changeInKg;
-        }
-      }
-
-      let streak = 0;
-      if (weekDataTyped.length > 0) {
-        const dates = weekDataTyped.map(d => d.tracking_date);
-        const todayDate = new Date();
-
-        for (let i = 0; i < 30; i++) {
-          const checkDate = new Date(todayDate);
-          checkDate.setDate(checkDate.getDate() - i);
-          const checkDateStr = checkDate.toISOString().split('T')[0];
-
-          if (dates.includes(checkDateStr)) {
-            streak++;
-          } else if (i > 0) {
-            break;
-          }
-        }
-      }
-
-      const { count } = await supabase
-        .from('daily_tracking')
-        .select('*', { count: 'exact', head: true })
-        .eq('user_id', user.id);
-
-      setDailyStats({
-        todaySteps: todayData?.steps || 0,
-        todayWeight: latestWeightData?.weight_kg, // Use latest weight, not just today's
-        lastWeightDate: latestWeightData?.tracking_date,
-        weeklyAvgSteps,
-        weightChange,
-        currentStreak: streak,
-        totalCheckIns: count || 0,
-      });
-    } catch (error) {
-      console.error('Error fetching daily stats:', error);
-    }
-  };
-
-  // Quick entry for weight
-  const handleQuickWeightSubmit = async () => {
-    if (!user || !quickWeight) return;
-
-    const today = new Date().toISOString().split('T')[0];
-    const numericWeight = parseFloat(quickWeight);
-
-    // Validate weight value
-    if (!isValidWeight(numericWeight, unitSystem)) {
-      const message = getWeightValidationMessage(numericWeight, unitSystem);
-      toast.error(message || 'Invalid weight value');
-      return;
-    }
-
-    const weightInKg = parseWeightToKg(quickWeight, unitSystem)!;
-
-    // Double-check for unit confusion
-    const unitCheck = detectWrongUnit(weightInKg, unitSystem);
-    if (unitCheck.isWrong) {
-      // Show confirmation dialog
-      const confirmed = window.confirm(
-        `${unitCheck.message}\n\nClick OK to save as ${weightInKg.toFixed(1)} kg, or Cancel to fix it.`
-      );
-      if (!confirmed) {
-        return;
-      }
-    }
-
-    const { error } = await supabase
-      .from('daily_tracking')
-      .upsert({
-        user_id: user.id,
-        tracking_date: today,
-        weight_kg: weightInKg,
-      } as any, {
-        onConflict: 'user_id,tracking_date'
-      });
-
-    if (error) {
-      toast.error('Failed to save weight');
-      console.error(error);
-      return;
-    }
-
-    analytics.track(AnalyticsEvents.weightLogged({ source: 'quick_log' }));
-    toast.success('Weight logged!');
-    setQuickWeight('');
-    void fetchCheckIns();
-    void fetchDailyStats();
-    void refreshGoals(); // Refresh daily goals too
-    void vitals.refresh(); // New reading → weight/BMI cards
-  };
-
-  // Quick entry for steps
-  const handleQuickStepsSubmit = async () => {
-    if (!user || !quickSteps) return;
-
-    const today = new Date().toISOString().split('T')[0];
-
-    const { error } = await supabase
-      .from('daily_tracking')
-      .upsert({
-        user_id: user.id,
-        tracking_date: today,
-        steps: parseInt(quickSteps),
-      } as any, {
-        onConflict: 'user_id,tracking_date'
-      });
-
-    if (error) throw error;
-
-    analytics.track(AnalyticsEvents.stepsLogged({ source: 'quick_log' }));
-    toast.success('Steps logged!');
-    setQuickSteps('');
-    void fetchCheckIns();
-    void fetchDailyStats();
-  };
-
-  // Backfill past data
-  const handleBackfillSubmit = async (data: { date: string; weight?: number; steps?: number }) => {
-    if (!user) return;
-
-    // Validate weight if provided
-    if (data.weight) {
-      const weightInKg = data.weight; // Already converted in BackfillDataDialog
-
-      if (weightInKg < 30 || weightInKg > 300) {
-        toast.error(`Weight must be between 30-300 kg (66-650 lbs)`);
-        return;
-      }
-    }
-
-    const { error } = await supabase
-      .from('daily_tracking')
-      .upsert({
-        user_id: user.id,
-        tracking_date: data.date,
-        weight_kg: data.weight || null,
-        steps: data.steps || null,
-      } as any, {
-        onConflict: 'user_id,tracking_date'
-      });
-
-    if (error) {
-      toast.error('Failed to save data');
-      return;
-    }
-
-    if (data.weight) analytics.track(AnalyticsEvents.weightLogged({ source: 'form' }));
-    if (data.steps) analytics.track(AnalyticsEvents.stepsLogged({ source: 'form' }));
-
-    const dateDisplay = new Date(data.date).toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric'
-    });
-
-    toast.success(`Data saved for ${dateDisplay}!`);
-    void fetchCheckIns();
-    void fetchDailyStats();
-    void vitals.refresh();
-  };
-
-  const chartData = checkIns
-    .slice(0, 14)
-    .reverse()
-    .map(checkIn => ({
-      date: new Date(checkIn.tracking_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
-      weight: checkIn.weight_kg ? weightKgToDisplay(checkIn.weight_kg, unitSystem) : null,
-      weightRaw: checkIn.weight_kg || null, // Keep raw kg for calculations if needed
-      steps: checkIn.steps || 0,
-      mood: checkIn.mood_score || 0,
-      energy: checkIn.energy_level || 0,
-    }));
-
-  // Span of the weights in view, used to pad the weight chart's y-axis.
-  const weightValues = chartData.map(d => d.weight).filter((w): w is number => typeof w === 'number');
-  const weightAxisSpan =
-    weightValues.length > 0 ? Math.max(...weightValues) - Math.min(...weightValues) : 0;
-
-  const handleCheckInClick = (checkIn: CheckIn) => {
-    setSelectedCheckIn(checkIn);
-    setShowCheckInDetail(true);
-  };
-
-  const handleDeleteCheckIn = async (checkInId: string) => {
-    try {
-      const response = await fetch(`/api/check-ins/${checkInId}`, {
-        method: 'DELETE',
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to delete check-in');
-      }
-
-      toast.success('Check-in deleted successfully');
-      void fetchCheckIns();
-      void fetchDailyStats();
-      setShowCheckInDetail(false);
-    } catch (error) {
-      console.error('Error deleting check-in:', error);
-      toast.error('Failed to delete check-in');
-    }
-  };
-
-  const handleTogglePrivacy = async (checkInId: string, isPublic: boolean) => {
-    try {
-      const response = await fetch(`/api/check-ins/${checkInId}/privacy`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ isPublic }),
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to update privacy');
-      }
-
-      toast.success(isPublic ? 'Check-in is now public' : 'Check-in is now private');
-      void fetchCheckIns();
-    } catch (error) {
-      console.error('Error updating privacy:', error);
-      toast.error('Failed to update privacy');
-    }
-  };
+  const renderers = useMemo<Record<HomeCardType, () => React.ReactNode>>(
+    () => ({
+      header: () => null, // rendered above the feed
+      campaign: () => <DashboardCampaignCard />,
+      hydration: () =>
+        vitals.summary ? (
+          <HydrationCard water={vitals.summary.water} unitSystem={unitSystem} onLogWater={vitals.logWater} onEditGoal={() => setGoalSheet(true)} />
+        ) : vitals.error ? null : (
+          <HydrationCardSkeleton />
+        ),
+      referral: () => <ReferralHomeCard />,
+      pro_upsell: () => <ProUpsellCard isPro={isPro} loading={entLoading} />,
+      streak_warning: () => null, // shields banner: no web data source yet
+      daily_goals: () => (
+        <div className="space-y-4">
+          <AnimatePresence>
+            {autoSync && <AutoSyncSubmissionCard steps={autoSync.steps} onSubmit={confirmAutoSync} isSubmitting={autoSync.submitting} />}
+          </AnimatePresence>
+          <StreakCard />
+          {hasData ? <WeekStepsCard rows={tracking.rows} stepsGoal={tracking.goals.stepsGoal} /> : <Skeleton className="h-[236px] rounded-xl" />}
+        </div>
+      ),
+      fitzy_focus: () => <FitzyFocusCard />,
+      progress: () =>
+        hasData ? (
+          <ProgressCards
+            todaySteps={tracking.today?.steps ?? 0}
+            stepsGoal={tracking.goals.stepsGoal}
+            summary={vitals.summary}
+            fallbackWeightKg={tracking.latestWeight?.weight_kg ?? undefined}
+            fallbackGoalKg={tracking.goals.weightGoalKg}
+            unitSystem={unitSystem}
+            onUnitChange={setUnitSystem}
+            unitLoading={unitLoading}
+            onLogSteps={() => openLog('steps')}
+            onLogWeight={() => openLog('weight')}
+          />
+        ) : (
+          <div className="grid grid-cols-2 gap-3 sm:gap-4">
+            <Skeleton className="h-[268px] rounded-xl" />
+            <Skeleton className="h-[268px] rounded-xl" />
+          </div>
+        ),
+      vitals: () => <BmiScaleCard bmi={vitals.summary?.bmi ?? null} unitSystem={unitSystem} loading={vitals.loading} />,
+      body_comp: () => <BodyCompDashboardCard />,
+      past_date_log: () => <PastDateRow onClick={() => openLog('weight', true)} />,
+      charts: () =>
+        hasData ? (
+          <div className="space-y-4">
+            <WeightTrendCard rows={tracking.rows} unitSystem={unitSystem} />
+            {tracking.rows.length > 0 && (
+              <CheckInHistoryList
+                rows={tracking.rows}
+                pageSize={3}
+                title="Recent check-ins"
+                seeAllHref="/exercise-log?tab=checkins"
+                onChanged={() => void tracking.reload()}
+              />
+            )}
+          </div>
+        ) : null,
+    }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [vitals.summary, vitals.error, vitals.loading, unitSystem, unitLoading, isPro, entLoading, autoSync, hasData, tracking.rows, tracking.today, tracking.goals]
+  );
 
   return (
-    <>
+    <div className="min-h-screen bg-canvas bg-hero-glow">
       <Navbar />
-      <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 overflow-x-hidden">
-        {/* Subtle circle background decoration */}
-        <div className="fixed inset-0 overflow-hidden pointer-events-none">
-          <div className="absolute top-20 left-10 w-96 h-96 bg-indigo-500/5 rounded-full blur-3xl" />
-          <div className="absolute top-40 right-20 w-[500px] h-[500px] bg-purple-500/5 rounded-full blur-3xl" />
-          <div className="absolute bottom-20 left-1/3 w-[400px] h-[400px] bg-orange-500/5 rounded-full blur-3xl" />
+      <Screen size="wide" className="max-w-2xl lg:max-w-6xl">
+        <ScreenHeader
+          title={name ? `Welcome back, ${name}!` : 'Welcome back!'}
+          subtitle="Track your progress and stay consistent"
+        />
+        <div
+          className="flex flex-col gap-4 lg:block lg:columns-2 lg:gap-5 [&>*]:lg:mb-5 [&>*]:lg:break-inside-avoid [&>div:empty]:hidden"
+          data-testid="home-feed"
+          data-layout-source={layout.source}
+          data-layout-key={layout.layoutKey}
+        >
+          {layout.cards
+            .filter((c) => c.type !== 'header')
+            .map((c) => {
+              const node = renderers[c.type]?.();
+              return node ? (
+                <div key={c.id} data-card={c.type}>
+                  {node}
+                </div>
+              ) : (
+                <Fragment key={c.id} />
+              );
+            })}
         </div>
+      </Screen>
 
-        <div className="relative max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-8 lg:py-12">
-          {/* Header */}
-          <motion.div
-            initial={{ opacity: 0, y: -20 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="mb-4 sm:mb-6 lg:mb-8"
-          >
-            <h1 className="text-2xl sm:text-3xl lg:text-5xl font-bold bg-gradient-to-r from-indigo-300 via-fuchsia-400 to-orange-400 bg-clip-text text-transparent mb-1.5 sm:mb-2">
-              Welcome back, {user?.name || 'Champion'}!
-            </h1>
-            <p className="text-gray-400 text-xs sm:text-sm lg:text-base">
-              Track your progress and stay consistent 🎯
-            </p>
-          </motion.div>
-
-          {/* Campaign card (homeSlug campaign, CAMPAIGNS_SPEC §10) */}
-          <DashboardCampaignCard />
-
-          {/* Auto-Sync Submission Card - shown when HealthKit steps need confirmation */}
-          <AnimatePresence>
-            {pendingAutoSyncSteps && !autoSyncUnlocked && (
-              <div className="mb-6 sm:mb-8">
-                <AutoSyncSubmissionCard
-                  steps={pendingAutoSyncSteps}
-                  onSubmit={handleAutoSyncSubmit}
-                  isSubmitting={isSubmittingAutoSync}
-                />
-              </div>
-            )}
-          </AnimatePresence>
-
-          {/* Quick Entry Section */}
-          <div className="mb-6 sm:mb-8">
-            <div className="flex items-center justify-between mb-3 sm:mb-4">
-              <h2 className="text-base sm:text-lg lg:text-xl font-semibold text-white">Quick Log</h2>
-              <button
-                onClick={() => setShowBackfillDialog(true)}
-                className="text-xs sm:text-sm text-indigo-400 hover:text-indigo-300 transition-colors flex items-center gap-1"
-              >
-                <Calendar className="h-3 w-3 sm:h-4 sm:w-4" />
-                <span className="hidden sm:inline">Log past date</span>
-                <span className="sm:hidden">Past date</span>
-              </button>
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <QuickEntryCard
-                icon={BathroomScale}
-                label="Weight"
-                value={quickWeight}
-                onChange={setQuickWeight}
-                onSubmit={handleQuickWeightSubmit}
-                placeholder={unitSystem === 'metric' ? '70.0' : '154.0'}
-                unit={getWeightUnit(unitSystem)}
-                color="purple-500"
-                type="number"
-                step="0.1"
-                min="0"
-                helperText={`Today's weight in ${getWeightUnit(unitSystem)}`}
-                headerAction={
-                  <UnitToggle
-                    value={unitSystem}
-                    onChange={setUnitSystem}
-                    isLoading={isLoadingUnits}
-                    size="sm"
-                  />
-                }
-              />
-              <QuickEntryCard
-                icon={Footprints as any}
-                label="Steps"
-                value={quickSteps}
-                onChange={setQuickSteps}
-                onSubmit={handleQuickStepsSubmit}
-                placeholder="10000"
-                unit="steps"
-                color="indigo-500"
-                type="number"
-                step="1"
-                min="0"
-                helperText="Today's step count"
-              />
-              <Link href="/food-log" className="block h-full">
-                <Card className="bg-slate-900/50 border-slate-800 backdrop-blur-xl h-full hover:bg-slate-800/50 transition-colors cursor-pointer group">
-                  <CardContent className="p-6 flex flex-col items-center justify-center h-full space-y-4">
-                    <div className="w-12 h-12 rounded-full bg-orange-500/20 flex items-center justify-center group-hover:scale-110 transition-transform">
-                      <Utensils className="w-6 h-6 text-orange-400" />
-                    </div>
-                    <div className="text-center">
-                      <h3 className="text-lg font-semibold text-white">Food & Drink</h3>
-                      <p className="text-sm text-gray-400">Log meals and water</p>
-                    </div>
-                  </CardContent>
-                </Card>
-              </Link>
-            </div>
-          </div>
-
-          {/* Engagement Streak Highlight - Full Width on Mobile, Prominent on Desktop */}
-          <div className="mb-6 sm:mb-8">
-            <EngagementStreakCard
-              onOpenHistory={() => setShowStreakHistory(true)}
-              onOpenCheckIn={() => setShowBackfillDialog(true)}
-            />
-          </div>
-
-          {/* Daily Progress Meter - Hero Section */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.2 }}
-            className="mb-6 sm:mb-8"
-          >
-            <DailyProgressMeter
-              userId={user?.id}
-              onGoalComplete={refreshGoals}
-              className="w-full"
-            />
-          </motion.div>
-
-          {/* Simplified Progress Cards */}
-          <div className="space-y-4 sm:space-y-6 mb-6 sm:mb-8">
-            <div className="grid grid-cols-2 gap-3 sm:gap-4">
-              {/* Steps Card with Progress Ring */}
-              <motion.div
-                initial={{ opacity: 0, scale: 0.9 }}
-                animate={{ opacity: 1, scale: 1 }}
-              >
-                <Card className="bg-slate-900/50 border-slate-800 backdrop-blur-xl h-full">
-                  <CardContent className="p-4 sm:p-6 flex flex-col items-center space-y-3 sm:space-y-4">
-                    {/* Header Icon */}
-                    <div className="w-full flex justify-start">
-                      <div className="w-10 h-10 rounded-full bg-indigo-500/20 flex items-center justify-center">
-                        <Footprints className="w-5 h-5 text-indigo-400" />
-                      </div>
-                    </div>
-
-                    {/* Steps Ring */}
-                    <div className="relative w-28 h-28 sm:w-32 sm:h-32">
-                      <svg className="w-full h-full transform -rotate-90">
-                        {/* Background ring */}
-                        <circle
-                          cx="50%"
-                          cy="50%"
-                          r="45%"
-                          fill="none"
-                          stroke="rgba(99, 102, 241, 0.2)"
-                          strokeWidth="12"
-                        />
-                        {/* Progress ring */}
-                        <circle
-                          cx="50%"
-                          cy="50%"
-                          r="45%"
-                          fill="none"
-                          stroke="#6366f1"
-                          strokeWidth="12"
-                          strokeLinecap="round"
-                          strokeDasharray={`${2 * Math.PI * 45} ${2 * Math.PI * 45}`}
-                          strokeDashoffset={`${2 * Math.PI * 45 * (1 - Math.min(dailyStats.todaySteps / dailyStepsGoal, 1))}`}
-                          className="transition-all duration-1000 ease-out"
-                        />
-                      </svg>
-                      {/* Center content */}
-                      <div className="absolute inset-0 flex flex-col items-center justify-center">
-                        <p className="text-xl sm:text-2xl font-bold text-white">{dailyStats.todaySteps.toLocaleString()}</p>
-                        <p className="text-xs text-gray-400">steps</p>
-                      </div>
-                    </div>
-
-                    {/* Goal */}
-                    <div className="text-center">
-                      <p className="text-sm sm:text-base font-semibold text-white">Steps</p>
-                      <p className="text-xs text-gray-400">Goal: {dailyStepsGoal.toLocaleString()}</p>
-                    </div>
-                  </CardContent>
-                </Card>
-              </motion.div>
-
-              {/* Weight Card */}
-              <motion.div
-                initial={{ opacity: 0, scale: 0.9 }}
-                animate={{ opacity: 1, scale: 1 }}
-                transition={{ delay: 0.1 }}
-              >
-                <Card className="bg-slate-900/50 border-slate-800 backdrop-blur-xl h-full">
-                  <CardContent className="p-0 h-full">
-                    {/* Weight · 7 days — server summary, falls back to today's reading until it loads */}
-                    <WeightVitalsCard
-                      summary={vitals.summary}
-                      unitSystem={unitSystem}
-                      fallbackWeightKg={dailyStats.todayWeight}
-                      fallbackWeightDate={dailyStats.lastWeightDate}
-                      fallbackGoalKg={goalWeightKg}
-                      onEditGoal={() => setShowVitalsGoals(true)}
-                    />
-                  </CardContent>
-                </Card>
-              </motion.div>
-            </div>
-
-            {/* BMI + Water this week (VITALS_CLIENT_CONTRACT.md) */}
-            <BmiScaleCard bmi={vitals.summary?.bmi ?? null} unitSystem={unitSystem} loading={vitals.loading} />
-            <WaterWeekCard
-              water={vitals.summary?.water ?? null}
-              today={vitals.summary?.period.end}
-              unitSystem={unitSystem}
-              loading={vitals.loading}
-              onEditGoal={() => setShowVitalsGoals(true)}
-              onLogWater={vitals.logWater}
-            />
-
-            {/* Body Composition — latest BF% + trend state, links to the journal */}
-            <BodyCompDashboardCard />
-          </div>
-
-          {/* Main Content Tabs */}
-          <Tabs defaultValue="weight" className="space-y-4 sm:space-y-6">
-            <TabsList className="w-full sm:w-auto grid grid-cols-2 gap-2 bg-slate-900/50 border border-slate-800">
-              <TabsTrigger value="weight" className="text-xs sm:text-sm data-[state=active]:bg-purple-500/20 data-[state=active]:text-purple-400">
-                <BathroomScale className="h-3.5 w-3.5 sm:h-4 sm:w-4 mr-1.5 sm:mr-2" size={16} />
-                <span className="hidden sm:inline">Weight Trends</span>
-                <span className="sm:hidden">Weight</span>
-              </TabsTrigger>
-              <TabsTrigger value="steps" className="text-xs sm:text-sm data-[state=active]:bg-indigo-500/20 data-[state=active]:text-indigo-400">
-                <Footprints className="h-3.5 w-3.5 sm:h-4 sm:w-4 mr-1.5 sm:mr-2" />
-                <span className="hidden sm:inline">Steps Trends</span>
-                <span className="sm:hidden">Steps</span>
-              </TabsTrigger>
-            </TabsList>
-
-            {/* Weight Trends Tab */}
-            <TabsContent value="weight">
-              <Card className="bg-slate-900/50 border-slate-800 backdrop-blur-xl shadow-2xl">
-                <CardHeader className="p-4 sm:p-6">
-                  <div className="flex items-start justify-between gap-2">
-                    <div>
-                      <CardTitle className="flex items-center gap-2 text-white text-base sm:text-lg">
-                        <BathroomScale className="h-4 w-4 sm:h-5 sm:w-5" size={20} />
-                        Weight Progress ({getWeightUnit(unitSystem)})
-                      </CardTitle>
-                      <CardDescription className="text-gray-400 text-xs sm:text-sm">Last 14 days</CardDescription>
-                    </div>
-                    {/* Second journal entry point (BODY_COMP_BUILD_CONTRACT §3):
-                        body-composition from the existing tracking/history area */}
-                    <Link
-                      href="/body-composition"
-                      className="text-xs sm:text-sm text-purple-400 hover:text-purple-300 whitespace-nowrap transition-colors"
-                    >
-                      Body composition →
-                    </Link>
-                  </div>
-                </CardHeader>
-                <CardContent className="h-64 sm:h-80 p-3 sm:p-6">
-                  {chartData.filter(d => d.weight).length === 0 ? (
-                    <div className="flex items-center justify-center h-full">
-                      <div className="text-center">
-                        <BathroomScale className="h-12 w-12 text-gray-600 mx-auto mb-3" size={48} />
-                        <p className="text-gray-400">No weight data yet</p>
-                      </div>
-                    </div>
-                  ) : (
-                    <ResponsiveContainer width="100%" height="100%">
-                      <AreaChart data={chartData.filter(d => d.weight)}>
-                        <defs>
-                          <linearGradient id="weightGradient" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.4} />
-                            <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0} />
-                          </linearGradient>
-                        </defs>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
-                        <XAxis dataKey="date" stroke="#94a3b8" className="text-xs" />
-                        {/* Tight, padded range around the readings (Apple Health
-                            style) instead of a 0-based axis that flattens a 2 lb
-                            change into a straight line. */}
-                        <YAxis
-                          stroke="#94a3b8"
-                          className="text-xs"
-                          allowDecimals={false}
-                          domain={[
-                            (min: number) => Math.floor(min - Math.max((weightAxisSpan) * 0.25, unitSystem === 'imperial' ? 2 : 1)),
-                            (max: number) => Math.ceil(max + Math.max((weightAxisSpan) * 0.25, unitSystem === 'imperial' ? 2 : 1)),
-                          ]}
-                          tickCount={4}
-                        />
-                        <Tooltip
-                          contentStyle={{
-                            backgroundColor: '#1e293b',
-                            border: '1px solid #334155',
-                            borderRadius: '8px',
-                            color: '#fff'
-                          }}
-                          formatter={(value: any) => {
-                            if (value === null || value === undefined) return ['--', ''];
-                            return [`${value} ${getWeightUnit(unitSystem)}`, ''];
-                          }}
-                        />
-                        {/* Only days with a reading are in the series, so the line
-                            runs straight between weigh-ins — never down to 0. */}
-                        <Area
-                          type="linear"
-                          dataKey="weight"
-                          stroke="#8b5cf6"
-                          strokeWidth={3}
-                          fill="url(#weightGradient)"
-                          connectNulls
-                          dot={{ r: 4, stroke: '#8b5cf6', strokeWidth: 2, fill: '#0f172a' }}
-                          activeDot={{ r: 6, fill: '#8b5cf6' }}
-                        />
-                      </AreaChart>
-                    </ResponsiveContainer>
-                  )}
-                </CardContent>
-              </Card>
-            </TabsContent>
-
-            {/* Steps Trends Tab */}
-            <TabsContent value="steps">
-              <Card className="bg-slate-900/50 border-slate-800 backdrop-blur-xl shadow-2xl">
-                <CardHeader className="p-4 sm:p-6">
-                  <CardTitle className="flex items-center gap-2 text-white text-base sm:text-lg">
-                    <Footprints className="h-4 w-4 sm:h-5 sm:w-5" />
-                    Steps Progress
-                  </CardTitle>
-                  <CardDescription className="text-gray-400 text-xs sm:text-sm">Last 14 days</CardDescription>
-                </CardHeader>
-                <CardContent className="h-64 sm:h-80 p-3 sm:p-6">
-                  {chartData.filter(d => d.steps > 0).length === 0 ? (
-                    <div className="flex items-center justify-center h-full">
-                      <div className="text-center">
-                        <Footprints className="h-12 w-12 text-gray-600 mx-auto mb-3" />
-                        <p className="text-gray-400">No steps data yet</p>
-                      </div>
-                    </div>
-                  ) : (
-                    <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={chartData}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
-                        <XAxis dataKey="date" stroke="#94a3b8" className="text-xs" />
-                        <YAxis stroke="#94a3b8" className="text-xs" />
-                        <Tooltip
-                          contentStyle={{
-                            backgroundColor: '#1e293b',
-                            border: '1px solid #334155',
-                            borderRadius: '8px',
-                            color: '#fff'
-                          }}
-                        />
-                        <Bar dataKey="steps" fill="#6366f1" radius={[8, 8, 0, 0]} />
-                      </BarChart>
-                    </ResponsiveContainer>
-                  )}
-                </CardContent>
-              </Card>
-            </TabsContent>
-          </Tabs>
-
-          {/* Recent Check-Ins Section */}
-          {checkIns.length > 0 && (
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.7 }}
-              className="mt-6 sm:mt-8"
-            >
-              <h2 className="text-base sm:text-lg lg:text-xl font-semibold text-white mb-3 sm:mb-4">Recent Check-Ins</h2>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
-                {checkIns.slice(0, 6).map((checkIn) => (
-                  <CheckInCard
-                    key={checkIn.id}
-                    checkIn={{
-                      id: checkIn.id,
-                      user_id: user?.id || '',
-                      tracking_date: checkIn.tracking_date,
-                      weight_kg: checkIn.weight_kg ?? null,
-                      steps: checkIn.steps ?? null,
-                      mood_score: checkIn.mood_score ?? null,
-                      energy_level: checkIn.energy_level ?? null,
-                      notes: checkIn.notes ?? null,
-                      is_public: true, // Assume public for user's own check-ins
-                      created_at: checkIn.created_at,
-                      updated_at: checkIn.created_at,
-                    }}
-                    onClick={() => handleCheckInClick(checkIn)}
-                  />
-                ))}
-              </div>
-            </motion.div>
-          )}
-        </div>
-      </div>
-
-      {/* Vitals goals (target weight + daily water) */}
+      <QuickLogSheet
+        open={quickLog.open}
+        onOpenChange={(open) => setQuickLog((q) => ({ ...q, open }))}
+        initialKind={quickLog.kind}
+        pastDate={quickLog.past}
+        unitSystem={unitSystem}
+        onUnitChange={setUnitSystem}
+        unitLoading={unitLoading}
+        onSave={saveDay}
+      />
       <VitalsGoalDialog
-        open={showVitalsGoals}
-        onOpenChange={setShowVitalsGoals}
+        open={goalSheet}
+        onOpenChange={setGoalSheet}
         summary={vitals.summary}
         unitSystem={unitSystem}
-        onSave={async (body) => {
-          await vitals.saveGoals(body);
-          void fetchGoalWeight(); // keep the profile-sourced goal state in sync
-        }}
+        onSave={vitals.saveGoals}
       />
-
-      {/* Backfill Data Dialog */}
-      <BackfillDataDialog
-        open={showBackfillDialog}
-        onOpenChange={setShowBackfillDialog}
-        onSubmit={handleBackfillSubmit}
-        unitSystem={unitSystem}
-        weightUnit={getWeightUnit(unitSystem)}
-      />
-
-      {/* Streak History Modal */}
-      <StreakHistoryModal
-        isOpen={showStreakHistory}
-        onClose={() => setShowStreakHistory(false)}
-        userId={user?.id}
-      />
-
-      {/* Check-In Detail Modal (Desktop) */}
-      {selectedCheckIn && (
-        <>
-          <CheckInDetailModal
-            checkIn={{
-              id: selectedCheckIn.id,
-              user_id: user?.id || '',
-              tracking_date: selectedCheckIn.tracking_date,
-              weight_kg: selectedCheckIn.weight_kg ?? null,
-              steps: selectedCheckIn.steps ?? null,
-              mood_score: selectedCheckIn.mood_score ?? null,
-              energy_level: selectedCheckIn.energy_level ?? null,
-              notes: selectedCheckIn.notes ?? null,
-              is_public: true,
-              created_at: selectedCheckIn.created_at,
-              updated_at: selectedCheckIn.created_at,
-              profile: {
-                username: user?.email?.split('@')[0] || 'user',
-                display_name: user?.name || 'You',
-                avatar_url: null,
-              },
-            }}
-            isOpen={showCheckInDetail}
-            onClose={() => setShowCheckInDetail(false)}
-            onDelete={() => handleDeleteCheckIn(selectedCheckIn.id)}
-            onTogglePrivacy={(isPublic) => handleTogglePrivacy(selectedCheckIn.id, isPublic)}
-            canEdit={true}
-          />
-
-          {/* Check-In Detail Sheet (Mobile) */}
-          <CheckInDetailSheet
-            checkIn={{
-              id: selectedCheckIn.id,
-              user_id: user?.id || '',
-              tracking_date: selectedCheckIn.tracking_date,
-              weight_kg: selectedCheckIn.weight_kg ?? null,
-              steps: selectedCheckIn.steps ?? null,
-              mood_score: selectedCheckIn.mood_score ?? null,
-              energy_level: selectedCheckIn.energy_level ?? null,
-              notes: selectedCheckIn.notes ?? null,
-              is_public: true,
-              created_at: selectedCheckIn.created_at,
-              updated_at: selectedCheckIn.created_at,
-              profile: {
-                username: user?.email?.split('@')[0] || 'user',
-                display_name: user?.name || 'You',
-                avatar_url: null,
-              },
-            }}
-            isOpen={showCheckInDetail}
-            onClose={() => setShowCheckInDetail(false)}
-            onDelete={() => handleDeleteCheckIn(selectedCheckIn.id)}
-            onTogglePrivacy={(isPublic) => handleTogglePrivacy(selectedCheckIn.id, isPublic)}
-            canEdit={true}
-          />
-        </>
-      )}
-    </>
+    </div>
   );
 }

@@ -104,8 +104,8 @@ describe('Dialog Component', () => {
 
       const closeButton = screen.getByRole('button', { name: /close/i });
       expect(closeButton).toHaveClass('focus:ring-2');
-      expect(closeButton).toHaveClass('focus:ring-orange-500/50');
-      expect(closeButton).toHaveClass('focus:ring-offset-slate-900');
+      expect(closeButton).toHaveClass('focus:ring-brand-purple/60');
+      expect(closeButton).toHaveClass('focus:ring-offset-surface');
     });
 
     it('should be positioned in top right corner', () => {

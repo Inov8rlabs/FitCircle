@@ -89,7 +89,7 @@ export function StepsGoalCard({
   };
 
   return (
-    <Card className={`bg-slate-900/50 border-slate-800 backdrop-blur-xl h-full ${className}`}>
+    <Card className={`bg-surface-raised/50 border-hairline backdrop-blur-xl h-full ${className}`}>
       <CardContent className="p-3 flex flex-col items-center justify-center h-full">
         <AnimatePresence mode="wait">
           {!isEditing ? (
