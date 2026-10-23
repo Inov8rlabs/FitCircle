@@ -123,7 +123,13 @@ export type NotificationType =
   | 'circle_streak_milestone'
   | 'circle_kickoff'
   // Admin-authored campaign pushes (docs/CAMPAIGNS_SPEC.md §5)
-  | 'campaign';
+  | 'campaign'
+  // Fitzy coaching tips (docs/FITZY_PUSH_NOTIFICATIONS.md; copy built by FitzyPushService)
+  | 'fitzy_daily_focus'
+  | 'fitzy_weekly_recap'
+  | 'fitzy_weekly_plan'
+  | 'fitzy_hydration_nudge'
+  | 'fitzy_protein_nudge';
 
 interface NotificationContent {
   title: string;
@@ -148,7 +154,10 @@ export type NotificationScreen =
   | 'challenges'
   | 'streaks'
   | 'invite_hub'
-  | 'campaign';
+  | 'campaign'
+  // Fitzy chat, seeded with the tip from `fitzyTip`. Older app builds don't know this screen and
+  // fall back to `type` (fitzy_* → dashboard, where the Fitzy focus card lives).
+  | 'fitzy_chat';
 
 export const TYPE_SCREEN_MAP: Record<NotificationType, NotificationScreen> = {
   // Journey
@@ -201,7 +210,17 @@ export const TYPE_SCREEN_MAP: Record<NotificationType, NotificationScreen> = {
   circle_kickoff: 'circle_detail',
   // Clients route by data.campaignSlug (calendar screen / home card / wizard).
   campaign: 'campaign',
+  fitzy_daily_focus: 'fitzy_chat',
+  fitzy_weekly_recap: 'fitzy_chat',
+  fitzy_weekly_plan: 'fitzy_chat',
+  fitzy_hydration_nudge: 'fitzy_chat',
+  fitzy_protein_nudge: 'fitzy_chat',
 };
+
+/** Coach pushes: Android "Coach" channel (FCM falls back to the default channel on older builds). */
+export const ANDROID_COACH_CHANNEL_ID = 'fitcircle_coach';
+/** Longest tip forwarded to the app in the data payload (never shown on the lock screen). */
+export const FITZY_TIP_DATA_MAX = 400;
 
 export function screenFor(type: NotificationType, data: NotificationData): NotificationScreen {
   const screen = TYPE_SCREEN_MAP[type] ?? 'dashboard';
@@ -486,6 +505,35 @@ export const NOTIFICATION_TEMPLATES: Record<
     body: 'Check in today. 3 days of check-ins and you both get a free week of Pro.',
     category: 'social',
   }),
+
+  // ---- Fitzy coaching tips (docs/FITZY_PUSH_NOTIFICATIONS.md) ----
+  // Copy is generated / templated and lock-screen-checked by FitzyPushService (lib/fitzy/push.ts);
+  // these defaults only apply if a caller omits it.
+  fitzy_daily_focus: (data) => ({
+    title: String(data.title || "Today's focus from Fitzy ☀️"),
+    body: String(data.body || 'One small, doable idea for today is waiting for you.'),
+    category: 'coach',
+  }),
+  fitzy_weekly_recap: (data) => ({
+    title: String(data.title || 'Your week with Fitzy 🗓️'),
+    body: String(data.body || 'Your weekly recap is ready. See what went well and what to carry into next week.'),
+    category: 'coach',
+  }),
+  fitzy_weekly_plan: (data) => ({
+    title: String(data.title || 'Plan your week with Fitzy 🗓️'),
+    body: String(data.body || 'Turn one goal into a few small, doable steps for this week.'),
+    category: 'coach',
+  }),
+  fitzy_hydration_nudge: (data) => ({
+    title: String(data.title || 'Water break? 💧'),
+    body: String(data.body || 'A glass now makes the afternoon easier. Log it in a tap.'),
+    category: 'coach',
+  }),
+  fitzy_protein_nudge: (data) => ({
+    title: String(data.title || 'A protein boost for later 💪'),
+    body: String(data.body || 'A protein-rich snack you enjoy could round out your afternoon.'),
+    category: 'coach',
+  }),
 };
 
 // ============================================================================
@@ -650,6 +698,10 @@ export class NotificationOrchestrator {
     if (data.messageId) pushData.messageId = String(data.messageId);
     if (data.deepLink) pushData.deepLink = data.deepLink;
     if (data.campaignSlug) pushData.campaignSlug = String(data.campaignSlug);
+    // Fitzy chat context (the tip the push came from); clients render it as plain text.
+    if (content.category === 'coach' && data.fitzyTip) {
+      pushData.fitzyTip = [...String(data.fitzyTip)].slice(0, FITZY_TIP_DATA_MAX).join('');
+    }
 
     if (isChatType) {
       // Chat wire contract: circleName + preview always; senderName except rallies.
@@ -668,6 +720,7 @@ export class NotificationOrchestrator {
       ...(isChatType
         ? { chat: { threadId: data.circleId ? String(data.circleId) : '' } }
         : {}),
+      ...(content.category === 'coach' ? { androidChannelId: ANDROID_COACH_CHANNEL_ID } : {}),
     };
 
     const sentCount = await PushService.sendPush(userId, pushNotification);

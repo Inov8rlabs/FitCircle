@@ -13,6 +13,8 @@ export interface NotificationPreferences {
   challenge_enabled: boolean;
   social_enabled: boolean;
   celebration_enabled: boolean;
+  /** "Coaching tips from Fitzy" (migration 107). Absent before 107 / null → on. */
+  coach_enabled?: boolean | null;
   quiet_hours_start: string | null; // TIME format "HH:MM"
   quiet_hours_end: string | null;
   quiet_hours_timezone: string;
@@ -25,7 +27,9 @@ export type NotificationCategory =
   | 'circle'
   | 'challenge'
   | 'social'
-  | 'celebration';
+  | 'celebration'
+  // Fitzy coaching tips (docs/FITZY_PUSH_NOTIFICATIONS.md) — its own toggle.
+  | 'coach';
 
 // Maps notification type prefix to category
 const TYPE_CATEGORY_MAP: Record<string, NotificationCategory> = {
@@ -85,6 +89,13 @@ const TYPE_CATEGORY_MAP: Record<string, NotificationCategory> = {
 
   // Campaigns (docs/CAMPAIGNS_SPEC.md §5) — the Challenges toggle silences them.
   campaign: 'challenge',
+
+  // Fitzy coaching tips (docs/FITZY_PUSH_NOTIFICATIONS.md) — "Coaching tips from Fitzy".
+  fitzy_daily_focus: 'coach',
+  fitzy_weekly_recap: 'coach',
+  fitzy_weekly_plan: 'coach',
+  fitzy_hydration_nudge: 'coach',
+  fitzy_protein_nudge: 'coach',
 };
 
 // ============================================================================
@@ -165,6 +176,8 @@ export class NotificationPreferencesService {
     ]);
     if (!masterEnabled) return false;
     const enabledKey = `${category}_enabled` as keyof NotificationPreferences;
+    // coach_enabled arrives with migration 107 and is nullable: only an explicit false turns it off.
+    if (category === 'coach') return prefs.coach_enabled !== false;
     return prefs[enabledKey] as boolean;
   }
 

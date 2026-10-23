@@ -24,6 +24,8 @@ const SCREENS = [
   'streaks',
   'invite_hub',
   'campaign',
+  // Fitzy coaching tips (docs/FITZY_PUSH_NOTIFICATIONS.md): iOS DeepLinkRouter + Android NotificationDeepLink.
+  'fitzy_chat',
 ];
 
 describe('notification catalog contract', () => {

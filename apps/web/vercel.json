@@ -71,6 +71,10 @@
     {
       "path": "/api/cron/campaigns",
       "schedule": "2 * * * *"
+    },
+    {
+      "path": "/api/cron/fitzy-coach",
+      "schedule": "10 * * * *"
     }
   ]
 }

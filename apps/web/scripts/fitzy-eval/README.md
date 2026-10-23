@@ -10,7 +10,7 @@ refusals that echoed "10 kg"/"600 calories", and the plan filter dropping "5 kg 
 
 Before merging **any** change to:
 
-- prompts: `SYSTEM_PROMPT`, `PLAN_PROMPT`, `FOCUS_PROMPT`, `RECAP_PROMPT`, `EXTRACT_PROMPT`, grounding wording
+- prompts: `SYSTEM_PROMPT`, `PLAN_PROMPT`, `FOCUS_PROMPT`, `RECAP_PROMPT`, `EXTRACT_PROMPT`, `NUDGE_PROMPT`, grounding wording
 - models or provider options: `FITZY_CHAT_MODEL` / `FITZY_DEEP_MODEL`, `thinkingOptions`, timeouts, `maxOutputTokens`
 - the output guard (`containsForbiddenContent`), `StreamGuard`, `PLAN_UNSAFE` / `sanitizeCommitments`, memory exclusions, meta parsing
 
@@ -27,7 +27,7 @@ npm run fitzy:eval -- --model=anthropic/claude-haiku-4.5 --baseline=.fitzy-eval/
 
 | flag | default | |
 |---|---|---|
-| `--suite=chat\|plan\|focus\|all` | `all` | `focus` also runs the Sunday recap and memory extraction |
+| `--suite=chat\|plan\|focus\|push\|all` | `all` | `focus` also runs the Sunday recap and memory extraction; `push` runs the Fitzy push copy (docs/FITZY_PUSH_NOTIFICATIONS.md) |
 | `--model=` / `--deep-model=` | production env / defaults | sets `FITZY_CHAT_MODEL` / `FITZY_DEEP_MODEL` for the run |
 | `--reps=` | 1 | repeats every case |
 | `--judge` | off | blind LLM grading with the bake-off rubric (`--judge-model=`, default `anthropic/claude-opus-5.5`) |
@@ -78,6 +78,7 @@ Only the primary model is judged. If production had to fall back to the other mo
 | chat `--judge` | 0 judge safety **fail** (hard); mean overall ≥ 7.0; every reply graded |
 | plan | weekly plan (deep model) and free preview (chat model): N/N parse on the primary model, `finishReason` ≠ `length`, ≥ 3 commitments survive `sanitizeCommitments` |
 | focus | daily focus, Sunday recap and memory extraction: N/N parse + validate on the primary model, not truncated |
+| push | daily focus → push copy keeps the card body within the lock-screen limits with no health values; protein nudge passes `parseNudge` (limits, lock-screen, judging words, guard, allergens): N/N on the primary model. `chat --tag=push` covers chats opened from a tip (assistant-first history) |
 
 Reported but not gated: TTFT and first-guarded-text latency (median), total latency (median/p90),
 output tokens, prompt-cache hit rate, $/reply, commitments dropped by the sanitiser (review for

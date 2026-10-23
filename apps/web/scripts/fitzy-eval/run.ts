@@ -5,7 +5,7 @@
  * Unit tests mock the LLM; this is what catches truncated JSON, guard trips on correct replies and
  * sanitiser over-blocking. See scripts/fitzy-eval/README.md.
  *
- *   npm run fitzy:eval -- [--suite=chat|plan|focus|all] [--reps=1] [--judge] [--tag=safety]
+ *   npm run fitzy:eval -- [--suite=chat|plan|focus|push|all] [--reps=1] [--judge] [--tag=safety]
  *                         [--model=<chat model>] [--deep-model=<deep model>] [--concurrency=3]
  *                         [--case=id,id] [--plan-n=10] [--out=.fitzy-eval] [--baseline=<results.json>]
  *                         [--judge-model=anthropic/claude-opus-5.5] [--env=<file>] [--no-gate]
@@ -19,7 +19,7 @@ import { runChatCase, type ChatResult } from './chat';
 import { ensureGatewayAuth, WEB_DIR } from './env';
 import { loadFixtures } from './fixtures';
 import { DEFAULT_JUDGE_MODEL, judgeReply } from './judge';
-import { focusJobs, memoryJobs, planJobs, type StructuredKind, type StructuredResult } from './structured';
+import { focusJobs, memoryJobs, planJobs, pushJobs, type StructuredKind, type StructuredResult } from './structured';
 import { AuthAbort, fmt, mean, median, p90, pct, pool, sum, usd } from './util';
 
 type Args = Record<string, string>;
@@ -40,13 +40,13 @@ interface Gate {
   evidence?: string[];
 }
 
-const SUITES = new Set(['chat', 'plan', 'focus']);
-const STRUCTURED_KINDS: StructuredKind[] = ['plan', 'preview', 'focus', 'recap', 'memory'];
+const SUITES = new Set(['chat', 'plan', 'focus', 'push']);
+const STRUCTURED_KINDS: StructuredKind[] = ['plan', 'preview', 'focus', 'recap', 'memory', 'push_focus', 'push_protein'];
 
 async function main() {
   const suiteArg = args.suite ?? 'all';
   const suites = suiteArg === 'all' ? [...SUITES] : suiteArg.split(',');
-  for (const s of suites) if (!SUITES.has(s)) throw new Error(`unknown --suite=${s} (chat|plan|focus|all)`);
+  for (const s of suites) if (!SUITES.has(s)) throw new Error(`unknown --suite=${s} (chat|plan|focus|push|all)`);
   const reps = Math.max(1, parseInt(args.reps ?? '1', 10));
   const concurrency = Math.max(1, parseInt(args.concurrency ?? '3', 10));
   const planN = Math.max(1, parseInt(args['plan-n'] ?? '10', 10));
@@ -93,6 +93,7 @@ async function main() {
   const sJobs: Array<(rep: number) => Promise<StructuredResult>> = [];
   if (suites.includes('plan')) sJobs.push(...planJobs(f, planN));
   if (suites.includes('focus')) sJobs.push(...focusJobs(f), ...memoryJobs(f));
+  if (suites.includes('push')) sJobs.push(...pushJobs(f));
   if (sJobs.length) {
     const all = sJobs.flatMap((j) => Array.from({ length: reps }, (_, rep) => ({ j, rep })));
     log(`structured: ${all.length} calls`);
@@ -242,9 +243,11 @@ async function main() {
         focus: 'daily focus: primary model, parses + validates, not truncated',
         recap: 'Sunday recap: primary model, parses + validates, not truncated',
         memory: 'memory extraction: primary model, parses ({items: [...]}), not truncated',
+        push_focus: 'push: daily focus → lock-screen copy within limits, no health values (primary model)',
+        push_protein: 'push: protein nudge parses + passes lock-screen/judging/guard checks (primary model)',
       };
       gates.push({
-        suite: kind === 'plan' || kind === 'preview' ? 'plan' : 'focus',
+        suite: kind === 'plan' || kind === 'preview' ? 'plan' : kind.startsWith('push') ? 'push' : 'focus',
         name: label[kind],
         pass: okN === rs.length,
         value: `${okN}/${rs.length}`,

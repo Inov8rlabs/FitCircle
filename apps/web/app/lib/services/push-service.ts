@@ -18,6 +18,12 @@ export interface PushNotification {
    * alert + apns-priority 10 + thread-id (= circleId, groups per circle) on iOS.
    */
   chat?: { threadId: string };
+  /**
+   * Android notification channel for the legacy (notification-message) shape, used by FCM when it
+   * auto-displays a background push. Unset = the app's default channel (unchanged behaviour). An
+   * unknown channel on an older build also falls back to the default channel.
+   */
+  androidChannelId?: string;
 }
 
 export interface PushToken {
@@ -55,6 +61,7 @@ interface FCMMessage {
       priority?: 'NORMAL' | 'HIGH';
       notification?: {
         sound?: string;
+        channel_id?: string;
       };
     };
   };
@@ -363,6 +370,7 @@ export class PushService {
               android: {
                 notification: {
                   sound: notification.sound || 'default',
+                  ...(notification.androidChannelId ? { channel_id: notification.androidChannelId } : {}),
                 },
               },
             },
