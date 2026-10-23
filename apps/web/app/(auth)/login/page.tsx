@@ -100,7 +100,7 @@ function LoginForm() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center px-4 py-12 bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950">
+    <div className="min-h-screen flex items-center justify-center px-4 py-12 bg-canvas bg-hero-glow">
       {/* Subtle circle background decoration */}
       <div className="fixed inset-0 overflow-hidden pointer-events-none">
         <div className="absolute top-20 left-0 w-[600px] h-[600px] bg-indigo-500/5 rounded-full blur-3xl" />
@@ -124,7 +124,7 @@ function LoginForm() {
             </p>
           </div>
 
-          <Card className="bg-slate-900/50 border-slate-800 backdrop-blur-xl">
+          <Card className="bg-surface-raised/50 border-hairline backdrop-blur-xl">
             <CardContent className="p-6">
             <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
               <div>
@@ -229,7 +229,7 @@ function LoginForm() {
                 size="lg"
                 disabled={isSubmitting || isLoading}
                 loading={isSubmitting || isLoading}
-                className="bg-purple-600 hover:bg-purple-700 shadow-lg hover:shadow-purple-500/50 transition-all"
+                className="bg-gradient-brand shadow-glow transition hover:brightness-110"
               >
                 Sign In
                 <ArrowRight className="ml-2 h-4 w-4" />
@@ -267,7 +267,7 @@ function LoginForm() {
 export default function LoginPage() {
   return (
     <Suspense fallback={
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950">
+      <div className="min-h-screen flex items-center justify-center bg-canvas bg-hero-glow">
         <Loader2 className="h-8 w-8 animate-spin text-purple-400" />
       </div>
     }>

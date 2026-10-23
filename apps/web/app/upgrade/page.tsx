@@ -7,16 +7,26 @@
  */
 
 import { motion } from 'framer-motion';
-import { Crown } from 'lucide-react';
+import { BanIcon, Crown, LineChart, Sparkles, Users } from 'lucide-react';
+import Link from 'next/link';
 import { useEffect, useState } from 'react';
 
-import { Navbar } from '@/components/layout/navbar';
 import { PricingCards, PlanComparison } from '@/components/billing/PricingCards';
 import { ProBadge } from '@/components/billing/ProBadge';
+import { Navbar } from '@/components/layout/navbar';
+import { GlassCard, Screen, ToneDisc, type Tone } from '@/components/ui/ios';
 import { useEntitlements } from '@/hooks/useEntitlements';
 import { AnalyticsEvents, analytics } from '@/lib/analytics';
 import { paywallSource, takeCheckout, webProductId } from '@/lib/analytics/checkout';
 import { useTrackOnce } from '@/lib/analytics/react';
+
+/** iOS paywall feature list (PaywallView): what Pro adds, matching PlanComparison. */
+const PRO_FEATURES: Array<{ icon: typeof Sparkles; tone: Tone; title: string; body: string }> = [
+  { icon: Sparkles, tone: 'purple', title: 'Unlimited AI logging', body: 'Photo and voice logging plus Fitzy coach (fair-use limits apply).' },
+  { icon: LineChart, tone: 'cyan', title: 'Your full history', body: 'Trends and progress beyond the free 14-day window.' },
+  { icon: Users, tone: 'green', title: 'Unlimited circles', body: 'Create as many active circles as you want.' },
+  { icon: BanIcon, tone: 'orange', title: 'No ads', body: 'A completely ad-free FitCircle.' },
+];
 
 export default function UpgradePage() {
   const { entitlements, isPro, isLoading } = useEntitlements();
@@ -56,48 +66,73 @@ export default function UpgradePage() {
   // Master feature flag: the subscription surface is invisible until enabled.
   if (!isLoading && entitlements?.subscriptionsEnabled !== true) {
     return (
-      <div className="min-h-screen bg-background pb-24">
+      <div className="min-h-screen bg-canvas bg-hero-glow">
         <Navbar />
-        <main className="mx-auto max-w-2xl px-4 py-16 text-center">
-          <Crown className="mx-auto h-8 w-8 text-amber-400" />
-          <h1 className="mt-3 text-xl font-bold">FitCircle Pro is coming soon</h1>
-          <p className="mt-2 text-sm text-muted-foreground">
+        <Screen className="py-16 text-center">
+          <ToneDisc icon={Crown} tone="yellow" size="lg" className="mx-auto" />
+          <h1 className="mt-4 text-title2 text-white">FitCircle Pro is coming soon</h1>
+          <p className="mt-2 text-subhead text-fg-secondary">
             Everything in FitCircle is free right now. Enjoy!
           </p>
-        </main>
+        </Screen>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-background pb-24">
+    <div className="min-h-screen bg-canvas bg-hero-glow">
       <Navbar />
-      <main className="mx-auto max-w-2xl px-4 py-6 space-y-6">
-        <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}>
-          <div className="flex items-center gap-2">
-            <Crown className="h-6 w-6 text-amber-400" />
-            <h1 className="text-2xl font-bold">FitCircle Pro</h1>
-          </div>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Unlimited AI food logging, unlimited Fitzy coaching, your full history, and an
-            ad-free FitCircle — while your circles stay free for everyone.
+      <Screen className="space-y-6">
+        <motion.header
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="pt-2 text-center"
+          data-testid="paywall-header"
+        >
+          <p className="inline-flex items-center gap-1.5 text-footnote font-bold uppercase tracking-[0.18em] text-brand-orange">
+            <Crown className="h-4 w-4" aria-hidden /> FitCircle Pro
           </p>
-        </motion.div>
+          <h1 className="mt-2 text-title1 text-white sm:text-large-title">Unlock FitCircle Pro</h1>
+          <p className="mx-auto mt-2 max-w-md text-subhead text-fg-secondary">
+            AI food logging and Fitzy coaching (fair-use limits apply), your full history, and an
+            ad-free FitCircle, while your circles stay free for everyone.
+          </p>
+        </motion.header>
+
+        <GlassCard as="div" className="space-y-4" data-testid="paywall-features">
+          {PRO_FEATURES.map((f) => (
+            <div key={f.title} className="flex items-start gap-3">
+              <ToneDisc icon={f.icon} tone={f.tone} size="md" />
+              <div className="min-w-0">
+                <p className="text-headline text-white">{f.title}</p>
+                <p className="text-footnote text-fg-secondary">{f.body}</p>
+              </div>
+            </div>
+          ))}
+        </GlassCard>
 
         {!isLoading && isPro ? (
-          <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm">
-            <span className="mr-2 font-semibold">You're already Pro</span>
-            <ProBadge />
-            <p className="mt-1 text-muted-foreground">
-              Manage your plan in Settings → Billing.
+          <GlassCard as="div" className="border-brand-yellow/30 bg-brand-yellow/10">
+            <p className="flex items-center gap-2 text-headline text-white">
+              You&apos;re already Pro <ProBadge />
             </p>
-          </div>
+            <p className="mt-1 text-subhead text-fg-secondary">
+              Manage your plan in{' '}
+              <Link href="/settings/billing" className="font-semibold text-brand-purple hover:underline">
+                Settings → Billing
+              </Link>
+              .
+            </p>
+          </GlassCard>
         ) : (
           <PricingCards source={source ?? 'pricing_page'} />
         )}
 
-        <PlanComparison />
-      </main>
+        <section>
+          <h2 className="mb-2 px-4 text-footnote font-semibold uppercase tracking-wide text-fg-tertiary">Free vs Pro</h2>
+          <PlanComparison />
+        </section>
+      </Screen>
     </div>
   );
 }

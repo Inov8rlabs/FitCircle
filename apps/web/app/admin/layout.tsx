@@ -18,7 +18,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   return (
     <>
       <Navbar />
-      <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950">
+      <div className="min-h-screen bg-canvas bg-hero-glow">
         <div className="mx-auto max-w-[1440px] px-4 sm:px-6 lg:px-8">{children}</div>
       </div>
     </>

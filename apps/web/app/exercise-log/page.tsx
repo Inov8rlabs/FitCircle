@@ -1,180 +1,217 @@
 'use client';
 
 /**
- * Exercise log page — web port of iOS `ExerciseLogView`. List recent
- * workouts, show weekly stats, and link to /exercise-log/new for entry.
+ * Activity tab — web port of iOS `ExerciseLogView`, plus the steps and
+ * check-in history that iOS keeps on Home. Three segments:
+ *   Workouts  · category chips, day groups, workout rows, + sheet
+ *   Steps     · today, This Week bars, daily list
+ *   Check-ins · CheckInHistoryList (detail sheet, delete, privacy)
+ * `?tab=steps|checkins` deep-links a segment (the dashboard links here).
  */
-
-import { motion } from 'framer-motion';
-import {
-  Dumbbell, Flame, Clock, Activity, Plus, Trash2, TrendingUp, Loader2,
-} from 'lucide-react';
-import Link from 'next/link';
-import { useCallback, useEffect, useState } from 'react';
+import { Clock, Dumbbell, Flame, Plus } from 'lucide-react';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
+import { Suspense, useCallback, useEffect, useState } from 'react';
 import { toast } from 'sonner';
 
+import {
+  fetchStepsGoal,
+  fetchTracking,
+  fetchWorkouts,
+  fetchWorkoutStats,
+  type TrackingRow,
+} from '@/components/activity/api';
+import { CheckInHistoryList } from '@/components/activity/CheckInHistoryList';
+import { StepsPanel } from '@/components/activity/StepsPanel';
+import { WorkoutForm } from '@/components/activity/WorkoutForm';
+import { WorkoutList } from '@/components/activity/WorkoutList';
 import { Navbar } from '@/components/layout/navbar';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
+import { Fab, GlassCard, Screen, ScreenHeader, ToneDisc } from '@/components/ui/ios';
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet';
+import { Skeleton } from '@/components/ui/skeleton';
 import { exerciseClient } from '@/lib/api/exercise-client';
 import type { ExerciseLog, ExerciseStatsResponse } from '@/lib/types/exercise';
+import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/stores/auth-store';
 
-export default function ExerciseLogPage() {
-  const { isAuthenticated } = useAuthStore();
-  const [logs, setLogs] = useState<ExerciseLog[]>([]);
-  const [stats, setStats] = useState<ExerciseStatsResponse | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+type Tab = 'workouts' | 'steps' | 'checkins';
+const TABS: { id: Tab; label: string }[] = [
+  { id: 'workouts', label: 'Workouts' },
+  { id: 'steps', label: 'Steps' },
+  { id: 'checkins', label: 'Check-ins' },
+];
 
-  const load = useCallback(async () => {
-    try {
-      const [listRes, statsRes] = await Promise.allSettled([
-        exerciseClient.list({ limit: 50 }),
-        exerciseClient.getStats('week'),
-      ]);
-      if (listRes.status === 'fulfilled') setLogs(listRes.value.exercises);
-      if (statsRes.status === 'fulfilled') setStats(statsRes.value);
-    } catch (e) {
-      console.warn('[exercise-log] load failed', e);
-    } finally {
-      setIsLoading(false);
-    }
+function isTab(v: string | null): v is Tab {
+  return v === 'workouts' || v === 'steps' || v === 'checkins';
+}
+
+export default function ExerciseLogPage() {
+  return (
+    <Suspense fallback={null}>
+      <ActivityScreen />
+    </Suspense>
+  );
+}
+
+function ActivityScreen() {
+  const user = useAuthStore((s) => s.user);
+  const router = useRouter();
+  const pathname = usePathname();
+  const params = useSearchParams();
+  const tabParam = params.get('tab');
+  const tab: Tab = isTab(tabParam) ? tabParam : 'workouts';
+
+  const [logs, setLogs] = useState<ExerciseLog[]>([]);
+  const [stats, setStats] = useState<(ExerciseStatsResponse & { total_calories?: number }) | null>(null);
+  const [loadingWorkouts, setLoadingWorkouts] = useState(true);
+  const [tracking, setTracking] = useState<TrackingRow[] | null>(null);
+  const [stepsGoal, setStepsGoal] = useState(10_000);
+  const [addOpen, setAddOpen] = useState(false);
+
+  const loadWorkouts = useCallback(async () => {
+    const [list, st] = await Promise.allSettled([fetchWorkouts(100), fetchWorkoutStats('week')]);
+    if (list.status === 'fulfilled') setLogs(list.value);
+    else console.warn('[activity] workouts failed', list.reason);
+    if (st.status === 'fulfilled') setStats(st.value);
+    setLoadingWorkouts(false);
   }, []);
 
-  useEffect(() => { void load(); }, [load]);
+  const loadTracking = useCallback(async () => {
+    if (!user?.id) return;
+    const [rows, goal] = await Promise.allSettled([fetchTracking(user.id, 90), fetchStepsGoal(user.id)]);
+    setTracking(rows.status === 'fulfilled' ? rows.value : []);
+    if (goal.status === 'fulfilled') setStepsGoal(goal.value);
+  }, [user?.id]);
 
-  const handleDelete = async (id: string) => {
-    if (!confirm('Delete this exercise?')) return;
+  useEffect(() => {
+    void loadWorkouts();
+  }, [loadWorkouts]);
+
+  useEffect(() => {
+    void loadTracking();
+  }, [loadTracking]);
+
+  const selectTab = (next: Tab) => {
+    const q = new URLSearchParams(params.toString());
+    if (next === 'workouts') q.delete('tab');
+    else q.set('tab', next);
+    const qs = q.toString();
+    router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+  };
+
+  const handleDelete = async (log: ExerciseLog) => {
+    if (!confirm(`Delete ${log.exercise_type}?`)) return;
     try {
-      await exerciseClient.delete(id);
-      setLogs(prev => prev.filter(l => l.id !== id));
+      await exerciseClient.delete(log.id);
+      setLogs((prev) => prev.filter((l) => l.id !== log.id));
       toast.success('Exercise removed');
-    } catch (e: any) {
-      toast.error(e?.message ?? 'Could not delete');
+      void loadWorkouts();
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : 'Could not delete');
     }
   };
 
-  if (!isAuthenticated) {
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <p className="text-muted-foreground">Sign in to view your exercise log.</p>
-      </div>
-    );
-  }
-
   return (
-    <div className="min-h-screen bg-background pb-24">
+    <div className="min-h-screen bg-canvas">
       <Navbar />
-      <main className="mx-auto max-w-2xl px-4 py-6 space-y-6">
-        <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-bold">Exercise Log</h1>
-          <Link href="/exercise-log/new">
-            <Button className="bg-orange-500 hover:bg-orange-600 gap-1">
-              <Plus className="h-4 w-4" /> Log workout
-            </Button>
-          </Link>
+      <Screen className="max-w-5xl">
+        <ScreenHeader title="Activity" subtitle="Workouts, steps and check-ins" />
+
+        <div
+          role="tablist"
+          aria-label="Activity sections"
+          className="mb-5 grid h-11 grid-cols-3 rounded-xl border border-hairline bg-white/5 p-1 md:max-w-md"
+        >
+          {TABS.map((t) => (
+            <button
+              key={t.id}
+              type="button"
+              role="tab"
+              id={`tab-${t.id}`}
+              aria-selected={tab === t.id}
+              aria-controls={`panel-${t.id}`}
+              onClick={() => selectTab(t.id)}
+              className={cn(
+                'rounded-lg text-subhead font-semibold transition duration-200 ease-ios',
+                tab === t.id ? 'bg-surface-raised text-white shadow-ios-sm' : 'text-fg-secondary hover:text-white'
+              )}
+            >
+              {t.label}
+            </button>
+          ))}
         </div>
 
-        {stats && <StatsRow stats={stats} />}
+        <div role="tabpanel" id={`panel-${tab}`} aria-labelledby={`tab-${tab}`}>
+          {tab === 'workouts' && (
+            <div className="grid grid-cols-[minmax(0,1fr)] gap-5 lg:grid-cols-[minmax(0,1fr)_300px] lg:items-start">
+              <WorkoutList logs={logs} loading={loadingWorkouts} onDelete={handleDelete} onAdd={() => setAddOpen(true)} />
+              <WeekSummary stats={stats} loading={loadingWorkouts} />
+            </div>
+          )}
+          {tab === 'steps' && <StepsPanel rows={tracking ?? []} goal={stepsGoal} loading={tracking === null} />}
+          {tab === 'checkins' && (
+            <div className="max-w-2xl">
+              <CheckInHistoryList
+                rows={tracking ?? undefined}
+                title={null}
+                pageSize={10}
+                onChanged={() => void loadTracking()}
+              />
+            </div>
+          )}
+        </div>
+      </Screen>
 
-        {isLoading ? (
-          <Card><CardContent className="p-8 flex justify-center"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></CardContent></Card>
-        ) : logs.length === 0 ? (
-          <EmptyState />
-        ) : (
-          <div className="space-y-2">
-            {logs.map((log) => (
-              <ExerciseRow key={log.id} log={log} onDelete={() => handleDelete(log.id)} />
-            ))}
-          </div>
-        )}
-      </main>
+      {tab === 'workouts' && <Fab icon={Plus} label="Log workout" onClick={() => setAddOpen(true)} />}
+
+      <Sheet open={addOpen} onOpenChange={setAddOpen}>
+        <SheetContent>
+          <SheetHeader>
+            <SheetTitle>Log workout</SheetTitle>
+            <SheetDescription>Workouts from Apple Health and Health Connect sync on their own.</SheetDescription>
+          </SheetHeader>
+          <WorkoutForm
+            onCancel={() => setAddOpen(false)}
+            onSaved={() => {
+              setAddOpen(false);
+              void loadWorkouts();
+            }}
+          />
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }
 
-function StatsRow({ stats }: { stats: ExerciseStatsResponse }) {
+function WeekSummary({
+  stats,
+  loading,
+}: {
+  stats: (ExerciseStatsResponse & { total_calories?: number }) | null;
+  loading: boolean;
+}) {
+  const items = [
+    { icon: Dumbbell, tone: 'purple' as const, label: 'Workouts', value: stats?.total_workouts ?? 0 },
+    { icon: Clock, tone: 'cyan' as const, label: 'Minutes', value: stats?.total_minutes ?? 0 },
+    { icon: Flame, tone: 'orange' as const, label: 'Calories', value: Math.round(stats?.total_calories ?? 0) },
+  ];
   return (
-    <div className="grid grid-cols-3 gap-2">
-      <StatCard label="Workouts" value={stats.total_workouts} icon={<Dumbbell className="h-4 w-4" />} color="text-purple-400" />
-      <StatCard label="Minutes" value={stats.total_minutes} icon={<Clock className="h-4 w-4" />} color="text-orange-400" />
-      <StatCard label="Calories" value={Math.round(stats.total_workouts > 0 ? (stats as any).total_calories ?? 0 : 0)} icon={<Flame className="h-4 w-4" />} color="text-red-400" />
-    </div>
-  );
-}
-
-function StatCard({ label, value, icon, color }: { label: string; value: number; icon: React.ReactNode; color: string }) {
-  return (
-    <Card>
-      <CardContent className="p-3 text-center">
-        <div className={`flex items-center justify-center gap-1 ${color}`}>
-          {icon}
-          <p className="text-xl font-bold">{value}</p>
-        </div>
-        <p className="text-[10px] text-muted-foreground uppercase tracking-wide">{label}</p>
-      </CardContent>
-    </Card>
-  );
-}
-
-function ExerciseRow({ log, onDelete }: { log: ExerciseLog; onDelete: () => void }) {
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.2 }}
-    >
-      <Card>
-        <CardContent className="p-3 flex items-center gap-3">
-          <div className={`h-10 w-10 rounded-full flex items-center justify-center ${CATEGORY_BG[log.category] ?? 'bg-zinc-800'}`}>
-            <Activity className="h-5 w-5 text-white" />
+    <GlassCard className="order-first lg:order-none lg:sticky lg:top-24" data-testid="week-summary">
+      <h2 className="mb-3 text-footnote font-semibold uppercase tracking-wide text-fg-tertiary">This week</h2>
+      <div className="grid grid-cols-3 gap-3 lg:grid-cols-1">
+        {items.map((it) => (
+          <div key={it.label} className="flex flex-col items-start gap-2 lg:flex-row lg:items-center lg:gap-3">
+            <ToneDisc icon={it.icon} tone={it.tone} size="sm" />
+            <div>
+              {loading ? (
+                <Skeleton className="h-6 w-12" />
+              ) : (
+                <p className="text-title3 tabular-nums text-white">{it.value.toLocaleString()}</p>
+              )}
+              <p className="text-caption text-fg-secondary">{it.label}</p>
+            </div>
           </div>
-          <div className="flex-1 min-w-0">
-            <p className="font-semibold truncate capitalize">{log.exercise_type}</p>
-            <p className="text-xs text-muted-foreground">
-              {log.duration_minutes} min
-              {log.calories_burned ? ` · ${log.calories_burned} cal` : ''}
-              {log.effort_level ? ` · RPE ${log.effort_level}` : ''}
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={onDelete}
-            className="text-muted-foreground hover:text-destructive p-1"
-            aria-label="Delete exercise"
-          >
-            <Trash2 className="h-4 w-4" />
-          </button>
-        </CardContent>
-      </Card>
-    </motion.div>
+        ))}
+      </div>
+    </GlassCard>
   );
 }
-
-function EmptyState() {
-  return (
-    <Card>
-      <CardContent className="p-12 text-center space-y-3">
-        <Dumbbell className="mx-auto h-12 w-12 text-muted-foreground" />
-        <p className="text-lg font-semibold">No workouts yet</p>
-        <p className="text-sm text-muted-foreground">
-          Tap "Log workout" to record your first exercise.
-        </p>
-        <Link href="/exercise-log/new">
-          <Button className="mt-4 bg-orange-500 hover:bg-orange-600">
-            <Plus className="h-4 w-4 mr-1" /> Log first workout
-          </Button>
-        </Link>
-      </CardContent>
-    </Card>
-  );
-}
-
-const CATEGORY_BG: Record<string, string> = {
-  cardio: 'bg-red-500',
-  strength: 'bg-purple-500',
-  flexibility: 'bg-cyan-500',
-  sports: 'bg-orange-500',
-  outdoor: 'bg-emerald-500',
-  other: 'bg-zinc-600',
-};

@@ -79,7 +79,7 @@ export function WaterWeekCard({ water, today, unitSystem, loading, onEditGoal, o
   const dayCount = water?.days.length ?? 7;
 
   return (
-    <Card className="bg-slate-900/50 border-slate-800 backdrop-blur-xl">
+    <Card className="bg-surface-raised/50 border-hairline backdrop-blur-xl">
       <CardHeader className="p-4 sm:p-6 pb-2 sm:pb-3">
         <div className="flex items-start justify-between gap-3">
           <div className="flex items-center gap-2 sm:gap-3 min-w-0">

@@ -69,7 +69,7 @@ export function BodyCompDashboardCard() {
 
   return (
     <Link href="/body-composition" className="block">
-      <Card className="bg-slate-900/50 border-slate-800 backdrop-blur-xl hover:bg-slate-800/50 transition-colors cursor-pointer group">
+      <Card className="bg-surface-raised/50 border-hairline backdrop-blur-xl hover:bg-slate-800/50 transition-colors cursor-pointer group">
         <CardContent className="p-4 sm:p-6 flex items-center gap-4">
           <div className="w-12 h-12 rounded-full bg-purple-500/20 flex items-center justify-center flex-shrink-0 group-hover:scale-110 transition-transform">
             <PersonStanding className="w-6 h-6 text-purple-400" />

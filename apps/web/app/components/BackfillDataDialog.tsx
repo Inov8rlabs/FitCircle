@@ -82,7 +82,7 @@ export function BackfillDataDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="bg-slate-900/95 border-slate-800 backdrop-blur-xl max-w-md">
+      <DialogContent className="bg-surface/95 border-hairline backdrop-blur-xl max-w-md">
         <DialogHeader>
           <DialogTitle className="text-xl font-bold text-white flex items-center gap-2">
             <Calendar className="h-5 w-5 text-indigo-400" />

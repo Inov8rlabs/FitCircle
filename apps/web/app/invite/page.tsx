@@ -9,11 +9,8 @@ import { InviteHub } from '@/components/referrals/InviteHub';
  */
 export default function InvitePage() {
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950">
-      <div className="pointer-events-none fixed inset-0 overflow-hidden" aria-hidden>
-        <div className="absolute -top-40 left-1/2 h-[520px] w-[520px] -translate-x-1/2 rounded-full bg-purple-600/15 blur-3xl" />
-        <div className="absolute bottom-0 right-[-120px] h-[420px] w-[420px] rounded-full bg-pink-600/10 blur-3xl" />
-      </div>
+    <div className="min-h-screen bg-canvas">
+      <div className="pointer-events-none fixed inset-x-0 top-0 h-[480px] bg-[radial-gradient(60%_60%_at_50%_0%,rgba(139,92,246,0.18),transparent_70%)]" aria-hidden />
       <Navbar />
       <main className="relative">
         <InviteHub />

@@ -69,14 +69,14 @@ export default function MomentumPage() {
 
   if (!isAuthenticated) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
+      <div className="min-h-screen bg-canvas flex items-center justify-center">
         <p className="text-muted-foreground">Sign in to view your momentum.</p>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-background pb-24">
+    <div className="min-h-screen bg-canvas pb-24">
       <Navbar />
       <main className="mx-auto max-w-2xl px-4 py-6 space-y-6">
         {isLoading || !status ? (

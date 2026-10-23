@@ -1,29 +1,38 @@
 'use client';
 
-import { motion } from 'framer-motion';
-import { Users, Plus, UserPlus, Hash, Trophy, Calendar, Loader2 } from 'lucide-react';
-import { useRouter } from 'next/navigation';
-import { useState, useEffect } from 'react';
+import { AlertCircle, Flame, Hash, Plus, Users } from 'lucide-react';
+import { useEffect, useState } from 'react';
 
 import CircleCreationWizard from '@/components/CircleCreationWizard';
+import { CircleListCard, CircleListCardSkeleton, type CircleSummary } from '@/components/circles/CircleListCard';
 import DashboardNav from '@/components/DashboardNav';
 import QuickJoinCircle from '@/components/QuickJoinCircle';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
+import { Chip, ChipRow } from '@/components/ui/chip';
+import { EmptyState } from '@/components/ui/empty-state';
+import { GlassCard, ListGroup, ListRow, Screen, ScreenHeader } from '@/components/ui/ios';
 import { analytics } from '@/lib/analytics';
 import { useAuthStore } from '@/stores/auth-store';
 
-// import { fitCircleService } from '@/lib/services/fitcircle-service'; // Temporarily disabled due to RLS issues
+type Filter = 'active' | 'ended' | 'all';
 
+function isEnded(c: CircleSummary): boolean {
+  return Boolean(c.end_date) && new Date(c.end_date as string).getTime() < Date.now();
+}
+
+/**
+ * Circles tab, laid out like iOS CirclesListView: gradient title + Fitzy,
+ * Challenge Library row, Join with Code / Create Circle, an Active / Ended
+ * filter and one live card per circle.
+ */
 export default function CirclesPage() {
   const { user } = useAuthStore();
-  const router = useRouter();
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [isJoinDialogOpen, setIsJoinDialogOpen] = useState(false);
-  const [myCircles, setMyCircles] = useState<any[]>([]);
+  const [myCircles, setMyCircles] = useState<CircleSummary[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [hasError, setHasError] = useState(false);
+  const [filter, setFilter] = useState<Filter>('active');
 
   useEffect(() => {
     if (user) {
@@ -31,6 +40,7 @@ export default function CirclesPage() {
     } else {
       setIsLoading(false);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- refetch only when the signed-in user changes
   }, [user]);
 
   const fetchMyCircles = async () => {
@@ -38,42 +48,29 @@ export default function CirclesPage() {
       setIsLoading(false);
       return;
     }
-
     setIsLoading(true);
     setHasError(false);
-    
     try {
-      console.log('Starting to fetch circles for user:', user.id);
-
-      // Fetch circles from our API endpoint
-      const response = await fetch('/api/fitcircles', {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      });
-
+      // GET /api/fitcircles is the source of truth (migration 067 makes the
+      // browser anon-key client own-row-only on fitcircles/fitcircle_members).
+      const response = await fetch('/api/fitcircles', { headers: { 'Content-Type': 'application/json' } });
       if (response.ok) {
         const data = await response.json();
-        console.log('Successfully fetched circles:', data.circles?.length || 0);
-        setMyCircles(data.circles || []);
-        analytics.setUserProperties({ circles_count: (data.circles || []).length });
-        setIsLoading(false);
+        const circles: CircleSummary[] = (data.circles || []).map((c: CircleSummary & { challenge_id?: string }) => ({
+          ...c,
+          id: c.challenge_id || c.id,
+        }));
+        setMyCircles(circles);
+        analytics.setUserProperties({ circles_count: circles.length });
         return;
       }
-
-      // Note: no direct-query fallback here. Migration 067 makes the browser
-      // (anon-key) client own-row-only on `fitcircles`/`fitcircle_members`, so a
-      // client-side fallback query can no longer see private circles the user
-      // belongs to but didn't create. GET /api/fitcircles is the source of truth.
-      console.error('API call failed:', response.status, response.statusText);
-      const errorData = await response.json().catch(() => ({}));
-      console.error('Error response:', errorData);
+      console.error('GET /api/fitcircles failed:', response.status);
       setMyCircles([]);
       setHasError(true);
-    } catch (error: any) {
+    } catch (error) {
       console.error('Exception in fetchMyCircles:', error);
       setMyCircles([]);
+      setHasError(true);
     } finally {
       setIsLoading(false);
     }
@@ -84,216 +81,154 @@ export default function CirclesPage() {
     void fetchMyCircles();
   };
 
-  const handleCircleJoined = () => {
-    setIsJoinDialogOpen(false);
-    void fetchMyCircles();
+  const counts = {
+    active: myCircles.filter((c) => !isEnded(c)).length,
+    ended: myCircles.filter(isEnded).length,
+    all: myCircles.length,
   };
-
-  const hasActiveCircles = myCircles.length > 0;
+  const shown = myCircles.filter((c) => (filter === 'all' ? true : filter === 'ended' ? isEnded(c) : !isEnded(c)));
 
   return (
     <>
       <DashboardNav />
-      <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950">
-        {/* Subtle circle background decoration */}
-        <div className="fixed inset-0 overflow-hidden pointer-events-none">
-          <div className="absolute top-20 left-10 w-96 h-96 bg-indigo-500/5 rounded-full blur-3xl" />
-          <div className="absolute top-40 right-20 w-[500px] h-[500px] bg-purple-500/5 rounded-full blur-3xl" />
-          <div className="absolute bottom-20 left-1/3 w-[400px] h-[400px] bg-orange-500/5 rounded-full blur-3xl" />
-        </div>
+      <div className="min-h-screen bg-canvas">
+        <Screen size="wide" className="max-w-5xl">
+          <ScreenHeader title="FitCircles" subtitle="Join groups and compete with friends" />
 
-        <div className="relative max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-8 lg:py-12 overflow-x-hidden">
-          <div className="mb-6 sm:mb-8">
-            <h1 className="text-2xl sm:text-3xl lg:text-5xl font-bold bg-gradient-to-r from-indigo-300 via-fuchsia-400 to-orange-400 bg-clip-text text-transparent mb-1.5 sm:mb-2">
-              FitCircles
-            </h1>
-            <p className="text-gray-400 text-xs sm:text-sm lg:text-base mb-4 sm:mb-6">
-              Join groups and compete with friends
-            </p>
+          <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px] lg:items-start">
+            <div className="min-w-0 space-y-4">
+              {/* Join / Create (iOS SecondaryButton + PrimaryButton) */}
+              <div className="grid grid-cols-2 gap-3 lg:hidden">
+                <Button variant="outline" size="lg" className="px-3" onClick={() => setIsJoinDialogOpen(true)} data-testid="join-with-code">
+                  <Hash className="mr-2 h-4 w-4 shrink-0" />
+                  Join with Code
+                </Button>
+                <Button size="lg" className="px-3" onClick={() => setIsCreateDialogOpen(true)} data-testid="create-circle">
+                  <Plus className="mr-2 h-4 w-4 shrink-0" />
+                  Create Circle
+                </Button>
+              </div>
 
-            {/* Action Buttons */}
-            <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 justify-center sm:justify-start max-w-2xl">
-              <Button
-                onClick={() => setIsJoinDialogOpen(true)}
-                variant="outline"
-                size="lg"
-                className="border-slate-700 bg-slate-800/50 hover:bg-slate-800 text-white group w-full sm:w-auto"
-              >
-                <Hash className="h-4 w-4 sm:h-5 sm:w-5 mr-2 group-hover:text-orange-400 transition-colors" />
-                Join with Code
-              </Button>
-              <Button
-                onClick={() => setIsCreateDialogOpen(true)}
-                size="lg"
-                className="bg-gradient-to-r from-orange-600 to-purple-600 hover:from-orange-700 hover:to-purple-700 w-full sm:w-auto"
-              >
-                <Plus className="h-4 w-4 sm:h-5 sm:w-5 mr-2" />
-                Create New Circle
-              </Button>
-            </div>
-          </div>
-
-          {/* Error State */}
-          {hasError && (
-            <Card className="bg-red-900/20 border-red-800/50 backdrop-blur-xl mb-6">
-              <CardContent className="p-6">
-                <div className="flex items-start gap-3">
-                  <div className="p-2 bg-red-500/20 rounded-lg">
-                    <svg className="h-5 w-5 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                    </svg>
-                  </div>
-                  <div className="flex-1">
-                    <h3 className="text-red-400 font-semibold mb-1">Unable to load FitCircles</h3>
-                    <p className="text-gray-400 text-sm mb-3">
-                      There was an issue loading your FitCircles. This might be due to database configuration.
-                    </p>
-                    <div className="flex gap-3 flex-wrap">
-                      <Button
-                        onClick={() => {
-                          setHasError(false);
-                          void fetchMyCircles();
-                        }}
-                        variant="outline"
-                        className="border-red-800 hover:bg-red-900/20 text-sm"
-                      >
-                        Try Again
-                      </Button>
-                      <Button
-                        onClick={() => setIsCreateDialogOpen(true)}
-                        className="bg-gradient-to-r from-orange-600 to-purple-600 hover:from-orange-700 hover:to-purple-700 text-sm"
-                      >
-                        Create New Circle
-                      </Button>
-                      {process.env.NODE_ENV === 'development' && (
-                        <Button
-                          onClick={() => {
-                            void (async () => {
-                              const res = await fetch('/api/debug/test-circles');
-                              const data = await res.json();
-                              console.log('Debug test results:', data);
-                              alert('Check console for debug results');
-                            })();
-                          }}
-                          variant="outline"
-                          className="border-yellow-600 hover:bg-yellow-900/20 text-sm"
-                        >
-                          Debug Test
-                        </Button>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Empty State */}
-          {!isLoading && !hasActiveCircles && !hasError && (
-            <Card className="bg-slate-900/50 border-slate-800 backdrop-blur-xl">
-              <CardContent className="p-12 text-center">
-                {/* Icon in circle with gradient background */}
-                <div className="mb-6 inline-flex">
-                  <div className="relative">
-                    <div className="absolute inset-0 bg-gradient-to-br from-orange-500/20 to-purple-500/20 rounded-full blur-xl" />
-                    <div className="relative w-24 h-24 rounded-full bg-gradient-to-br from-orange-900/40 to-purple-900/40 flex items-center justify-center border border-orange-500/30">
-                      <Users className="w-12 h-12 text-orange-400" />
-                    </div>
-                  </div>
-                </div>
-
-                <h3 className="text-2xl font-semibold text-orange-200 mb-2">No Active FitCircles</h3>
-                <p className="text-gray-400 max-w-lg mx-auto">
-                  Create your first FitCircle to start competing with friends, track progress together, and achieve your fitness goals
-                </p>
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Active Circles View */}
-          {!isLoading && hasActiveCircles && !hasError && (
-            <div className="space-y-6">
-              {/* Loading state */}
-              {isLoading ? (
-                <div className="flex items-center justify-center py-12">
-                  <Loader2 className="h-8 w-8 animate-spin text-orange-400" />
-                </div>
-              ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {myCircles.map((circle) => (
-                    <motion.div
-                      key={circle.challenge_id || circle.id}
-                      whileHover={{ scale: 1.02 }}
-                      whileTap={{ scale: 0.98 }}
+              {myCircles.length > 0 && (
+                <ChipRow>
+                  {(['active', 'ended', 'all'] as const).map((f) => (
+                    <Chip
+                      key={f}
+                      selected={filter === f}
+                      onClick={() => setFilter(f)}
+                      className={filter === f ? 'bg-gradient-brand' : undefined}
                     >
-                      <Card
-                        className="bg-slate-900/50 border-slate-800 backdrop-blur-xl hover:border-orange-500/50 transition-all cursor-pointer"
-                        onClick={() => { void router.push(`/fitcircles/${circle.challenge_id || circle.id}`); }}
-                      >
-                        <CardContent className="p-6">
-                          <div className="flex items-start justify-between mb-4">
-                            <div className="p-3 bg-gradient-to-br from-orange-500/20 to-purple-500/20 rounded-lg">
-                              <Trophy className="h-6 w-6 text-orange-400" />
-                            </div>
-                            <Badge
-                              variant={circle.status === 'active' ? 'default' : 'secondary'}
-                              className="text-xs"
-                            >
-                              {circle.status}
-                            </Badge>
-                          </div>
-                          
-                          <h3 className="text-lg font-semibold text-white mb-2">
-                            {circle.name}
-                          </h3>
-                          
-                          {circle.description && (
-                            <p className="text-sm text-gray-400 mb-4 line-clamp-2">
-                              {circle.description}
-                            </p>
-                          )}
-                          
-                          <div className="flex items-center justify-between text-xs text-gray-500">
-                            <div className="flex items-center gap-1">
-                              <Users className="h-3 w-3" />
-                              <span>{circle.participant_count || 0} participants</span>
-                            </div>
-                            <div className="flex items-center gap-1">
-                              <Calendar className="h-3 w-3" />
-                              <span>
-                                {new Date(circle.end_date) > new Date()
-                                  ? `${Math.ceil((new Date(circle.end_date).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24))}d left`
-                                  : 'Ended'
-                                }
-                              </span>
-                            </div>
-                          </div>
-                        </CardContent>
-                      </Card>
-                    </motion.div>
+                      {f === 'active' ? 'Active' : f === 'ended' ? 'Ended' : 'All'}
+                      {counts[f] > 0 && (
+                        <span className={filter === f ? 'rounded-full bg-white/25 px-1.5 text-caption' : 'rounded-full bg-white/10 px-1.5 text-caption'}>
+                          {counts[f]}
+                        </span>
+                      )}
+                    </Chip>
                   ))}
+                </ChipRow>
+              )}
+
+              {hasError && (
+                <GlassCard className="border-brand-red/30 bg-brand-red/10" role="alert">
+                  <div className="flex items-start gap-3">
+                    <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-brand-red" aria-hidden />
+                    <div className="min-w-0 flex-1">
+                      <h3 className="text-headline text-white">Couldn&apos;t load your circles</h3>
+                      <p className="mt-1 text-subhead text-fg-secondary">Check your connection and try again.</p>
+                      <Button variant="outline" size="sm" className="mt-3" onClick={() => void fetchMyCircles()}>
+                        Try again
+                      </Button>
+                    </div>
+                  </div>
+                </GlassCard>
+              )}
+
+              {isLoading ? (
+                <div className="space-y-4" data-testid="circles-loading">
+                  <CircleListCardSkeleton />
+                  <CircleListCardSkeleton />
                 </div>
+              ) : !hasError && myCircles.length === 0 ? (
+                <GlassCard>
+                  <EmptyState
+                    icon={Users}
+                    tone="orange"
+                    title="No Circles Yet"
+                    description="Create a circle and invite a few friends, or join one with an invite code."
+                    action={
+                      <div className="flex flex-wrap justify-center gap-3">
+                        <Button onClick={() => setIsCreateDialogOpen(true)}>
+                          <Plus className="mr-2 h-4 w-4 shrink-0" />
+                          Create Circle
+                        </Button>
+                        <Button variant="outline" onClick={() => setIsJoinDialogOpen(true)}>
+                          <Hash className="mr-2 h-4 w-4 shrink-0" />
+                          Join with Code
+                        </Button>
+                      </div>
+                    }
+                  />
+                </GlassCard>
+              ) : !hasError && shown.length === 0 ? (
+                <GlassCard>
+                  <EmptyState
+                    icon={Users}
+                    tone="indigo"
+                    title={filter === 'ended' ? 'No ended circles' : 'No active circles'}
+                    description={filter === 'ended' ? 'Circles you finish land here.' : 'Start a new one or join with a code.'}
+                  />
+                </GlassCard>
+              ) : (
+                <ul className="space-y-4" data-testid="circles-list">
+                  {shown.map((circle) => (
+                    <li key={circle.id}>
+                      <CircleListCard circle={circle} />
+                    </li>
+                  ))}
+                </ul>
               )}
             </div>
-          )}
-        </div>
+
+            {/* Side column on desktop; stacked under the list on phones */}
+            <aside className="space-y-4 lg:sticky lg:top-24">
+              <div className="hidden gap-3 lg:grid">
+                <Button size="lg" fullWidth onClick={() => setIsCreateDialogOpen(true)}>
+                  <Plus className="mr-2 h-4 w-4 shrink-0" />
+                  Create Circle
+                </Button>
+                <Button variant="outline" size="lg" fullWidth onClick={() => setIsJoinDialogOpen(true)}>
+                  <Hash className="mr-2 h-4 w-4 shrink-0" />
+                  Join with Code
+                </Button>
+              </div>
+              <ListGroup className="mb-0">
+                <ListRow
+                  href="/challenges"
+                  icon={Flame}
+                  tone="orange"
+                  title="Challenge Library"
+                  subtitle="Browse and start challenges"
+                  testId="challenge-library-row"
+                />
+                <ListRow href="/invite" icon={Users} tone="pink" title="Invite friends" subtitle="Better together: share your link" />
+              </ListGroup>
+            </aside>
+          </div>
+        </Screen>
       </div>
 
-      {/* Circle Creation Wizard */}
       <CircleCreationWizard
         isOpen={isCreateDialogOpen}
         onClose={() => setIsCreateDialogOpen(false)}
         onSuccess={handleCircleCreated}
       />
 
-      {/* Quick Join Circle Modal */}
       <QuickJoinCircle
         isOpen={isJoinDialogOpen}
         onClose={() => {
           setIsJoinDialogOpen(false);
-          if (user) {
-            void fetchMyCircles(); // Refresh after joining
-          }
+          if (user) void fetchMyCircles();
         }}
       />
     </>

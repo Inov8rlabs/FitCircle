@@ -1,7 +1,7 @@
 {
   "$schema": "./tracking-plan.schema.json",
   "version": 11,
-  "updated": "2026-10-16",
+  "updated": "2026-10-22",
   "conventions": {
     "eventNames": "Title Case, '<Object> <Past-tense verb>' (e.g. 'Meal Logged'). Names are frozen once shipped: rename in the analytics tool, never in code.",
     "propertyNames": "snake_case. Enum values are lowercase snake_case.",
@@ -1912,6 +1912,136 @@
           "type": "string",
           "required": true,
           "description": "hero, footer, pricing, invite_landing …"
+        }
+      ]
+    },
+    {
+      "name": "Get App Clicked",
+      "category": "acquisition",
+      "platforms": [
+        "web"
+      ],
+      "description": "A 'Get the app' CTA (routes through /get) was tapped. store is where /get sends this device.",
+      "properties": [
+        {
+          "name": "placement",
+          "type": "string",
+          "required": true,
+          "description": "hero, nav, banner, footer, post_signup, invite_landing, get_page …"
+        },
+        {
+          "name": "device_platform",
+          "type": "enum",
+          "values": [
+            "ios",
+            "android",
+            "desktop"
+          ],
+          "required": true,
+          "description": "Visitor's device class from the user agent (iPadOS counts as ios)."
+        },
+        {
+          "name": "store",
+          "type": "enum",
+          "values": [
+            "app_store",
+            "play_store",
+            "none"
+          ],
+          "required": true,
+          "description": "none = desktop, shown the QR fallback page."
+        },
+        {
+          "name": "has_invite",
+          "type": "bool",
+          "required": true
+        }
+      ]
+    },
+    {
+      "name": "Get App Page Viewed",
+      "category": "acquisition",
+      "platforms": [
+        "web"
+      ],
+      "description": "A web-to-app handoff page rendered: the /get desktop fallback or the post-signup 'get the app' screen.",
+      "properties": [
+        {
+          "name": "source",
+          "type": "enum",
+          "values": [
+            "get_page",
+            "post_signup"
+          ],
+          "required": true
+        },
+        {
+          "name": "device_platform",
+          "type": "enum",
+          "values": [
+            "ios",
+            "android",
+            "desktop"
+          ],
+          "required": true,
+          "description": "Visitor's device class from the user agent (iPadOS counts as ios)."
+        },
+        {
+          "name": "has_invite",
+          "type": "bool",
+          "required": true
+        }
+      ]
+    },
+    {
+      "name": "Open In App Clicked",
+      "category": "acquisition",
+      "platforms": [
+        "web"
+      ],
+      "description": "'Open in FitCircle' (universal link / Android intent) tapped on a mobile web page.",
+      "properties": [
+        {
+          "name": "placement",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "device_platform",
+          "type": "enum",
+          "values": [
+            "ios",
+            "android",
+            "desktop"
+          ],
+          "required": true,
+          "description": "Visitor's device class from the user agent (iPadOS counts as ios)."
+        }
+      ]
+    },
+    {
+      "name": "App Banner Dismissed",
+      "category": "acquisition",
+      "platforms": [
+        "web"
+      ],
+      "description": "The sticky mobile 'get the app' banner was closed (hidden for 14 days).",
+      "properties": [
+        {
+          "name": "placement",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "device_platform",
+          "type": "enum",
+          "values": [
+            "ios",
+            "android",
+            "desktop"
+          ],
+          "required": true,
+          "description": "Visitor's device class from the user agent (iPadOS counts as ios)."
         }
       ]
     },

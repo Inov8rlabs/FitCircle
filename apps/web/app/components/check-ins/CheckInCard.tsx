@@ -38,12 +38,6 @@ const CHECK_IN_COLORS = {
   },
 };
 
-// Mood emojis mapping
-const MOOD_EMOJIS: Record<number, string> = {
-  1: '😫', 2: '😔', 3: '😕', 4: '😐',
-  5: '🙂', 6: '😊', 7: '😁', 8: '🤩',
-  9: '🎉', 10: '🔥',
-};
 
 interface CheckInCardProps {
   checkIn: CheckIn;
@@ -75,20 +69,14 @@ export function CheckInCard({
     : null;
 
   // Format date
-  const date = new Date(checkIn.tracking_date);
+  // tracking_date is a calendar day (YYYY-MM-DD): parse it as local, not UTC midnight.
+  const date = new Date(`${checkIn.tracking_date.slice(0, 10)}T00:00:00`);
   const dateStr = format(date, 'MMM d, yyyy');
   const timeStr = format(new Date(checkIn.created_at), 'h:mm a');
 
   // Get icon based on type
   const Icon = type === 'weight' ? Scale : type === 'steps' ? Footprints : Activity;
 
-  // Mood emoji
-  const moodEmoji = checkIn.mood_score ? MOOD_EMOJIS[checkIn.mood_score] : null;
-
-  // Energy level (lightning bolts)
-  const energyBolts = checkIn.energy_level
-    ? '⚡'.repeat(Math.ceil(checkIn.energy_level / 2))
-    : null;
 
   return (
     <motion.div
@@ -173,21 +161,9 @@ export function CheckInCard({
           )}
         </div>
 
-        {/* Mood, Energy, Notes */}
-        {!compact && (moodEmoji || energyBolts || checkIn.notes) && (
+        {/* Notes */}
+        {!compact && checkIn.notes && (
           <div className="flex items-center gap-4 pt-2 border-t border-slate-700/50">
-            {moodEmoji && (
-              <div className="flex items-center gap-1">
-                <span className="text-lg">{moodEmoji}</span>
-                <span className="text-xs text-slate-400">Mood</span>
-              </div>
-            )}
-            {energyBolts && (
-              <div className="flex items-center gap-1">
-                <span className="text-sm">{energyBolts}</span>
-                <span className="text-xs text-slate-400">Energy</span>
-              </div>
-            )}
             {checkIn.notes && (
               <p className="text-sm text-slate-300 line-clamp-1 flex-1">
                 &quot;{checkIn.notes}&quot;

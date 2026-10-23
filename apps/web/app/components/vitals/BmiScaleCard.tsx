@@ -55,7 +55,7 @@ export function BmiScaleCard({ bmi, unitSystem, loading }: BmiScaleCardProps) {
   }));
 
   return (
-    <Card className="bg-slate-900/50 border-slate-800 backdrop-blur-xl">
+    <Card className="bg-surface-raised/50 border-hairline backdrop-blur-xl">
       <CardHeader className="p-4 sm:p-6 pb-2 sm:pb-3">
         <div className="flex items-start justify-between gap-3">
           <div className="flex items-center gap-2 sm:gap-3 min-w-0">
@@ -141,7 +141,7 @@ export function BmiScaleCard({ bmi, unitSystem, loading }: BmiScaleCardProps) {
         ) : missing === 'height' ? (
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 rounded-lg bg-slate-800/40 p-4">
             <p className="text-sm text-gray-300">Add your height to see BMI</p>
-            <Button asChild size="sm" className="bg-purple-600 hover:bg-purple-700 text-white">
+            <Button asChild size="sm" className="bg-gradient-brand shadow-glow transition hover:brightness-110 text-white">
               <Link href="/profile">Edit Profile</Link>
             </Button>
           </div>

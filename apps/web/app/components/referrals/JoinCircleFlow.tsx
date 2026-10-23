@@ -11,7 +11,6 @@ import {
   Clock,
   Dumbbell,
   Footprints,
-  Loader2,
   Shield,
   Star,
   Trophy,
@@ -22,10 +21,12 @@ import { useCallback, useEffect, useState } from 'react';
 import { toast } from 'sonner';
 
 import GoalSettingForm from '@/components/GoalSettingForm';
-import { Avatar } from '@/components/ui/avatar';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { EmptyState } from '@/components/ui/empty-state';
+import { GradientText } from '@/components/ui/gradient-text';
+import { AvatarCircle, GlassCard, ToneDisc } from '@/components/ui/ios';
+import { Skeleton } from '@/components/ui/skeleton';
+import { StatTile } from '@/components/ui/stat-tile';
 import { AnalyticsEvents, analytics, toErrorKind } from '@/lib/analytics';
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/stores/auth-store';
@@ -64,19 +65,6 @@ function challengeIcon(type: string) {
       return Dumbbell;
     default:
       return Star;
-  }
-}
-
-function challengeColor(type: string) {
-  switch (type) {
-    case 'weight_loss':
-      return 'from-purple-500 to-purple-600';
-    case 'step_count':
-      return 'from-indigo-500 to-indigo-600';
-    case 'workout_frequency':
-      return 'from-orange-500 to-orange-600';
-    default:
-      return 'from-green-500 to-green-600';
   }
 }
 
@@ -225,44 +213,42 @@ export function JoinCircleFlow({
 
   if (isLoading) {
     return (
-      <div className="min-h-[60vh] flex items-center justify-center">
-        <div className="text-center">
-          <Loader2 className="h-8 w-8 animate-spin text-purple-400 mx-auto mb-4" />
-          <p className="text-gray-400">Getting your seat ready…</p>
+      <div className="mx-auto w-full max-w-2xl px-4 py-10" aria-busy="true" data-testid="join-loading">
+        <span className="sr-only">Getting your seat ready…</span>
+        <div className="flex flex-col items-center">
+          <Skeleton className="h-4 w-28" />
+          <Skeleton className="mt-3 h-9 w-60" />
+          <Skeleton className="mt-2 h-4 w-72 max-w-full" />
+          <Skeleton className="mt-5 h-12 w-56 rounded-full" />
         </div>
+        <div className="mt-6 grid grid-cols-2 gap-3">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <Skeleton key={i} className="h-[118px] rounded-xl" />
+          ))}
+        </div>
+        <Skeleton className="mt-4 h-28 rounded-xl" />
+        <Skeleton className="mt-6 h-14 rounded-xl" />
       </div>
     );
   }
 
   if (!circle || !canJoin) {
     return (
-      <div className="min-h-[60vh] flex items-center justify-center p-4">
-        <Card className="max-w-md w-full bg-slate-900/50 border-slate-800 backdrop-blur-xl">
-          <CardContent className="p-8 text-center">
-            <div className="mb-6">
-              <div className={`p-4 rounded-full inline-flex mb-4 ${isAlreadyMember ? 'bg-purple-500/10' : 'bg-red-500/10'}`}>
-                {isAlreadyMember ? (
-                  <CheckCircle2 className="h-12 w-12 text-purple-400" />
-                ) : (
-                  <AlertCircle className="h-12 w-12 text-red-400" />
-                )}
-              </div>
-            </div>
-            <h2 className="text-2xl font-bold text-white mb-2">
-              {isAlreadyMember ? "You're already in!" : 'Unable to join'}
-            </h2>
-            <p className="text-gray-400 mb-6">
-              {isAlreadyMember ? "You're already part of this FitCircle." : joinError || 'This invite link is not valid.'}
-            </p>
-            <Button
-              onClick={() => router.push(isAlreadyMember && circle ? `/fitcircles/${circle.id}` : '/fitcircles')}
-              className="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700"
-            >
-              {isAlreadyMember ? 'Go to circle' : 'Browse FitCircles'}
-              <ChevronRight className="h-4 w-4 ml-2" />
-            </Button>
-          </CardContent>
-        </Card>
+      <div className="mx-auto flex min-h-[60vh] w-full max-w-md items-center px-4">
+        <GlassCard className="w-full">
+          <EmptyState
+            icon={isAlreadyMember ? CheckCircle2 : AlertCircle}
+            tone={isAlreadyMember ? 'purple' : 'orange'}
+            title={isAlreadyMember ? "You're already in!" : 'Unable to join'}
+            description={isAlreadyMember ? "You're already part of this FitCircle." : joinError || 'This invite link is not valid.'}
+            action={
+              <Button onClick={() => router.push(isAlreadyMember && circle ? `/fitcircles/${circle.id}` : '/fitcircles')}>
+                {isAlreadyMember ? 'Go to circle' : 'Browse FitCircles'}
+                <ChevronRight className="ml-2 h-4 w-4" />
+              </Button>
+            }
+          />
+        </GlassCard>
       </div>
     );
   }
@@ -285,117 +271,98 @@ export function JoinCircleFlow({
     circle.status === 'active'
       ? Math.max(0, Math.ceil((new Date(circle.end_date).getTime() - Date.now()) / DAY_MS))
       : Math.max(0, Math.ceil((new Date(circle.start_date).getTime() - Date.now()) / DAY_MS));
+  const typeLabel = circle.type
+    .split('_')
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(' ');
 
   return (
-    <div className="relative max-w-3xl mx-auto px-4 py-10">
+    <div className="relative mx-auto w-full max-w-2xl px-4 pb-16 pt-6 sm:pt-10">
       {onBack && (
         <button
           type="button"
           onClick={onBack}
-          className="mb-4 inline-flex items-center gap-2 text-sm text-gray-400 hover:text-white"
+          aria-label="Back"
+          className="mb-4 flex h-10 w-10 items-center justify-center rounded-full border border-glass bg-surface-raised/60 text-white transition hover:bg-surface-raised"
         >
-          <ArrowLeft className="h-4 w-4" /> Back
+          <ArrowLeft className="h-5 w-5" />
         </button>
       )}
-      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }}>
-        <Card className="bg-slate-900/50 border-slate-800 backdrop-blur-xl overflow-hidden">
-          <div className={`h-2 bg-gradient-to-r ${challengeColor(circle.type)}`} />
-          <CardHeader className="pb-4">
-            <div className="flex items-start justify-between gap-3">
-              <div className="flex-1 min-w-0">
-                <CardTitle className="text-2xl sm:text-3xl font-bold text-white mb-2 break-words">{circle.name}</CardTitle>
-                {circle.description && (
-                  <CardDescription className="text-base text-gray-400">{circle.description}</CardDescription>
-                )}
-              </div>
-              <Badge variant={circle.status === 'active' ? 'default' : 'secondary'} className="text-xs shrink-0">
-                {circle.status === 'active' ? 'Active' : 'Starting Soon'}
-              </Badge>
-            </div>
-            <div className="flex items-center gap-3 mt-6 p-3 bg-slate-800/30 rounded-lg">
-              <Avatar
-                src={circle.creator.avatar_url}
-                fallback={circle.creator.display_name}
-                size="md"
-                className="h-10 w-10"
-              />
-              <div>
-                <p className="text-sm text-gray-400">Created by</p>
-                <p className="text-white font-medium">{circle.creator.display_name}</p>
-              </div>
-            </div>
-          </CardHeader>
+      <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}>
+        {/* iOS circle header: status, gradient name, description, creator */}
+        <header className="flex flex-col items-center text-center">
+          <span
+            className={
+              circle.status === 'active'
+                ? 'rounded-full bg-brand-green/15 px-3 py-1 text-caption font-semibold text-brand-green'
+                : 'rounded-full bg-brand-orange/15 px-3 py-1 text-caption font-semibold text-brand-orange'
+            }
+          >
+            {circle.status === 'active' ? 'Active' : 'Starting Soon'}
+          </span>
+          <GradientText as="h1" className="mt-3 break-words text-[30px] font-bold leading-tight sm:text-large-title">
+            {circle.name}
+          </GradientText>
+          {circle.description && <p className="mt-1 max-w-lg text-subhead text-fg-secondary">{circle.description}</p>}
+          <div className="mt-5 inline-flex items-center gap-3 rounded-full border border-glass bg-surface-raised/50 py-1.5 pl-1.5 pr-4">
+            <AvatarCircle name={circle.creator.display_name} src={circle.creator.avatar_url} size={36} />
+            <span className="text-left leading-tight">
+              <span className="block text-caption text-fg-secondary">Created by</span>
+              <span className="block text-subhead font-semibold text-white">{circle.creator.display_name}</span>
+            </span>
+          </div>
+        </header>
 
-          <CardContent className="space-y-6">
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-              <Stat icon={<Icon className="h-6 w-6 text-orange-400 mx-auto mb-2" />} label="Challenge">
-                {circle.type
-                  .split('_')
-                  .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
-                  .join(' ')}
-              </Stat>
-              <Stat icon={<Users className="h-6 w-6 text-purple-400 mx-auto mb-2" />} label="Members">
+        <div className="mt-6 grid grid-cols-2 gap-3">
+          <StatTile icon={Icon} tone="orange" label="Challenge" value={<span className="text-headline">{typeLabel}</span>} />
+          <StatTile
+            icon={Users}
+            tone="purple"
+            label="Members"
+            value={
+              <>
                 {circle.participant_count}
-                {circle.max_participants ? (
-                  <span className="text-sm text-gray-400">/{circle.max_participants}</span>
-                ) : null}
-              </Stat>
-              <Stat icon={<Calendar className="h-6 w-6 text-indigo-400 mx-auto mb-2" />} label="Days total">
-                {durationDays(circle.start_date, circle.end_date)}
-              </Stat>
-              <Stat
-                icon={<Clock className="h-6 w-6 text-green-400 mx-auto mb-2" />}
-                label={circle.status === 'active' ? 'Days left' : 'Days until start'}
-              >
-                {daysLeft}
-              </Stat>
-            </div>
+                {circle.max_participants ? <span className="text-subhead text-fg-secondary">/{circle.max_participants}</span> : null}
+              </>
+            }
+          />
+          <StatTile icon={Calendar} tone="indigo" label="Days total" value={durationDays(circle.start_date, circle.end_date)} />
+          <StatTile icon={Clock} tone="green" label={circle.status === 'active' ? 'Days left' : 'Days until start'} value={daysLeft} />
+        </div>
 
-            <div className="bg-gradient-to-br from-green-900/20 to-green-800/10 rounded-lg p-5 border border-green-500/30">
-              <div className="flex items-start gap-4">
-                <div className="p-2 bg-green-500/20 rounded-lg">
-                  <Shield className="h-6 w-6 text-green-400" />
-                </div>
-                <div className="flex-1">
-                  <h3 className="text-lg font-semibold text-green-400 mb-2">Your privacy is protected</h3>
-                  <ul className="space-y-1 text-sm text-gray-300">
-                    <li className="flex items-start gap-2">
-                      <CheckCircle2 className="h-4 w-4 text-green-400 mt-0.5 flex-shrink-0" />
-                      <span>Only your progress percentage is shared with the group</span>
-                    </li>
-                    <li className="flex items-start gap-2">
-                      <CheckCircle2 className="h-4 w-4 text-green-400 mt-0.5 flex-shrink-0" />
-                      <span>Your actual weight, measurements, or metrics stay private</span>
-                    </li>
-                  </ul>
-                </div>
-              </div>
+        <GlassCard className="mt-4 border-brand-green/25 bg-brand-green/[0.06]">
+          <div className="flex items-start gap-3">
+            <ToneDisc icon={Shield} tone="green" />
+            <div className="min-w-0 flex-1">
+              <h3 className="text-headline text-white">Your privacy is protected</h3>
+              <ul className="mt-2 space-y-1.5 text-subhead text-fg-secondary">
+                <li className="flex items-start gap-2">
+                  <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-brand-green" aria-hidden />
+                  <span>Only your progress percentage is shared with the group</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-brand-green" aria-hidden />
+                  <span>Your actual weight, measurements, or metrics stay private</span>
+                </li>
+              </ul>
             </div>
+          </div>
+        </GlassCard>
 
-            <Button
-              size="lg"
-              onClick={() => {
-                analytics.track(AnalyticsEvents.fitCircleJoinStarted({ source: 'invite_link' }));
-                setShowGoalSetting(true);
-              }}
-              className="w-full bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-lg py-6"
-            >
-              Set your goal & join
-              <ArrowRight className="h-5 w-5 ml-2" />
-            </Button>
-          </CardContent>
-        </Card>
+        <Button
+          size="xl"
+          fullWidth
+          className="mt-6"
+          data-testid="join-set-goal"
+          onClick={() => {
+            analytics.track(AnalyticsEvents.fitCircleJoinStarted({ source: 'invite_link' }));
+            setShowGoalSetting(true);
+          }}
+        >
+          Set your goal & join
+          <ArrowRight className="ml-2 h-5 w-5" />
+        </Button>
       </motion.div>
-    </div>
-  );
-}
-
-function Stat({ icon, label, children }: { icon: React.ReactNode; label: string; children: React.ReactNode }) {
-  return (
-    <div className="bg-slate-800/30 rounded-lg p-4 text-center">
-      {icon}
-      <p className="text-xl font-bold text-white">{children}</p>
-      <p className="text-xs text-gray-400 mt-1">{label}</p>
     </div>
   );
 }

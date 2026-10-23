@@ -15,11 +15,14 @@ describe('middleware isPublicPath', () => {
     '/.well-known/apple-app-site-association',
     '/register',
     '/',
+    '/get',
+    '/open',
+    '/welcome/app',
   ])('%s is public', (path) => {
     expect(isPublicPath(path)).toBe(true);
   });
 
-  it.each(['/invite', '/invite/', '/invite/unsubscribe-other', '/inviteX', '/ideas', '/dashboard'])(
+  it.each(['/invite', '/invite/', '/invite/unsubscribe-other', '/inviteX', '/ideas', '/dashboard', '/getaway', '/opener', '/welcome'])(
     '%s requires sign-in',
     (path) => {
       expect(isPublicPath(path)).toBe(false);

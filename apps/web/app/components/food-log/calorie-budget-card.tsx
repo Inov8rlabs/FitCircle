@@ -31,15 +31,18 @@ export function CalorieBudgetCard({ consumed, budget = DEFAULT_CALORIE_BUDGET }:
       : `${remaining.toLocaleString()} left`;
 
   return (
-    <div className="rounded-xl border border-slate-800/60 bg-slate-900/60 p-5 backdrop-blur-xl">
+    <section
+      className="rounded-xl border border-glass bg-surface-raised/50 p-4 shadow-ios-sm backdrop-blur-xl sm:p-5"
+      data-testid="calorie-budget-card"
+    >
       <div className="flex items-center gap-5">
         <div
-          className="relative h-28 w-28 shrink-0"
+          className="relative h-[104px] w-[104px] shrink-0"
           role="img"
           aria-label={`${eaten} of ${safeBudget} calories, ${status}`}
         >
           <svg viewBox="0 0 120 120" className="h-full w-full -rotate-90" aria-hidden="true">
-            <circle cx="60" cy="60" r={radius} fill="none" stroke="rgba(148,163,184,0.15)" strokeWidth="10" />
+            <circle cx="60" cy="60" r={radius} fill="none" stroke="rgba(16,185,129,0.14)" strokeWidth="10" />
             <circle
               cx="60"
               cy="60"
@@ -53,26 +56,26 @@ export function CalorieBudgetCard({ consumed, budget = DEFAULT_CALORIE_BUDGET }:
             />
           </svg>
           <div className="absolute inset-0 flex flex-col items-center justify-center">
-            <span className="text-2xl font-bold tabular-nums text-white">{pct}%</span>
-            <span className="text-[10px] uppercase tracking-wide text-gray-400">of budget</span>
+            <span className="text-title2 font-bold tabular-nums text-white">{pct}%</span>
+            <span className="text-caption text-fg-secondary">of budget</span>
           </div>
         </div>
 
         <div className="min-w-0 flex-1 space-y-2">
-          <div className="text-sm font-semibold text-white">Today&apos;s calories</div>
-          <div className="text-2xl font-bold tabular-nums text-white">
+          <div className="text-headline text-white">Today&apos;s calories</div>
+          <div className="text-title2 font-bold tabular-nums text-white">
             {eaten.toLocaleString()}
-            <span className="text-base font-medium text-gray-400"> / {safeBudget.toLocaleString()}</span>
+            <span className="text-callout font-medium text-fg-secondary"> / {safeBudget.toLocaleString()}</span>
           </div>
           <div
             className={cn(
-              'inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold',
-              isOver ? 'bg-orange-500/15 text-orange-300' : 'bg-emerald-500/15 text-emerald-300'
+              'inline-flex rounded-full px-2.5 py-0.5 text-caption font-semibold',
+              isOver ? 'bg-brand-orange/15 text-brand-orange' : 'bg-brand-green/15 text-brand-green'
             )}
           >
             {status}
           </div>
-          <div className="h-1.5 overflow-hidden rounded-full bg-slate-800">
+          <div className="h-1.5 overflow-hidden rounded-full bg-white/10">
             <div
               className="h-full rounded-full transition-[width] duration-700"
               style={{ width: `${pct}%`, backgroundColor: color }}
@@ -80,6 +83,6 @@ export function CalorieBudgetCard({ consumed, budget = DEFAULT_CALORIE_BUDGET }:
           </div>
         </div>
       </div>
-    </div>
+    </section>
   );
 }

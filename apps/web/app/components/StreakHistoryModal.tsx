@@ -9,7 +9,7 @@
  * Features:
  * - Current streak stats (days, longest streak, freezes)
  * - Chronological list of all check-ins
- * - Detailed info for each check-in (weight, steps, mood, energy, notes)
+ * - Detailed info for each check-in (weight, steps, notes)
  * - Manual/synced indicators
  * - Responsive design (modal on desktop, sheet on mobile)
  */
@@ -22,8 +22,6 @@ import {
   Snowflake,
   Scale,
   Footprints,
-  Smile,
-  Zap,
   Calendar,
   Loader2,
   X,
@@ -70,13 +68,6 @@ interface StreakHistoryModalProps {
   onClose: () => void;
   userId?: string;
 }
-
-// Mood emojis mapping
-const MOOD_EMOJIS: Record<number, string> = {
-  1: '😫', 2: '😔', 3: '😕', 4: '😐',
-  5: '🙂', 6: '😊', 7: '😁', 8: '🤩',
-  9: '🎉', 10: '🔥',
-};
 
 export function StreakHistoryModal({ isOpen, onClose, userId }: StreakHistoryModalProps) {
   const [streak, setStreak] = useState<EngagementStreak | null>(null);
@@ -201,8 +192,6 @@ export function StreakHistoryModal({ isOpen, onClose, userId }: StreakHistoryMod
                   const timeStr = format(new Date(checkIn.created_at), 'h:mm a');
                   const hasWeight = checkIn.weight_kg !== null && checkIn.weight_kg !== undefined;
                   const hasSteps = checkIn.steps !== null && checkIn.steps !== undefined;
-                  const hasMood = checkIn.mood_score !== null && checkIn.mood_score !== undefined;
-                  const hasEnergy = checkIn.energy_level !== null && checkIn.energy_level !== undefined;
                   const hasNotes = checkIn.notes && checkIn.notes.trim().length > 0;
 
                   const SourceIcon = getSourceIcon(checkIn.steps_source);
@@ -266,31 +255,7 @@ export function StreakHistoryModal({ isOpen, onClose, userId }: StreakHistoryMod
                               </div>
                             )}
 
-                            {/* Mood */}
-                            {hasMood && (
-                              <div className="flex items-start gap-2">
-                                <Smile className="h-4 w-4 text-amber-400 flex-shrink-0 mt-0.5" />
-                                <div>
-                                  <p className="text-xs text-gray-400">Mood</p>
-                                  <p className="text-sm font-semibold text-white">
-                                    {MOOD_EMOJIS[checkIn.mood_score!]} {checkIn.mood_score}/10
-                                  </p>
-                                </div>
-                              </div>
-                            )}
 
-                            {/* Energy */}
-                            {hasEnergy && (
-                              <div className="flex items-start gap-2">
-                                <Zap className="h-4 w-4 text-orange-400 flex-shrink-0 mt-0.5" />
-                                <div>
-                                  <p className="text-xs text-gray-400">Energy</p>
-                                  <p className="text-sm font-semibold text-white">
-                                    {'⚡'.repeat(Math.ceil(checkIn.energy_level! / 2))} {checkIn.energy_level}/10
-                                  </p>
-                                </div>
-                              </div>
-                            )}
                           </div>
 
                           {/* Notes */}
@@ -307,7 +272,7 @@ export function StreakHistoryModal({ isOpen, onClose, userId }: StreakHistoryMod
                           )}
 
                           {/* Empty State for Check-In with No Data */}
-                          {!hasWeight && !hasSteps && !hasMood && !hasEnergy && !hasNotes && (
+                          {!hasWeight && !hasSteps && !hasNotes && (
                             <p className="text-sm text-gray-500 italic">No data logged</p>
                           )}
                         </CardContent>

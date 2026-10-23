@@ -212,7 +212,7 @@ export function VitalsGoalDialog({ open, onOpenChange, summary, unitSystem, onSa
                 onClick={handleSave}
                 disabled={busy}
                 loading={saving}
-                className="flex-1 sm:flex-none bg-purple-600 hover:bg-purple-700"
+                className="flex-1 sm:flex-none bg-gradient-brand shadow-glow transition hover:brightness-110"
               >
                 Save
               </Button>

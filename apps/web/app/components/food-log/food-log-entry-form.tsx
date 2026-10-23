@@ -76,7 +76,16 @@ function toLocalDateTimeInputValue(d: Date): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
-export function FoodLogEntryForm() {
+export interface FoodLogEntryFormProps {
+  /** `page` (default): full-page /food-log/new with a back button. `sheet`: inside the Food Log add sheet. */
+  variant?: 'page' | 'sheet';
+  /** Called after a successful save in the sheet (the sheet closes and the list refreshes). */
+  onSaved?: () => void;
+  /** Slot rendered under the page title (the photo / voice / search quick paths). */
+  header?: React.ReactNode;
+}
+
+export function FoodLogEntryForm({ variant = 'page', onSaved, header }: FoodLogEntryFormProps = {}) {
   const router = useRouter();
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -367,7 +376,11 @@ export function FoodLogEntryForm() {
         window.dispatchEvent(new CustomEvent('streak-auto-claimed', { detail: { source: 'food_log' } }));
       }
 
-      router.push('/food-log');
+      if (variant === 'sheet') {
+        onSaved?.();
+      } else {
+        router.push('/food-log');
+      }
       router.refresh();
     } catch (error: any) {
       toast({
@@ -381,13 +394,16 @@ export function FoodLogEntryForm() {
   };
 
   return (
-    <div className="max-w-2xl mx-auto space-y-8 pb-20">
-      <div className="flex items-center gap-4">
-        <Button variant="ghost" size="icon" onClick={() => router.back()}>
-          <ArrowLeft size={20} />
-        </Button>
-        <h1 className="text-2xl font-bold">New Entry</h1>
-      </div>
+    <div className={variant === 'sheet' ? 'space-y-8' : 'max-w-2xl mx-auto space-y-8 pb-20'}>
+      {variant === 'page' && (
+        <div className="flex items-center gap-3">
+          <Button variant="ghost" size="icon" onClick={() => router.back()} aria-label="Back" className="rounded-full bg-white/5">
+            <ArrowLeft size={20} />
+          </Button>
+          <h1 className="w-fit max-w-full text-title1 bg-gradient-sunset bg-clip-text text-transparent sm:text-large-title">New Entry</h1>
+        </div>
+      )}
+      {header}
 
       {/* Category Selection */}
       <section className="space-y-4">
@@ -395,7 +411,7 @@ export function FoodLogEntryForm() {
 
         <div className="space-y-2">
           <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Meals</span>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-2 gap-3 [&>*]:min-w-0">
             {(['meal', 'snack'] as CategoryId[]).map((id) => (
               <CategoryCard
                 key={id}
@@ -410,7 +426,7 @@ export function FoodLogEntryForm() {
 
         <div className="space-y-2">
           <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Beverages</span>
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-3 gap-2 sm:gap-3 [&>*]:min-w-0">
             {(['water', 'coffee', 'tea', 'soda', 'juice', 'alcohol'] as CategoryId[]).map((id) => (
               <CategoryCard
                 key={id}
@@ -444,7 +460,7 @@ export function FoodLogEntryForm() {
         {category === 'water' && (
           <div className="space-y-4">
             <h2 className="text-lg font-semibold">How much water?</h2>
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-3 gap-2 sm:gap-3 [&>*]:min-w-0">
               <WaterPresetButton title="Half Glass" subtitle="120 ml" value={120} selectedValue={waterAmount} onClick={() => setWaterAmount(120)} />
               <WaterPresetButton title="Glass" subtitle="240 ml" value={240} selectedValue={waterAmount} onClick={() => setWaterAmount(240)} />
               <WaterPresetButton title="Bottle" subtitle="500 ml" value={500} selectedValue={waterAmount} onClick={() => setWaterAmount(500)} />
@@ -507,7 +523,7 @@ export function FoodLogEntryForm() {
                     <Input id="drink-name" value={drinkName} onChange={(e) => setDrinkName(e.target.value)} placeholder="Old Fashioned" />
                   </div>
                 </div>
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-2 gap-3 [&>*]:min-w-0">
                   <div>
                     <Label htmlFor="abv">ABV %</Label>
                     <Input id="abv" type="number" step="0.1" min="0" max="100"

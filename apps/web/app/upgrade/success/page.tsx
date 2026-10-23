@@ -6,12 +6,13 @@
  * seconds; poll /api/entitlements until the tier flips (max ~30s), then celebrate.
  */
 
-import { useEffect, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import { CheckCircle2, Loader2 } from 'lucide-react';
 import Link from 'next/link';
+import { useEffect, useRef, useState } from 'react';
 
 import { Navbar } from '@/components/layout/navbar';
+import { GlassCard } from '@/components/ui/ios';
 import { useEntitlements } from '@/hooks/useEntitlements';
 import { AnalyticsEvents, analytics } from '@/lib/analytics';
 import { firstTimeFor, takeCheckout, webProductId } from '@/lib/analytics/checkout';
@@ -63,14 +64,15 @@ export default function UpgradeSuccessPage() {
   }, [refresh]);
 
   return (
-    <div className="min-h-screen bg-background pb-24">
+    <div className="min-h-screen bg-canvas bg-hero-glow">
       <Navbar />
       <main className="mx-auto flex max-w-md flex-col items-center px-4 py-16 text-center">
+        <GlassCard as="div" className="flex w-full flex-col items-center px-6 py-10">
         {state === 'activating' && (
           <>
-            <Loader2 className="h-10 w-10 animate-spin text-purple-400" />
-            <h1 className="mt-4 text-xl font-bold">Activating your Pro membership…</h1>
-            <p className="mt-2 text-sm text-muted-foreground">
+            <Loader2 className="h-10 w-10 animate-spin text-brand-purple" />
+            <h1 className="mt-4 text-title3 text-white">Activating your Pro membership…</h1>
+            <p className="mt-2 text-subhead text-fg-secondary">
               Payment received — syncing your account. This usually takes a few seconds.
             </p>
           </>
@@ -81,15 +83,15 @@ export default function UpgradeSuccessPage() {
             animate={{ scale: 1, opacity: 1 }}
             className="flex flex-col items-center"
           >
-            <CheckCircle2 className="h-12 w-12 text-emerald-400" />
-            <h1 className="mt-4 text-2xl font-bold">Welcome to Pro 🎉</h1>
-            <p className="mt-2 text-sm text-muted-foreground">
-              Unlimited AI logging, unlimited Fitzy, full history, and no ads — everywhere
-              you use FitCircle, including the mobile apps.
+            <span className="flex h-16 w-16 items-center justify-center rounded-full bg-brand-green/20"><CheckCircle2 className="h-9 w-9 text-brand-green" /></span>
+            <h1 className="mt-4 text-title2 text-white">Welcome to Pro 🎉</h1>
+            <p className="mt-2 text-subhead text-fg-secondary">
+              AI logging and Fitzy (fair-use limits apply), your full history and no ads,
+              everywhere you use FitCircle, including the mobile apps.
             </p>
             <Link
               href="/dashboard"
-              className="mt-6 rounded-xl bg-purple-500 px-6 py-3 font-bold text-white hover:bg-purple-600"
+              className="mt-6 inline-flex h-12 items-center rounded-xl bg-gradient-brand px-6 text-headline text-white shadow-glow transition hover:brightness-110"
             >
               Back to my dashboard
             </Link>
@@ -97,17 +99,18 @@ export default function UpgradeSuccessPage() {
         )}
         {state === 'slow' && (
           <>
-            <CheckCircle2 className="h-10 w-10 text-emerald-400" />
-            <h1 className="mt-4 text-xl font-bold">Payment received</h1>
-            <p className="mt-2 text-sm text-muted-foreground">
+            <CheckCircle2 className="h-10 w-10 text-brand-green" />
+            <h1 className="mt-4 text-title3 text-white">Payment received</h1>
+            <p className="mt-2 text-subhead text-fg-secondary">
               Your Pro membership is still syncing — it will appear on your account within a
-              few minutes. If it doesn't, contact support and we'll sort it out.
+              few minutes. If it doesn&apos;t, contact support and we&apos;ll sort it out.
             </p>
-            <Link href="/dashboard" className="mt-6 text-sm font-semibold text-purple-400 underline">
+            <Link href="/dashboard" className="mt-6 text-subhead font-semibold text-brand-purple underline">
               Back to my dashboard
             </Link>
           </>
         )}
+        </GlassCard>
       </main>
     </div>
   );

@@ -7,14 +7,15 @@
  * managed where they were purchased).
  */
 
-import { useState } from 'react';
-import { AlertTriangle, Crown, ExternalLink } from 'lucide-react';
+import { AlertTriangle, Crown, ExternalLink, Sparkles } from 'lucide-react';
 import Link from 'next/link';
+import { useState } from 'react';
 import { toast } from 'sonner';
 
-import { Navbar } from '@/components/layout/navbar';
-import { Card, CardContent } from '@/components/ui/card';
 import { ProBadge } from '@/components/billing/ProBadge';
+import { SettingsScreen } from '@/components/profile/settings-shell';
+import { GlassCard, ListGroup, ListRow, ToneDisc } from '@/components/ui/ios';
+import { Skeleton } from '@/components/ui/skeleton';
 import { useEntitlements } from '@/hooks/useEntitlements';
 import { AnalyticsEvents, analytics } from '@/lib/analytics';
 
@@ -59,24 +60,25 @@ export default function BillingSettingsPage() {
     }
   };
 
-  return (
-    <div className="min-h-screen bg-background pb-24">
-      <Navbar />
-      <main className="mx-auto max-w-2xl px-4 py-6 space-y-6">
-        <h1 className="text-2xl font-bold">Billing</h1>
+  const manageLabel =
+    platform === 'stripe' || platform == null
+      ? 'Manage subscription'
+      : `Manage in ${PLATFORM_LABELS[platform] ?? 'your store'}`;
 
-        <Card>
-          <CardContent className="p-4 space-y-3">
-            {isLoading ? (
-              <p className="text-sm text-muted-foreground">Loading your plan…</p>
-            ) : isPro ? (
-              <>
-                <div className="flex items-center gap-2">
-                  <Crown className="h-5 w-5 text-amber-400" />
-                  <p className="font-semibold">FitCircle Pro</p>
-                  <ProBadge />
-                </div>
-                <p className="text-sm text-muted-foreground">
+  return (
+    <SettingsScreen title="Billing" subtitle="Your FitCircle plan">
+      {isLoading ? (
+        <Skeleton className="mb-6 h-[132px] rounded-xl" />
+      ) : isPro ? (
+        <>
+          <GlassCard className="mb-6" data-testid="billing-plan-card">
+            <div className="flex items-center gap-3">
+              <ToneDisc icon={Crown} tone="yellow" size="lg" />
+              <div className="min-w-0 flex-1">
+                <p className="flex items-center gap-2 text-headline text-white">
+                  FitCircle Pro <ProBadge />
+                </p>
+                <p className="mt-1 text-subhead text-fg-secondary">
                   {isLifetime
                     ? 'Lifetime membership — yours forever.'
                     : isTrialing
@@ -86,59 +88,62 @@ export default function BillingSettingsPage() {
                         : `Active until ${expiresAt ? expiresAt.toLocaleDateString() : 'the end of the period'} — will not renew.`}
                   {platform ? ` Purchased via ${PLATFORM_LABELS[platform] ?? platform}.` : ''}
                 </p>
+              </div>
+            </div>
 
-                {isPastDue && (
-                  <div className="flex items-start gap-2 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm">
-                    <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-400" />
-                    <p>
-                      We couldn't collect your last payment. Update your payment method to keep
-                      Pro — access pauses when the grace period ends.
-                    </p>
-                  </div>
-                )}
-
-                <button
-                  type="button"
-                  onClick={openPortal}
-                  disabled={portalBusy}
-                  className="flex w-full items-center justify-center gap-2 rounded-lg bg-zinc-800 py-2.5 text-sm font-semibold hover:bg-zinc-700 disabled:opacity-60"
-                >
-                  {platform === 'stripe' || platform == null
-                    ? 'Manage subscription'
-                    : `Manage in ${PLATFORM_LABELS[platform] ?? 'your store'}`}
-                  <ExternalLink className="h-4 w-4" />
-                </button>
-              </>
-            ) : entitlements?.subscriptionsEnabled === true ? (
-              <>
-                <p className="font-semibold">Free plan</p>
-                <p className="text-sm text-muted-foreground">
-                  You're on the free plan — 5 AI scans and 5 Fitzy messages a day, 14 days of
-                  history, and up to 2 circles of your own.
+            {isPastDue && (
+              <div className="mt-4 flex items-start gap-2 rounded-lg border border-brand-yellow/40 bg-brand-yellow/10 px-3 py-2 text-subhead text-white">
+                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-brand-yellow" />
+                <p>
+                  We couldn&apos;t collect your last payment. Update your payment method to keep
+                  Pro — access pauses when the grace period ends.
                 </p>
-                <Link
-                  href="/upgrade?source=settings"
-                  className="block w-full rounded-lg bg-purple-500 py-2.5 text-center text-sm font-bold text-white hover:bg-purple-600"
-                >
-                  Upgrade to Pro
-                </Link>
-              </>
-            ) : (
-              <>
-                <p className="font-semibold">Free plan</p>
-                <p className="text-sm text-muted-foreground">
-                  Everything in FitCircle is currently free — nothing to manage here.
-                </p>
-              </>
+              </div>
             )}
-          </CardContent>
-        </Card>
+          </GlassCard>
 
-        <p className="text-xs text-muted-foreground">
-          Subscriptions purchased on iOS or Android are billed by Apple or Google and must be
-          cancelled there. Web subscriptions are billed by Stripe and managed here.
-        </p>
-      </main>
-    </div>
+          <ListGroup>
+            <ListRow
+              onClick={() => void openPortal()}
+              icon={ExternalLink}
+              tone="purple"
+              title={portalBusy ? 'Opening…' : manageLabel}
+              testId="billing-manage"
+            />
+          </ListGroup>
+        </>
+      ) : entitlements?.subscriptionsEnabled === true ? (
+        <GlassCard className="mb-6" data-testid="billing-plan-card">
+          <div className="flex items-center gap-3">
+            <ToneDisc icon={Sparkles} tone="purple" size="lg" />
+            <div className="min-w-0 flex-1">
+              <p className="text-headline text-white">Free plan</p>
+              <p className="mt-1 text-subhead text-fg-secondary">
+                You&apos;re on the free plan — 5 AI scans and 5 Fitzy messages a day, 14 days of
+                history, and up to 2 circles of your own.
+              </p>
+            </div>
+          </div>
+          <Link
+            href="/upgrade?source=settings"
+            className="mt-4 flex h-12 w-full items-center justify-center rounded-xl bg-gradient-brand text-headline text-white shadow-glow transition hover:brightness-110"
+          >
+            Upgrade to Pro
+          </Link>
+        </GlassCard>
+      ) : (
+        <GlassCard className="mb-6" data-testid="billing-plan-card">
+          <p className="text-headline text-white">Free plan</p>
+          <p className="mt-1 text-subhead text-fg-secondary">
+            Everything in FitCircle is currently free — nothing to manage here.
+          </p>
+        </GlassCard>
+      )}
+
+      <p className="px-4 text-footnote text-fg-tertiary">
+        Subscriptions purchased on iOS or Android are billed by Apple or Google and must be
+        cancelled there. Web subscriptions are billed by Stripe and managed here.
+      </p>
+    </SettingsScreen>
   );
 }

@@ -139,7 +139,7 @@ export function GoalProgressIndicator({
                 <Button
                   onClick={() => setIsSettingGoal(true)}
                   size="sm"
-                  className="bg-purple-600 hover:bg-purple-700 shadow-lg hover:shadow-purple-500/50"
+                  className="bg-gradient-brand shadow-glow transition hover:brightness-110"
                 >
                   Set Your Goal
                 </Button>
@@ -171,7 +171,7 @@ export function GoalProgressIndicator({
                   <Button
                     onClick={handleSaveGoal}
                     disabled={isSaving || !goalInput}
-                    className="flex-1 bg-purple-600 hover:bg-purple-700"
+                    className="flex-1 bg-gradient-brand shadow-glow transition hover:brightness-110"
                   >
                     {isSaving ? (
                       <>

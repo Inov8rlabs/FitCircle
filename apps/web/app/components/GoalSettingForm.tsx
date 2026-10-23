@@ -186,7 +186,7 @@ export default function GoalSettingForm({
         animate={{ opacity: 1, y: 0 }}
         className="relative max-w-2xl w-full"
       >
-        <Card className="bg-slate-900/50 border-slate-800 backdrop-blur-xl">
+        <Card className="bg-surface-raised/50 border-hairline backdrop-blur-xl">
           <CardHeader>
             <div className="flex items-center justify-between mb-4">
               {onBack && (

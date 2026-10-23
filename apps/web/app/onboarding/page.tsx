@@ -217,9 +217,11 @@ function OnboardingForm() {
   };
 
   const handleCelebrationComplete = () => {
-    // Redirect to returnUrl if provided (e.g., from invite link), otherwise go to dashboard.
-    // Only honor same-origin relative paths to avoid an open redirect.
-    router.push(safeReturnUrl(returnUrl));
+    // Redirect to returnUrl if provided (e.g., from invite link; those pages
+    // carry their own app CTA). Otherwise offer the app first, with the
+    // dashboard one tap away. Only same-origin relative paths are honored.
+    const next = safeReturnUrl(returnUrl);
+    router.push(next === '/dashboard' ? '/welcome/app?next=%2Fdashboard' : next);
   };
 
   const handleBack = () => {
@@ -249,7 +251,7 @@ function OnboardingForm() {
           userName={formData.displayName || user?.name || 'Champion'}
         />
       )}
-      <div className="min-h-screen bg-gradient-to-br from-background via-background to-primary/5 flex items-center justify-center p-4">
+      <div className="min-h-screen bg-canvas bg-hero-glow flex items-center justify-center p-4">
         <div className="w-full max-w-2xl">
         {/* Progress Bar */}
         <div className="mb-8">
@@ -535,7 +537,7 @@ function OnboardingForm() {
 export default function OnboardingPage() {
   return (
     <Suspense fallback={
-      <div className="min-h-screen bg-gradient-to-br from-background via-background to-primary/5 flex items-center justify-center">
+      <div className="min-h-screen bg-canvas bg-hero-glow flex items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
       </div>
     }>

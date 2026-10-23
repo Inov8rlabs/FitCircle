@@ -174,8 +174,18 @@ export function InviteHub() {
 
   if (loading && !hub) {
     return (
-      <div className="flex min-h-[60vh] items-center justify-center" data-testid="hub-loading">
-        <Loader2 className="h-8 w-8 animate-spin text-purple-400" />
+      <div className="mx-auto w-full max-w-3xl px-4 pb-24 pt-8" data-testid="hub-loading" aria-busy="true">
+        <div className="flex flex-col items-center">
+          <div className="skeleton h-9 w-64 rounded-lg" />
+          <div className="skeleton mt-3 h-4 w-80 max-w-full rounded-lg" />
+          <div className="skeleton mt-8 h-[180px] w-[180px] rounded-full" />
+          <div className="skeleton mt-5 h-4 w-56 rounded-lg" />
+          <div className="skeleton mt-7 h-14 w-full max-w-md rounded-xl" />
+          <div className="mt-3 grid w-full max-w-md grid-cols-2 gap-3">
+            <div className="skeleton h-12 rounded-xl" />
+            <div className="skeleton h-12 rounded-xl" />
+          </div>
+        </div>
       </div>
     );
   }
@@ -187,7 +197,7 @@ export function InviteHub() {
         <button
           type="button"
           onClick={() => void load()}
-          className="mt-4 rounded-xl bg-purple-600 px-5 py-2.5 font-medium text-white hover:bg-purple-700"
+          className="mt-4 rounded-xl bg-gradient-brand px-5 py-2.5 font-semibold text-white shadow-glow hover:brightness-110"
         >
           Try again
         </button>
@@ -228,11 +238,11 @@ export function InviteHub() {
 
       {/* Hero */}
       <section className="text-center">
-        <h1 className="text-3xl font-extrabold tracking-tight text-white sm:text-4xl">
+        <h1 className="text-[30px] font-bold leading-tight text-white sm:text-large-title">
           Better{' '}
-          <span className="bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">together</span>
+          <span className="bg-gradient-brand bg-clip-text text-transparent">together</span>
         </h1>
-        <p className="mt-2 text-gray-300">Every friend who joins gets you both a free week of Pro.</p>
+        <p className="mt-2 text-callout text-fg-secondary">Every friend who joins gets you both a free week of Pro.</p>
 
         <div className="mt-8 flex justify-center">
           <HeroRing progress={progress}>
@@ -267,7 +277,7 @@ export function InviteHub() {
             type="button"
             whileTap={{ scale: 0.98 }}
             onClick={() => void shareOrCopy(shareText, undefined, 'hub', 'Invite copied 💜')}
-            className="flex items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-purple-600 to-pink-600 px-5 py-4 text-lg font-semibold text-white shadow-lg shadow-purple-900/40"
+            className="flex h-14 items-center justify-center gap-2 rounded-xl bg-gradient-brand px-5 text-headline text-white shadow-glow transition hover:brightness-110"
           >
             <Share2 className="h-5 w-5" /> Invite friends
           </motion.button>
@@ -280,7 +290,7 @@ export function InviteHub() {
                   analytics.track(AnalyticsEvents.referralInviteShared({ method: 'copy_link', context: 'hub' }));
                 }
               }}
-              className="flex items-center justify-center gap-2 rounded-xl border border-slate-700 bg-slate-900/60 px-4 py-3 text-sm font-medium text-gray-200 hover:border-purple-500/60"
+              className="flex items-center justify-center gap-2 rounded-xl border border-hairline bg-white/5 px-4 py-3 text-sm font-semibold text-white transition hover:bg-white/10"
             >
               <Link2 className="h-4 w-4" /> Copy link
             </button>
@@ -292,7 +302,7 @@ export function InviteHub() {
                   analytics.track(AnalyticsEvents.referralInviteShared({ method: 'copy_code', context: 'hub' }));
                 }
               }}
-              className="flex items-center justify-center gap-2 rounded-xl border border-slate-700 bg-slate-900/60 px-4 py-3 text-sm font-medium text-gray-200 hover:border-purple-500/60"
+              className="flex items-center justify-center gap-2 rounded-xl border border-hairline bg-white/5 px-4 py-3 text-sm font-semibold text-white transition hover:bg-white/10"
             >
               <Hash className="h-4 w-4" /> Share code
               <span className="font-mono text-purple-300">{hub.code}</span>
@@ -321,7 +331,7 @@ export function InviteHub() {
               href={`/join/${encodeURIComponent(hub.pendingCircleInvite.inviteCode)}${
                 hub.pendingCircleInvite.ref ? `?ref=${encodeURIComponent(hub.pendingCircleInvite.ref)}` : ''
               }`}
-              className="inline-flex shrink-0 items-center gap-1 rounded-xl bg-gradient-to-r from-purple-600 to-pink-600 px-4 py-2.5 text-sm font-semibold text-white"
+              className="inline-flex shrink-0 items-center gap-1 rounded-full bg-gradient-brand px-4 py-2.5 text-sm font-semibold text-white shadow-glow"
             >
               Join <ArrowRight className="h-4 w-4" />
             </Link>
@@ -349,7 +359,7 @@ export function InviteHub() {
             <button
               type="button"
               onClick={() => void shareOrCopy(hub.starterCircle!.shareMessage, undefined, 'circle', 'Circle invite copied 💜')}
-              className="shrink-0 rounded-xl bg-purple-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-purple-700"
+              className="shrink-0 rounded-full bg-gradient-brand px-4 py-2.5 text-sm font-semibold text-white shadow-glow hover:brightness-110"
             >
               <UserPlus className="mr-1 inline h-4 w-4" /> Invite
             </button>
@@ -359,7 +369,7 @@ export function InviteHub() {
               <div
                 key={i}
                 className={`h-2 flex-1 rounded-full ${
-                  i < hub.starterCircle!.memberCount ? 'bg-gradient-to-r from-purple-500 to-pink-500' : 'bg-slate-800'
+                  i < hub.starterCircle!.memberCount ? 'bg-gradient-brand' : 'bg-white/10'
                 }`}
               />
             ))}
@@ -403,13 +413,13 @@ export function InviteHub() {
                     m.reached
                       ? 'border-purple-500/40 bg-purple-500/10'
                       : isNext
-                        ? 'border-pink-500/40 bg-slate-900/60'
-                        : 'border-slate-800 bg-slate-900/40'
+                        ? 'border-brand-pink/40 bg-surface-raised/60'
+                        : 'border-glass bg-surface-raised/40'
                   }`}
                 >
                   <div
                     className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full ${
-                      m.reached ? 'bg-gradient-to-br from-purple-500 to-pink-500 text-white' : 'bg-slate-800 text-gray-500'
+                      m.reached ? 'bg-gradient-brand text-white' : 'bg-white/10 text-fg-tertiary'
                     }`}
                   >
                     {m.reached ? (
@@ -549,11 +559,11 @@ function HeroRing({ progress, children }: { progress: number; children: React.Re
 }
 
 function Card({ children, className = '' }: { children: React.ReactNode; className?: string }) {
-  return <div className={`rounded-2xl border border-slate-800 bg-slate-900/50 p-4 backdrop-blur ${className}`}>{children}</div>;
+  return <div className={`rounded-xl border border-glass bg-surface-raised/50 p-4 backdrop-blur-xl ${className}`}>{children}</div>;
 }
 
 function SectionTitle({ children }: { children: React.ReactNode }) {
-  return <h2 className="text-sm font-semibold uppercase tracking-wider text-gray-400">{children}</h2>;
+  return <h2 className="px-1 text-footnote font-semibold uppercase tracking-wide text-fg-tertiary">{children}</h2>;
 }
 
 const CLAIM_MESSAGES: Record<string, string> = {
@@ -617,12 +627,12 @@ function ClaimCodeForm({ onClaimed }: { onClaimed: () => void }) {
           placeholder="e.g. MAYA7K2"
           aria-label="Invite code"
           autoCapitalize="characters"
-          className="min-w-0 flex-1 rounded-xl border border-slate-700 bg-slate-900/60 px-4 py-3 font-mono text-white placeholder:text-gray-500 focus:border-purple-500 focus:outline-none"
+          className="min-w-0 flex-1 rounded-xl border border-hairline bg-white/5 px-4 py-3 font-mono text-white placeholder:text-fg-tertiary focus:border-brand-purple/60 focus:outline-none"
         />
         <button
           type="submit"
           disabled={busy || !code.trim()}
-          className="rounded-xl bg-purple-600 px-5 py-3 font-semibold text-white hover:bg-purple-700 disabled:opacity-50"
+          className="rounded-xl bg-gradient-brand px-5 py-3 font-semibold text-white shadow-glow hover:brightness-110 disabled:opacity-50"
         >
           {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Add'}
         </button>

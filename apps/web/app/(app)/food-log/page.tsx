@@ -1,12 +1,11 @@
-import { Plus } from 'lucide-react';
-import Link from 'next/link';
 import { redirect } from 'next/navigation';
 
+import { AddEntrySheet } from '@/components/food-log/add-entry-sheet';
 import { CalorieBudgetCard, DEFAULT_CALORIE_BUDGET } from '@/components/food-log/calorie-budget-card';
-import { FoodLogList } from '@/components/food-log/food-log-list';
+import { FoodLogFeed } from '@/components/food-log/food-log-feed';
 import { FirstFoodLogPrompt } from '@/components/nutrition/FirstFoodLogPrompt';
 import { FoodLogNutritionSection } from '@/components/nutrition/FoodLogNutritionSection';
-import { Button } from '@/components/ui/button';
+import { Screen, ScreenHeader } from '@/components/ui/ios';
 import { BeverageLogService } from '@/lib/services/beverage-log-service';
 import { FoodLogImageService } from '@/lib/services/food-log-image-service';
 import { FoodLogService } from '@/lib/services/food-log-service';
@@ -35,7 +34,6 @@ export default async function FoodLogPage() {
     const { data: beverageStats } = await BeverageLogService.getStats(user.id, today, today, supabase);
 
     const totalCalories = (foodStats?.total_calories || 0) + (beverageStats?.total_calories || 0);
-    const totalWater = (foodStats?.total_water_ml || 0) + (beverageStats?.total_water_ml || 0);
     const calorieBudget = await PlateScoreService.getForDay(user.id, today)
       .then((s) => (s.calorieTarget > 0 ? s.calorieTarget : DEFAULT_CALORIE_BUDGET))
       .catch(() => DEFAULT_CALORIE_BUDGET);
@@ -61,36 +59,21 @@ export default async function FoodLogPage() {
     ].sort((a, b) => new Date(b.logged_at).getTime() - new Date(a.logged_at).getTime());
 
     return (
-        <div className="container max-w-2xl py-8 space-y-8">
-            <div className="flex items-center justify-between">
-                <div>
-                    <h1 className="text-3xl font-bold tracking-tight">Food & Drink</h1>
-                    <p className="text-muted-foreground">Track your nutrition and hydration.</p>
-                </div>
-                <Link href="/food-log/new">
-                    <Button className="rounded-full h-12 w-12 p-0 shadow-lg hover:shadow-xl transition-all hover:scale-105">
-                        <Plus size={24} />
-                    </Button>
-                </Link>
-            </div>
-
-            <CalorieBudgetCard consumed={totalCalories} budget={calorieBudget} />
-
-            {/* First-run nudge (§6.14) — only when the user has no logs yet */}
-            <FirstFoodLogPrompt hasLogs={allEntries.length > 0} />
-
-            <div className="p-4 rounded-xl bg-cyan-500/5 border border-cyan-500/10">
-                <div className="text-sm text-muted-foreground">Water Intake</div>
-                <div className="text-2xl font-bold text-cyan-600">{Math.round(totalWater)} ml</div>
-            </div>
-
-            {/* Nutrition: Plate Score, Insights, Dietary preferences */}
-            <FoodLogNutritionSection />
-
-            <div className="space-y-4">
-                <h2 className="text-xl font-semibold">Recent Entries</h2>
-                <FoodLogList entries={allEntries} userId={user.id} />
-            </div>
-        </div>
+        <Screen size="wide" className="lg:max-w-5xl">
+            <ScreenHeader title="Food Log" subtitle="Track your nutrition and hydration." />
+            <FoodLogFeed
+                entries={allEntries}
+                userId={user.id}
+                summary={
+                    <>
+                        <CalorieBudgetCard consumed={totalCalories} budget={calorieBudget} />
+                        {/* First-run nudge (§6.14) — only when the user has no logs yet */}
+                        <FirstFoodLogPrompt hasLogs={allEntries.length > 0} />
+                    </>
+                }
+                nutrition={<FoodLogNutritionSection />}
+            />
+            <AddEntrySheet />
+        </Screen>
     );
 }

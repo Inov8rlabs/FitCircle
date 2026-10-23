@@ -8,9 +8,11 @@
         "components": [
           { "/": "/i/*", "comment": "Personal invite links" },
           { "/": "/join/*", "comment": "Circle invite links" },
-          { "/": "/c/*", "comment": "Campaign links (docs/CAMPAIGNS_SPEC.md)" }
+          { "/": "/c/*", "comment": "Campaign links (docs/CAMPAIGNS_SPEC.md)" },
+          { "/": "/open", "comment": "Open-in-app links from the website; not installed, /open forwards to /get (App Store)" },
+          { "/": "/open/*", "comment": "Open-in-app links with a sub-path" }
         ],
-        "paths": ["/i/*", "/join/*", "/c/*"]
+        "paths": ["/i/*", "/join/*", "/c/*", "/open", "/open/*"]
       }
     ]
   }

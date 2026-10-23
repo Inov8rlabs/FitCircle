@@ -206,9 +206,9 @@ Let's do this! 🚀`;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="bg-slate-900 border-slate-800 max-w-lg">
+      <DialogContent className="bg-surface border-hairline max-w-lg">
         <DialogHeader>
-          <DialogTitle className="text-2xl font-bold bg-gradient-to-r from-indigo-400 to-purple-400 bg-clip-text text-transparent">
+          <DialogTitle className="text-2xl font-bold bg-gradient-indigo bg-clip-text text-transparent">
             Share &quot;{fitCircleName}&quot;
           </DialogTitle>
           <DialogDescription className="text-gray-400">
@@ -217,16 +217,16 @@ Let's do this! 🚀`;
         </DialogHeader>
 
         <Tabs defaultValue="link" className="w-full">
-          <TabsList className="grid w-full grid-cols-3 bg-slate-800/50">
-            <TabsTrigger value="link" className="data-[state=active]:bg-slate-700">
+          <TabsList className="grid w-full grid-cols-3 bg-white/5">
+            <TabsTrigger value="link" className="data-[state=active]:bg-white/10">
               <Copy className="h-4 w-4 mr-2" />
               Link
             </TabsTrigger>
-            <TabsTrigger value="message" className="data-[state=active]:bg-slate-700">
+            <TabsTrigger value="message" className="data-[state=active]:bg-white/10">
               <MessageCircle className="h-4 w-4 mr-2" />
               Message
             </TabsTrigger>
-            <TabsTrigger value="email" className="data-[state=active]:bg-slate-700">
+            <TabsTrigger value="email" className="data-[state=active]:bg-white/10">
               <Mail className="h-4 w-4 mr-2" />
               Email
             </TabsTrigger>
@@ -243,7 +243,7 @@ Let's do this! 🚀`;
                 <Input
                   value={inviteUrl}
                   readOnly
-                  className="bg-slate-800/50 border-slate-700 text-gray-300 font-mono text-sm"
+                  className="bg-white/5 border-glass text-gray-300 font-mono text-sm"
                 />
                 <Button
                   onClick={copyToClipboard}
@@ -283,7 +283,7 @@ Let's do this! 🚀`;
                 Copy this pre-formatted message to share on WhatsApp, Instagram, or any social platform:
               </p>
 
-              <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-4">
+              <div className="bg-white/5 border border-glass rounded-lg p-4">
                 <pre className="text-sm text-gray-300 whitespace-pre-wrap font-sans leading-relaxed">
                   {generateShareMessage()}
                 </pre>
@@ -294,7 +294,7 @@ Let's do this! 🚀`;
                 className={`w-full ${
                   messageCopySuccess
                     ? 'bg-green-600 hover:bg-green-700'
-                    : 'bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700'
+                    : 'bg-gradient-brand shadow-glow hover:brightness-110'
                 }`}
               >
                 {messageCopySuccess ? (
@@ -346,7 +346,7 @@ Let's do this! 🚀`;
                         placeholder={`friend${index + 1}@example.com`}
                         value={email}
                         onChange={(e) => handleEmailChange(index, e.target.value)}
-                        className={`bg-slate-800/50 border-slate-700 ${
+                        className={`bg-white/5 border-glass ${
                           emailErrors[index] ? 'border-red-500' : ''
                         }`}
                       />
@@ -377,7 +377,7 @@ Let's do this! 🚀`;
                   variant="outline"
                   size="sm"
                   onClick={addEmailField}
-                  className="w-full border-slate-700 text-gray-300 hover:bg-slate-800"
+                  className="w-full border-glass text-gray-300 hover:bg-surface-raised"
                 >
                   <Plus className="h-4 w-4 mr-2" />
                   Add another email
@@ -387,7 +387,7 @@ Let's do this! 🚀`;
               <Button
                 onClick={sendInviteEmails}
                 disabled={isSending}
-                className="w-full bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700"
+                className="w-full bg-gradient-brand shadow-glow hover:brightness-110"
               >
                 {isSending ? (
                   <>

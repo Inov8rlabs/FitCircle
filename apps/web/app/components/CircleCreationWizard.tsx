@@ -542,9 +542,9 @@ export default function CircleCreationWizard({ isOpen, onClose, onSuccess, initi
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto bg-slate-900/95 border-slate-800 backdrop-blur-xl">
-        <DialogHeader className="sticky top-0 z-10 bg-slate-900/95 pb-4 backdrop-blur-xl">
-          <DialogTitle className="text-xl font-bold bg-gradient-to-r from-orange-400 to-purple-400 bg-clip-text text-transparent">
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto bg-surface/95 border-hairline backdrop-blur-xl">
+        <DialogHeader className="sticky top-0 z-10 bg-surface/95 pb-4 backdrop-blur-xl">
+          <DialogTitle className="text-xl font-bold bg-gradient-sunset bg-clip-text text-transparent">
             Create Your FitCircle
           </DialogTitle>
         </DialogHeader>
@@ -560,8 +560,8 @@ export default function CircleCreationWizard({ isOpen, onClose, onSuccess, initi
                     <div
                       className={`w-8 h-8 sm:w-10 sm:h-10 rounded-full flex items-center justify-center text-sm sm:text-base font-semibold transition-all ${
                         step <= currentStep
-                          ? 'bg-gradient-to-r from-orange-500 to-purple-600 text-white'
-                          : 'bg-slate-800 text-gray-500'
+                          ? 'bg-gradient-sunset text-white'
+                          : 'bg-surface-raised text-gray-500'
                       }`}
                     >
                       {step < currentStep ? (
@@ -586,8 +586,8 @@ export default function CircleCreationWizard({ isOpen, onClose, onSuccess, initi
                         data-testid={`connecting-line-${step}`}
                         className={`h-0.5 sm:h-1 w-4 sm:w-8 md:w-12 rounded transition-all ${
                           step < currentStep
-                            ? 'bg-gradient-to-r from-orange-500 to-purple-600'
-                            : 'bg-slate-800'
+                            ? 'bg-gradient-sunset'
+                            : 'bg-surface-raised'
                         }`}
                       />
                     </div>
@@ -622,7 +622,7 @@ export default function CircleCreationWizard({ isOpen, onClose, onSuccess, initi
                     placeholder="e.g., Summer Shred Challenge"
                     value={formData.name}
                     onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                    className="bg-slate-800/50 border-slate-700 text-white placeholder:text-gray-500"
+                    className="bg-white/5 border-glass text-white placeholder:text-gray-500"
                     maxLength={50}
                   />
                   <p className="text-xs text-gray-400">
@@ -639,7 +639,7 @@ export default function CircleCreationWizard({ isOpen, onClose, onSuccess, initi
                     placeholder="What's this challenge about? What are the goals?"
                     value={formData.description}
                     onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                    className="bg-slate-800/50 border-slate-700 text-white placeholder:text-gray-500 min-h-[80px]"
+                    className="bg-white/5 border-glass text-white placeholder:text-gray-500 min-h-[80px]"
                     maxLength={200}
                   />
                   <p className="text-xs text-gray-400">
@@ -686,7 +686,7 @@ export default function CircleCreationWizard({ isOpen, onClose, onSuccess, initi
                         className={`p-3 sm:p-4 rounded-xl border transition-all text-center ${
                           isSelected
                             ? 'bg-gradient-to-br from-orange-500/20 to-purple-600/20 border-orange-500/60'
-                            : 'bg-slate-800/40 border-slate-700 hover:bg-slate-800/70'
+                            : 'bg-white/5 border-glass hover:bg-white/5'
                         }`}
                       >
                         <Icon
@@ -717,8 +717,8 @@ export default function CircleCreationWizard({ isOpen, onClose, onSuccess, initi
                             onClick={() => setFormData({ ...formData, templateCategoryFilter: cat.value })}
                             className={`px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all ${
                               isSelected
-                                ? 'bg-gradient-to-r from-orange-500 to-purple-600 text-white'
-                                : 'bg-slate-800/60 text-gray-400 hover:bg-slate-800'
+                                ? 'bg-gradient-sunset text-white'
+                                : 'bg-white/5 text-gray-400 hover:bg-surface-raised'
                             }`}
                           >
                             {cat.label}
@@ -763,7 +763,7 @@ export default function CircleCreationWizard({ isOpen, onClose, onSuccess, initi
                               className={`w-full text-left p-3 rounded-xl border transition-all ${
                                 isSelected
                                   ? 'border-orange-500 bg-gradient-to-br from-orange-500/10 to-purple-600/10'
-                                  : 'border-slate-700 bg-slate-800/30 hover:bg-slate-800/50'
+                                  : 'border-glass bg-white/5 hover:bg-white/5'
                               }`}
                             >
                               <div className="flex items-start gap-3">
@@ -802,7 +802,7 @@ export default function CircleCreationWizard({ isOpen, onClose, onSuccess, initi
                         onChange={(e) =>
                           setFormData({ ...formData, customChallengeName: e.target.value })
                         }
-                        className="bg-slate-800/50 border-slate-700 text-white placeholder:text-gray-500"
+                        className="bg-white/5 border-glass text-white placeholder:text-gray-500"
                         maxLength={50}
                       />
                     </div>
@@ -817,7 +817,7 @@ export default function CircleCreationWizard({ isOpen, onClose, onSuccess, initi
                         onChange={(e) =>
                           setFormData({ ...formData, customChallengeDescription: e.target.value })
                         }
-                        className="bg-slate-800/50 border-slate-700 text-white placeholder:text-gray-500 min-h-[60px]"
+                        className="bg-white/5 border-glass text-white placeholder:text-gray-500 min-h-[60px]"
                         maxLength={200}
                       />
                     </div>
@@ -837,8 +837,8 @@ export default function CircleCreationWizard({ isOpen, onClose, onSuccess, initi
                                 }
                                 className={`px-3 py-1.5 rounded-full text-xs font-semibold capitalize transition-all ${
                                   isSelected
-                                    ? 'bg-gradient-to-r from-orange-500 to-purple-600 text-white'
-                                    : 'bg-slate-800/60 text-gray-400 hover:bg-slate-800'
+                                    ? 'bg-gradient-sunset text-white'
+                                    : 'bg-white/5 text-gray-400 hover:bg-surface-raised'
                                 }`}
                               >
                                 {cat}
@@ -860,7 +860,7 @@ export default function CircleCreationWizard({ isOpen, onClose, onSuccess, initi
                             const v = e.target.value.replace(/[^0-9.]/g, '');
                             setFormData({ ...formData, customChallengeGoalAmount: v });
                           }}
-                          className="bg-slate-800/50 border-slate-700 text-white placeholder:text-gray-500"
+                          className="bg-white/5 border-glass text-white placeholder:text-gray-500"
                         />
                       </div>
                       <div className="space-y-2">
@@ -871,7 +871,7 @@ export default function CircleCreationWizard({ isOpen, onClose, onSuccess, initi
                           onChange={(e) =>
                             setFormData({ ...formData, customChallengeUnit: e.target.value })
                           }
-                          className="bg-slate-800/50 border-slate-700 text-white placeholder:text-gray-500"
+                          className="bg-white/5 border-glass text-white placeholder:text-gray-500"
                           maxLength={20}
                         />
                       </div>
@@ -887,7 +887,7 @@ export default function CircleCreationWizard({ isOpen, onClose, onSuccess, initi
                         onChange={(e) =>
                           setFormData({ ...formData, customChallengeLoggingPrompt: e.target.value })
                         }
-                        className="bg-slate-800/50 border-slate-700 text-white placeholder:text-gray-500"
+                        className="bg-white/5 border-glass text-white placeholder:text-gray-500"
                         maxLength={60}
                       />
                     </div>
@@ -915,7 +915,7 @@ export default function CircleCreationWizard({ isOpen, onClose, onSuccess, initi
 
                 {/* Add Later card */}
                 {formData.challengeMode === 'none' && (
-                  <Card className="bg-slate-800/40 border-slate-700">
+                  <Card className="bg-white/5 border-glass">
                     <CardContent className="p-4">
                       <div className="flex items-start gap-3">
                         <Clock className="h-5 w-5 text-indigo-400 mt-0.5 shrink-0" />
@@ -999,7 +999,7 @@ export default function CircleCreationWizard({ isOpen, onClose, onSuccess, initi
             {currentStep === 4 && (
               <div className="space-y-4 sm:space-y-6">
                 <div className="space-y-4">
-                  <div className="flex items-center justify-between p-4 bg-slate-800/30 rounded-lg">
+                  <div className="flex items-center justify-between p-4 bg-white/5 rounded-lg">
                     <div className="flex items-center gap-3">
                       {formData.isPrivate ? (
                         <Lock className="h-5 w-5 text-orange-400" />
@@ -1038,7 +1038,7 @@ export default function CircleCreationWizard({ isOpen, onClose, onSuccess, initi
                         placeholder="No limit"
                         value={formData.maxParticipants}
                         onChange={(e) => setFormData({ ...formData, maxParticipants: e.target.value })}
-                        className="pl-10 bg-slate-800/50 border-slate-700 text-white placeholder:text-gray-500"
+                        className="pl-10 bg-white/5 border-glass text-white placeholder:text-gray-500"
                         min="2"
                         max="100"
                       />
@@ -1048,7 +1048,7 @@ export default function CircleCreationWizard({ isOpen, onClose, onSuccess, initi
                     </p>
                   </div>
 
-                  <div className="flex items-center justify-between p-4 bg-slate-800/30 rounded-lg">
+                  <div className="flex items-center justify-between p-4 bg-white/5 rounded-lg">
                     <div className="flex-1">
                       <p className="text-white font-medium">Auto-accept invites</p>
                       <p className="text-xs text-gray-400">
@@ -1077,7 +1077,7 @@ export default function CircleCreationWizard({ isOpen, onClose, onSuccess, initi
                         className={`p-3 rounded-lg border transition-all ${
                           formData.leaderboardFrequency === 'realtime'
                             ? 'bg-orange-500/20 border-orange-500 text-white'
-                            : 'bg-slate-800/50 border-slate-700 text-gray-400 hover:bg-slate-800'
+                            : 'bg-white/5 border-glass text-gray-400 hover:bg-surface-raised'
                         }`}
                       >
                         <Activity className="h-5 w-5 mx-auto mb-1" />
@@ -1090,7 +1090,7 @@ export default function CircleCreationWizard({ isOpen, onClose, onSuccess, initi
                         className={`p-3 rounded-lg border transition-all ${
                           formData.leaderboardFrequency === 'daily'
                             ? 'bg-orange-500/20 border-orange-500 text-white'
-                            : 'bg-slate-800/50 border-slate-700 text-gray-400 hover:bg-slate-800'
+                            : 'bg-white/5 border-glass text-gray-400 hover:bg-surface-raised'
                         }`}
                       >
                         <Calendar className="h-5 w-5 mx-auto mb-1" />
@@ -1103,7 +1103,7 @@ export default function CircleCreationWizard({ isOpen, onClose, onSuccess, initi
                         className={`p-3 rounded-lg border transition-all ${
                           formData.leaderboardFrequency === 'weekly'
                             ? 'bg-orange-500/20 border-orange-500 text-white'
-                            : 'bg-slate-800/50 border-slate-700 text-gray-400 hover:bg-slate-800'
+                            : 'bg-white/5 border-glass text-gray-400 hover:bg-surface-raised'
                         }`}
                       >
                         <Clock className="h-5 w-5 mx-auto mb-1" />
@@ -1120,7 +1120,7 @@ export default function CircleCreationWizard({ isOpen, onClose, onSuccess, initi
                           <select
                             value={formData.leaderboardDay}
                             onChange={(e) => setFormData({ ...formData, leaderboardDay: parseInt(e.target.value) })}
-                            className="w-full p-2 bg-slate-800/50 border-slate-700 rounded-lg text-white text-sm"
+                            className="w-full p-2 bg-white/5 border-glass rounded-lg text-white text-sm"
                           >
                             <option value={0}>Sunday</option>
                             <option value={1}>Monday</option>
@@ -1137,13 +1137,13 @@ export default function CircleCreationWizard({ isOpen, onClose, onSuccess, initi
                             type="time"
                             value={formData.leaderboardTime}
                             onChange={(e) => setFormData({ ...formData, leaderboardTime: e.target.value })}
-                            className="w-full p-2 bg-slate-800/50 border-slate-700 rounded-lg text-white text-sm"
+                            className="w-full p-2 bg-white/5 border-glass rounded-lg text-white text-sm"
                           />
                         </div>
                       </div>
                     )}
 
-                    <div className="bg-slate-800/50 rounded-lg p-3 mt-2">
+                    <div className="bg-white/5 rounded-lg p-3 mt-2">
                       <p className="text-xs text-gray-400">
                         {formData.leaderboardFrequency === 'realtime' &&
                           'Leaderboard updates instantly when you track your daily progress.'}
@@ -1262,13 +1262,13 @@ export default function CircleCreationWizard({ isOpen, onClose, onSuccess, initi
                         <Sparkles className="h-5 w-5 text-yellow-400 animate-pulse" />
                       </div>
                       <div className="relative inline-block">
-                        <div className="absolute inset-0 bg-gradient-to-r from-orange-400 to-purple-400 blur-xl opacity-50 animate-pulse" />
+                        <div className="absolute inset-0 bg-gradient-sunset blur-xl opacity-50 animate-pulse" />
                         <motion.div
-                          className="relative bg-slate-900/90 px-8 py-4 rounded-xl border-2 border-orange-500/50"
+                          className="relative bg-surface/95 px-8 py-4 rounded-xl border-2 border-orange-500/50"
                           whileHover={{ scale: 1.02 }}
                           whileTap={{ scale: 0.98 }}
                         >
-                          <p className="text-4xl font-bold bg-gradient-to-r from-orange-400 via-purple-400 to-cyan-400 bg-clip-text text-transparent tracking-wider font-mono select-all">
+                          <p className="text-4xl font-bold bg-gradient-sunset bg-clip-text text-transparent tracking-wider font-mono select-all">
                             {inviteLink}
                           </p>
                         </motion.div>
@@ -1279,7 +1279,7 @@ export default function CircleCreationWizard({ isOpen, onClose, onSuccess, initi
                       <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
                         <Button
                           onClick={copyInviteCode}
-                          className="bg-gradient-to-r from-orange-600 to-purple-600 hover:from-orange-700 hover:to-purple-700 shadow-lg hover:shadow-orange-500/50"
+                          className="bg-gradient-brand shadow-glow hover:brightness-110 shadow-lg hover:shadow-orange-500/50"
                         >
                           <Copy className="h-4 w-4 mr-2" />
                           Copy Code
@@ -1289,7 +1289,7 @@ export default function CircleCreationWizard({ isOpen, onClose, onSuccess, initi
                         <Button
                           onClick={copyInviteURL}
                           variant="outline"
-                          className="border-slate-700 hover:bg-slate-800 hover:border-purple-500/50"
+                          className="border-glass hover:bg-surface-raised hover:border-purple-500/50"
                         >
                           <Share2 className="h-4 w-4 mr-2" />
                           Share Link
@@ -1302,7 +1302,7 @@ export default function CircleCreationWizard({ isOpen, onClose, onSuccess, initi
                             toast.info('QR Code feature coming soon!');
                           }}
                           variant="outline"
-                          className="border-slate-700 hover:bg-slate-800 hover:border-cyan-500/50"
+                          className="border-glass hover:bg-surface-raised hover:border-cyan-500/50"
                         >
                           <QrCode className="h-4 w-4 mr-2" />
                           QR Code
@@ -1311,7 +1311,7 @@ export default function CircleCreationWizard({ isOpen, onClose, onSuccess, initi
                     </div>
 
                     <motion.div
-                      className="bg-slate-800/50 rounded-lg p-3"
+                      className="bg-white/5 rounded-lg p-3"
                       initial={{ opacity: 0 }}
                       animate={{ opacity: 1 }}
                       transition={{ delay: 0.5 }}
@@ -1339,12 +1339,12 @@ export default function CircleCreationWizard({ isOpen, onClose, onSuccess, initi
                             addEmail();
                           }
                         }}
-                        className="pl-10 bg-slate-800/50 border-slate-700 text-white placeholder:text-gray-500"
+                        className="pl-10 bg-white/5 border-glass text-white placeholder:text-gray-500"
                       />
                     </div>
                     <Button
                       onClick={addEmail}
-                      className="bg-gradient-to-r from-orange-600 to-purple-600 hover:from-orange-700 hover:to-purple-700"
+                      className="bg-gradient-brand shadow-glow hover:brightness-110"
                     >
                       Add
                     </Button>
@@ -1358,11 +1358,11 @@ export default function CircleCreationWizard({ isOpen, onClose, onSuccess, initi
                 {formData.inviteEmails.length > 0 && (
                   <div className="space-y-2">
                     <Label className="text-white">Invited ({formData.inviteEmails.length})</Label>
-                    <div className="bg-slate-800/30 rounded-lg p-3 max-h-40 overflow-y-auto space-y-2">
+                    <div className="bg-white/5 rounded-lg p-3 max-h-40 overflow-y-auto space-y-2">
                       {formData.inviteEmails.map((email) => (
                         <div
                           key={email}
-                          className="flex items-center justify-between bg-slate-700/30 rounded px-3 py-2"
+                          className="flex items-center justify-between bg-white/5 rounded px-3 py-2"
                         >
                           <span className="text-sm text-white">{email}</span>
                           <button
@@ -1400,7 +1400,7 @@ export default function CircleCreationWizard({ isOpen, onClose, onSuccess, initi
             variant="outline"
             onClick={currentStep === 1 ? onClose : handleBack}
             size="sm"
-            className="border-slate-700 hover:bg-slate-800 text-xs sm:text-sm"
+            className="border-glass hover:bg-surface-raised text-xs sm:text-sm"
             disabled={currentStep === 5} // Can't go back from invite step
             aria-label={currentStep === 1 ? 'Cancel' : 'Go back'}
           >
@@ -1413,7 +1413,7 @@ export default function CircleCreationWizard({ isOpen, onClose, onSuccess, initi
               onClick={handleNext}
               disabled={!validateStep(currentStep)}
               size="sm"
-              className="bg-gradient-to-r from-orange-600 to-purple-600 hover:from-orange-700 hover:to-purple-700 text-xs sm:text-sm"
+              className="bg-gradient-brand shadow-glow hover:brightness-110 text-xs sm:text-sm"
             >
               Next
               <ChevronRight className="h-3 w-3 sm:h-4 sm:w-4 ml-1 sm:ml-2" />
@@ -1423,7 +1423,7 @@ export default function CircleCreationWizard({ isOpen, onClose, onSuccess, initi
               onClick={handleCreateAndContinue}
               disabled={isCreating || !validateStep(3)}
               size="sm"
-              className="bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-xs sm:text-sm"
+              className="bg-gradient-green hover:brightness-110 text-xs sm:text-sm"
             >
               {isCreating ? (
                 <>
@@ -1443,7 +1443,7 @@ export default function CircleCreationWizard({ isOpen, onClose, onSuccess, initi
             <Button
               onClick={handleFinish}
               size="sm"
-              className="bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-xs sm:text-sm"
+              className="bg-gradient-green hover:brightness-110 text-xs sm:text-sm"
             >
               <CheckCircle2 className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
               {formData.inviteEmails.length > 0 ? (

@@ -1,93 +1,40 @@
 'use client';
 
 /**
- * Settings hub — single landing page with links to all settings sub-routes.
- * Mirrors iOS `SettingsView` (Display / Health / Notifications / Privacy / Data).
+ * Settings hub — mirrors iOS `SettingsView` section order:
+ * Subscription · Health & Data · Notifications · Privacy & Safety · Display ·
+ * Support & Legal · Account, then the app-info footer.
  */
 
-import { motion } from 'framer-motion';
 import {
-  Bell, Heart, Lock, Palette, Database, ChevronRight, Crown, LogOut, User,
+  Bell,
+  BookOpen,
+  Crown,
+  Database,
+  FileText,
+  Heart,
+  HelpCircle,
+  Lock,
+  LogOut,
+  Mail,
+  Palette,
+  Shield,
+  Trash2,
+  User,
 } from 'lucide-react';
-import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 
-import { Navbar } from '@/components/layout/navbar';
-import { Card, CardContent } from '@/components/ui/card';
+import { ProBadge } from '@/components/billing/ProBadge';
+import { GroupButton, SettingsScreen } from '@/components/profile/settings-shell';
+import { ListGroup, ListRow } from '@/components/ui/ios';
+import { useEntitlements } from '@/hooks/useEntitlements';
 import { useAuthStore } from '@/stores/auth-store';
-
-interface Section {
-  href: string;
-  icon: React.ComponentType<any>;
-  iconBg: string;
-  iconColor: string;
-  title: string;
-  description: string;
-}
-
-const SECTIONS: Section[] = [
-  {
-    href: '/profile',
-    icon: User,
-    iconBg: 'bg-purple-500/15',
-    iconColor: 'text-purple-400',
-    title: 'Profile',
-    description: 'Display name, avatar, bio',
-  },
-  {
-    href: '/settings/display',
-    icon: Palette,
-    iconBg: 'bg-indigo-500/15',
-    iconColor: 'text-indigo-400',
-    title: 'Display',
-    description: 'Theme, units, language',
-  },
-  {
-    href: '/settings/health',
-    icon: Heart,
-    iconBg: 'bg-red-500/15',
-    iconColor: 'text-red-400',
-    title: 'Health & Data',
-    description: 'Sources, sync, import preferences',
-  },
-  {
-    href: '/settings/notifications',
-    icon: Bell,
-    iconBg: 'bg-orange-500/15',
-    iconColor: 'text-orange-400',
-    title: 'Notifications',
-    description: 'Email, push, in-app',
-  },
-  {
-    href: '/settings/privacy',
-    icon: Lock,
-    iconBg: 'bg-emerald-500/15',
-    iconColor: 'text-emerald-400',
-    title: 'Privacy',
-    description: 'Profile visibility, data sharing',
-  },
-  {
-    href: '/settings/data',
-    icon: Database,
-    iconBg: 'bg-cyan-500/15',
-    iconColor: 'text-cyan-400',
-    title: 'Data',
-    description: 'Export, delete account',
-  },
-  {
-    href: '/settings/billing',
-    icon: Crown,
-    iconBg: 'bg-amber-500/15',
-    iconColor: 'text-amber-400',
-    title: 'Billing',
-    description: 'FitCircle Pro plan, payment, invoices',
-  },
-];
 
 export default function SettingsPage() {
   const router = useRouter();
   const { logout } = useAuthStore();
+  const { isPro, entitlements } = useEntitlements();
 
   const handleSignOut = async () => {
     try {
@@ -99,43 +46,95 @@ export default function SettingsPage() {
   };
 
   return (
-    <div className="min-h-screen bg-background pb-24">
-      <Navbar />
-      <main className="mx-auto max-w-2xl px-4 py-6 space-y-6">
-        <h1 className="text-2xl font-bold">Settings</h1>
+    <SettingsScreen title="Settings" backHref="/profile" backLabel="Profile">
+      <div data-testid="settings-groups">
+        <ListGroup title="Subscription">
+          <ListRow
+            href="/settings/billing"
+            icon={Crown}
+            tone="yellow"
+            title="FitCircle Pro"
+            subtitle={
+              entitlements?.subscriptionsEnabled === false
+                ? 'Everything is free right now'
+                : 'Manage your plan and benefits'
+            }
+            trailing={isPro ? <ProBadge /> : undefined}
+          />
+        </ListGroup>
 
-        <Card>
-          <CardContent className="p-0 divide-y divide-border">
-            {SECTIONS.map((s, idx) => (
-              <Link key={s.href} href={s.href}>
-                <motion.div
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  transition={{ delay: idx * 0.03 }}
-                  className="flex items-center gap-3 px-4 py-3 hover:bg-zinc-800/40 transition-colors cursor-pointer"
-                >
-                  <div className={`h-10 w-10 rounded-lg ${s.iconBg} ${s.iconColor} flex items-center justify-center`}>
-                    <s.icon className="h-5 w-5" />
-                  </div>
-                  <div className="flex-1">
-                    <p className="font-semibold">{s.title}</p>
-                    <p className="text-xs text-muted-foreground">{s.description}</p>
-                  </div>
-                  <ChevronRight className="h-4 w-4 text-muted-foreground" />
-                </motion.div>
-              </Link>
-            ))}
-          </CardContent>
-        </Card>
+        <ListGroup title="Health & Data">
+          <ListRow
+            href="/settings/health"
+            icon={Heart}
+            tone="red"
+            title="Health sources"
+            subtitle="Apple Health, Health Connect and sync"
+          />
+          <ListRow
+            href="/settings/data"
+            icon={Database}
+            tone="cyan"
+            title="Your data"
+            subtitle="Export or delete your data"
+          />
+        </ListGroup>
 
-        <button
-          type="button"
-          onClick={handleSignOut}
-          className="w-full flex items-center justify-center gap-2 rounded-lg bg-destructive/10 text-destructive py-3 font-semibold hover:bg-destructive/15 transition-colors"
-        >
-          <LogOut className="h-4 w-4" /> Sign out
-        </button>
-      </main>
-    </div>
+        <ListGroup title="Notifications">
+          <ListRow
+            href="/settings/notifications"
+            icon={Bell}
+            tone="orange"
+            title="Notification Preferences"
+            subtitle="Manage your notification settings"
+          />
+        </ListGroup>
+
+        <ListGroup title="Privacy & Safety">
+          <ListRow
+            href="/settings/privacy"
+            icon={Lock}
+            tone="green"
+            title="Privacy Settings"
+            subtitle="Cookies, analytics and data sharing"
+          />
+        </ListGroup>
+
+        <ListGroup title="Display">
+          <ListRow
+            href="/settings/display"
+            icon={Palette}
+            tone="indigo"
+            title="Units & Nutrition"
+            subtitle="Metric or imperial, diet preferences"
+          />
+        </ListGroup>
+
+        <ListGroup title="Support & Legal">
+          <ListRow href="/support" icon={HelpCircle} tone="purple" title="Help & Support" subtitle="Answers and troubleshooting" />
+          <ListRow
+            href="mailto:support@fitcircle.ai"
+            icon={Mail}
+            tone="cyan"
+            title="Contact Us"
+            subtitle="support@fitcircle.ai"
+          />
+          <ListRow href="/terms" icon={FileText} tone="slate" title="Terms of Use" />
+          <ListRow href="/privacy" icon={Shield} tone="slate" title="Privacy Policy" />
+          <ListRow href="/privacy/delete-account" icon={BookOpen} tone="slate" title="Account deletion policy" />
+        </ListGroup>
+
+        <ListGroup title="Account">
+          <ListRow href="/profile" icon={User} tone="purple" title="Profile" subtitle="Name, goals and units" />
+          <ListRow href="/settings/data" icon={Trash2} destructive title="Delete Account" subtitle="Permanently delete your account" />
+        </ListGroup>
+
+        <GroupButton onClick={() => void handleSignOut()} destructive icon={LogOut} testId="settings-sign-out">
+          Sign out
+        </GroupButton>
+
+        <p className="pb-4 text-center text-footnote text-fg-tertiary">FitCircle for the web</p>
+      </div>
+    </SettingsScreen>
   );
 }

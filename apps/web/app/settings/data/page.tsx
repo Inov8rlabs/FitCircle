@@ -5,19 +5,18 @@
  * Mirrors iOS `HistoricalDataFeature` + iOS account deletion flow.
  */
 
-import { ArrowLeft, Download, Trash2, AlertTriangle, Loader2, Database } from 'lucide-react';
-import Link from 'next/link';
+import { Database, Download, Loader2, Mail, Trash2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { toast } from 'sonner';
 
-import { Navbar } from '@/components/layout/navbar';
+import { SettingsScreen } from '@/components/profile/settings-shell';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
 import {
   Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
+import { ListGroup, ListRow } from '@/components/ui/ios';
 import { Label } from '@/components/ui/label';
 import { AnalyticsEvents, analytics } from '@/lib/analytics';
 import { useAuthStore } from '@/stores/auth-store';
@@ -95,74 +94,40 @@ export default function DataSettingsPage() {
   };
 
   return (
-    <div className="min-h-screen bg-background pb-24">
-      <Navbar />
-      <main className="mx-auto max-w-2xl px-4 py-6 space-y-6">
-        <Link href="/settings" className="inline-flex items-center text-sm text-muted-foreground hover:text-foreground">
-          <ArrowLeft className="h-4 w-4 mr-1" /> Back to settings
-        </Link>
+    <SettingsScreen title="Data" subtitle="Export or delete what FitCircle keeps">
+      <ListGroup title="Export" footer="A JSON archive of your check-ins, streaks, circles, and goals.">
+        <ListRow
+          onClick={() => void handleExport()}
+          icon={Download}
+          tone="cyan"
+          title={exporting ? 'Preparing export…' : 'Export your data'}
+          trailing={exporting ? <Loader2 className="h-4 w-4 animate-spin text-fg-secondary" aria-hidden /> : undefined}
+          testId="data-export"
+        />
+      </ListGroup>
 
-        <h1 className="text-2xl font-bold">Data</h1>
+      <ListGroup title="Account">
+        <ListRow icon={Mail} tone="purple" title="Email" value={user?.email ?? '—'} />
+        <ListRow
+          icon={Database}
+          tone="slate"
+          title="User ID"
+          value={<span className="font-mono text-footnote">{user?.id?.slice(0, 8) ?? '—'}…</span>}
+        />
+      </ListGroup>
 
-        {/* Export */}
-        <Card>
-          <CardContent className="p-4 space-y-3">
-            <div className="flex items-center gap-3">
-              <Download className="h-5 w-5 text-cyan-400" />
-              <div>
-                <h2 className="font-semibold">Export your data</h2>
-                <p className="text-xs text-muted-foreground">
-                  Download a JSON archive of your check-ins, streaks, circles, and goals.
-                </p>
-              </div>
-            </div>
-            <Button onClick={handleExport} disabled={exporting} className="w-full">
-              {exporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <><Download className="h-4 w-4 mr-2" />Export data</>}
-            </Button>
-          </CardContent>
-        </Card>
-
-        {/* Account info */}
-        <Card>
-          <CardContent className="p-4 space-y-2">
-            <div className="flex items-center gap-3">
-              <Database className="h-5 w-5 text-purple-400" />
-              <h2 className="font-semibold">Account</h2>
-            </div>
-            <dl className="text-sm space-y-1">
-              <div className="flex justify-between">
-                <dt className="text-muted-foreground">Email</dt>
-                <dd className="font-medium">{user?.email ?? '—'}</dd>
-              </div>
-              <div className="flex justify-between">
-                <dt className="text-muted-foreground">User ID</dt>
-                <dd className="font-mono text-xs">{user?.id?.slice(0, 8) ?? '—'}…</dd>
-              </div>
-            </dl>
-          </CardContent>
-        </Card>
-
-        {/* Danger zone */}
-        <Card className="border-destructive/30">
-          <CardContent className="p-4 space-y-3">
-            <div className="flex items-center gap-3">
-              <AlertTriangle className="h-5 w-5 text-destructive" />
-              <h2 className="font-semibold">Danger zone</h2>
-            </div>
-            <p className="text-sm text-muted-foreground">
-              Deleting your account permanently removes all your check-ins, streaks, and
-              circle memberships. This cannot be undone.
-            </p>
-            <Button
-              variant="destructive"
-              onClick={() => setDeleteOpen(true)}
-              className="w-full"
-            >
-              <Trash2 className="h-4 w-4 mr-2" /> Delete account
-            </Button>
-          </CardContent>
-        </Card>
-      </main>
+      <ListGroup
+        title="Danger zone"
+        footer="Deleting your account permanently removes all your check-ins, streaks, and circle memberships. This cannot be undone."
+      >
+        <ListRow
+          onClick={() => setDeleteOpen(true)}
+          icon={Trash2}
+          destructive
+          title="Delete account"
+          testId="data-delete"
+        />
+      </ListGroup>
 
       <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
         <DialogContent>
@@ -193,7 +158,7 @@ export default function DataSettingsPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+    </SettingsScreen>
   );
 }
 

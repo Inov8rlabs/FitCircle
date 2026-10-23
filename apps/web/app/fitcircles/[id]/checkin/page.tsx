@@ -22,6 +22,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Skeleton } from '@/components/ui/skeleton';
 import { AnalyticsEvents, analytics } from '@/lib/analytics';
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/stores/auth-store';
@@ -229,10 +230,15 @@ export default function CheckInPage() {
     return (
       <>
         <DashboardNav />
-        <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 flex items-center justify-center">
-          <div className="text-center">
-            <div className="animate-spin w-8 h-8 border-4 border-orange-500 border-t-transparent rounded-full mx-auto mb-4"></div>
-            <p className="text-gray-400">Loading...</p>
+        <div className="min-h-screen bg-canvas">
+          <div className="mx-auto max-w-4xl px-4 py-6 sm:px-6 sm:py-8" aria-busy="true">
+            <Skeleton className="mb-4 h-10 w-10 rounded-full" />
+            <Skeleton className="h-9 w-64" />
+            <Skeleton className="mt-2 h-4 w-48" />
+            <div className="mt-8 grid grid-cols-1 gap-6 lg:grid-cols-2">
+              <Skeleton className="h-80 rounded-xl" />
+              <Skeleton className="h-80 rounded-xl" />
+            </div>
           </div>
         </div>
       </>
@@ -243,15 +249,11 @@ export default function CheckInPage() {
     return (
       <>
         <DashboardNav />
-        <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 flex items-center justify-center">
-          <Card className="bg-red-900/20 border-red-800/50 backdrop-blur-xl">
+        <div className="min-h-screen bg-canvas flex items-center justify-center px-4">
+          <Card className="w-full max-w-md">
             <CardContent className="p-8 text-center">
-              <h2 className="text-xl font-semibold text-red-400 mb-2">FitCircle Not Found</h2>
-              <Button
-                onClick={() => { void router.push('/fitcircles'); }}
-                variant="outline"
-                className="border-orange-500/50 text-orange-400 hover:bg-orange-500/10"
-              >
+              <h2 className="mb-4 text-title3 text-white">Circle not found</h2>
+              <Button onClick={() => { void router.push('/fitcircles'); }} variant="outline">
                 <ArrowLeft className="h-4 w-4 mr-2" />
                 Back to FitCircles
               </Button>
@@ -265,28 +267,28 @@ export default function CheckInPage() {
   return (
     <>
       <DashboardNav />
-      <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950">
-        <div className="relative max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 lg:py-12">
+      <div className="min-h-screen bg-canvas">
+        <div className="relative mx-auto max-w-4xl px-4 py-6 sm:px-6 sm:py-8">
           {/* Header */}
           <div className="mb-8">
-            <Button
+            <button
+              type="button"
               onClick={() => { void router.push(`/fitcircles/${circleId}`); }}
-              variant="ghost"
-              className="mb-4 text-gray-400 hover:text-white hover:bg-slate-800/50"
+              aria-label={`Back to ${fitCircle.name}`}
+              className="mb-4 flex h-10 w-10 items-center justify-center rounded-full border border-glass bg-surface-raised/60 text-white transition hover:bg-surface-raised"
             >
-              <ArrowLeft className="h-4 w-4 mr-2" />
-              Back to {fitCircle.name}
-            </Button>
+              <ArrowLeft className="h-5 w-5" />
+            </button>
 
-            <div className="flex items-center space-x-4">
-              <div className="p-4 bg-gradient-to-br from-orange-500/20 to-purple-500/20 rounded-lg">
+            <div className="flex items-center gap-4">
+              <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-brand-orange/20">
                 {getChallengeIcon(fitCircle.type)}
               </div>
-              <div>
-                <h1 className="text-3xl font-bold bg-gradient-to-r from-orange-400 to-purple-400 bg-clip-text text-transparent">
+              <div className="min-w-0">
+                <h1 className="w-fit max-w-full bg-gradient-sunset bg-clip-text text-[30px] font-bold leading-tight text-transparent sm:text-large-title">
                   Submit Progress
                 </h1>
-                <p className="text-gray-400">
+                <p className="text-callout text-fg-secondary">
                   Track your progress for {fitCircle.name}
                 </p>
               </div>
@@ -300,7 +302,7 @@ export default function CheckInPage() {
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.1 }}
             >
-              <Card className="bg-slate-900/50 border-slate-800/50 backdrop-blur-xl">
+              <Card className="bg-surface-raised/50 border-hairline backdrop-blur-xl">
                 <CardHeader>
                   <CardTitle className="flex items-center space-x-2">
                     <TrendingUp className="h-5 w-5 text-orange-400" />
@@ -318,7 +320,7 @@ export default function CheckInPage() {
                       value={value}
                       onChange={(e) => setValue(e.target.value)}
                       placeholder={`Enter your ${fitCircle.type.replace('_', ' ')} value`}
-                      className="bg-slate-800/50 border-slate-700 text-white"
+                      className="bg-white/5 border-glass text-white"
                     />
                   </div>
 
@@ -353,7 +355,7 @@ export default function CheckInPage() {
                   <Button
                     onClick={handleSubmit}
                     disabled={submitting || !value}
-                    className="w-full bg-gradient-to-r from-orange-600 to-orange-700 hover:from-orange-700 hover:to-orange-800"
+                    className="w-full bg-gradient-orange hover:brightness-110"
                   >
                     {submitting ? 'Submitting...' : 'Submit Entry'}
                   </Button>
@@ -367,7 +369,7 @@ export default function CheckInPage() {
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.2 }}
             >
-              <Card className="bg-slate-900/50 border-slate-800/50 backdrop-blur-xl">
+              <Card className="bg-surface-raised/50 border-hairline backdrop-blur-xl">
                 <CardHeader>
                   <CardTitle className="flex items-center space-x-2">
                     <Calendar className="h-5 w-5 text-blue-400" />
@@ -382,8 +384,8 @@ export default function CheckInPage() {
                           key={entry.id}
                           className={`flex items-center justify-between p-3 rounded-lg border ${
                             entry.is_public
-                              ? 'bg-slate-800/50 border-slate-700/50'
-                              : 'bg-slate-800/30 border-slate-700/30 opacity-75'
+                              ? 'bg-white/5 border-glass'
+                              : 'bg-white/5 border-glass opacity-75'
                           }`}
                         >
                           <div className="flex items-center space-x-3">

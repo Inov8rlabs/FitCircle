@@ -11,7 +11,7 @@ const SUPPORT_EMAIL = 'support@fitcircle.ai';
 
 export default function SupportPage() {
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950">
+    <div className="min-h-screen bg-canvas bg-hero-glow">
       <div className="max-w-3xl mx-auto p-6 py-12">
         <Link
           href="/"

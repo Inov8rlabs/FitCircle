@@ -7,23 +7,16 @@ import {
   Cookie,
   AlertTriangle,
   CheckCircle2,
-  ExternalLink,
   FileText,
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useState, useEffect } from 'react';
 import { toast } from 'sonner';
 
-import DashboardNav from '@/components/DashboardNav';
+import { SettingsScreen, ToggleRow } from '@/components/profile/settings-shell';
 import { Button } from '@/components/ui/button';
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card';
-import { Switch } from '@/components/ui/switch';
+import { ListGroup, ListRow } from '@/components/ui/ios';
+import { Skeleton } from '@/components/ui/skeleton';
 import { AnalyticsEvents, analytics } from '@/lib/analytics';
 import { createBrowserSupabase } from '@/lib/supabase';
 import { useAuthStore } from '@/stores/auth-store';
@@ -245,179 +238,94 @@ export default function PrivacySettingsPage() {
     }
   };
 
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950">
-        <DashboardNav />
-        <div className="flex items-center justify-center h-screen">
-          <p className="text-white">Loading privacy settings...</p>
-        </div>
-      </div>
-    );
-  }
-
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950">
-      <DashboardNav />
-
-      <div className="max-w-4xl mx-auto p-6 pt-24 space-y-6">
-        {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-4xl font-bold text-white mb-2 flex items-center gap-3">
-            <Shield className="h-10 w-10 text-purple-400" />
-            Privacy & Data Settings
-          </h1>
-          <p className="text-slate-400 text-lg">
-            Manage your data, cookies, and privacy preferences
-          </p>
+    <SettingsScreen title="Privacy" subtitle="Manage your data, cookies, and privacy preferences">
+      {loading ? (
+        <div role="status" aria-label="Loading" className="space-y-2">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <Skeleton key={i} className="h-[64px] rounded-xl" />
+          ))}
         </div>
+      ) : (
+        <>
+          <ListGroup title="Cookie preferences" footer="Control how we use cookies and tracking.">
+            <ToggleRow
+              id="essential"
+              icon={CheckCircle2}
+              tone="green"
+              title="Essential cookies"
+              description="Required for authentication and core functionality"
+              checked
+              disabled
+              trailingNote="Always on"
+            />
+            <ToggleRow
+              id="analytics"
+              icon={Cookie}
+              tone="purple"
+              title="Analytics cookies"
+              description="Help us improve FitCircle by tracking usage (Amplitude)"
+              checked={settings.analytics_enabled}
+              onCheckedChange={(checked) => setSettings({ ...settings, analytics_enabled: checked })}
+            />
+            <ToggleRow
+              id="marketing"
+              icon={Cookie}
+              tone="slate"
+              title="Marketing cookies"
+              description="Currently not used on FitCircle"
+              checked={settings.marketing_enabled}
+              disabled
+            />
+          </ListGroup>
+          <Button onClick={saveSettings} disabled={saving} size="lg" fullWidth className="mb-6">
+            {saving ? 'Saving...' : 'Save Cookie Preferences'}
+          </Button>
 
-        {/* Cookie Preferences */}
-        <Card className="bg-slate-900/50 border-slate-700 backdrop-blur">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-white">
-              <Cookie className="h-5 w-5 text-purple-400" />
-              Cookie Preferences
-            </CardTitle>
-            <CardDescription>Control how we use cookies and tracking</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex items-center justify-between p-4 rounded-lg bg-slate-800/50 border border-slate-700">
-              <div className="flex-1">
-                <p className="font-medium text-white flex items-center gap-2">
-                  <CheckCircle2 className="h-4 w-4 text-green-400" />
-                  Essential Cookies
-                </p>
-                <p className="text-sm text-slate-400 mt-1">
-                  Required for authentication and core functionality
-                </p>
-              </div>
-              <div className="flex items-center gap-2">
-                <Switch checked={true} disabled />
-                <span className="text-xs text-green-400 font-medium">Always On</span>
-              </div>
-            </div>
+          <ListGroup title="California privacy rights (CCPA)" footer="For California residents only.">
+            <ToggleRow
+              id="do_not_sell"
+              icon={FileText}
+              tone="orange"
+              title="Do Not Sell My Personal Information"
+              description="Opt out of data sharing with third parties (Amplitude analytics)"
+              checked={settings.do_not_sell}
+              onCheckedChange={handleCCPAOptOut}
+            />
+          </ListGroup>
 
-            <div className="flex items-center justify-between p-4 rounded-lg bg-slate-800/50 border border-slate-700 hover:border-indigo-500/50 transition-colors">
-              <div className="flex-1">
-                <p className="font-medium text-white">Analytics Cookies</p>
-                <p className="text-sm text-slate-400 mt-1">
-                  Help us improve FitCircle by tracking usage (Amplitude)
-                </p>
-              </div>
-              <Switch
-                checked={settings.analytics_enabled}
-                onCheckedChange={(checked) =>
-                  setSettings({ ...settings, analytics_enabled: checked })
-                }
-              />
-            </div>
-
-            <div className="flex items-center justify-between p-4 rounded-lg bg-slate-800/50 border border-slate-700 opacity-50">
-              <div className="flex-1">
-                <p className="font-medium text-white">Marketing Cookies</p>
-                <p className="text-sm text-slate-400 mt-1">
-                  Currently not used on FitCircle
-                </p>
-              </div>
-              <Switch
-                checked={settings.marketing_enabled}
-                disabled
-              />
-            </div>
-
-            <Button
-              onClick={saveSettings}
-              disabled={saving}
-              className="w-full bg-gradient-to-r from-purple-500 to-indigo-500 hover:from-purple-600 hover:to-indigo-600"
-            >
-              {saving ? 'Saving...' : 'Save Cookie Preferences'}
-            </Button>
-          </CardContent>
-        </Card>
-
-        {/* CCPA Rights (California Residents) */}
-        <Card className="bg-slate-900/50 border-slate-700 backdrop-blur">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-white">
-              <FileText className="h-5 w-5 text-orange-400" />
-              California Privacy Rights (CCPA)
-            </CardTitle>
-            <CardDescription>For California residents only</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex items-center justify-between p-4 rounded-lg bg-slate-800/50 border border-slate-700">
-              <div className="flex-1">
-                <p className="font-medium text-white">Do Not Sell My Personal Information</p>
-                <p className="text-sm text-slate-400 mt-1">
-                  Opt out of data sharing with third parties (Amplitude analytics)
-                </p>
-              </div>
-              <Switch
-                checked={settings.do_not_sell}
-                onCheckedChange={handleCCPAOptOut}
-              />
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Your Data Rights (GDPR) */}
-        <Card className="bg-slate-900/50 border-slate-700 backdrop-blur">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-white">
-              <Shield className="h-5 w-5 text-cyan-400" />
-              Your Data Rights
-            </CardTitle>
-            <CardDescription>Access, download, or delete your data (GDPR)</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <Button
-              onClick={handleDownloadData}
-              variant="outline"
-              className="w-full border-slate-600 text-white hover:bg-slate-800 justify-start"
-            >
-              <Download className="h-4 w-4 mr-2" />
-              Download My Data (JSON Export)
-            </Button>
-
-            <Button
-              onClick={handleDeleteAccount}
-              variant="outline"
-              className="w-full border-red-900/50 text-red-400 hover:bg-red-950/30 hover:border-red-800 justify-start"
-            >
-              <Trash2 className="h-4 w-4 mr-2" />
-              Delete My Account Permanently
-            </Button>
-
-            <div className="mt-4 p-3 rounded-lg bg-amber-500/10 border border-amber-500/20">
-              <p className="text-xs text-amber-300 flex items-start gap-2">
-                <AlertTriangle className="h-4 w-4 flex-shrink-0 mt-0.5" />
-                <span>
-                  Account deletion is permanent and cannot be undone. All your data will be erased
-                  within 30 days as required by GDPR.
-                </span>
-              </p>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Privacy Policy Link */}
-        <Card className="bg-slate-900/50 border-slate-700 backdrop-blur">
-          <CardContent className="p-6">
-            <a
-              href="/privacy"
-              target="_blank"
-              className="flex items-center justify-between text-cyan-400 hover:text-cyan-300 transition-colors"
-            >
-              <span className="font-medium flex items-center gap-2">
-                <FileText className="h-4 w-4" />
-                Read our Privacy Policy
+          <ListGroup
+            title="Your data rights"
+            footer={
+              <span className="inline-flex items-start gap-1.5 text-brand-yellow/90">
+                <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />
+                Account deletion is permanent and cannot be undone. All your data will be erased within 30 days as
+                required by GDPR.
               </span>
-              <ExternalLink className="h-4 w-4" />
-            </a>
-          </CardContent>
-        </Card>
-      </div>
-    </div>
+            }
+          >
+            <ListRow
+              onClick={() => void handleDownloadData()}
+              icon={Download}
+              tone="cyan"
+              title="Download My Data"
+              subtitle="JSON export (GDPR)"
+              testId="privacy-download"
+            />
+            <ListRow
+              onClick={() => void handleDeleteAccount()}
+              icon={Trash2}
+              destructive
+              title="Delete My Account Permanently"
+              testId="privacy-delete"
+            />
+          </ListGroup>
+
+          <ListGroup>
+            <ListRow href="/privacy" icon={Shield} tone="slate" title="Read our Privacy Policy" />
+          </ListGroup>
+        </>
+      )}
+    </SettingsScreen>
   );
 }

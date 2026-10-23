@@ -1,84 +1,77 @@
 'use client';
 
-import { motion, AnimatePresence } from 'framer-motion';
-import { Home, Trophy, Plus, Users, User } from 'lucide-react';
+import { motion } from 'framer-motion';
+import { Activity, Home, User, Users, Utensils } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
 import { cn, triggerHapticFeedback } from '@/lib/utils';
 import { useUIStore } from '@/stores/ui-store';
 
-const navItems = [
-  { href: '/dashboard', icon: Home, label: 'Home' },
-  { href: '/challenges', icon: Trophy, label: 'Challenges' },
-  { href: '/checkin', icon: Plus, label: 'Check-in', isSpecial: true },
-  { href: '/teams', icon: Users, label: 'Teams' },
-  { href: '/profile', icon: User, label: 'Profile' },
-];
+/**
+ * The iOS tab bar (MainTabView: Home · Circles · Food · Activity · Profile)
+ * as a floating pill on phones. Every destination is a real route; the old
+ * /checkin and /teams items pointed at pages that don't exist.
+ */
+export const BOTTOM_NAV_ITEMS = [
+  { href: '/dashboard', icon: Home, label: 'Home', match: ['/dashboard'] },
+  { href: '/fitcircles', icon: Users, label: 'Circles', match: ['/fitcircles', '/challenges', '/join'] },
+  { href: '/food-log', icon: Utensils, label: 'Food', match: ['/food-log', '/beverage-log'] },
+  { href: '/exercise-log', icon: Activity, label: 'Activity', match: ['/exercise-log', '/streaks', '/momentum', '/body-composition'] },
+  { href: '/profile', icon: User, label: 'Profile', match: ['/profile', '/settings', '/invite', '/upgrade'] },
+] as const;
+
+export function isNavItemActive(pathname: string | null, match: readonly string[]): boolean {
+  if (!pathname) return false;
+  return match.some((m) => pathname === m || pathname.startsWith(`${m}/`));
+}
+
+/** Full-screen flows where the tab bar would cover the primary action. */
+const HIDDEN_ON = [/^\/onboarding/, /^\/food-log\/new/, /^\/exercise-log\/new/, /^\/fitcircles\/[^/]+\/checkin/, /^\/admin/];
 
 export function BottomNav() {
   const pathname = usePathname();
   const { isBottomNavVisible } = useUIStore();
+  if (!isBottomNavVisible || HIDDEN_ON.some((re) => re.test(pathname ?? ''))) return null;
 
   return (
-    <AnimatePresence>
-      {isBottomNavVisible && (
-        <motion.nav
-          initial={{ y: 100 }}
-          animate={{ y: 0 }}
-          exit={{ y: 100 }}
-          transition={{ type: 'spring', damping: 25, stiffness: 500 }}
-          className="fixed bottom-0 left-0 right-0 z-50 bg-background/80 backdrop-blur-lg border-t border-border md:hidden safe-bottom"
-        >
-          <div className="grid grid-cols-5 h-16">
-            {navItems.map((item) => {
-              const Icon = item.icon;
-              const isActive = pathname === item.href;
-
-              if (item.isSpecial) {
-                return (
-                  <Link
-                    key={item.href}
-                    href={item.href}
-                    onClick={() => triggerHapticFeedback('medium')}
-                    className="flex flex-col items-center justify-center relative"
-                  >
-                    <motion.div
-                      whileHover={{ scale: 1.1 }}
-                      whileTap={{ scale: 0.95 }}
-                      className="absolute -top-4 bg-primary rounded-full p-3 shadow-lg"
-                    >
-                      <Icon className="h-6 w-6 text-primary-foreground" />
-                    </motion.div>
-                  </Link>
-                );
-              }
-
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  onClick={() => triggerHapticFeedback('light')}
-                  className={cn(
-                    'flex flex-col items-center justify-center space-y-1 transition-colors',
-                    isActive ? 'text-primary' : 'text-muted-foreground'
-                  )}
-                >
-                  <Icon className="h-5 w-5" />
-                  <span className="text-[10px] font-medium">{item.label}</span>
-                  {isActive && (
-                    <motion.div
-                      layoutId="bottomNavIndicator"
-                      className="absolute bottom-0 h-0.5 w-12 bg-primary"
-                      transition={{ type: 'spring', damping: 25, stiffness: 500 }}
-                    />
-                  )}
-                </Link>
-              );
-            })}
-          </div>
-        </motion.nav>
-      )}
-    </AnimatePresence>
+    <nav
+      aria-label="Primary"
+      data-bottom-nav
+      data-testid="bottom-nav"
+      className="fixed inset-x-3 z-50 md:hidden"
+      style={{ bottom: 'calc(10px + env(safe-area-inset-bottom))' }}
+    >
+      <ul className="grid h-16 grid-cols-5 rounded-full border border-glass bg-surface/85 px-1.5 shadow-ios-lg backdrop-blur-xl">
+        {BOTTOM_NAV_ITEMS.map((item) => {
+          const Icon = item.icon;
+          const active = isNavItemActive(pathname, item.match);
+          return (
+            <li key={item.href} className="relative flex">
+              <Link
+                href={item.href}
+                aria-current={active ? 'page' : undefined}
+                onClick={() => triggerHapticFeedback('light')}
+                className={cn(
+                  'relative z-10 m-1.5 flex flex-1 flex-col items-center justify-center gap-0.5 rounded-full transition-colors duration-200 ease-ios',
+                  active ? 'text-white' : 'text-fg-tertiary hover:text-fg-secondary'
+                )}
+              >
+                {active && (
+                  <motion.span
+                    layoutId="bottomNavPill"
+                    aria-hidden
+                    className="absolute inset-0 -z-10 rounded-full bg-white/10"
+                    transition={{ type: 'spring', damping: 30, stiffness: 400 }}
+                  />
+                )}
+                <Icon className="h-5 w-5" strokeWidth={active ? 2.4 : 2} />
+                <span className="text-[10px] font-semibold leading-none">{item.label}</span>
+              </Link>
+            </li>
+          );
+        })}
+      </ul>
+    </nav>
   );
 }

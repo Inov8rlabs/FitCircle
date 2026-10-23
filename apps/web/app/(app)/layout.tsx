@@ -2,9 +2,8 @@
 
 import { motion, AnimatePresence } from 'framer-motion';
 import { usePathname, useRouter } from 'next/navigation';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 
-import { BottomNav } from '@/components/layout/bottom-nav';
 import { Navbar } from '@/components/layout/navbar';
 import { useAuthStore } from '@/stores/auth-store';
 import { useUIStore } from '@/stores/ui-store';
@@ -19,9 +18,20 @@ export default function AppLayout({
   const router = useRouter();
   const { isAuthenticated, checkAuth } = useAuthStore();
   const { setBottomNavVisible } = useUIStore();
+  // The server already gated this request (middleware + the page's own
+  // getUser()). The client store starts out signed-out until checkAuth() has
+  // read the Supabase session, so redirecting before that finished bounced
+  // every direct load of /food-log and /body-composition to /login.
+  const [authChecked, setAuthChecked] = useState(false);
 
   useEffect(() => {
-    void checkAuth();
+    let cancelled = false;
+    void checkAuth().finally(() => {
+      if (!cancelled) setAuthChecked(true);
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [checkAuth]);
 
   useEffect(() => {
@@ -30,16 +40,18 @@ export default function AppLayout({
     setBottomNavVisible(!hideBottomNavPaths.includes(pathname));
   }, [pathname, setBottomNavVisible]);
 
-  // Redirect to login if not authenticated
+  // Session gone (signed out in another tab, expired): send to login, but
+  // only once the session check has actually finished.
   useEffect(() => {
+    if (!authChecked || isAuthenticated) return;
     const publicPaths = ['/', '/login', '/register', '/forgot-password'];
-    if (!isAuthenticated && !publicPaths.includes(pathname)) {
-      void router.push('/login');
+    if (!publicPaths.includes(pathname)) {
+      void router.replace(`/login?returnUrl=${encodeURIComponent(pathname)}`);
     }
-  }, [isAuthenticated, pathname, router]);
+  }, [authChecked, isAuthenticated, pathname, router]);
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-canvas">
       <Navbar />
       <AnimatePresence mode="wait">
         <motion.main
@@ -53,7 +65,6 @@ export default function AppLayout({
           {children}
         </motion.main>
       </AnimatePresence>
-      <BottomNav />
     </div>
   );
 }

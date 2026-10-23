@@ -7,14 +7,12 @@ import {
   Calendar,
   Target,
   Crown,
-  Medal,
   TrendingUp,
   TrendingDown,
   Clock,
   ArrowLeft,
   Settings,
   UserPlus,
-  MoreHorizontal,
   Activity,
   AlertCircle,
   Lock,
@@ -38,14 +36,18 @@ import CircleChallengesSection from '@/components/challenges/CircleChallengesSec
 import { CircleChat } from '@/components/chat/CircleChat';
 import { CheckInCard } from '@/components/check-ins';
 import CircleQuestsSection from '@/components/CircleQuestsSection';
+import { CircleDetailSkeleton } from '@/components/circles/CircleDetailSkeleton';
+import { CircleStreakLiveCard } from '@/components/circles/CircleStreakLiveCard';
+import { LeaderboardRow } from '@/components/circles/LeaderboardRow';
+import { circleTypeLabel, durationLabel } from '@/components/circles/types';
+import { useCircleStreak } from '@/components/circles/useCircleStreak';
 import DashboardNav from '@/components/DashboardNav';
 import { BathroomScale } from '@/components/icons/BathroomScale';
 import { CircleFoodFeed } from '@/components/nutrition/CircleFoodFeed';
-import { CircleStreakCard } from '@/components/nutrition/CircleStreakCard';
+import { FitzyChat } from '@/components/nutrition/FitzyChat';
 import { FoodSearch } from '@/components/nutrition/FoodSearch';
 import { GroupMealComposer } from '@/components/nutrition/GroupMealComposer';
 import { GroupMealInbox } from '@/components/nutrition/GroupMealInbox';
-import { FitzyChat } from '@/components/nutrition/FitzyChat';
 import { InsightsList } from '@/components/nutrition/InsightsList';
 import { NutritionChallengeCard } from '@/components/nutrition/NutritionChallengeCard';
 import { PhotoLog } from '@/components/nutrition/PhotoLog';
@@ -55,9 +57,12 @@ import { ShareFitCircleDialog } from '@/components/ShareFitCircleDialog';
 import { SubmitProgressDialog } from '@/components/SubmitProgressDialog';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { DateRangeDisplay, DatePicker } from '@/components/ui/date-picker';
+import { DatePicker } from '@/components/ui/date-picker';
+import { EmptyState } from '@/components/ui/empty-state';
+import { GradientText } from '@/components/ui/gradient-text';
+import { GlassCard, ListGroup, ListRow, Screen } from '@/components/ui/ios';
 import { Progress } from '@/components/ui/progress';
+import { StatTile } from '@/components/ui/stat-tile';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useUnitPreference } from '@/hooks/useUnitPreference';
 import { AnalyticsEvents, analytics } from '@/lib/analytics';
@@ -101,6 +106,7 @@ interface Participant {
   is_public?: boolean;
   is_creator?: boolean;
   is_current_user?: boolean;
+  checked_in_today?: boolean;
   entries?: ProgressEntry[];
 }
 
@@ -127,6 +133,8 @@ export default function FitCirclePage() {
   const [copySuccess, setCopySuccess] = useState(false);
   const [foodPrivacyTier, setFoodPrivacyTier] = useState<PrivacyTier | null>(null);
   const [foodFeedKey, setFoodFeedKey] = useState(0);
+  // Live circle streak + today's check-ins (GET /api/mobile/circles/[id]/streak).
+  const { status: circleStreak, setStatus: setCircleStreak } = useCircleStreak(params.id as string);
 
   // Generate invite URL using environment variable or window location
   const inviteUrl = fitCircle?.invite_code
@@ -316,6 +324,7 @@ export default function FitCirclePage() {
           total_entries: entry.total_entries,
           is_creator: entry.is_creator,
           is_current_user: entry.is_current_user,
+          checked_in_today: Boolean(entry.checked_in_today),
           is_public: true, // daily_tracking visibility will be handled separately
         }));
 
@@ -877,11 +886,10 @@ export default function FitCirclePage() {
     return (
       <>
         <DashboardNav />
-        <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 flex items-center justify-center">
-          <div className="text-center">
-            <div className="animate-spin w-8 h-8 border-4 border-orange-500 border-t-transparent rounded-full mx-auto mb-4"></div>
-            <p className="text-gray-400">Loading FitCircle...</p>
-          </div>
+        <div className="min-h-screen bg-canvas">
+          <Screen size="wide" className="max-w-5xl">
+            <CircleDetailSkeleton />
+          </Screen>
         </div>
       </>
     );
@@ -891,504 +899,286 @@ export default function FitCirclePage() {
     return (
       <>
         <DashboardNav />
-        <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 flex items-center justify-center">
-          <Card className="bg-red-900/20 border-red-800/50 backdrop-blur-xl">
-            <CardContent className="p-8 text-center">
-              <div className="text-red-400 mb-4">
-                <AlertCircle className="h-12 w-12 mx-auto" />
-              </div>
-              <h2 className="text-xl font-semibold text-red-400 mb-2">FitCircle Not Found</h2>
-              <p className="text-gray-400 mb-4">{error || 'The FitCircle you\'re looking for doesn\'t exist.'}</p>
-              <Button
-                onClick={() => { void router.push('/fitcircles'); }}
-                variant="outline"
-                className="border-orange-500/50 text-orange-400 hover:bg-orange-500/10"
-              >
-                <ArrowLeft className="h-4 w-4 mr-2" />
-                Back to FitCircles
-              </Button>
-            </CardContent>
-          </Card>
+        <div className="min-h-screen bg-canvas">
+          <Screen>
+            <GlassCard className="mt-10">
+              <EmptyState
+                icon={AlertCircle}
+                tone="orange"
+                title="Circle not found"
+                description={error || "The circle you're looking for doesn't exist, or you're not a member."}
+                action={
+                  <Button variant="outline" onClick={() => { void router.push('/fitcircles'); }}>
+                    <ArrowLeft className="mr-2 h-4 w-4" />
+                    Back to Circles
+                  </Button>
+                }
+              />
+            </GlassCard>
+          </Screen>
         </div>
       </>
     );
   }
 
-  const getRankIcon = (rank: number) => {
-    switch (rank) {
-      case 1:
-        return <Crown className="h-5 w-5 text-yellow-500" />;
-      case 2:
-        return <Medal className="h-5 w-5 text-gray-400" />;
-      case 3:
-        return <Medal className="h-5 w-5 text-orange-600" />;
-      default:
-        return <span className="text-lg font-bold text-gray-500">#{rank}</span>;
-    }
-  };
-
-  const getProgressColor = (progress: number) => {
-    if (progress >= 80) return 'from-green-500 to-green-600';
-    if (progress >= 60) return 'from-orange-500 to-orange-600';
-    if (progress >= 40) return 'from-yellow-500 to-yellow-600';
-    return 'from-red-500 to-red-600';
-  };
-
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric',
-    });
-  };
+  const formatDate = (dateString: string) =>
+    new Date(dateString).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 
   const getDaysRemaining = (endDate: string) => {
-    const now = new Date();
-    const end = new Date(endDate);
-    const diffTime = end.getTime() - now.getTime();
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    const diffDays = Math.ceil((new Date(endDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
     return diffDays > 0 ? diffDays : 0;
+  };
+
+  // Today's check-in state per member, from the live circle streak (the
+  // leaderboard's checked_in_today is the fallback).
+  const loggedToday = new Set(
+    (circleStreak?.today?.members ?? []).filter((m) => m.logged || m.covered).map((m) => m.userId)
+  );
+  const isInToday = (p: Participant) => (circleStreak?.today ? loggedToday.has(p.user_id) : Boolean(p.checked_in_today));
+
+  const openTab = (tab: string) => {
+    setActiveTab(tab);
+    if (tab === 'chat') {
+      setChatUnread(0);
+      analytics.track(AnalyticsEvents.chatOpened());
+    }
+    if (tab === 'nutrition') analytics.track(AnalyticsEvents.fitzyOpened({ surface: 'circle_nutrition' }));
   };
 
   return (
     <>
       <DashboardNav />
-      <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950">
-        {/* Subtle background decorations */}
-        <div className="fixed inset-0 overflow-hidden pointer-events-none">
-          <div className="absolute top-20 left-10 w-96 h-96 bg-indigo-500/5 rounded-full blur-3xl" />
-          <div className="absolute top-40 right-20 w-[500px] h-[500px] bg-purple-500/5 rounded-full blur-3xl" />
-          <div className="absolute bottom-20 left-1/3 w-[400px] h-[400px] bg-orange-500/5 rounded-full blur-3xl" />
-        </div>
-
-        <div className="relative max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-8 lg:py-12 overflow-x-hidden">
-          {/* Header */}
-          <div className="mb-6 sm:mb-8">
-            <Button
+      <div className="min-h-screen bg-canvas">
+        <Screen size="wide" className="max-w-5xl">
+          {/* iOS nav bar: back + gear */}
+          <div className="mb-2 flex items-center justify-between">
+            <button
+              type="button"
               onClick={() => { void router.push('/fitcircles'); }}
-              variant="ghost"
-              className="mb-3 sm:mb-4 text-gray-400 hover:text-white hover:bg-slate-800/50 text-xs sm:text-sm"
+              aria-label="Back to Circles"
+              className="flex h-10 w-10 items-center justify-center rounded-full border border-glass bg-surface-raised/60 text-white transition hover:bg-surface-raised"
             >
-              <ArrowLeft className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
-              Back to FitCircles
-            </Button>
+              <ArrowLeft className="h-5 w-5" />
+            </button>
+            <button
+              type="button"
+              onClick={() => (fitCircle.is_creator ? setShowManageModal(true) : setShowShareDialog(true))}
+              aria-label={fitCircle.is_creator ? 'Manage circle' : 'Share circle'}
+              data-testid="circle-settings"
+              className="flex h-10 w-10 items-center justify-center rounded-full border border-glass bg-surface-raised/60 text-brand-purple transition hover:bg-surface-raised"
+            >
+              {fitCircle.is_creator ? <Settings className="h-5 w-5" /> : <Share2 className="h-5 w-5" />}
+            </button>
+          </div>
 
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-              <div className="flex-1 min-w-0">
-                <h1 className="text-2xl sm:text-3xl lg:text-5xl font-bold bg-gradient-to-r from-indigo-300 via-fuchsia-400 to-orange-400 bg-clip-text text-transparent mb-1.5 sm:mb-2 break-words">
-                  {fitCircle.name}
-                </h1>
-                <p className="text-gray-400 text-xs sm:text-sm lg:text-base max-w-2xl">
-                  {fitCircle.description}
-                </p>
-              </div>
-
-              <div className="flex gap-2 flex-shrink-0">
-                {/* Share button - available to all members */}
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="border-indigo-500/50 text-indigo-400 hover:bg-indigo-500/10 text-xs sm:text-sm"
-                  onClick={() => setShowShareDialog(true)}
-                >
-                  <Share2 className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
-                  Share
-                </Button>
-
-                {/* Manage button - only for creators */}
-                {fitCircle.is_creator && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="border-orange-500/50 text-orange-400 hover:bg-orange-500/10 text-xs sm:text-sm"
-                    onClick={() => setShowManageModal(true)}
-                  >
-                    <Settings className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
-                    Manage
-                  </Button>
+          {/* Name, description, Invite + Chat pills */}
+          <header className="mb-6 flex flex-col items-center text-center">
+            <GradientText as="h1" className="break-words text-[30px] font-bold leading-tight sm:text-large-title">
+              {fitCircle.name}
+            </GradientText>
+            {fitCircle.description && (
+              <p className="mt-1 max-w-xl text-subhead text-fg-secondary">{fitCircle.description}</p>
+            )}
+            <div className="mt-4 flex gap-2">
+              <button
+                type="button"
+                onClick={() => setShowShareDialog(true)}
+                data-testid="circle-invite"
+                className="inline-flex h-9 items-center gap-1.5 rounded-full bg-gradient-brand px-4 text-footnote font-semibold text-white shadow-glow transition hover:brightness-110 active:scale-95"
+              >
+                <UserPlus className="h-4 w-4" aria-hidden />
+                Invite
+              </button>
+              <button
+                type="button"
+                onClick={() => openTab('chat')}
+                data-testid="circle-chat"
+                className="relative inline-flex h-9 items-center gap-1.5 rounded-full bg-gradient-indigo px-4 text-footnote font-semibold text-white transition hover:brightness-110 active:scale-95"
+              >
+                <MessageCircle className="h-4 w-4" aria-hidden />
+                Chat
+                {chatUnread > 0 && (
+                  <span className="ml-0.5 inline-flex h-4 min-w-[16px] items-center justify-center rounded-full bg-white px-1 text-[10px] font-bold leading-none text-brand-indigo">
+                    {chatUnread > 99 ? '99+' : chatUnread}
+                  </span>
                 )}
-              </div>
+              </button>
             </div>
-          </div>
+          </header>
 
-          {/* FitCircle Stats Cards */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5 sm:gap-3 lg:gap-4 mb-6 sm:mb-8">
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.1 }}
-            >
-              <Card className="bg-slate-900/50 border-slate-800/50 backdrop-blur-xl h-full">
-                <CardContent className="p-3 sm:p-4 lg:p-5 h-full min-h-[90px] sm:min-h-[110px] flex items-center">
-                  <div className="flex items-center gap-2 sm:gap-3 w-full">
-                    <div className="flex items-center justify-center w-9 h-9 sm:w-11 sm:h-11 rounded-lg sm:rounded-xl bg-gradient-to-br from-indigo-500/20 to-blue-500/20 flex-shrink-0">
-                      <Users className="h-4 w-4 sm:h-5 sm:w-5 text-indigo-400" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-xs text-gray-400 mb-0.5">Participants</p>
-                      <p className="text-base sm:text-lg lg:text-xl font-bold text-white truncate">
-                        {fitCircle.max_participants
-                          ? `${participants.length}/${fitCircle.max_participants}`
-                          : participants.length
-                        }
-                      </p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            </motion.div>
-
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.2 }}
-            >
-              <Card className="bg-slate-900/50 border-slate-800/50 backdrop-blur-xl h-full">
-                <CardContent className="p-3 sm:p-4 lg:p-5 h-full min-h-[90px] sm:min-h-[110px] flex items-center">
-                  <div className="flex items-center gap-2 sm:gap-3 w-full">
-                    <div className="flex items-center justify-center w-9 h-9 sm:w-11 sm:h-11 rounded-lg sm:rounded-xl bg-gradient-to-br from-orange-500/20 to-red-500/20 flex-shrink-0">
-                      <Calendar className="h-4 w-4 sm:h-5 sm:w-5 text-orange-400" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-xs text-gray-400 mb-0.5">Days Left</p>
-                      <p className="text-base sm:text-lg lg:text-xl font-bold text-white">
-                        {getDaysRemaining(fitCircle.end_date)}
-                      </p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            </motion.div>
-
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.3 }}
-            >
-              <Card className="bg-slate-900/50 border-slate-800/50 backdrop-blur-xl h-full">
-                <CardContent className="p-3 sm:p-4 lg:p-5 h-full min-h-[90px] sm:min-h-[110px] flex items-center">
-                  <div className="flex items-center gap-2 sm:gap-3 w-full">
-                    <div className="flex items-center justify-center w-9 h-9 sm:w-11 sm:h-11 rounded-lg sm:rounded-xl bg-gradient-to-br from-green-500/20 to-emerald-500/20 flex-shrink-0">
-                      <Trophy className="h-4 w-4 sm:h-5 sm:w-5 text-green-400" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-xs text-gray-400 mb-0.5">Type</p>
-                      <p className="text-base sm:text-lg lg:text-xl font-bold text-white capitalize truncate">
-                        {fitCircle.type.replace('_', ' ')}
-                      </p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            </motion.div>
-
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.4 }}
-            >
-              <Card className="bg-slate-900/50 border-slate-800/50 backdrop-blur-xl h-full">
-                <CardContent className="p-3 sm:p-4 lg:p-5 h-full min-h-[90px] sm:min-h-[110px] flex items-center">
-                  <div className="flex items-center gap-2 sm:gap-3 w-full">
-                    <div className="flex items-center justify-center w-9 h-9 sm:w-11 sm:h-11 rounded-lg sm:rounded-xl bg-gradient-to-br from-purple-500/20 to-indigo-500/20 flex-shrink-0">
-                      <Calendar className="h-4 w-4 sm:h-5 sm:w-5 text-purple-400" />
-                    </div>
-                    <DateRangeDisplay
-                      startDate={fitCircle.start_date}
-                      endDate={fitCircle.end_date}
-                    />
-                  </div>
-                </CardContent>
-              </Card>
-            </motion.div>
-          </div>
-
-          {/* Sectioned content: Overview vs Chat */}
-          <Tabs
-            value={activeTab}
-            onValueChange={(tab) => {
-              setActiveTab(tab);
-              // Opening the chat tab reads the timeline (CircleChat marks read).
-              if (tab === 'chat') {
-                setChatUnread(0);
-                analytics.track(AnalyticsEvents.chatOpened());
-              }
-              // The nutrition tab embeds the circle's Fitzy coach.
-              if (tab === 'nutrition') analytics.track(AnalyticsEvents.fitzyOpened({ surface: 'circle_nutrition' }));
-            }}
-            className="w-full"
-          >
-            <TabsList className="mb-4 grid w-full max-w-md grid-cols-3 bg-slate-900/50 border border-slate-800/50 backdrop-blur-xl">
-              <TabsTrigger value="overview" className="gap-1.5 data-[state=active]:bg-slate-800 data-[state=active]:text-white">
+          <Tabs value={activeTab} onValueChange={openTab} className="w-full">
+            <TabsList className="mx-auto mb-5 grid w-full max-w-md grid-cols-3">
+              <TabsTrigger value="overview" className="gap-1.5">
                 <LayoutGrid className="h-4 w-4" />
                 Overview
               </TabsTrigger>
-              <TabsTrigger value="chat" className="gap-1.5 data-[state=active]:bg-slate-800 data-[state=active]:text-white">
+              <TabsTrigger value="chat" className="gap-1.5">
                 <MessageCircle className="h-4 w-4" />
                 Chat
                 {chatUnread > 0 && (
-                  <span className="ml-1 inline-flex h-4 min-w-[16px] items-center justify-center rounded-full bg-indigo-500 px-1 text-[10px] font-semibold leading-none text-white">
+                  <span className="ml-1 inline-flex h-4 min-w-[16px] items-center justify-center rounded-full bg-brand-indigo px-1 text-[10px] font-semibold leading-none text-white">
                     {chatUnread > 99 ? '99+' : chatUnread}
                   </span>
                 )}
               </TabsTrigger>
-              <TabsTrigger value="nutrition" className="gap-1.5 data-[state=active]:bg-slate-800 data-[state=active]:text-white">
+              <TabsTrigger value="nutrition" className="gap-1.5">
                 <Salad className="h-4 w-4" />
                 Nutrition
               </TabsTrigger>
             </TabsList>
 
-            <TabsContent value="overview" className="space-y-6 sm:space-y-8 mt-0">
-          {/* Circle Challenges */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.45 }}
-          >
-            <Card className="bg-slate-900/50 border-slate-800/50 backdrop-blur-xl">
-              <CardContent className="p-4 sm:p-6">
-                <CircleChallengesSection
-                  circleId={circleId}
-                  circleMembers={participants.map(p => ({
-                    user_id: p.user_id,
-                    display_name: p.display_name,
-                    avatar_url: p.avatar_url,
-                  }))}
-                />
-              </CardContent>
-            </Card>
-          </motion.div>
+            <TabsContent value="overview" className="mt-0">
+              {/* Phones: one column in the iOS order (streak, info, challenges, leaderboard).
+                  Desktop: leaderboard column + info column. The column wrappers are
+                  `display: contents` on phones so `order-*` can interleave them. */}
+              <div className="flex flex-col gap-5 lg:grid lg:grid-cols-[minmax(0,1fr)_340px] lg:items-start">
+                <div className="contents lg:block lg:min-w-0 lg:space-y-5">
+                  {/* Circle streak + today's check-ins + shared save pool */}
+                  {circleStreak !== undefined && (
+                    <div className="order-1 lg:order-none">
+                    <CircleStreakLiveCard
+                      circleId={circleId}
+                      status={circleStreak}
+                      viewerId={user?.id}
+                      onChanged={setCircleStreak}
+                    />
+                    </div>
+                  )}
 
-          {/* Quests + Boost (iOS / Android parity) */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.47 }}
-          >
-            <CircleQuestsSection circleId={circleId} />
-          </motion.div>
+                  {/* Leaderboard */}
+                  <motion.section
+                    className="order-5 lg:order-none"
+                    viewport={{ once: true }}
+                    onViewportEnter={() => analytics.track(AnalyticsEvents.leaderboardViewed())}
+                    aria-labelledby="leaderboard-title"
+                  >
+                    <div className="mb-3 flex items-center gap-2">
+                      <Trophy className="h-5 w-5 text-brand-orange" aria-hidden />
+                      <h2 id="leaderboard-title" className="text-title3 text-white">Leaderboard</h2>
+                      {participants.length > 0 && (
+                        <span className="ml-auto text-caption text-fg-tertiary">{participants.length} members</span>
+                      )}
+                    </div>
+                    {participants.length === 0 ? (
+                      <GlassCard>
+                        <EmptyState
+                          icon={Trophy}
+                          tone="orange"
+                          title="No Rankings Yet"
+                          description="Check in daily to appear on the leaderboard"
+                        />
+                      </GlassCard>
+                    ) : (
+                      <ul className="space-y-2" data-testid="leaderboard">
+                        {participants.map((participant, index) => (
+                          <LeaderboardRow
+                            key={participant.id}
+                            rank={index + 1}
+                            entry={participant}
+                            isYou={participant.user_id === user?.id}
+                            isCreator={participant.user_id === fitCircle.creator_id}
+                            checkedInToday={isInToday(participant)}
+                            onClick={() => void handleParticipantClick(participant)}
+                          />
+                        ))}
+                      </ul>
+                    )}
+                  </motion.section>
 
-          {/* Leaderboard */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.5 }}
-            viewport={{ once: true }}
-            onViewportEnter={() => analytics.track(AnalyticsEvents.leaderboardViewed())}
-          >
-            <Card className="bg-slate-900/50 border-slate-800/50 backdrop-blur-xl">
-              <CardHeader className="p-4 sm:p-6">
-                <CardTitle className="flex items-center gap-2 sm:gap-3 text-lg sm:text-xl">
-                  <Trophy className="h-5 w-5 sm:h-6 sm:w-6 text-yellow-500 flex-shrink-0" />
-                  <span className="bg-gradient-to-r from-yellow-400 to-orange-400 bg-clip-text text-transparent">
-                    Leaderboard
-                  </span>
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="p-3 sm:p-6">
-                {participants.length === 0 ? (
-                  <div className="text-center py-8">
-                    <Users className="h-12 w-12 text-gray-600 mx-auto mb-4" />
-                    <p className="text-gray-400">No participants yet</p>
-                    <p className="text-sm text-gray-500 mt-2">Be the first to join this challenge!</p>
+                  {/* Primary action */}
+                  <div className="order-6 lg:order-none">
+                  {fitCircle.is_participant ? (
+                    <Button size="lg" fullWidth onClick={() => setShowSubmitProgressDialog(true)} data-testid="submit-progress">
+                      <TrendingUp className="mr-2 h-5 w-5" />
+                      Submit Progress
+                    </Button>
+                  ) : (
+                    <Button size="lg" fullWidth onClick={() => setShowShareDialog(true)}>
+                      <UserPlus className="mr-2 h-5 w-5" />
+                      Join Challenge
+                    </Button>
+                  )}
                   </div>
-                ) : (
-                  <div className="space-y-3 sm:space-y-4">
-                    {participants.map((participant, index) => {
-                      const rank = index + 1;
-                      return (
-                        <motion.div
-                          key={participant.id}
-                          initial={{ opacity: 0, x: -20 }}
-                          animate={{ opacity: 1, x: 0 }}
-                          transition={{ delay: 0.1 * index }}
-                          className={`flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4 p-3 sm:p-4 rounded-lg border transition-all ${
-                            participant.user_id === user?.id || participant.is_public
-                              ? 'cursor-pointer hover:bg-slate-800/70'
-                              : 'cursor-not-allowed'
-                          } ${
-                            participant.user_id === user?.id
-                              ? 'bg-indigo-500/10 border-indigo-500/30'
-                              : participant.is_public
-                                ? 'bg-slate-800/50 border-slate-700/50 hover:border-orange-500/30'
-                                : 'bg-slate-800/30 border-slate-700/30 opacity-60'
-                          }`}
-                          onClick={() => handleParticipantClick(participant)}
-                        >
-                          {/* Mobile: Rank + User Info + Progress in one row */}
-                          <div className="flex items-center gap-3 sm:gap-4 flex-1 min-w-0">
-                            <div className="flex items-center justify-center w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-slate-800/50 flex-shrink-0">
-                              {getRankIcon(rank)}
-                            </div>
+                </div>
 
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center gap-2 sm:gap-3">
-                                <div className="relative flex-shrink-0">
-                                  <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-gradient-to-r from-indigo-500 to-purple-600 flex items-center justify-center text-white font-semibold text-xs sm:text-sm">
-                                    {participant.display_name.charAt(0).toUpperCase()}
-                                  </div>
-                                  {!participant.is_public && participant.user_id !== user?.id && (
-                                    <div className="absolute -top-0.5 -right-0.5 w-3.5 h-3.5 sm:w-4 sm:h-4 bg-gray-500 rounded-full flex items-center justify-center">
-                                      <Lock className="h-2 w-2 text-white" />
-                                    </div>
-                                  )}
-                                </div>
-                                <div className="flex-1 min-w-0">
-                                  <div className="font-semibold text-white text-sm sm:text-base flex items-center gap-1.5 sm:gap-2 flex-wrap">
-                                    <span className="truncate">{participant.display_name}</span>
-                                    {participant.user_id === fitCircle.creator_id && (
-                                      <Crown className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-yellow-500 flex-shrink-0" />
-                                    )}
-                                    {participant.user_id === user?.id && (
-                                      <Badge variant="outline" className="text-xs border-indigo-500/50 text-indigo-400 flex-shrink-0">
-                                        You
-                                      </Badge>
-                                    )}
-                                    {!participant.is_public && participant.user_id !== user?.id && (
-                                      <Badge variant="secondary" className="text-xs flex-shrink-0">
-                                        Private
-                                      </Badge>
-                                    )}
-                                  </div>
-                                  <p className="text-xs sm:text-sm text-gray-400 truncate">
-                                    {participant.current_value ? `${participant.current_value.toFixed(1)} kg` : 'No data'}
-                                    {participant.target_value && ` → ${participant.target_value.toFixed(1)} kg goal`}
-                                  </p>
-                                </div>
-                              </div>
-                            </div>
-
-                            {/* Mobile: Show progress percentage inline */}
-                            <div className="text-right sm:hidden flex-shrink-0">
-                              <p className="text-base font-bold text-white">{participant.progress}%</p>
-                            </div>
-                          </div>
-
-                          {/* Desktop: Progress section */}
-                          <div className="hidden sm:flex items-center gap-4 flex-shrink-0">
-                            <div className="text-right">
-                              <p className="text-lg font-bold text-white">{participant.progress}%</p>
-                              <p className="text-sm text-gray-400">Progress</p>
-                            </div>
-                            <div className="w-32">
-                              <Progress
-                                value={participant.progress}
-                                className={`h-2 bg-slate-800`}
-                              />
-                              {participant.starting_value && participant.current_value && participant.target_value && (
-                                <div className="mt-1.5 text-xs text-center whitespace-nowrap">
-                                  <span className="font-semibold bg-gradient-to-r from-green-400 to-emerald-500 bg-clip-text text-transparent">
-                                    {(participant.starting_value - participant.current_value).toFixed(1)} kg
-                                  </span>
-                                  <span className="text-gray-500 mx-1">of</span>
-                                  <span className="font-semibold text-gray-300">
-                                    {(participant.starting_value - participant.target_value).toFixed(1)} kg
-                                  </span>
-                                </div>
-                              )}
-                            </div>
-                          </div>
-
-                          {/* Mobile: Progress bar and details */}
-                          <div className="sm:hidden w-full">
-                            <Progress
-                              value={participant.progress}
-                              className={`h-2 bg-slate-800 mb-2`}
-                            />
-                            {participant.starting_value && participant.current_value && participant.target_value && (
-                              <div className="text-xs text-center">
-                                <span className="font-semibold bg-gradient-to-r from-green-400 to-emerald-500 bg-clip-text text-transparent">
-                                  {(participant.starting_value - participant.current_value).toFixed(1)} kg
-                                </span>
-                                <span className="text-gray-500 mx-1">of</span>
-                                <span className="font-semibold text-gray-300">
-                                  {(participant.starting_value - participant.target_value).toFixed(1)} kg
-                                </span>
-                              </div>
-                            )}
-                          </div>
-                        </motion.div>
-                      );
-                    })}
+                <div className="contents lg:block lg:min-w-0 lg:space-y-5">
+                  {/* iOS InfoCards */}
+                  <div className="order-2 grid grid-cols-2 gap-3 lg:order-none" data-testid="circle-stats">
+                    <StatTile
+                      icon={Users}
+                      tone="indigo"
+                      label="Participants"
+                      value={fitCircle.max_participants ? `${participants.length}/${fitCircle.max_participants}` : participants.length}
+                    />
+                    <StatTile icon={Calendar} tone="orange" label="Days Left" value={getDaysRemaining(fitCircle.end_date)} />
+                    <StatTile icon={Target} tone="green" label="Challenge Type" value={<span className="text-headline">{circleTypeLabel(fitCircle.type)}</span>} />
+                    <StatTile
+                      icon={Clock}
+                      tone="purple"
+                      label="Duration"
+                      value={<span className="text-headline">{durationLabel(fitCircle.start_date, fitCircle.end_date)}</span>}
+                      sub={`${formatDate(fitCircle.start_date)} – ${formatDate(fitCircle.end_date)}`}
+                    />
                   </div>
-                )}
-              </CardContent>
-            </Card>
-          </motion.div>
 
-          {/* Action Buttons */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.6 }}
-            className="mt-6 sm:mt-8 flex justify-center gap-3 sm:gap-4 px-3 sm:px-0"
-          >
-            {fitCircle.is_participant && (
-              <Button
-                size="lg"
-                onClick={() => setShowSubmitProgressDialog(true)}
-                className="flex-1 sm:flex-initial bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-sm sm:text-base"
-              >
-                <TrendingUp className="h-4 w-4 sm:h-5 sm:w-5 mr-1.5 sm:mr-2" />
-                Submit Progress
-              </Button>
-            )}
+                  <GlassCard className="order-3 lg:order-none">
+                    <CircleChallengesSection
+                      circleId={circleId}
+                      circleMembers={participants.map((p) => ({
+                        user_id: p.user_id,
+                        display_name: p.display_name,
+                        avatar_url: p.avatar_url,
+                      }))}
+                    />
+                  </GlassCard>
 
-            {!fitCircle.is_participant && (
-              <Button
-                size="lg"
-                className="flex-1 sm:flex-initial bg-gradient-to-r from-orange-600 to-orange-700 hover:from-orange-700 hover:to-orange-800 text-sm sm:text-base"
-              >
-                <UserPlus className="h-4 w-4 sm:h-5 sm:w-5 mr-1.5 sm:mr-2" />
-                Join Challenge
-              </Button>
-            )}
-          </motion.div>
+                  <div className="order-4 empty:hidden lg:order-none">
+                    <CircleQuestsSection circleId={circleId} />
+                  </div>
+
+                  <ListGroup className="order-7 mb-0 lg:order-none">
+                    <ListRow
+                      icon={Salad}
+                      tone="green"
+                      title="Food Feed"
+                      subtitle="Meals your circle shared"
+                      onClick={() => openTab('nutrition')}
+                      chevron
+                      testId="food-feed-row"
+                    />
+                    <ListRow
+                      icon={Share2}
+                      tone="indigo"
+                      title="Share circle"
+                      subtitle={fitCircle.invite_code ? `Code ${fitCircle.invite_code}` : 'Invite link'}
+                      onClick={() => setShowShareDialog(true)}
+                      chevron
+                    />
+                  </ListGroup>
+                </div>
+              </div>
             </TabsContent>
 
             <TabsContent value="chat" className="mt-0">
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-              >
-                <Card className="bg-slate-900/50 border-slate-800/50 backdrop-blur-xl">
-                  <CardContent className="p-3 sm:p-4">
-                    <CircleChat circleId={circleId} />
-                  </CardContent>
-                </Card>
-              </motion.div>
+              <GlassCard className="mx-auto max-w-3xl p-3 sm:p-4">
+                <CircleChat circleId={circleId} />
+              </GlassCard>
             </TabsContent>
 
             <TabsContent value="nutrition" className="mt-0">
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="grid grid-cols-1 gap-4 lg:grid-cols-3"
-              >
+              <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
                 {/* Logging + Plate Score column */}
                 <div className="space-y-4 lg:col-span-1">
-                  <Card className="bg-slate-900/50 border-slate-800/50 backdrop-blur-xl">
-                    <CardHeader className="p-4 pb-2">
-                      <CardTitle className="text-base">Log a meal</CardTitle>
-                    </CardHeader>
-                    <CardContent className="space-y-3 p-4 pt-2">
+                  <GlassCard>
+                    <h3 className="mb-3 text-headline text-white">Log a meal</h3>
+                    <div className="space-y-3">
                       <PhotoLog onLogged={() => setFoodFeedKey((k) => k + 1)} />
                       <VoiceLog onLogged={() => setFoodFeedKey((k) => k + 1)} />
                       <FoodSearch />
-                    </CardContent>
-                  </Card>
+                    </div>
+                  </GlassCard>
 
                   <PlateScoreCard />
-
-                  <CircleStreakCard
-                    circleId={circleId}
-                    members={participants.map((p) => ({
-                      user_id: p.user_id,
-                      display_name: p.display_name,
-                      avatar_url: p.avatar_url,
-                    }))}
-                    currentUserId={user?.id}
-                  />
 
                   <NutritionChallengeCard circleId={circleId} isCreator={fitCircle.is_creator} />
 
@@ -1396,17 +1186,13 @@ export default function FitCirclePage() {
                 </div>
 
                 {/* Feed column */}
-                <div className="lg:col-span-2">
-                  <Card className="bg-slate-900/50 border-slate-800/50 backdrop-blur-xl">
-                    <CardHeader className="p-4 pb-2">
-                      <CardTitle className="text-base">Circle food feed</CardTitle>
-                    </CardHeader>
-                    <CardContent className="p-4 pt-2">
-                      <CircleFoodFeed key={foodFeedKey} circleId={circleId} privacyTier={foodPrivacyTier} />
-                    </CardContent>
-                  </Card>
+                <div className="space-y-4 lg:col-span-2">
+                  <GlassCard>
+                    <h3 className="mb-3 text-headline text-white">Circle food feed</h3>
+                    <CircleFoodFeed key={foodFeedKey} circleId={circleId} privacyTier={foodPrivacyTier} />
+                  </GlassCard>
 
-                  <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                  <div className="grid gap-4 sm:grid-cols-2">
                     <GroupMealComposer
                       circleId={circleId}
                       members={participants.map((p) => ({
@@ -1417,33 +1203,21 @@ export default function FitCirclePage() {
                       currentUserId={user?.id}
                       onCreated={() => setFoodFeedKey((k) => k + 1)}
                     />
-
-                    <Card className="bg-slate-900/50 border-slate-800/50 backdrop-blur-xl">
-                      <CardHeader className="p-4 pb-2">
-                        <CardTitle className="text-base">Meal invites</CardTitle>
-                      </CardHeader>
-                      <CardContent className="p-4 pt-2">
-                        <GroupMealInbox
-                          circleId={circleId}
-                          onChanged={() => setFoodFeedKey((k) => k + 1)}
-                        />
-                      </CardContent>
-                    </Card>
+                    <GlassCard>
+                      <h3 className="mb-3 text-headline text-white">Meal invites</h3>
+                      <GroupMealInbox circleId={circleId} onChanged={() => setFoodFeedKey((k) => k + 1)} />
+                    </GlassCard>
                   </div>
 
-                  <Card className="mt-4 bg-slate-900/50 border-slate-800/50 backdrop-blur-xl">
-                    <CardHeader className="p-4 pb-2">
-                      <CardTitle className="text-base">Insights</CardTitle>
-                    </CardHeader>
-                    <CardContent className="p-4 pt-2">
-                      <InsightsList />
-                    </CardContent>
-                  </Card>
+                  <GlassCard>
+                    <h3 className="mb-3 text-headline text-white">Insights</h3>
+                    <InsightsList />
+                  </GlassCard>
                 </div>
-              </motion.div>
+              </div>
             </TabsContent>
           </Tabs>
-        </div>
+        </Screen>
 
         {/* Participant Detail Modal */}
         {showDetailModal && selectedParticipant && (

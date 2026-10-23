@@ -9,20 +9,21 @@ import { motion } from 'framer-motion';
 import {
   Coffee, Droplet, GlassWater, Milk, Wine, Loader2, Plus, Trash2, Zap, Cookie, FlaskConical,
 } from 'lucide-react';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 
+import { dayKeyToDate, formatWater } from '@/components/food-log/feed-model';
 import { Navbar } from '@/components/layout/navbar';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
-import {
-  Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger,
-} from '@/components/ui/dialog';
+import { EmptyState } from '@/components/ui/empty-state';
 import { Input } from '@/components/ui/input';
+import { DayHeader, Fab, GlassCard, Screen, ScreenHeader } from '@/components/ui/ios';
 import { Label } from '@/components/ui/label';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
+import { Sheet, SheetContent, SheetFooter, SheetHeader, SheetTitle } from '@/components/ui/sheet';
+import { Skeleton } from '@/components/ui/skeleton';
 import { AnalyticsEvents, analytics } from '@/lib/analytics';
 import { announceStreakAutoClaim, clientTimezone, extractStreakMeta } from '@/lib/streaks/auto-claim-events';
 import type {
@@ -120,90 +121,122 @@ export default function BeverageLogPage() {
 
   if (!isAuthenticated) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
+      <div className="min-h-screen bg-canvas flex items-center justify-center">
         <p className="text-muted-foreground">Sign in to view your beverages.</p>
       </div>
     );
   }
 
-  const totalMl = entries
-    .filter(e => e.entry_date === new Date().toISOString().split('T')[0])
-    .reduce((sum, e) => sum + e.volume_ml, 0);
+  return <BeverageScreen entries={entries} isLoading={isLoading} addOpen={addOpen} setAddOpen={setAddOpen} onAdd={handleAdd} onDelete={handleDelete} />;
+}
+
+function localDayKey(d: Date): string {
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+function BeverageScreen({
+  entries, isLoading, addOpen, setAddOpen, onAdd, onDelete,
+}: {
+  entries: BeverageLogEntry[];
+  isLoading: boolean;
+  addOpen: boolean;
+  setAddOpen: (v: boolean) => void;
+  onAdd: (input: CreateBeverageLogInput) => Promise<void>;
+  onDelete: (id: string) => Promise<void>;
+}) {
+  const todayKey = localDayKey(new Date());
+  const today = entries.filter(e => e.entry_date === todayKey);
+  const totalMl = today.reduce((sum, e) => sum + e.volume_ml, 0);
+  const days = useMemo(() => {
+    const map = new Map<string, BeverageLogEntry[]>();
+    for (const e of entries) {
+      const list = map.get(e.entry_date) ?? [];
+      list.push(e);
+      map.set(e.entry_date, list);
+    }
+    return [...map.entries()].sort(([a], [b]) => b.localeCompare(a));
+  }, [entries]);
 
   return (
-    <div className="min-h-screen bg-background pb-24">
+    <div className="min-h-screen bg-canvas">
       <Navbar />
-      <main className="mx-auto max-w-2xl px-4 py-6 space-y-6">
-        <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-bold">Beverages</h1>
-          <Dialog open={addOpen} onOpenChange={setAddOpen}>
-            <DialogTrigger asChild>
-              <Button className="bg-cyan-500 hover:bg-cyan-600 gap-1">
-                <Plus className="h-4 w-4" /> Log drink
-              </Button>
-            </DialogTrigger>
-            <BeverageAddDialog onAdd={handleAdd} onClose={() => setAddOpen(false)} />
-          </Dialog>
-        </div>
-
-        {/* Quick-add row */}
-        <Card>
-          <CardContent className="p-4">
-            <p className="text-xs text-muted-foreground mb-3 uppercase tracking-wide">Quick add</p>
-            <div className="grid grid-cols-6 gap-2">
-              {CATEGORIES.slice(0, 6).map(cat => (
-                <button
-                  key={cat.value}
-                  type="button"
-                  onClick={() => handleAdd({
-                    category: cat.value,
-                    beverage_type: cat.label,
-                    volume_ml: cat.defaultMl,
-                  })}
-                  className="rounded-xl bg-zinc-800/50 hover:bg-zinc-800 p-3 text-center transition-colors"
-                  aria-label={`Quick log ${cat.label}`}
-                >
-                  <cat.icon className={`h-5 w-5 mx-auto ${cat.color}`} />
-                  <p className="text-[10px] mt-1 truncate">{cat.label}</p>
-                </button>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
+      <Screen>
+        <ScreenHeader title="Beverages" subtitle="Coffee, tea, water and everything in between." />
 
         {/* Today's total */}
-        <Card>
-          <CardContent className="p-4 flex items-center gap-4">
-            <div className="h-12 w-12 rounded-full bg-cyan-500/15 flex items-center justify-center">
-              <Droplet className="h-6 w-6 text-cyan-400" />
-            </div>
-            <div className="flex-1">
-              <p className="text-xs text-muted-foreground">Today</p>
-              <p className="text-2xl font-bold">{(totalMl / 1000).toFixed(1)}L</p>
-            </div>
-            <p className="text-sm text-muted-foreground">
-              {entries.filter(e => e.entry_date === new Date().toISOString().split('T')[0]).length} drinks
-            </p>
-          </CardContent>
-        </Card>
-
-        {/* Entries */}
-        {isLoading ? (
-          <Card><CardContent className="p-8 flex justify-center"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></CardContent></Card>
-        ) : entries.length === 0 ? (
-          <Card>
-            <CardContent className="p-12 text-center text-muted-foreground space-y-2">
-              <GlassWater className="mx-auto h-12 w-12" />
-              <p className="font-semibold">No entries yet</p>
-              <p className="text-sm">Tap a quick-add button above to log your first drink.</p>
-            </CardContent>
-          </Card>
-        ) : (
-          <div className="space-y-2">
-            {entries.map(entry => <BeverageRow key={entry.id} entry={entry} onDelete={() => handleDelete(entry.id)} />)}
+        <GlassCard className="flex items-center gap-4" data-testid="beverage-today">
+          <span className="flex h-[52px] w-[52px] shrink-0 items-center justify-center rounded-full bg-brand-cyan/15 text-brand-cyan">
+            <Droplet className="h-6 w-6 fill-current" aria-hidden />
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="text-footnote font-semibold uppercase tracking-wide text-fg-secondary">Today</p>
+            <p className="text-title2 font-bold tabular-nums text-white">{formatWater(totalMl)}</p>
           </div>
-        )}
-      </main>
+          <p className="text-subhead text-fg-secondary">
+            {today.length} {today.length === 1 ? 'drink' : 'drinks'}
+          </p>
+        </GlassCard>
+
+        {/* Quick-add tiles (iOS hydration chips) */}
+        <section className="mt-5" aria-label="Quick add">
+          <h2 className="mb-2 text-footnote font-semibold uppercase tracking-wide text-fg-tertiary">Quick add</h2>
+          <div className="grid grid-cols-3 gap-2.5 sm:grid-cols-6">
+            {CATEGORIES.slice(0, 6).map(cat => (
+              <button
+                key={cat.value}
+                type="button"
+                onClick={() => onAdd({
+                  category: cat.value,
+                  beverage_type: cat.label,
+                  volume_ml: cat.defaultMl,
+                })}
+                className="flex flex-col items-center gap-1 rounded-xl border border-glass bg-surface-raised/50 px-2 py-3 text-center transition duration-200 ease-ios hover:border-white/20 active:scale-[0.97]"
+                aria-label={`Quick log ${cat.label}`}
+              >
+                <cat.icon className={`h-6 w-6 ${cat.color}`} aria-hidden />
+                <span className="text-subhead font-semibold text-white">+{cat.defaultMl} ml</span>
+                <span className="text-caption text-fg-secondary">{cat.label}</span>
+              </button>
+            ))}
+          </div>
+        </section>
+
+        {/* Entries by day */}
+        <div className="mt-6">
+          {isLoading ? (
+            <div className="space-y-3" aria-label="Loading">
+              {[0, 1, 2].map(i => <Skeleton key={i} className="h-[68px] rounded-xl" />)}
+            </div>
+          ) : entries.length === 0 ? (
+            <EmptyState
+              icon={GlassWater}
+              tone="cyan"
+              title="No drinks yet"
+              description="Tap a quick-add tile above to log your first drink."
+              className="rounded-xl border border-dashed border-hairline"
+            />
+          ) : (
+            days.map(([key, list]) => (
+              <section key={key}>
+                <DayHeader date={dayKeyToDate(key)} count={list.length} countIcon={GlassWater} />
+                <ul className="space-y-2.5">
+                  {list.map(entry => (
+                    <li key={entry.id}>
+                      <BeverageRow entry={entry} onDelete={() => onDelete(entry.id)} />
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            ))
+          )}
+        </div>
+      </Screen>
+
+      <Fab icon={Plus} label="Log a drink" onClick={() => setAddOpen(true)} />
+      <Sheet open={addOpen} onOpenChange={setAddOpen}>
+        {addOpen && <BeverageAddDialog onAdd={onAdd} onClose={() => setAddOpen(false)} />}
+      </Sheet>
     </div>
   );
 }
@@ -218,30 +251,28 @@ function BeverageRow({ entry, onDelete }: { entry: BeverageLogEntry; onDelete: (
       initial={{ opacity: 0, y: 6 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.2 }}
+      className="flex items-center gap-3 rounded-xl border border-glass bg-surface-raised/50 p-3"
+      data-testid="beverage-row"
     >
-      <Card>
-        <CardContent className="p-3 flex items-center gap-3">
-          <div className={`h-10 w-10 rounded-full bg-zinc-800 flex items-center justify-center`}>
-            <Icon className={`h-5 w-5 ${cat.color}`} />
-          </div>
-          <div className="flex-1 min-w-0">
-            <p className="font-semibold truncate">{entry.beverage_type}</p>
-            <p className="text-xs text-muted-foreground">
-              {entry.volume_ml} ml
-              {entry.calories ? ` · ${entry.calories} cal` : ''}
-              {entry.caffeine_mg ? ` · ${entry.caffeine_mg}mg caf` : ''}
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={onDelete}
-            className="text-muted-foreground hover:text-destructive p-1"
-            aria-label="Delete entry"
-          >
-            <Trash2 className="h-4 w-4" />
-          </button>
-        </CardContent>
-      </Card>
+      <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[12px] bg-white/5">
+        <Icon className={`h-5 w-5 ${cat.color}`} aria-hidden />
+      </span>
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-headline text-white">{entry.beverage_type}</p>
+        <p className="text-footnote text-fg-secondary">
+          {entry.volume_ml} ml
+          {entry.calories ? ` · ${entry.calories} cal` : ''}
+          {entry.caffeine_mg ? ` · ${entry.caffeine_mg}mg caf` : ''}
+        </p>
+      </div>
+      <button
+        type="button"
+        onClick={onDelete}
+        className="flex h-8 w-8 items-center justify-center rounded-full text-fg-tertiary transition hover:bg-brand-red/10 hover:text-brand-red"
+        aria-label="Delete entry"
+      >
+        <Trash2 className="h-4 w-4" />
+      </button>
     </motion.div>
   );
 }
@@ -272,10 +303,10 @@ function BeverageAddDialog({
   };
 
   return (
-    <DialogContent>
-      <DialogHeader>
-        <DialogTitle>Log a drink</DialogTitle>
-      </DialogHeader>
+    <SheetContent data-testid="beverage-add-sheet">
+      <SheetHeader>
+        <SheetTitle>Log a drink</SheetTitle>
+      </SheetHeader>
       <div className="space-y-3">
         <div className="space-y-1">
           <Label>Category</Label>
@@ -314,12 +345,12 @@ function BeverageAddDialog({
           </div>
         </div>
       </div>
-      <DialogFooter>
+      <SheetFooter>
         <Button variant="ghost" onClick={onClose}>Cancel</Button>
-        <Button onClick={submit} disabled={submitting} className="bg-cyan-500 hover:bg-cyan-600">
+        <Button onClick={submit} disabled={submitting} className="min-w-24">
           {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Log'}
         </Button>
-      </DialogFooter>
-    </DialogContent>
+      </SheetFooter>
+    </SheetContent>
   );
 }

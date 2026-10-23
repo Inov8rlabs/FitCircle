@@ -253,7 +253,7 @@ export function DailyProgressMeter({ userId, onGoalComplete, className = '' }: D
 
   if (isLoading) {
     return (
-      <Card className={`bg-slate-900/50 border-slate-800 backdrop-blur-xl ${className}`}>
+      <Card className={`bg-surface-raised/50 border-hairline backdrop-blur-xl ${className}`}>
         <CardContent className="p-6 flex items-center justify-center">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-400" />
         </CardContent>
@@ -264,7 +264,7 @@ export function DailyProgressMeter({ userId, onGoalComplete, className = '' }: D
   if (!progress || progress.total_goals === 0) {
     return (
       <>
-        <Card className={`bg-slate-900/50 border-slate-800 backdrop-blur-xl ${className}`}>
+        <Card className={`bg-surface-raised/50 border-hairline backdrop-blur-xl ${className}`}>
           <CardContent className="p-6">
             {/* Empty State Header */}
             <div className="flex flex-col items-center justify-center text-center mb-6">
@@ -366,7 +366,7 @@ export function DailyProgressMeter({ userId, onGoalComplete, className = '' }: D
   }));
 
   return (
-    <Card className={`bg-slate-900/50 border-slate-800 backdrop-blur-xl ${className}`}>
+    <Card className={`bg-surface-raised/50 border-hairline backdrop-blur-xl ${className}`}>
       <CardContent className="p-6">
         {/* Header */}
         <div className="flex items-center justify-between mb-4">

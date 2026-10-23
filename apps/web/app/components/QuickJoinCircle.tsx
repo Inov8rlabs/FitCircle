@@ -192,7 +192,7 @@ export default function QuickJoinCircle({ isOpen, onClose, initialCode = '' }: Q
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto bg-slate-900/95 border-slate-800 backdrop-blur-xl">
+      <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto bg-surface/95 border-hairline backdrop-blur-xl">
         <DialogHeader>
           <DialogTitle className="text-xl font-bold bg-gradient-to-r from-orange-400 to-purple-400 bg-clip-text text-transparent">
             Join a FitCircle

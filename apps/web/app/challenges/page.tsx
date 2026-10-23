@@ -95,19 +95,19 @@ export default function ChallengesLibraryPage() {
 
   if (!isAuthenticated) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
+      <div className="min-h-screen bg-canvas flex items-center justify-center">
         <p className="text-muted-foreground">Sign in to browse challenges.</p>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-background pb-24">
+    <div className="min-h-screen bg-canvas pb-24">
       <Navbar />
       <main className="mx-auto max-w-4xl px-4 py-6 space-y-6">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold">Challenge Library</h1>
+            <h1 className="w-fit max-w-full text-title1 bg-gradient-sunset bg-clip-text text-transparent sm:text-large-title">Challenge Library</h1>
             <p className="text-sm text-muted-foreground">Find a challenge for your next FitCircle.</p>
           </div>
           <Link href="/fitcircles">

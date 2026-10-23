@@ -11,7 +11,7 @@ import { FitzyChat } from './FitzyChat';
 
 interface FitzyLauncherProps {
   /** Style of the trigger: a labelled nav item (desktop) or compact icon (mobile bar). */
-  variant?: 'nav' | 'icon' | 'mobile-row';
+  variant?: 'nav' | 'icon' | 'mobile-row' | 'header';
   onOpen?: () => void;
 }
 
@@ -46,7 +46,18 @@ export function FitzyLauncher({ variant = 'nav', onOpen }: FitzyLauncherProps) {
   };
 
   const trigger =
-    variant === 'icon' ? (
+    variant === 'header' ? (
+      // iOS FitzyHeaderButton: gradient sparkle disc beside the screen title.
+      <button
+        type="button"
+        onClick={handleOpen}
+        aria-label="Open Fitzy"
+        data-testid="fitzy-header-button"
+        className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-gradient-brand text-white shadow-glow-pink transition duration-200 ease-ios hover:brightness-110 active:scale-95"
+      >
+        <Sparkles className="h-5 w-5" />
+      </button>
+    ) : variant === 'icon' ? (
       <button
         type="button"
         onClick={handleOpen}
