@@ -42,7 +42,8 @@ import {
   APNS_PAYLOAD_BUDGET_BYTES,
   CIRCLE_CARD_MAX_MEMBERS,
   CIRCLE_CARD_TYPES,
-  PASSIVE_TYPES,
+  DEFAULT_PASSIVE_TYPES,
+  passiveTypes,
   TIME_SENSITIVE_TYPES,
   TYPE_APNS_CATEGORY,
   buildCircleCard,
@@ -104,7 +105,7 @@ describe('presentationFor', () => {
     const mapped = [
       ...Object.keys(TYPE_APNS_CATEGORY),
       ...TIME_SENSITIVE_TYPES,
-      ...PASSIVE_TYPES,
+      ...DEFAULT_PASSIVE_TYPES,
     ] as NotificationType[];
     for (const t of mapped) expect(NOTIFICATION_TEMPLATES[t], t).toBeTypeOf('function');
   });
@@ -116,17 +117,26 @@ describe('presentationFor', () => {
   });
 
   it('low-value nudges are passive with a low score; re-engagement stays active', () => {
-    for (const t of ['weekly_summary', 'daily_drop', 'day30_monthly_recap'] as NotificationType[]) {
+    for (const t of ['daily_drop', 'day30_monthly_recap', 'day14_challenge_nudge', 'challenge_halfway'] as NotificationType[]) {
       expect(presentationFor(t).interruptionLevel, t).toBe('passive');
       expect(presentationFor(t).relevanceScore, t).toBeLessThanOrEqual(0.2);
     }
-    for (const t of ['dormant_7d', 'win_back_60d', 'streak_lost'] as NotificationType[]) {
+    for (const t of ['dormant_7d', 'win_back_60d', 'streak_lost', 'weekly_summary', 'referral_progress'] as NotificationType[]) {
       expect(presentationFor(t).interruptionLevel, t).toBe('active');
     }
   });
 
+  it('passive list is reversible from env: PUSH_PASSIVE_ENABLED=false and PUSH_PASSIVE_TYPES override', () => {
+    expect(passiveTypes({})).toBe(DEFAULT_PASSIVE_TYPES);
+    expect(passiveTypes({ PUSH_PASSIVE_ENABLED: 'false' }).size).toBe(0);
+    expect(presentationFor('daily_drop', {}, { PUSH_PASSIVE_ENABLED: 'false' }).interruptionLevel).toBe('active');
+    expect([...passiveTypes({ PUSH_PASSIVE_TYPES: ' weekly_summary , daily_drop ' })]).toEqual(['weekly_summary', 'daily_drop']);
+    expect(presentationFor('weekly_summary', {}, { PUSH_PASSIVE_TYPES: 'weekly_summary' }).interruptionLevel).toBe('passive');
+    expect(passiveTypes({ PUSH_PASSIVE_TYPES: '' }).size).toBe(0);
+  });
+
   it('time-sensitive and passive never overlap', () => {
-    for (const t of TIME_SENSITIVE_TYPES) expect(PASSIVE_TYPES.has(t)).toBe(false);
+    for (const t of TIME_SENSITIVE_TYPES) expect(DEFAULT_PASSIVE_TYPES.has(t)).toBe(false);
   });
 
   it('sets mutable-content for chat with a sender and for an https image only', () => {
@@ -367,8 +377,8 @@ describe('NotificationOrchestrator.send → PushNotification', () => {
     expect(sent().apns?.mutableContent).toBe(true);
   });
 
-  it('weekly summary goes out passive', async () => {
+  it('weekly summary stays audible (active)', async () => {
     await NotificationOrchestrator.send('u1', 'weekly_summary', { workoutsThisWeek: 3, streakDays: 4 });
-    expect(sent().apns).toMatchObject({ interruptionLevel: 'passive', relevanceScore: 0.2 });
+    expect(sent().apns).toMatchObject({ interruptionLevel: 'active' });
   });
 });

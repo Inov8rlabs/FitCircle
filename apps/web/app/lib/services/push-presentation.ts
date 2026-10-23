@@ -74,16 +74,35 @@ export const TIME_SENSITIVE_TYPES: ReadonlySet<NotificationType> = new Set<Notif
 /**
  * Low-value nudges: delivered quietly to the notification list (no sound,
  * no screen wake). Re-engagement (dormant / win-back) stays active on purpose —
- * a passive win-back is a win-back nobody sees.
+ * a passive win-back is a win-back nobody sees. Weekly summary and referral
+ * progress stay audible (product decision 2026-10-23).
+ *
+ * Reversible without a code change (Vercel env, takes effect on redeploy):
+ *   PUSH_PASSIVE_ENABLED=false   → every type is delivered with sound again
+ *   PUSH_PASSIVE_TYPES=a,b,c     → replaces this default list (empty = none)
  */
-export const PASSIVE_TYPES: ReadonlySet<NotificationType> = new Set<NotificationType>([
+export const DEFAULT_PASSIVE_TYPES: ReadonlySet<NotificationType> = new Set<NotificationType>([
   'day14_challenge_nudge',
   'day30_monthly_recap',
-  'weekly_summary',
   'daily_drop',
   'challenge_halfway',
-  'referral_progress',
 ]);
+
+type Env = Record<string, string | undefined>;
+const OFF = new Set(['0', 'false', 'off', 'no']);
+
+/** The types delivered passively right now (see DEFAULT_PASSIVE_TYPES for the env overrides). */
+export function passiveTypes(env: Env = process.env): ReadonlySet<NotificationType> {
+  if (OFF.has((env.PUSH_PASSIVE_ENABLED ?? '').trim().toLowerCase())) return new Set();
+  const raw = env.PUSH_PASSIVE_TYPES;
+  if (raw === undefined) return DEFAULT_PASSIVE_TYPES;
+  return new Set(
+    raw
+      .split(',')
+      .map((t) => t.trim())
+      .filter(Boolean) as NotificationType[]
+  );
+}
 
 /** Chat types whose sender becomes a Communication Notification (not rallies: no sender). */
 export const COMMUNICATION_TYPES: ReadonlySet<NotificationType> = new Set<NotificationType>([
@@ -113,10 +132,10 @@ export function isHttpsUrl(value: unknown): value is string {
   }
 }
 
-export function presentationFor(type: NotificationType, data: NotificationData = {}): ApnsPresentation {
+export function presentationFor(type: NotificationType, data: NotificationData = {}, env: Env = process.env): ApnsPresentation {
   const interruptionLevel: InterruptionLevel = TIME_SENSITIVE_TYPES.has(type)
     ? 'time-sensitive'
-    : PASSIVE_TYPES.has(type)
+    : passiveTypes(env).has(type)
       ? 'passive'
       : 'active';
   const relevanceScore =
