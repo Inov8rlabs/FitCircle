@@ -18,6 +18,7 @@ Request headers:
 
 Query:
 - `cards` — comma-separated list of card types **and versions** the client can render, e.g. `cards=header@1,campaign@1,hydration@1,referral@1,pro_upsell@1,streak_warning@1,daily_goals@1,progress@1,vitals@1,body_comp@1,past_date_log@1,native_ad@1,charts@1,fitzy_focus@1,health_sync_banner@1,offline_banner@1`.
+  Android 1.0.8 additionally declares `missing_days@1` (iOS 1.0.8 does not).
   The server only returns cards in this list (type match + `version <= client version`). Unknown → never returned.
 
 Response `200`:
@@ -58,6 +59,7 @@ Each card keeps its existing self-gating on the client (e.g. campaign card hides
 | `referral` | ReferralHomeCard | ReferralHomeCard | |
 | `pro_upsell` | ProUpsellCard | Pro card | |
 | `streak_warning` | streakWarningSection | streak shield banner | |
+| `missing_days` | — (not declared by iOS 1.0.8) | missing-days prompt ("you have unlogged days") | added 2026-10-22; Android only for now |
 | `daily_goals` | widgetsSection | daily goals | |
 | `progress` | simplifiedProgressSection | steps/weight cards | |
 | `vitals` | vitalsSection (BMI) | vitals | |
@@ -69,7 +71,7 @@ Each card keeps its existing self-gating on the client (e.g. campaign card hides
 
 ## 4. Default layout (also the clients' built-in fallback)
 
-`offline_banner, header, health_sync_banner, campaign, hydration, referral, pro_upsell, streak_warning, daily_goals, fitzy_focus, progress, vitals, body_comp, past_date_log, native_ad, charts`
+`offline_banner, header, health_sync_banner, campaign, hydration, referral, pro_upsell, streak_warning, missing_days, daily_goals, fitzy_focus, progress, vitals, body_comp, past_date_log, native_ad, charts`
 
 With the guardrail below, when a campaign card is present the referral card moves after `progress` (the 1.0.7 behaviour), and hydration always sits directly above the referral card.
 
@@ -115,19 +117,20 @@ Admin: rules CRUD on the existing admin portal (admin.fitcircle.ai) behind admin
 
 Clarifications made while building the server. All are backward compatible with §1–7; mobile teams should mirror the marked (★) ones.
 
-- ★ **200 body is the raw schema-1 object above**, not the `{ success, data }` envelope. Errors (`400`/`401`/`5xx`) use the standard envelope `{ success:false, data, error:{ code, message } }`.
+- ★ **200 body is the bare schema-1 object above**, not the `{ success, data }` envelope (Android accepts both; iOS expects the bare object). Errors (`400`/`401`/`5xx`) use the standard envelope `{ success:false, data, error:{ code, message } }`.
 - ★ **Validation errors (400)**: missing `X-Feed-Schema` → `FEED_SCHEMA_REQUIRED`; any value other than `1` → `UNSUPPORTED_FEED_SCHEMA` with `data.supported = [1]`; missing/empty/unparseable `cards` → `CARDS_REQUIRED`. Treat any 400 like a 5xx (cached/default layout) and log it — it is a client bug.
 - ★ **Headers**: the server reads `X-App-Platform`, falling back to `X-Platform` (what Android's AuthInterceptor already sends). **iOS must add `X-App-Platform: ios`, `X-App-Version`, `X-App-Build` on this request** (iOS doesn't send them today); without them, rules gated on platform/version never apply (the user gets the default layout).
 - `cards` parsing is lenient: whitespace trimmed, `type` without `@n` = version 1, malformed tokens ignored, duplicates keep the highest version, max 64 entries.
 - ★ **Position of chrome cards**: `offline_banner` is index 0 and `header` index 1 when both are listed (guardrail G1 = "header first after the offline banner"). Guardrail positions (first 3 / first 6) are counted *without* `offline_banner`.
 - ★ **Effective default layouts** (what the server returns with no rules, i.e. §4 after the guardrails; the clients' built-in fallback should be identical):
-  - no campaign: `offline_banner, header, health_sync_banner, hydration, referral, streak_warning, pro_upsell, daily_goals, fitzy_focus, progress, vitals, body_comp, past_date_log, native_ad, charts`
-  - campaign present: `offline_banner, header, health_sync_banner, campaign, streak_warning, pro_upsell, daily_goals, fitzy_focus, progress, hydration, referral, vitals, body_comp, past_date_log, native_ad, charts`
-  (`pro_upsell` steps below `streak_warning` because promos may not be adjacent; with a campaign, hydration follows the referral card below `progress`.)
+  - no campaign: `offline_banner, header, health_sync_banner, hydration, referral, streak_warning, pro_upsell, missing_days, daily_goals, fitzy_focus, progress, vitals, body_comp, past_date_log, native_ad, charts`
+  - campaign present: `offline_banner, header, health_sync_banner, campaign, streak_warning, pro_upsell, missing_days, daily_goals, fitzy_focus, progress, hydration, referral, vitals, body_comp, past_date_log, native_ad, charts`
+  (`pro_upsell` steps below `streak_warning` because promos may not be adjacent; with a campaign, hydration follows the referral card below `progress`. `missing_days` only appears for clients that declare it — Android; iOS gets the same lists without it.)
 - Server eligibility hints only drop a card when the server *knows*: `campaign` when no campaign is visible, `referral` when the program is off, `pro_upsell` for Pro users / subscriptions off, `native_ad` for Pro users. Unknown (lookup failed/timed out) → the card stays and the client self-gates.
 - `section` and `dismissible` are not sent in v1 (clients use their per-card defaults); `variant` only when a rule sets one; `props` only for `campaign` (`{ slug }`, id `campaign:<slug>`).
-- Events: `at` is optional (stored as `occurred_at` when within the last 7 days); unknown extra fields are ignored; `event` ∈ `impression | tap | dismiss | cta`; `position` = 0-based index in the rendered layout. 1–50 events per call, else 400.
-- Amplitude: `Home Feed Card Viewed / Tapped / Dismissed` carry `decision_id, layout_key, card_type, card_id, position` (+ optional `experiment_key, experiment_arm`). Send `Tapped` for both `tap` and `cta`.
+- Events: `at` is optional (stored as `occurred_at` when within the last 7 days); unknown extra fields are ignored; `event` ∈ `impression | tap | dismiss | cta` (clients send `impression`, `tap`, `dismiss` today; `cta` stays allowed for later). 1–50 events per call, else 400.
+- ★ **`position`** (events API and Amplitude) = the card's 0-based index in the **resolved order before client-side collapse**: the order the client decided to render (server/cached/default layout, after the client's own forcing of `offline_banner`/`header` and dropping of unknown types/duplicates), counting cards that later collapse because they had nothing to show. It is *not* the visual index among visible cards.
+- Amplitude (tracking plan v12): `Home Feed Card Viewed / Tapped / Dismissed`. Required: `card_type`, `card_id`, `position`, `layout_key`, `layout_source` (enum `home_feed_layout_source` = `server | cache | default` — where the rendered layout came from). Optional: `decision_id` (absent for the built-in default), `variant`, `experiment_key`, `experiment_arm`. Send `Tapped` for both `tap` and `cta`.
 
 ## 9. Operating the feed
 

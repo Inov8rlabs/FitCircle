@@ -20,6 +20,7 @@ export type DurationBand = 'lt_15' | '15_30' | '30_60' | '60_plus';
 export type PlatformApp = 'ios' | 'android' | 'web';
 export type Environment = 'production' | 'development';
 export type ReferralAttributionSource = 'universal_link' | 'app_link' | 'play_referrer' | 'paste' | 'typed' | 'web' | 'circle_join' | 'email_invite';
+export type HomeFeedLayoutSource = 'server' | 'cache' | 'default';
 export type LogoutReason = 'user' | 'session_expired' | 'account_deleted';
 export type HealthPermissionsRespondedProvider = 'apple_health' | 'health_connect';
 export type TrackingPermissionRespondedStatus = 'authorized' | 'denied' | 'restricted' | 'not_determined';
@@ -470,12 +471,12 @@ export const AnalyticsEvents = {
   fitzyTipShared: (p: { tier: FitzyTipSharedTier }): AnalyticsEventPayload => ({ name: 'Fitzy Tip Shared', properties: clean(p) }),
   /** The user removed an item Fitzy remembers, or cleared all. */
   fitzyMemoryEdited: (p: { change: FitzyMemoryEditedChange }): AnalyticsEventPayload => ({ name: 'Fitzy Memory Edited', properties: clean(p) }),
-  /** A server-driven home feed card was >= 50% visible for >= 1 s (once per decision per card). Mirrors the 'impression' event sent to POST /api/mobile/home-feed/events. */
-  homeFeedCardViewed: (p: { decision_id: string; layout_key: string; card_type: string; card_id: string; position: number; experiment_key?: string; experiment_arm?: string }): AnalyticsEventPayload => ({ name: 'Home Feed Card Viewed', properties: clean(p) }),
-  /** The user tapped a home feed card (or its CTA). Mirrors 'tap' / 'cta' sent to the events API. */
-  homeFeedCardTapped: (p: { decision_id: string; layout_key: string; card_type: string; card_id: string; position: number; experiment_key?: string; experiment_arm?: string }): AnalyticsEventPayload => ({ name: 'Home Feed Card Tapped', properties: clean(p) }),
-  /** The user dismissed a home feed card. Mirrors 'dismiss' sent to the events API. */
-  homeFeedCardDismissed: (p: { decision_id: string; layout_key: string; card_type: string; card_id: string; position: number; experiment_key?: string; experiment_arm?: string }): AnalyticsEventPayload => ({ name: 'Home Feed Card Dismissed', properties: clean(p) }),
+  /** A home feed card was >= 50% visible for >= 1 s (once per decision per card; HOME_FEED_SPEC §6). */
+  homeFeedCardViewed: (p: { card_type: string; card_id: string; position: number; layout_key: string; layout_source: HomeFeedLayoutSource; decision_id?: string; variant?: string; experiment_key?: string; experiment_arm?: string }): AnalyticsEventPayload => ({ name: 'Home Feed Card Viewed', properties: clean(p) }),
+  /** A home feed card's own primary action was tapped. */
+  homeFeedCardTapped: (p: { card_type: string; card_id: string; position: number; layout_key: string; layout_source: HomeFeedLayoutSource; decision_id?: string; variant?: string; experiment_key?: string; experiment_arm?: string }): AnalyticsEventPayload => ({ name: 'Home Feed Card Tapped', properties: clean(p) }),
+  /** A home feed card was dismissed by the user. */
+  homeFeedCardDismissed: (p: { card_type: string; card_id: string; position: number; layout_key: string; layout_source: HomeFeedLayoutSource; decision_id?: string; variant?: string; experiment_key?: string; experiment_arm?: string }): AnalyticsEventPayload => ({ name: 'Home Feed Card Dismissed', properties: clean(p) }),
 } as const;
 
 /** Canonical user properties. Keys in USER_PROPERTIES_SET_ONCE must be sent with setOnce. */

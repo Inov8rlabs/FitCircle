@@ -27,7 +27,7 @@ const entry = (type: CardType, kind: CardKind, dismissible = false, version = 1)
   dismissible,
 });
 
-/** §4 default order — also the clients' built-in fallback. */
+/** §4 default order — also the clients' built-in fallback. `missing_days` added 2026-10-22 (Android). */
 export const DEFAULT_ORDER: readonly CardType[] = [
   'offline_banner',
   'header',
@@ -37,6 +37,7 @@ export const DEFAULT_ORDER: readonly CardType[] = [
   'referral',
   'pro_upsell',
   'streak_warning',
+  'missing_days',
   'daily_goals',
   'fitzy_focus',
   'progress',
@@ -56,6 +57,8 @@ export const CATALOG: Readonly<Record<string, CatalogEntry>> = Object.freeze({
   referral: entry('referral', 'promo', true),
   pro_upsell: entry('pro_upsell', 'promo', true),
   streak_warning: entry('streak_warning', 'utility'),
+  /** "You have unlogged days" prompt (Android today; iOS doesn't declare it yet). */
+  missing_days: entry('missing_days', 'utility', true),
   daily_goals: entry('daily_goals', 'utility'),
   fitzy_focus: entry('fitzy_focus', 'utility'),
   progress: entry('progress', 'utility'),

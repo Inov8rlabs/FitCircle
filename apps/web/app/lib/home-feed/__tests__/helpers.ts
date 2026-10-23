@@ -3,10 +3,13 @@ import type { FeedRule } from '../rules';
 import { ruleDefinitionSchema } from '../rules';
 import type { FeedContext } from '../types';
 
-/** The exact `cards=` list from HOME_FEED_SPEC §2 (what 1.0.8 clients send). */
-export const SPEC_CARDS =
+/** The exact `cards=` list from HOME_FEED_SPEC §2 (what iOS 1.0.8 sends). */
+export const IOS_CARDS =
   'header@1,campaign@1,hydration@1,referral@1,pro_upsell@1,streak_warning@1,daily_goals@1,progress@1,vitals@1,body_comp@1,past_date_log@1,native_ad@1,charts@1,fitzy_focus@1,health_sync_banner@1,offline_banner@1';
+/** Android 1.0.8 also declares missing_days@1 — i.e. the full v1 catalog. */
+export const SPEC_CARDS = `${IOS_CARDS},missing_days@1`;
 export const SPEC_SUPPORT = parseClientCards(SPEC_CARDS);
+export const IOS_SUPPORT = parseClientCards(IOS_CARDS);
 
 export const USER = '11111111-1111-4111-8111-111111111111';
 

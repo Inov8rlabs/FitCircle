@@ -92,6 +92,11 @@
       "web",
       "circle_join",
       "email_invite"
+    ],
+    "home_feed_layout_source": [
+      "server",
+      "cache",
+      "default"
     ]
   },
   "globalProperties": [
@@ -3020,49 +3025,53 @@
         "ios",
         "android"
       ],
-      "description": "A server-driven home feed card was >= 50% visible for >= 1 s (once per decision per card). Mirrors the 'impression' event sent to POST /api/mobile/home-feed/events.",
+      "description": "A home feed card was >= 50% visible for >= 1 s (once per decision per card; HOME_FEED_SPEC §6).",
       "properties": [
-        {
-          "name": "decision_id",
-          "type": "string",
-          "required": true,
-          "description": "decision_id of the GET /api/mobile/home-feed response that produced the layout (joins home_feed_decisions)."
-        },
-        {
-          "name": "layout_key",
-          "type": "string",
-          "required": true,
-          "description": "layout_key of that response, e.g. default-v1 or default-v1+water_first.treatment."
-        },
         {
           "name": "card_type",
           "type": "string",
-          "required": true,
-          "description": "Card type from the feed catalog: header, campaign, hydration, referral, pro_upsell, streak_warning, daily_goals, progress, vitals, body_comp, past_date_log, native_ad, charts, fitzy_focus, health_sync_banner, offline_banner (new types may appear)."
+          "required": true
         },
         {
           "name": "card_id",
           "type": "string",
-          "required": true,
-          "description": "The card's stable id from the response (e.g. hydration, campaign:hold_the_line)."
+          "required": true
         },
         {
           "name": "position",
           "type": "int",
+          "required": true
+        },
+        {
+          "name": "layout_key",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "layout_source",
+          "type": "enum",
           "required": true,
-          "description": "0-based index of the card in the rendered layout."
+          "enum": "home_feed_layout_source"
+        },
+        {
+          "name": "decision_id",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "variant",
+          "type": "string",
+          "required": false
         },
         {
           "name": "experiment_key",
           "type": "string",
-          "required": false,
-          "description": "experiment.key of the response, when one was set."
+          "required": false
         },
         {
           "name": "experiment_arm",
           "type": "string",
-          "required": false,
-          "description": "experiment.arm of the response, when one was set."
+          "required": false
         }
       ]
     },
@@ -3073,49 +3082,53 @@
         "ios",
         "android"
       ],
-      "description": "The user tapped a home feed card (or its CTA). Mirrors 'tap' / 'cta' sent to the events API.",
+      "description": "A home feed card's own primary action was tapped.",
       "properties": [
-        {
-          "name": "decision_id",
-          "type": "string",
-          "required": true,
-          "description": "decision_id of the GET /api/mobile/home-feed response that produced the layout (joins home_feed_decisions)."
-        },
-        {
-          "name": "layout_key",
-          "type": "string",
-          "required": true,
-          "description": "layout_key of that response, e.g. default-v1 or default-v1+water_first.treatment."
-        },
         {
           "name": "card_type",
           "type": "string",
-          "required": true,
-          "description": "Card type from the feed catalog: header, campaign, hydration, referral, pro_upsell, streak_warning, daily_goals, progress, vitals, body_comp, past_date_log, native_ad, charts, fitzy_focus, health_sync_banner, offline_banner (new types may appear)."
+          "required": true
         },
         {
           "name": "card_id",
           "type": "string",
-          "required": true,
-          "description": "The card's stable id from the response (e.g. hydration, campaign:hold_the_line)."
+          "required": true
         },
         {
           "name": "position",
           "type": "int",
+          "required": true
+        },
+        {
+          "name": "layout_key",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "layout_source",
+          "type": "enum",
           "required": true,
-          "description": "0-based index of the card in the rendered layout."
+          "enum": "home_feed_layout_source"
+        },
+        {
+          "name": "decision_id",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "variant",
+          "type": "string",
+          "required": false
         },
         {
           "name": "experiment_key",
           "type": "string",
-          "required": false,
-          "description": "experiment.key of the response, when one was set."
+          "required": false
         },
         {
           "name": "experiment_arm",
           "type": "string",
-          "required": false,
-          "description": "experiment.arm of the response, when one was set."
+          "required": false
         }
       ]
     },
@@ -3126,49 +3139,53 @@
         "ios",
         "android"
       ],
-      "description": "The user dismissed a home feed card. Mirrors 'dismiss' sent to the events API.",
+      "description": "A home feed card was dismissed by the user.",
       "properties": [
-        {
-          "name": "decision_id",
-          "type": "string",
-          "required": true,
-          "description": "decision_id of the GET /api/mobile/home-feed response that produced the layout (joins home_feed_decisions)."
-        },
-        {
-          "name": "layout_key",
-          "type": "string",
-          "required": true,
-          "description": "layout_key of that response, e.g. default-v1 or default-v1+water_first.treatment."
-        },
         {
           "name": "card_type",
           "type": "string",
-          "required": true,
-          "description": "Card type from the feed catalog: header, campaign, hydration, referral, pro_upsell, streak_warning, daily_goals, progress, vitals, body_comp, past_date_log, native_ad, charts, fitzy_focus, health_sync_banner, offline_banner (new types may appear)."
+          "required": true
         },
         {
           "name": "card_id",
           "type": "string",
-          "required": true,
-          "description": "The card's stable id from the response (e.g. hydration, campaign:hold_the_line)."
+          "required": true
         },
         {
           "name": "position",
           "type": "int",
+          "required": true
+        },
+        {
+          "name": "layout_key",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "layout_source",
+          "type": "enum",
           "required": true,
-          "description": "0-based index of the card in the rendered layout."
+          "enum": "home_feed_layout_source"
+        },
+        {
+          "name": "decision_id",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "variant",
+          "type": "string",
+          "required": false
         },
         {
           "name": "experiment_key",
           "type": "string",
-          "required": false,
-          "description": "experiment.key of the response, when one was set."
+          "required": false
         },
         {
           "name": "experiment_arm",
           "type": "string",
-          "required": false,
-          "description": "experiment.arm of the response, when one was set."
+          "required": false
         }
       ]
     }

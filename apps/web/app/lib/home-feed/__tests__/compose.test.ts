@@ -30,7 +30,7 @@ describe('composeFeed', () => {
 
   it('default layout, no campaign (free user)', () => {
     expect(ids(composeFeed({ support: SPEC_SUPPORT, ctx: makeCtx() }))).toEqual([
-      'offline_banner', 'header', 'health_sync_banner', 'hydration', 'referral', 'streak_warning', 'pro_upsell',
+      'offline_banner', 'header', 'health_sync_banner', 'hydration', 'referral', 'streak_warning', 'pro_upsell', 'missing_days',
       'daily_goals', 'fitzy_focus', 'progress', 'vitals', 'body_comp', 'past_date_log', 'native_ad', 'charts',
     ]);
   });
@@ -38,7 +38,7 @@ describe('composeFeed', () => {
   it('default layout with a campaign: referral after progress, hydration directly above it, header first', () => {
     const r = composeFeed({ support: SPEC_SUPPORT, ctx: makeCtx(withCampaign()) });
     expect(ids(r)).toEqual([
-      'offline_banner', 'header', 'health_sync_banner', 'campaign:hold_the_line', 'streak_warning', 'pro_upsell',
+      'offline_banner', 'header', 'health_sync_banner', 'campaign:hold_the_line', 'streak_warning', 'pro_upsell', 'missing_days',
       'daily_goals', 'fitzy_focus', 'progress', 'hydration', 'referral', 'vitals', 'body_comp', 'past_date_log', 'native_ad', 'charts',
     ]);
     expect(r.response.cards[3]).toEqual({ id: 'campaign:hold_the_line', type: 'campaign', version: 1, props: { slug: 'hold_the_line' } });

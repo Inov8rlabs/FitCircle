@@ -39,6 +39,11 @@ exports[`GET /api/mobile/home-feed — 1.0.8 client fixtures > Android 1.0.8 (no
       "version": 1,
     },
     {
+      "id": "missing_days",
+      "type": "missing_days",
+      "version": 1,
+    },
+    {
       "id": "daily_goals",
       "type": "daily_goals",
       "version": 1,
@@ -122,6 +127,11 @@ exports[`GET /api/mobile/home-feed — 1.0.8 client fixtures > Android 1.0.8 wit
     {
       "id": "pro_upsell",
       "type": "pro_upsell",
+      "version": 1,
+    },
+    {
+      "id": "missing_days",
+      "type": "missing_days",
       "version": 1,
     },
     {

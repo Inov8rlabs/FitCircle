@@ -3,11 +3,12 @@ import { describe, expect, it } from 'vitest';
 import { buildCandidates, clientSupports, ineligibleReason, parseClientCards } from '../candidates';
 import { CATALOG, DEFAULT_ORDER, PROMO_TYPES, cardId, catalogEntry, defaultIndex, isPromo } from '../catalog';
 
-import { SPEC_SUPPORT, makeCtx, types, withCampaign } from './helpers';
+import { IOS_SUPPORT, SPEC_SUPPORT, makeCtx, types, withCampaign } from './helpers';
 
 describe('catalog', () => {
   it('has every default-order type at version 1, and the spec promo set', () => {
-    expect(DEFAULT_ORDER).toHaveLength(16);
+    expect(DEFAULT_ORDER).toHaveLength(17);
+    expect(DEFAULT_ORDER.indexOf('missing_days')).toBe(DEFAULT_ORDER.indexOf('streak_warning') + 1);
     for (const t of DEFAULT_ORDER) expect(CATALOG[t]).toMatchObject({ type: t, version: 1 });
     expect([...PROMO_TYPES].sort()).toEqual(['campaign', 'pro_upsell', 'referral']);
     expect(isPromo('hydration')).toBe(false);
@@ -25,8 +26,14 @@ describe('catalog', () => {
 
 describe('parseClientCards', () => {
   it('parses the spec list', () => {
-    expect(SPEC_SUPPORT.size).toBe(16);
+    expect(SPEC_SUPPORT.size).toBe(17);
     for (const t of DEFAULT_ORDER) expect(SPEC_SUPPORT.get(t)).toBe(1);
+  });
+
+  it('iOS 1.0.8 does not declare missing_days, so it never gets it', () => {
+    expect(IOS_SUPPORT.has('missing_days')).toBe(false);
+    expect(types(buildCandidates(makeCtx(), IOS_SUPPORT).eligible)).not.toContain('missing_days');
+    expect(types(buildCandidates(makeCtx(), SPEC_SUPPORT).eligible)).toContain('missing_days');
   });
 
   it('is lenient: whitespace, missing version = 1, duplicates keep max, junk ignored', () => {

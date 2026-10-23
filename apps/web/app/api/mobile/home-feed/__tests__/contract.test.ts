@@ -190,6 +190,18 @@ describe('GET /api/mobile/home-feed — 1.0.8 client fixtures', () => {
     }
   });
 
+  it('missing_days: Android (declares it) gets it right after streak_warning; iOS (does not) never does', async () => {
+    for (const campaign of [null, { slug: 'hold_the_line', phase: 'live' }]) {
+      h.campaign = campaign;
+      const android = (await (await GET(fromFixture(ANDROID, ANDROID_USER))).json()).cards.map((c: any) => c.type);
+      const sw = android.indexOf('streak_warning');
+      // pro_upsell may be slotted between them by the no-adjacent-promos guardrail.
+      expect(android.slice(sw + 1, sw + 3)).toContain('missing_days');
+      const ios = (await (await GET(fromFixture(IOS, IOS_USER))).json()).cards.map((c: any) => c.type);
+      expect(ios).not.toContain('missing_days');
+    }
+  });
+
   it('the server never returns a card type the client did not list', async () => {
     db.rows('home_feed_rules').push({
       id: db.nextId(),

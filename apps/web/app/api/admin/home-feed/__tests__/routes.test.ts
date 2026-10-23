@@ -155,7 +155,7 @@ describe('preview', () => {
     expect(res.status).toBe(200);
     const { data } = await res.json();
     expect(data.feed).toMatchObject({ schema: 1, layout_key: 'default-v1' });
-    expect(data.feed.cards.length).toBe(15); // full catalog minus the (absent) campaign
+    expect(data.feed.cards.length).toBe(16); // full catalog minus the (absent) campaign
     expect(data.context).toMatchObject({ userId: USER, platform: 'ios', appVersion: '1.0.8', timezone: 'America/New_York' });
     expect(data.killSwitch).toEqual({ feedEnabled: true, rulesEnabled: true });
     expect(data.trace).toMatchObject({ ranker: 'rules', suppressed: ['campaign'] });
