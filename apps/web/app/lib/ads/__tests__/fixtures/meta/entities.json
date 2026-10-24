@@ -1,0 +1,13 @@
+{
+ "_note": "Graph API v23.0 response shapes (synthetic values) for /act_{id}/campaigns, /adsets, /ads.",
+ "campaigns": { "data": [
+  { "id": "120200000000000001", "name": "Android - Install - Snap a meal", "status": "ACTIVE", "effective_status": "ACTIVE", "objective": "OUTCOME_APP_PROMOTION", "daily_budget": "5000", "start_time": "2026-10-25T09:00:00-0700" }
+ ] },
+ "adsets": { "data": [
+  { "id": "120200000000000011", "name": "US 25-44 broad", "campaign_id": "120200000000000001", "status": "ACTIVE", "effective_status": "ACTIVE", "bid_strategy": "COST_CAP", "bid_amount": "350", "daily_budget": "2500", "start_time": "2026-10-25T09:00:00-0700", "targeting": { "geo_locations": { "countries": ["US"] } }, "promoted_object": { "application_id": "1794378301771271", "object_store_url": "https://play.google.com/store/apps/details?id=com.inov8rlabs.apps.fitcircle" } },
+  { "id": "120200000000000012", "name": "US Advantage+ audience", "campaign_id": "120200000000000001", "status": "PAUSED", "effective_status": "PAUSED", "bid_strategy": "LOWEST_COST_WITHOUT_CAP", "daily_budget": "2500", "promoted_object": { "object_store_url": "https://play.google.com/store/apps/details?id=com.inov8rlabs.apps.fitcircle" } }
+ ] },
+ "ads": { "data": [
+  { "id": "120200000000000101", "name": "Snap a meal - video 1", "adset_id": "120200000000000011", "campaign_id": "120200000000000001", "status": "ACTIVE", "effective_status": "ACTIVE", "creative": { "id": "120200000000000901", "thumbnail_url": "https://scontent.example/thumb.jpg", "title": "Snap a meal. Get the macros.", "body": "Photo to calories in seconds." } }
+ ] }
+}

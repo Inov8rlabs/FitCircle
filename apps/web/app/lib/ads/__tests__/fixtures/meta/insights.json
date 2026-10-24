@@ -1,0 +1,9 @@
+{
+ "_note": "Graph API v23.0 /act_{id}/insights?level=ad&time_increment=1 (synthetic values).",
+ "data": [
+  { "ad_id": "120200000000000101", "adset_id": "120200000000000011", "campaign_id": "120200000000000001", "spend": "7.21", "impressions": "1800", "clicks": "40", "account_currency": "USD", "actions": [ { "action_type": "link_click", "value": "40" }, { "action_type": "mobile_app_install", "value": "6" } ], "date_start": "2026-10-25", "date_stop": "2026-10-25" },
+  { "ad_id": "120200000000000102", "adset_id": "120200000000000011", "campaign_id": "120200000000000001", "spend": "2.79", "impressions": "700", "clicks": "10", "account_currency": "USD", "actions": [ { "action_type": "mobile_app_install", "value": "1" } ], "date_start": "2026-10-25", "date_stop": "2026-10-25" },
+  { "ad_id": "120200000000000101", "adset_id": "120200000000000011", "campaign_id": "120200000000000001", "spend": "5.00", "impressions": "1000", "clicks": "20", "account_currency": "USD", "date_start": "2026-10-26", "date_stop": "2026-10-26" }
+ ],
+ "paging": { "cursors": { "before": "a", "after": "b" } }
+}

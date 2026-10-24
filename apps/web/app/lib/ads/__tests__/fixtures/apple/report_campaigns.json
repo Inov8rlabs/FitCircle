@@ -1,0 +1,101 @@
+{
+ "data": {
+  "reportingDataResponse": {
+   "row": [
+    {
+     "other": false,
+     "granularity": [
+      {
+       "date": "2026-10-21"
+      },
+      {
+       "date": "2026-10-22"
+      },
+      {
+       "date": "2026-10-23"
+      },
+      {
+       "date": "2026-10-24"
+      }
+     ],
+     "metadata": {
+      "campaignId": 2144950391,
+      "orgId": 25006540,
+      "deleted": false,
+      "modificationTime": "2026-10-24T06:26:43.572",
+      "campaignName": "US - Search - Concept test (CPP)",
+      "campaignStatus": "ENABLED",
+      "app": {
+       "appName": "FitCircle: Fitness & Nutrition",
+       "adamId": 6811432467
+      },
+      "servingStatus": "RUNNING",
+      "servingStateReasons": null,
+      "countriesOrRegions": [
+       "US"
+      ],
+      "totalBudget": null,
+      "dailyBudget": {
+       "amount": "50",
+       "currency": "USD"
+      },
+      "displayStatus": "RUNNING",
+      "supplySources": [
+       "APPSTORE_SEARCH_RESULTS"
+      ],
+      "adChannelType": "SEARCH",
+      "countryOrRegionServingStateReasons": {},
+      "billingEvent": "TAPS",
+      "biddingStrategy": "MANUAL_CPT",
+      "targetCpa": null
+     },
+     "total": {
+      "localSpend": {
+       "amount": "0",
+       "currency": "USD"
+      },
+      "tapInstalls": 0,
+      "tapInstallCPI": {
+       "amount": "0",
+       "currency": "USD"
+      },
+      "impressions": 0,
+      "taps": 0,
+      "ttr": 0,
+      "avgCPT": {
+       "amount": "0",
+       "currency": "USD"
+      },
+      "totalNewDownloads": 0,
+      "totalRedownloads": 0,
+      "viewInstalls": 0,
+      "totalInstalls": 0,
+      "tapNewDownloads": 0,
+      "tapRedownloads": 0,
+      "viewNewDownloads": 0,
+      "viewRedownloads": 0,
+      "tapPreOrdersPlaced": 0,
+      "viewPreOrdersPlaced": 0,
+      "totalPreOrdersPlaced": 0,
+      "totalAvgCPI": {
+       "amount": "0",
+       "currency": "USD"
+      },
+      "totalInstallRate": 0,
+      "tapInstallRate": 0,
+      "avgCPM": {
+       "amount": "0",
+       "currency": "USD"
+      }
+     }
+    }
+   ]
+  }
+ },
+ "pagination": {
+  "totalResults": 1,
+  "startIndex": 0,
+  "itemsPerPage": 1
+ },
+ "error": null
+}

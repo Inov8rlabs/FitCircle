@@ -1,0 +1,49 @@
+{
+ "data": {
+  "reportingDataResponse": {
+   "row": [
+    {
+     "other": false,
+     "granularity": [
+      {
+       "date": "2026-10-21"
+      },
+      {
+       "date": "2026-10-22"
+      },
+      {
+       "date": "2026-10-23"
+      },
+      {
+       "date": "2026-10-24"
+      }
+     ],
+     "metadata": {
+      "campaignId": 2144950391,
+      "orgId": 25006540,
+      "deleted": false,
+      "adId": -1,
+      "adName": "Default Ad",
+      "adDisplayStatus": "ACTIVE",
+      "language": null,
+      "status": "VALID",
+      "adStatus": "ENABLED",
+      "creativeType": "DEFAULT_PRODUCT_PAGE",
+      "creativeId": -1,
+      "adServingStateReasons": null,
+      "adGroupId": 2152121621,
+      "productPageId": null,
+      "creationTime": null,
+      "modificationTime": null
+     }
+    }
+   ]
+  }
+ },
+ "pagination": {
+  "totalResults": 1,
+  "startIndex": 0,
+  "itemsPerPage": 1
+ },
+ "error": null
+}

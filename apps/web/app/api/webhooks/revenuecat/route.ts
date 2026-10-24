@@ -2,10 +2,12 @@ import { createHash, timingSafeEqual } from 'node:crypto';
 
 import { type NextRequest, NextResponse } from 'next/server';
 
+import { AdsAttributionService } from '@/lib/ads/services/attribution-service';
 import {
   SubscriptionService,
   type RevenueCatEvent,
 } from '@/lib/services/subscription-service';
+import { runAfterResponse } from '@/lib/utils/after-response';
 
 export const dynamic = 'force-dynamic';
 
@@ -62,6 +64,12 @@ export async function POST(request: NextRequest) {
     });
     if (outcome !== 'applied') {
       console.log(`[RevenueCat webhook] ${event.type} ${event.id}: ${outcome}`);
+    }
+    // Ads console attribution fallback (ADS_CONSOLE_SPEC §4.2): after the response,
+    // best-effort, only when RevenueCat carries $mediaSource and the user has no row.
+    if (outcome === 'applied' && event.subscriber_attributes?.$mediaSource) {
+      const rcEvent = event;
+      runAfterResponse(() => AdsAttributionService.fromRevenueCat(rcEvent), 'ads-attribution-fallback');
     }
     return NextResponse.json({ received: true, outcome });
   } catch (error: any) {

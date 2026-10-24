@@ -8,6 +8,8 @@ vi.mock('@/lib/supabase-admin', async () => {
   return { createAdminSupabase: () => getDb().client() };
 });
 
+import { AdsAttributionService } from '@/lib/ads/services/attribution-service';
+
 import { POST } from '../route';
 
 const SECRET = 'test-webhook-secret';
@@ -102,5 +104,24 @@ describe('POST /api/webhooks/revenuecat — processing', () => {
     );
     expect(res.status).toBe(200);
     expect((await res.json()).outcome).toBe('unknown_user');
+  });
+
+  it('ads attribution fallback runs after the response and can never break the webhook', async () => {
+    const fallback = vi.spyOn(AdsAttributionService, 'fromRevenueCat').mockRejectedValue(new Error('db down'));
+    const res = await POST(
+      makeRequest(rcBody({ id: 'evt_route_attr', subscriber_attributes: { $mediaSource: { value: 'Apple Search Ads' }, $campaign: { value: '2144950391' } } }), SECRET)
+    );
+    expect(res.status).toBe(200);
+    expect((await res.json()).outcome).toBe('applied');
+    await new Promise((r) => setTimeout(r, 0));
+    expect(fallback).toHaveBeenCalledTimes(1);
+    fallback.mockRestore();
+  });
+
+  it('no subscriber attributes → no fallback call', async () => {
+    const fallback = vi.spyOn(AdsAttributionService, 'fromRevenueCat');
+    await POST(makeRequest(rcBody({ id: 'evt_route_noattr' }), SECRET));
+    expect(fallback).not.toHaveBeenCalled();
+    fallback.mockRestore();
   });
 });

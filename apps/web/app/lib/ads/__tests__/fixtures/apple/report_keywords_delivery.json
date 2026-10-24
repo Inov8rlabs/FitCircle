@@ -1,0 +1,31 @@
+{
+ "_note": "Shape of a v5 keyword report with delivery (granularity DAILY). Live campaign had no delivery yet when fixtures were recorded (2026-10-24), so metric values here are synthetic; field names match the live zero-delivery response.",
+ "data": {
+  "reportingDataResponse": {
+   "row": [
+    {
+     "other": false,
+     "granularity": [
+      {
+       "date": "2026-10-24",
+       "localSpend": { "amount": "12.34", "currency": "USD" },
+       "impressions": 410, "taps": 9, "ttr": 0.022,
+       "tapInstalls": 3, "viewInstalls": 1, "totalInstalls": 4,
+       "totalNewDownloads": 3, "totalRedownloads": 1,
+       "avgCPT": { "amount": "1.37", "currency": "USD" }
+      },
+      { "date": "2026-10-25" }
+     ],
+     "metadata": {
+      "campaignId": 2144950391, "keywordId": 2360029480, "keyword": "calorie counter",
+      "keywordStatus": "ACTIVE", "matchType": "EXACT",
+      "bidAmount": { "amount": "2", "currency": "USD" },
+      "adGroupId": 2152121621, "adGroupName": "Snap a meal - calorie/food/macro (exact)"
+     }
+    }
+   ]
+  }
+ },
+ "pagination": { "totalResults": 1, "startIndex": 0, "itemsPerPage": 1 },
+ "error": null
+}

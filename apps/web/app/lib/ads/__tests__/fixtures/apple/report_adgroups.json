@@ -1,0 +1,93 @@
+{
+ "data": {
+  "reportingDataResponse": {
+   "row": [
+    {
+     "other": false,
+     "granularity": [
+      {
+       "date": "2026-10-21"
+      },
+      {
+       "date": "2026-10-22"
+      },
+      {
+       "date": "2026-10-23"
+      },
+      {
+       "date": "2026-10-24"
+      }
+     ],
+     "metadata": {
+      "campaignId": 2144950391,
+      "orgId": 25006540,
+      "deleted": false,
+      "modificationTime": "2026-10-24T00:42:26.592",
+      "startTime": "2026-10-24T00:00:00.000",
+      "endTime": null,
+      "adGroupId": 2152121621,
+      "adGroupName": "Snap a meal - calorie/food/macro (exact)",
+      "cpaGoal": null,
+      "adGroupStatus": "ENABLED",
+      "adGroupServingStatus": "RUNNING",
+      "adGroupServingStateReasons": null,
+      "adGroupDisplayStatus": "RUNNING",
+      "pricingModel": "CPC",
+      "defaultBidAmount": {
+       "amount": "2",
+       "currency": "USD"
+      },
+      "automatedKeywordsOptIn": false,
+      "biddingStrategy": "MANUAL_CPT",
+      "automatedKeywordsRequired": false
+     },
+     "total": {
+      "localSpend": {
+       "amount": "0",
+       "currency": "USD"
+      },
+      "tapInstalls": 0,
+      "tapInstallCPI": {
+       "amount": "0",
+       "currency": "USD"
+      },
+      "impressions": 0,
+      "taps": 0,
+      "ttr": 0,
+      "avgCPT": {
+       "amount": "0",
+       "currency": "USD"
+      },
+      "totalNewDownloads": 0,
+      "totalRedownloads": 0,
+      "viewInstalls": 0,
+      "totalInstalls": 0,
+      "tapNewDownloads": 0,
+      "tapRedownloads": 0,
+      "viewNewDownloads": 0,
+      "viewRedownloads": 0,
+      "tapPreOrdersPlaced": 0,
+      "viewPreOrdersPlaced": 0,
+      "totalPreOrdersPlaced": 0,
+      "totalAvgCPI": {
+       "amount": "0",
+       "currency": "USD"
+      },
+      "totalInstallRate": 0,
+      "tapInstallRate": 0,
+      "avgCPM": {
+       "amount": "0",
+       "currency": "USD"
+      }
+     }
+    }
+   ]
+  }
+ },
+ "pagination": {
+  "totalResults": 1,
+  "startIndex": 0,
+  "itemsPerPage": 1
+ },
+ "error": null
+}

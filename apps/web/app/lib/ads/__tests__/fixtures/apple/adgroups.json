@@ -1,0 +1,49 @@
+{
+ "data": [
+  {
+   "id": 2152121621,
+   "campaignId": 2144950391,
+   "name": "Snap a meal - calorie/food/macro (exact)",
+   "cpaGoal": null,
+   "startTime": "2026-10-24T04:00:00.000",
+   "endTime": null,
+   "automatedKeywordsOptIn": false,
+   "targetingDimensions": {
+    "age": null,
+    "gender": null,
+    "country": null,
+    "adminArea": null,
+    "locality": null,
+    "deviceClass": {
+     "included": [
+      "IPHONE"
+     ]
+    },
+    "daypart": null,
+    "appDownloaders": null,
+    "appCategories": null
+   },
+   "orgId": 25006540,
+   "creationTime": "2026-10-24T04:42:26.404",
+   "pricingModel": "CPC",
+   "modificationTime": "2026-10-24T04:42:26.592",
+   "status": "ENABLED",
+   "servingStatus": "RUNNING",
+   "servingStateReasons": null,
+   "displayStatus": "RUNNING",
+   "deleted": false,
+   "defaultBidAmount": {
+    "amount": "2",
+    "currency": "USD"
+   },
+   "biddingStrategy": "MANUAL_CPT",
+   "automatedKeywordsRequired": false
+  }
+ ],
+ "pagination": {
+  "totalResults": 1,
+  "startIndex": 0,
+  "itemsPerPage": 1
+ },
+ "error": null
+}

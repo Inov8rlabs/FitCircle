@@ -1,0 +1,55 @@
+{
+ "data": [
+  {
+   "id": 2360029480,
+   "campaignId": 2144950391,
+   "adGroupId": 2152121621,
+   "text": "calorie counter",
+   "status": "ACTIVE",
+   "matchType": "EXACT",
+   "bidAmount": {
+    "amount": "2",
+    "currency": "USD"
+   },
+   "modificationTime": "2026-10-24T04:42:26.482",
+   "deleted": false,
+   "creationTime": "2026-10-24T04:42:26.482"
+  },
+  {
+   "id": 2360029481,
+   "campaignId": 2144950391,
+   "adGroupId": 2152121621,
+   "text": "calorie counter app",
+   "status": "ACTIVE",
+   "matchType": "EXACT",
+   "bidAmount": {
+    "amount": "2",
+    "currency": "USD"
+   },
+   "modificationTime": "2026-10-24T04:42:26.497",
+   "deleted": false,
+   "creationTime": "2026-10-24T04:42:26.497"
+  },
+  {
+   "id": 2360029482,
+   "campaignId": 2144950391,
+   "adGroupId": 2152121621,
+   "text": "calorie tracker",
+   "status": "ACTIVE",
+   "matchType": "EXACT",
+   "bidAmount": {
+    "amount": "2",
+    "currency": "USD"
+   },
+   "modificationTime": "2026-10-24T04:42:26.501",
+   "deleted": false,
+   "creationTime": "2026-10-24T04:42:26.501"
+  }
+ ],
+ "pagination": {
+  "totalResults": 3,
+  "startIndex": 0,
+  "itemsPerPage": 3
+ },
+ "error": null
+}

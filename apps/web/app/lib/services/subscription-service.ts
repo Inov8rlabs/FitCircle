@@ -39,6 +39,9 @@ export interface RevenueCatEvent {
   transaction_id?: string | null;
   transferred_from?: string[];
   transferred_to?: string[];
+  /** RevenueCat customer attributes, e.g. `$mediaSource: { value, updated_at_ms }` (ads attribution fallback). */
+  subscriber_attributes?: Record<string, { value?: string | null } | undefined>;
+  country_code?: string | null;
 }
 
 export type ProcessOutcome =
