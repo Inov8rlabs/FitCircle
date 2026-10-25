@@ -254,6 +254,8 @@ describe('changes', () => {
     expect(conn.applied).toHaveLength(1);
     expect(db.rows('ad_entities').find((e) => e.external_id === 'K1')!.bid_amount).toBe(2.4);
     expect(db.rows('ad_change_log')[0]).toMatchObject({ outcome: 'applied', new_value: '2.4' });
+    // The post-write refresh must not also log the change as 'external'.
+    expect(db.rows('ad_change_log')).toHaveLength(1);
   });
 
   it('rejects over the step limit and when writes are off (still logged)', async () => {

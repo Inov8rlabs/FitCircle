@@ -8,6 +8,7 @@ import { z } from 'zod';
 import { guardrailCaps, reportTimeZone, writeEnabled } from '../config';
 import { getConnector } from '../connectors';
 import { todayInTz } from '../dates';
+import { EXTERNAL_SOURCE } from '../external-changes';
 import { evaluateChange } from '../guardrails';
 import type { AdsActor } from '../http';
 import type { AdChangeLogEntry, AdChangeResult, AdEntityRow } from '../types';
@@ -155,7 +156,7 @@ export class AdsChangeService {
         value: guard.value,
         currency: entity.bid_currency ?? 'USD',
       });
-      if (applied.entity) await AdsSyncService.upsertEntities([applied.entity]);
+      if (applied.entity) await AdsSyncService.upsertEntities([applied.entity], undefined, { detectExternal: false });
       const logId = await this.log({ ...logBase, outcome: 'applied', new_value: str(applied.confirmedValue), error: null });
       return result('applied', { code: null, message: null, newValue: applied.confirmedValue, logId });
     } catch (e: any) {
@@ -181,6 +182,7 @@ export class AdsChangeService {
       actorUserId: r.actor_user_id ?? null,
       actorEmail: r.actor_email ?? null,
       actorName: r.actor_user_id ? (names.get(r.actor_user_id) ?? null) : (r.actor_email ?? null),
+      source: (r.checks as { source?: string } | null)?.source === EXTERNAL_SOURCE ? ('external' as const) : ('console' as const),
       channel: r.channel,
       level: r.level,
       externalId: r.external_id,

@@ -7,7 +7,8 @@
 import { writeEnabled, reportTimeZone } from '../config';
 import { getConnector, allConnectors } from '../connectors';
 import { addDays, todayInTz } from '../dates';
-import type { AdChannel, AdDailyMetricInput, AdEntityInput, ChannelSyncStatus } from '../types';
+import { externalChangeRows } from '../external-changes';
+import type { AdChannel, AdDailyMetricInput, AdEntityInput, AdEntityRow, ChannelSyncStatus } from '../types';
 import { AD_CHANNELS } from '../types';
 
 import { chunk, db } from './db';
@@ -69,15 +70,39 @@ export function metricToRow(m: AdDailyMetricInput, syncedAt: string) {
 const DEBOUNCE_MS = 2 * 60 * 1000;
 
 export class AdsSyncService {
-  static async upsertEntities(entities: AdEntityInput[], syncedAt = new Date().toISOString()): Promise<number> {
+  /**
+   * `detectExternal: false` when the console itself just wrote the change
+   * (it is already in ad_change_log; logging it again as external would double it).
+   */
+  static async upsertEntities(entities: AdEntityInput[], syncedAt = new Date().toISOString(), opts: { detectExternal?: boolean } = {}): Promise<number> {
     const supabase = db();
     // Dedupe (same object can appear twice, e.g. across report pages).
     const uniq = new Map(entities.map((e) => [`${e.channel}|${e.level}|${e.externalId}`, e]));
+    if (opts.detectExternal !== false) await this.logExternalChanges([...uniq.values()]);
     for (const part of chunk([...uniq.values()], 500)) {
       const { error } = await supabase.from('ad_entities').upsert(part.map((e) => entityToRow(e, syncedAt)), { onConflict: 'channel,level,external_id' });
       if (error) throw new Error(`ad_entities upsert: ${error.message}`);
     }
     return uniq.size;
+  }
+
+  /** Log bid / budget / status changes made outside the console (lib/ads/external-changes.ts). Never fails the sync. */
+  static async logExternalChanges(fetched: AdEntityInput[]): Promise<number> {
+    try {
+      const channels = [...new Set(fetched.map((e) => e.channel))];
+      if (!channels.length) return 0;
+      const { data, error } = await db().from('ad_entities').select('channel, level, external_id, bid_amount, daily_budget, status').in('channel', channels);
+      if (error) throw new Error(error.message);
+      const rows = externalChangeRows((data ?? []) as AdEntityRow[], fetched);
+      if (rows.length) {
+        const { error: insertError } = await db().from('ad_change_log').insert(rows);
+        if (insertError) throw new Error(insertError.message);
+      }
+      return rows.length;
+    } catch (e) {
+      console.error('[ads/sync] external change detection failed:', e instanceof Error ? e.message : e);
+      return 0;
+    }
   }
 
   static async upsertMetrics(rows: AdDailyMetricInput[], syncedAt = new Date().toISOString()): Promise<number> {

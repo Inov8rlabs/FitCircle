@@ -338,6 +338,8 @@ export interface AdChangeLogEntry {
   actorUserId: string | null;
   actorEmail: string | null;
   actorName: string | null;
+  /** 'external' = detected by sync (changed in the network's own UI); no actor is known. */
+  source: 'console' | 'external';
   channel: string;
   level: string;
   externalId: string;
