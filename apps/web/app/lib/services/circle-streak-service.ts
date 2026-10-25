@@ -336,6 +336,7 @@ export class CircleStreakService {
         friendName: ((saver?.display_name || saver?.username || 'A friend') as string).split(/\s+/)[0],
         circleName: circle?.name,
         circleId: fitcircleId,
+        dedupeKey: `circle_streak_saved:${saveRow.id}`,
       });
     }
 
@@ -402,7 +403,12 @@ export class CircleStreakService {
       await ChatActivityHooks.onCircleStreakMilestone(fitcircleId, days);
       const { data: circle } = await createAdminSupabase().from('fitcircles').select('name').eq('id', fitcircleId).maybeSingle();
       for (const id of memberIds) {
-        push(id, 'circle_streak_milestone', { circleName: circle?.name, streakDays: days, circleId: fitcircleId });
+        push(id, 'circle_streak_milestone', {
+          circleName: circle?.name,
+          streakDays: days,
+          circleId: fitcircleId,
+          dedupeKey: `circle_streak:${fitcircleId}:${days}`,
+        });
       }
     } catch (err: any) {
       console.error('[CircleStreakService] milestone celebration failed:', err?.message);

@@ -1,3 +1,5 @@
+import { createHash } from 'crypto';
+
 import { createAdminSupabase } from '../supabase-admin';
 
 import {
@@ -84,6 +86,18 @@ export interface NotificationData {
   // Deep link
   deepLink?: string;
 
+  /**
+   * Idempotency key for the underlying event (docs/PUSH_NOTIFICATIONS.md §3).
+   * At most one delivered push per (user, dedupeKey) per 24 h; also becomes the
+   * APNs `apns-collapse-id` and the Android notification `tag`. Stored in
+   * notification_log.data, so it is queryable (migration 109 indexes it).
+   */
+  dedupeKey?: string;
+  /** Cross-circle coalesced push: how many OTHER circles the event was posted to. */
+  otherCircleCount?: number;
+  /** Cross-circle rally: the achievement line used as the title. */
+  headline?: string;
+
   [key: string]: any;
 }
 
@@ -125,6 +139,8 @@ export type NotificationType =
   | 'chat_mention'
   | 'chat_rally'
   | 'chat_reaction'
+  // One bundled push per recipient per night covering all their circles' summaries.
+  | 'circle_daily_summary'
   // Referrals ("Better Together" — docs/REFERRALS_SPEC.md)
   | 'referral_friend_joined'
   | 'referral_reward_earned'
@@ -211,6 +227,8 @@ export const TYPE_SCREEN_MAP: Record<NotificationType, NotificationScreen> = {
   chat_mention: 'circle_chat',
   chat_rally: 'circle_chat',
   chat_reaction: 'circle_chat',
+  // Single circle → that chat; several circles → no circleId → the circles list.
+  circle_daily_summary: 'circle_chat',
   // Referrals
   referral_friend_joined: 'invite_hub',
   referral_reward_earned: 'invite_hub',
@@ -441,7 +459,7 @@ export const NOTIFICATION_TEMPLATES: Record<
 
   // ---- Circle Chat ----
   chat_message: (data) => ({
-    title: `${data.friendName || 'Someone'} in ${data.circleName || 'your circle'}`,
+    title: `${data.friendName || 'Someone'} in ${data.circleName || 'your circle'}${otherCirclesSuffix(data)}`,
     body: data.preview || 'sent a message',
     category: 'social',
   }),
@@ -450,15 +468,32 @@ export const NOTIFICATION_TEMPLATES: Record<
     body: data.preview || 'mentioned you in the chat',
     category: 'social',
   }),
-  chat_rally: (data) => ({
-    title: `🎉 Big moment in ${data.circleName || 'your circle'}`,
-    body: data.body || 'Something worth celebrating just happened!',
-    category: 'celebration',
-  }),
+  // One circle: "🎉 Big moment in <circle>" / the post. The same event posted to
+  // several circles the recipient shares: the achievement is the title and the
+  // body names where to celebrate (ChatNotificationService.planEventPushes).
+  chat_rally: (data) =>
+    (data.otherCircleCount ?? 0) > 0
+      ? {
+          title: `🎉 ${data.headline || data.body || 'Something worth celebrating just happened!'}`,
+          body: `Celebrate in ${data.circleName || 'your circle'}${otherCirclesSuffix(data)}`,
+          category: 'celebration',
+        }
+      : {
+          title: `🎉 Big moment in ${data.circleName || 'your circle'}`,
+          body: data.body || 'Something worth celebrating just happened!',
+          category: 'celebration',
+        },
   // Someone reacted to a message you posted (or a meal/streak card about you).
   chat_reaction: (data) => ({
     title: `${data.friendName || 'Someone'} reacted ${data.emoji || ''}`.trim(),
     body: data.preview ? `to "${data.preview}"` : 'to your message',
+    category: 'social',
+  }),
+
+  // Copy is built per recipient by DailySummaryService.planSummaryPushes.
+  circle_daily_summary: (data) => ({
+    title: String(data.title || 'Your circles today'),
+    body: String(data.body || 'See how your circles did today.'),
     category: 'social',
   }),
 
@@ -551,6 +586,13 @@ export const NOTIFICATION_TEMPLATES: Record<
   }),
 };
 
+/** " and 2 other circles" for a cross-circle coalesced push; "" otherwise. */
+function otherCirclesSuffix(data: NotificationData): string {
+  const n = Math.max(0, Math.floor(Number(data.otherCircleCount) || 0));
+  if (n === 0) return '';
+  return ` and ${n} other circle${n === 1 ? '' : 's'}`;
+}
+
 // ============================================================================
 // SUPPRESSION CHAINS
 // Pairs of notification types that shouldn't fire together.
@@ -585,6 +627,110 @@ const CHAT_NOTIFICATION_TYPES: NotificationType[] = [
   'chat_reaction',
 ];
 
+// ============================================================================
+// DUPLICATE + BURST GUARDS (docs/PUSH_NOTIFICATIONS.md §3–§4)
+// ============================================================================
+
+/** A delivered push with the same (user, dedupeKey) inside this window blocks a resend. */
+export const DEDUPE_WINDOW_HOURS = 24;
+/** Identical (type, title, body) to the same user inside this window is a duplicate. */
+export const IDENTICAL_CONTENT_WINDOW_MINUTES = 10;
+/** Burst control: at most BURST_LIMIT social/celebration pushes per BURST_WINDOW_MINUTES. */
+export const BURST_WINDOW_MINUTES = 2;
+export const BURST_LIMIT = 3;
+/**
+ * Ambient social / celebration traffic subject to burst control. Direct
+ * @mentions, outcomes (rewards, streak loss) and reminders are never dropped
+ * for a burst.
+ */
+export const BURST_TYPES: ReadonlySet<NotificationType> = new Set<NotificationType>([
+  'chat_message',
+  'chat_rally',
+  'chat_reaction',
+  'circle_daily_summary',
+  'circle_streak_milestone',
+  'perfect_day',
+  'circle_boost_threshold',
+  'friend_joined_circle',
+]);
+
+/** APNs rejects an `apns-collapse-id` over 64 bytes. */
+export const APNS_COLLAPSE_ID_MAX_BYTES = 64;
+
+/**
+ * The `apns-collapse-id` / Android `tag` for a dedupe key: the key itself when
+ * it is short printable ASCII, else a stable 64-char sha256 hex digest. Pure.
+ */
+export function collapseIdFor(dedupeKey: string | null | undefined): string | undefined {
+  if (!dedupeKey) return undefined;
+  if (/^[\x21-\x7e]+$/.test(dedupeKey) && dedupeKey.length <= APNS_COLLAPSE_ID_MAX_BYTES) {
+    return dedupeKey;
+  }
+  return createHash('sha256').update(dedupeKey).digest('hex').slice(0, APNS_COLLAPSE_ID_MAX_BYTES);
+}
+
+/**
+ * Notification-centre grouping (APNs `thread-id`; also `groupKey` in FCM data):
+ * one thread per circle for chat, one per category for everything else. Pure.
+ */
+export function threadIdFor(type: NotificationType, category: string, data: NotificationData): string {
+  if (CHAT_NOTIFICATION_TYPES.includes(type)) return data.circleId ? String(data.circleId) : '';
+  return `fitcircle.${category}`;
+}
+
+/**
+ * In-process half of the duplicate guard. Concurrent fan-outs inside one
+ * request (or one warm serverless instance) all read an empty notification_log
+ * before any of them has logged, so the DB check alone cannot stop them: the
+ * first send claims the key here and every concurrent / later send with the
+ * same key is a duplicate. The notification_log query is the cross-instance
+ * backstop. Bounded and TTL'd; process-local by design.
+ */
+class InProcessSendGuard {
+  private readonly claims = new Map<string, number>(); // key -> expiresAt
+  private readonly bursts = new Map<string, number[]>(); // userId -> reservation times
+
+  claim(key: string, ttlMs: number, now: number): boolean {
+    const expiresAt = this.claims.get(key);
+    if (expiresAt !== undefined && expiresAt > now) return false;
+    this.claims.set(key, now + ttlMs);
+    if (this.claims.size > 10_000) this.prune(now);
+    return true;
+  }
+
+  release(key: string): void {
+    this.claims.delete(key);
+  }
+
+  burstCount(userId: string, windowMs: number, now: number): number {
+    const times = (this.bursts.get(userId) ?? []).filter((t) => t > now - windowMs);
+    this.bursts.set(userId, times);
+    return times.length;
+  }
+
+  reserveBurst(userId: string, now: number): void {
+    this.bursts.set(userId, [...(this.bursts.get(userId) ?? []), now]);
+  }
+
+  releaseBurst(userId: string, at: number): void {
+    const times = this.bursts.get(userId) ?? [];
+    const i = times.indexOf(at);
+    if (i >= 0) times.splice(i, 1);
+  }
+
+  reset(): void {
+    this.claims.clear();
+    this.bursts.clear();
+  }
+
+  private prune(now: number): void {
+    for (const [k, exp] of this.claims) if (exp <= now) this.claims.delete(k);
+    for (const [u, times] of this.bursts) if (times.every((t) => t <= now - 60 * 60 * 1000)) this.bursts.delete(u);
+  }
+}
+
+const sendGuard = new InProcessSendGuard();
+
 // Cap-exempt: chat (conversation traffic), the two meal reminders (decided
 // 2026-09-13: "3 + lunch and dinner"), and outcomes that report something
 // that already happened to the user's streak or challenge — those must never
@@ -609,6 +755,8 @@ export const CAP_EXEMPT_TYPES: ReadonlySet<NotificationType> = new Set<Notificat
   // Something a friend did for you / your crew is in — never dropped for a nudge.
   'circle_streak_saved',
   'circle_kickoff',
+  // Replaces the per-circle chat_message summaries (which were chat, hence exempt).
+  'circle_daily_summary',
 ]);
 
 export function isCapExempt(type: NotificationType): boolean {
@@ -662,46 +810,201 @@ export class NotificationOrchestrator {
     }
 
     const content = template(data);
+    const now = Date.now();
+    const dedupeKey = typeof data.dedupeKey === 'string' && data.dedupeKey ? data.dedupeKey : undefined;
 
-    // 1. Check if user has this category enabled
-    const isEnabled = await NotificationPreferencesService.isTypeEnabled(userId, type);
-    if (!isEnabled) {
-      await this.logNotification(userId, type, content, data, true, 'category_disabled');
-      return { sent: false, reason: 'category_disabled' };
+    // 0. Duplicate guard (docs/PUSH_NOTIFICATIONS.md §3). In-process claims
+    //    first (race-safe for concurrent fan-outs), notification_log second
+    //    (cross-instance backstop). A claim is held for the window once the push
+    //    is delivered and released on any non-delivery so a later attempt can go.
+    const claimKeys: string[] = [];
+    const contentKey = `c:${userId}:${type}:${content.title}\u0000${content.body}`;
+    if (!sendGuard.claim(contentKey, IDENTICAL_CONTENT_WINDOW_MINUTES * 60_000, now)) {
+      await this.logNotification(userId, type, content, data, true, 'duplicate');
+      return { sent: false, reason: 'duplicate' };
+    }
+    claimKeys.push(contentKey);
+    if (dedupeKey) {
+      const keyKey = `k:${userId}:${dedupeKey}`;
+      if (!sendGuard.claim(keyKey, DEDUPE_WINDOW_HOURS * 3_600_000, now)) {
+        sendGuard.release(contentKey);
+        await this.logNotification(userId, type, content, data, true, 'duplicate');
+        return { sent: false, reason: 'duplicate' };
+      }
+      claimKeys.push(keyKey);
     }
 
-    // 2. Check frequency cap (see CAP_EXEMPT_TYPES)
-    const isChatType = CHAT_NOTIFICATION_TYPES.includes(type);
-    if (!isCapExempt(type)) {
-      const capResult = await this.checkFrequencyCap(userId);
-      if (!capResult.allowed) {
-        await this.logNotification(userId, type, content, data, true, 'frequency_cap');
-        return { sent: false, reason: 'frequency_cap' };
+    let burstReservation: number | null = null;
+    let delivered = false;
+    try {
+      if (await this.isDuplicate(userId, type, content, dedupeKey)) {
+        await this.logNotification(userId, type, content, data, true, 'duplicate');
+        return { sent: false, reason: 'duplicate' };
+      }
+
+      // 1. Check if user has this category enabled
+      const isEnabled = await NotificationPreferencesService.isTypeEnabled(userId, type);
+      if (!isEnabled) {
+        await this.logNotification(userId, type, content, data, true, 'category_disabled');
+        return { sent: false, reason: 'category_disabled' };
+      }
+
+      // 2. Check frequency cap (see CAP_EXEMPT_TYPES)
+      if (!isCapExempt(type)) {
+        const capResult = await this.checkFrequencyCap(userId);
+        if (!capResult.allowed) {
+          await this.logNotification(userId, type, content, data, true, 'frequency_cap');
+          return { sent: false, reason: 'frequency_cap' };
+        }
+      }
+
+      // 3. Check quiet hours
+      const quietResult = await this.checkQuietHours(userId);
+      if (quietResult.inQuietHours) {
+        await this.logNotification(userId, type, content, data, true, 'quiet_hours');
+        return { sent: false, reason: 'quiet_hours' };
+      }
+
+      // 4. Check suppression chains
+      const suppressionResult = await this.checkSuppression(userId, type);
+      if (suppressionResult.suppressed) {
+        await this.logNotification(
+          userId,
+          type,
+          content,
+          data,
+          true,
+          `suppressed_by_${suppressionResult.blockerType}`
+        );
+        return { sent: false, reason: `suppressed_by_${suppressionResult.blockerType}` };
+      }
+
+      // 4b. Burst control: the 4th+ ambient social/celebration push inside
+      //     2 minutes is dropped (the in-app timeline still has everything).
+      if (BURST_TYPES.has(type)) {
+        if (await this.isBurst(userId, now)) {
+          await this.logNotification(userId, type, content, data, true, 'burst');
+          return { sent: false, reason: 'burst' };
+        }
+        sendGuard.reserveBurst(userId, now);
+        burstReservation = now;
+      }
+
+      const sentCount = await PushService.sendPush(
+        userId,
+        await this.buildPushNotification(userId, type, data, content, dedupeKey)
+      );
+
+      // 6. Log the notification — truthfully. With no registered device (or
+      //    no FCM credentials) nothing was delivered, and a "sent" log row
+      //    would both mislead and count against the daily frequency cap.
+      if (sentCount > 0) {
+        delivered = true;
+        await this.logNotification(userId, type, content, data, false);
+        console.log(
+          `[NotificationOrchestrator] Sent "${type}" to user ${userId} (${sentCount} devices)`
+        );
+        return { sent: true };
+      }
+      await this.logNotification(userId, type, content, data, true, 'no_delivery');
+      return { sent: false, reason: 'no_delivery' };
+    } finally {
+      if (!delivered) {
+        for (const key of claimKeys) sendGuard.release(key);
+        if (burstReservation !== null) sendGuard.releaseBurst(userId, burstReservation);
       }
     }
+  }
 
-    // 3. Check quiet hours
-    const quietResult = await this.checkQuietHours(userId);
-    if (quietResult.inQuietHours) {
-      await this.logNotification(userId, type, content, data, true, 'quiet_hours');
-      return { sent: false, reason: 'quiet_hours' };
+  /** Test hook: forget the in-process duplicate / burst state. */
+  static resetInProcessGuards(): void {
+    sendGuard.reset();
+  }
+
+  /**
+   * notification_log backstop for the duplicate guard: a delivered row with the
+   * same dedupeKey in 24 h, or identical (type, title, body) in 10 min. Fails
+   * open (a DB hiccup must not silence every push). Works without migration
+   * 109's index — that only makes the dedupeKey lookup cheap.
+   */
+  static async isDuplicate(
+    userId: string,
+    type: NotificationType,
+    content: { title: string; body: string },
+    dedupeKey?: string
+  ): Promise<boolean> {
+    const supabaseAdmin = createAdminSupabase();
+    try {
+      if (dedupeKey) {
+        const since = new Date(Date.now() - DEDUPE_WINDOW_HOURS * 3_600_000).toISOString();
+        const { count, error } = await supabaseAdmin
+          .from('notification_log')
+          .select('id', { count: 'exact', head: true })
+          .eq('user_id', userId)
+          .eq('data->>dedupeKey', dedupeKey)
+          .eq('suppressed', false)
+          .gte('sent_at', since);
+        if (error) console.error('[NotificationOrchestrator.isDuplicate] dedupeKey:', error);
+        else if ((count || 0) > 0) return true;
+      }
+      const since = new Date(Date.now() - IDENTICAL_CONTENT_WINDOW_MINUTES * 60_000).toISOString();
+      const { count, error } = await supabaseAdmin
+        .from('notification_log')
+        .select('id', { count: 'exact', head: true })
+        .eq('user_id', userId)
+        .eq('notification_type', type)
+        .eq('title', content.title)
+        .eq('body', content.body)
+        .eq('suppressed', false)
+        .gte('sent_at', since);
+      if (error) {
+        console.error('[NotificationOrchestrator.isDuplicate] content:', error);
+        return false;
+      }
+      return (count || 0) > 0;
+    } catch (err) {
+      console.error('[NotificationOrchestrator.isDuplicate] failed open:', err);
+      return false;
     }
+  }
 
-    // 4. Check suppression chains
-    const suppressionResult = await this.checkSuppression(userId, type);
-    if (suppressionResult.suppressed) {
-      await this.logNotification(
-        userId,
-        type,
-        content,
-        data,
-        true,
-        `suppressed_by_${suppressionResult.blockerType}`
-      );
-      return { sent: false, reason: `suppressed_by_${suppressionResult.blockerType}` };
+  /**
+   * More than BURST_LIMIT burst-type pushes delivered (DB) or in flight
+   * (in-process reservations) in the last BURST_WINDOW_MINUTES. The larger of
+   * the two counts is used so rows this instance already logged are not
+   * double-counted. Fails open.
+   */
+  static async isBurst(userId: string, now: number = Date.now()): Promise<boolean> {
+    const windowMs = BURST_WINDOW_MINUTES * 60_000;
+    const local = sendGuard.burstCount(userId, windowMs, now);
+    if (local >= BURST_LIMIT) return true;
+    try {
+      const { count, error } = await createAdminSupabase()
+        .from('notification_log')
+        .select('id', { count: 'exact', head: true })
+        .eq('user_id', userId)
+        .eq('suppressed', false)
+        .in('notification_type', [...BURST_TYPES])
+        .gte('sent_at', new Date(now - windowMs).toISOString());
+      if (error) {
+        console.error('[NotificationOrchestrator.isBurst] Error:', error);
+        return false;
+      }
+      return Math.max(local, count || 0) >= BURST_LIMIT;
+    } catch {
+      return false;
     }
+  }
 
-    // 5. Send the push notification.
+  /** The wire-level PushNotification for a send that passed every guard. */
+  private static async buildPushNotification(
+    userId: string,
+    type: NotificationType,
+    data: NotificationData,
+    content: NotificationContent,
+    dedupeKey: string | undefined
+  ): Promise<PushNotification> {
+    const isChatType = CHAT_NOTIFICATION_TYPES.includes(type);
     // All data values must be strings (FCM v1 requirement); absent keys are omitted.
     const pushData: Record<string, string> = {
       type,
@@ -733,6 +1036,15 @@ export class NotificationOrchestrator {
     }
     if (isHttpsUrl(data.imageUrl)) pushData.image_url = data.imageUrl;
 
+    // Grouping / replace-instead-of-stack (docs/PUSH_NOTIFICATIONS.md §5).
+    const threadId = threadIdFor(type, content.category, data);
+    const collapseId = collapseIdFor(dedupeKey);
+    if (collapseId) {
+      // Data-only Android chat pushes are rendered by the app: give it the keys.
+      pushData.dedupeKey = collapseId;
+      pushData.groupKey = threadId || `fitcircle.${content.category}`;
+    }
+
     // iOS rich presentation: category / mutable-content / interruption level /
     // relevance, plus the circle card for the Circle Ring content extension.
     const presentation = presentationFor(type, data);
@@ -744,14 +1056,13 @@ export class NotificationOrchestrator {
       }
     }
 
-    const pushNotification: PushNotification = {
+    return {
       title: content.title,
       body: content.body,
       data: pushData,
       // Chat pushes ride the data-only Android / alert+thread-id iOS shape.
-      ...(isChatType
-        ? { chat: { threadId: data.circleId ? String(data.circleId) : '' } }
-        : {}),
+      ...(isChatType ? { chat: { threadId } } : { threadId }),
+      ...(collapseId ? { collapseId } : {}),
       ...(content.category === 'coach' ? { androidChannelId: ANDROID_COACH_CHANNEL_ID } : {}),
       apns: {
         category: presentation.category,
@@ -761,21 +1072,6 @@ export class NotificationOrchestrator {
         ...(Object.keys(custom).length ? { custom } : {}),
       },
     };
-
-    const sentCount = await PushService.sendPush(userId, pushNotification);
-
-    // 6. Log the notification — truthfully. With no registered device (or
-    //    no FCM credentials) nothing was delivered, and a "sent" log row
-    //    would both mislead and count against the daily frequency cap.
-    if (sentCount > 0) {
-      await this.logNotification(userId, type, content, data, false);
-      console.log(
-        `[NotificationOrchestrator] Sent "${type}" to user ${userId} (${sentCount} devices)`
-      );
-      return { sent: true };
-    }
-    await this.logNotification(userId, type, content, data, true, 'no_delivery');
-    return { sent: false, reason: 'no_delivery' };
   }
 
   /**

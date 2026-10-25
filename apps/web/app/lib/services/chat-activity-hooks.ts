@@ -14,6 +14,7 @@ import { createAdminSupabase } from '../supabase-admin';
 import type { SystemEventType } from '../types/circle-chat';
 import type { ActivitySignal, SignalPayload } from '../types/circle-chat-engine';
 
+import { ChatNotificationService, type SystemPushIntent } from './chat-notification-service';
 import { SystemPostEngine } from './system-post-engine';
 
 
@@ -172,7 +173,11 @@ export class ChatActivityHooks {
     try {
       const [saver, covered] = await Promise.all([this.actorName(saverUserId), this.actorName(coveredUserId)]);
       await this.ingest(
-        this.signal(fitcircleId, saverUserId, saver, 'circle_streak_saved', saveId, { coveredName: covered.split(/\s+/)[0] })
+        this.signal(fitcircleId, saverUserId, saver, 'circle_streak_saved', saveId, {
+          coveredName: covered.split(/\s+/)[0],
+          // The covered friend gets the dedicated circle_streak_saved push.
+          coveredUserId,
+        })
       );
     } catch (err) {
       this.swallow('onCircleStreakSaved', err);
@@ -228,20 +233,30 @@ export class ChatActivityHooks {
     await new SystemPostEngine().ingest(signal);
   }
 
-  /** Emit one signal per circle, isolating per-circle failures. */
+  /**
+   * Emit one signal per circle, isolating per-circle failures. The post lands
+   * in every circle, but the push is coalesced: every circle's push intent is
+   * collected and handed over once, so each recipient gets ONE push for the
+   * event however many circles they share with the actor, and the actor none.
+   */
   private static async emitPerCircle(
     circleIds: string[],
     build: (fitcircleId: string) => ActivitySignal
   ): Promise<void> {
-    await Promise.all(
-      circleIds.map(async (fitcircleId) => {
+    const engine = new SystemPostEngine();
+    const perCircle = await Promise.all(
+      circleIds.map(async (fitcircleId): Promise<SystemPushIntent[]> => {
         try {
-          await this.ingest(build(fitcircleId));
+          return (await engine.ingest(build(fitcircleId), { push: 'collect' })).intents;
         } catch (err) {
           this.swallow('emitPerCircle', err);
+          return [];
         }
       })
     );
+    // Keep the user's membership order (deep link → the first circle).
+    const intents = perCircle.flat();
+    if (intents.length > 0) await ChatNotificationService.notifySystemEvent(intents);
   }
 
   // ==========================================================================

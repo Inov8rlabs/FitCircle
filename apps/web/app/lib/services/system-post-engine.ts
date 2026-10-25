@@ -27,8 +27,50 @@ import {
   type RecentPostStats,
 } from '../types/circle-chat-engine';
 
-import { ChatNotificationService } from './chat-notification-service';
+import { ChatNotificationService, type SystemPushIntent } from './chat-notification-service';
 import { CircleChatService } from './circle-chat-service';
+
+/**
+ * Events a single user action fans out to every circle the user is in
+ * (ChatActivityHooks.emitPerCircle / CircleMealPostService). Their eventKey
+ * leaves the circle out, so the per-circle posts coalesce into one push per
+ * recipient. Every other event is about one circle and keys by it.
+ */
+export const CROSS_CIRCLE_EVENTS: ReadonlySet<SystemEventType> = new Set<SystemEventType>([
+  'workout_done',
+  'streak_milestone',
+  'notable_meal',
+  'meal_logged',
+]);
+
+/**
+ * Posts whose source already sends a dedicated, typed push to the members
+ * (CircleStreakService → circle_streak_milestone, CircleLobbyService →
+ * circle_kickoff) and the daily summary, which DailySummaryService bundles
+ * into one push per recipient per night. The engine writes the post but never
+ * pushes it — otherwise every member got two pushes for one moment.
+ */
+export const NO_ENGINE_PUSH_EVENTS: ReadonlySet<SystemEventType> = new Set<SystemEventType>([
+  'circle_streak',
+  'circle_kickoff',
+  'daily_summary',
+]);
+
+export interface IngestOptions {
+  /**
+   * 'immediate' (default): push this circle's post now (one-circle events).
+   * 'collect': return the push intents instead, so a caller that posts the
+   * same event to several circles pushes once (ChatNotificationService.notifySystemEvent).
+   */
+  push?: 'immediate' | 'collect';
+}
+
+export interface IngestResult {
+  /** Push intents for the written post(s); empty when nothing should be pushed. */
+  intents: SystemPushIntent[];
+  /** Posts written to the timeline (including ones that are never pushed). */
+  written: Array<{ eventType: SystemEventType; body: string; messageId: string | null }>;
+}
 
 
 export class SystemPostEngine {
@@ -201,7 +243,8 @@ export class SystemPostEngine {
    * resulting post(s) via CircleChatService.emitSystemPost(). Never throws —
    * wraps everything in try/catch (mirrors fire-and-forget BoostService calls).
    */
-  async ingest(signal: ActivitySignal): Promise<void> {
+  async ingest(signal: ActivitySignal, opts: IngestOptions = {}): Promise<IngestResult> {
+    const result: IngestResult = { intents: [], written: [] };
     try {
       const config = this.config;
       const nowISO = new Date().toISOString();
@@ -230,38 +273,51 @@ export class SystemPostEngine {
             actorUserIds: post.actorUserIds ?? [signal.actorUserId],
             systemPayload: this.buildSystemPayload(signal, post),
           });
+          const body = written.body ?? post.body ?? '';
+          result.written.push({
+            eventType: post.eventType ?? signal.eventType,
+            body,
+            messageId: (written as { id?: string }).id ?? null,
+          });
 
-          // P0 "rally" posts earn ONE celebratory push (in-app + push).
-          // queued_quiet defers the push (handled by quiet-hours), so only the
-          // immediately-posted P0 fires a rally push here. Fire-and-forget.
-          const effectivePriority =
-            post.priority ?? EVENT_TAXONOMY[signal.eventType].priority;
-          if (post.disposition === 'post' && effectivePriority === 'p0') {
-            void ChatNotificationService.notifyRallyPost(
-              signal.fitcircleId,
-              await this.resolveCircleName(signal.fitcircleId),
-              written.body ?? post.body ?? '',
-              post.eventType ?? signal.eventType
-            ).catch(() => {});
-          } else if (post.disposition === 'post' || post.disposition === 'post_bundled') {
-            // Every other post that lands in the timeline (streaks, workouts,
-            // daily summary, …) is a chat message to the members too
-            // (product decision 2026-09-22). Quiet hours are enforced per
-            // recipient by the orchestrator; the actor is not notified.
-            void ChatNotificationService.notifySystemPost(
-              signal.fitcircleId,
-              await this.resolveCircleName(signal.fitcircleId),
-              written.body ?? post.body ?? '',
-              signal.eventType === 'daily_summary' ? null : signal.actorUserId,
-              signal.eventType === 'daily_summary' ? 'Daily summary' : signal.actorName
-            ).catch(() => {});
-          }
+          // queued_quiet defers the push (handled by quiet-hours); a post
+          // whose source sends its own typed push is never pushed here.
+          if (post.disposition === 'queued_quiet') continue;
+          if (NO_ENGINE_PUSH_EVENTS.has(signal.eventType)) continue;
+
+          // P0 "rally" posts earn ONE celebratory push; every other post that
+          // lands in the timeline (workouts, quests, joins, …) is a chat
+          // message to the members (product decision 2026-09-22). Either way
+          // the actor(s) are never pushed about their own post, mutes are
+          // honoured, and one push per recipient per event (eventKey).
+          const effectivePriority = post.priority ?? EVENT_TAXONOMY[signal.eventType].priority;
+          const isRally = post.disposition === 'post' && effectivePriority === 'p0';
+          const actorUserIds = this.uniq([signal.actorUserId, ...(post.actorUserIds ?? [])]);
+          const coveredUserId = (signal.payload as { coveredUserId?: string } | undefined)?.coveredUserId;
+          result.intents.push({
+            kind: isRally ? 'rally' : 'system',
+            eventKey: SystemPostEngine.eventKeyFor(signal, post),
+            circleId: signal.fitcircleId,
+            circleName: await this.resolveCircleName(signal.fitcircleId),
+            body,
+            eventType: post.eventType ?? signal.eventType,
+            actorUserIds,
+            actorName: signal.actorName,
+            // Circle-level events use the circle id as a stand-in actor.
+            senderUserId: signal.actorUserId !== signal.fitcircleId ? signal.actorUserId : null,
+            messageId: (written as { id?: string }).id ?? null,
+            ...(coveredUserId ? { excludeUserIds: [coveredUserId] } : {}),
+          });
         } else {
           // 'drop_to_summary' | 'suppressed' -> no write.
           console.log(
             `[SystemPostEngine.ingest] ${signal.eventType} in circle ${signal.fitcircleId} -> ${post.disposition}${post.reason ? ` (${post.reason})` : ''}`
           );
         }
+      }
+
+      if ((opts.push ?? 'immediate') === 'immediate' && result.intents.length > 0) {
+        void ChatNotificationService.notifySystemEvent(result.intents).catch(() => {});
       }
     } catch (err) {
       // Failure-isolated: log and swallow so the source write never breaks.
@@ -270,6 +326,23 @@ export class SystemPostEngine {
         err
       );
     }
+    return result;
+  }
+
+  /**
+   * The underlying event a post is about — identical across every circle a
+   * cross-circle event was posted to, so those posts push once. PURE.
+   *   streak_milestone  → streak_milestone:<actor>:d<days>
+   *   workout_done      → workout_done:<actor>:<workoutId>
+   *   member_joined     → member_joined:<actor>:<refOrDay>@<circle>
+   */
+  static eventKeyFor(signal: ActivitySignal, post?: Pick<PlannedPost, 'refId' | 'eventType'>): string {
+    const eventType = post?.eventType ?? signal.eventType;
+    const days = signal.payload?.streakDays;
+    const ref =
+      post?.refId ?? signal.refId ?? (typeof days === 'number' ? `d${days}` : signal.occurredAt.slice(0, 10));
+    const key = `${eventType}:${signal.actorUserId}:${ref}`;
+    return CROSS_CIRCLE_EVENTS.has(eventType) ? key : `${key}@${signal.fitcircleId}`;
   }
 
   // ============================================================================

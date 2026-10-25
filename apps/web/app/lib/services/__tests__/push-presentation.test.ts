@@ -293,6 +293,8 @@ describe('NotificationOrchestrator.send → PushNotification', () => {
   beforeEach(() => {
     sendPush.mockClear();
     getStreak.mockReset();
+    // Duplicate / burst guards are process-local; every test starts clean.
+    NotificationOrchestrator.resetInProcessGuards();
   });
 
   const sent = () => sendPush.mock.calls.at(-1)![1] as unknown as PushNotification;

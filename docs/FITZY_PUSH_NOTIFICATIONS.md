@@ -138,6 +138,8 @@ There are no server "push sent" events in the tracking plan. `notification_log` 
 
 ## 5. Interaction with existing notifications
 
+The orchestrator's general duplicate, burst and grouping rules (docs/PUSH_NOTIFICATIONS.md) apply to Fitzy pushes too. The identical-content guard (10 min) and the thread-id `fitcircle.coach` apply. Fitzy types are not burst types.
+
 | Existing | Interaction |
 |---|---|
 | Daily cap (3) | Fitzy counts toward it and leaves one slot free for the evening streak reminder |

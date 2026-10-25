@@ -15,7 +15,7 @@
 
 import { createAdminSupabase } from '../supabase-admin';
 
-import { ChatNotificationService } from './chat-notification-service';
+import { ChatNotificationService, type SystemPushIntent } from './chat-notification-service';
 import { CircleChatService } from './circle-chat-service';
 import { FoodPrivacyService } from './food-privacy-service';
 
@@ -166,8 +166,10 @@ export class CircleMealPostService {
       const body = this.renderBody(actorName, entry);
       const payload = this.buildPayload(entry, imageId);
 
-      await Promise.all(
-        circleIds.map(async (circleId) => {
+      // One card per circle, ONE push per recipient for the meal however many
+      // circles they share with the poster (docs/PUSH_NOTIFICATIONS.md §2).
+      const intents = await Promise.all(
+        circleIds.map(async (circleId): Promise<SystemPushIntent | null> => {
           try {
             const post = await CircleChatService.emitSystemPost({
               fitcircleId: circleId,
@@ -179,21 +181,27 @@ export class CircleMealPostService {
               actorUserIds: [entry.user_id],
               systemPayload: payload as unknown as Record<string, unknown>,
             });
-            const circleName = await this.circleName(circleId);
-            // Same push as a typed message: excludes the poster, honours mutes.
-            void ChatNotificationService.notifyNewMessage(
+            return {
+              kind: 'member_post',
+              eventKey: `meal_logged:${entry.user_id}:${entry.id}`,
               circleId,
-              entry.user_id,
+              circleName: await this.circleName(circleId),
+              // Same push as a typed message: excludes the poster, honours mutes.
+              body: body.replace(`${actorName} `, ''),
+              eventType: 'meal_logged',
+              actorUserIds: [entry.user_id],
               actorName,
-              circleName,
-              post.id,
-              body.replace(`${actorName} `, '')
-            ).catch(() => {});
+              senderUserId: entry.user_id,
+              messageId: post.id,
+            };
           } catch (err) {
             console.error(`[CircleMealPostService.onMealLogged] circle ${circleId}:`, err);
+            return null;
           }
         })
       );
+      const posted = intents.filter((i): i is SystemPushIntent => i !== null);
+      if (posted.length > 0) void ChatNotificationService.notifySystemEvent(posted).catch(() => {});
     } catch (err) {
       console.error('[CircleMealPostService.onMealLogged] swallowed:', err);
     }

@@ -21,6 +21,13 @@
 // which is why the circle alternated "1 of 2" / "0 of 2" all week.
 //
 // Failure-isolated PER CIRCLE: one circle's DB error must not abort the batch.
+//
+// Push (2026-10-25, docs/PUSH_NOTIFICATIONS.md §2.3): the in-app summary stays
+// one post per circle, but the PUSH is bundled — after the batch, every
+// recipient gets ONE `circle_daily_summary` covering all their circles that
+// were summarized this tick ("Your circles today" / "Ani's Crew: you checked
+// in ✅ · Step-Up Circle: 2 of 6 checked in"), deduped per local date. It used
+// to be one chat_message push per circle per night.
 
 import { createAdminSupabase } from '../supabase-admin';
 import type { ActivitySignal } from '../types/circle-chat-engine';
@@ -29,7 +36,8 @@ import { getDateInTimezone } from '../utils/timezone';
 // utils/timezone.getStartOfDayUTC is a stub that returns UTC midnight of the
 // date string; for a 21:00 Eastern run that window would reach back into the
 // previous local evening and swallow that day's summary as "already posted".
-import { startOfLocalDay } from './notification-orchestrator';
+import { ChatNotificationService, type ActiveMember, type PlannedPush } from './chat-notification-service';
+import { NotificationOrchestrator, startOfLocalDay } from './notification-orchestrator';
 import { SystemPostEngine } from './system-post-engine';
 
 /**
@@ -47,7 +55,23 @@ import { SystemPostEngine } from './system-post-engine';
 export interface DailySummaryResult {
   circlesProcessed: number;
   postsAttempted: number;
+  /** Bundled pushes handed to the orchestrator (one per recipient). */
+  pushesPlanned?: number;
 }
+
+/** A circle whose summary was posted this tick, as the push bundler needs it. */
+export interface SummarizedCircle {
+  circleId: string;
+  circleName: string;
+  localDate: string;
+  total: number;
+  checkedInIds: Set<string>;
+  /** The in-app post body ("2 of 6 checked in today 👏"). */
+  body: string;
+}
+
+/** Most circle lines a bundled body lists before "+N more". */
+export const SUMMARY_PUSH_MAX_LINES = 4;
 
 interface ActiveCircleRow {
   id: string;
@@ -95,6 +119,101 @@ export class DailySummaryService {
     }
   }
 
+  /** One recipient's line for a circle. PURE. */
+  static summaryLine(circle: SummarizedCircle, recipientId: string): string {
+    const status =
+      circle.total === 1 && circle.checkedInIds.has(recipientId)
+        ? 'you checked in ✅'
+        : circle.checkedInIds.size >= circle.total
+          ? 'everyone checked in 🎉'
+          : `${circle.checkedInIds.size} of ${circle.total} checked in`;
+    return `${circle.circleName}: ${status}`;
+  }
+
+  /**
+   * PURE: one bundled push per recipient across every summarized circle they
+   * are an unmuted member of. A solo circle (only you) never earns a push on
+   * its own — that would be a push about your own check-in — but is listed
+   * when you also hear about a shared circle.
+   */
+  static planSummaryPushes(
+    circles: SummarizedCircle[],
+    membersByCircle: Map<string, ActiveMember[]>
+  ): PlannedPush[] {
+    const byRecipient = new Map<string, SummarizedCircle[]>();
+    for (const circle of circles) {
+      for (const m of membersByCircle.get(circle.circleId) ?? []) {
+        if (m.muted) continue;
+        byRecipient.set(m.userId, [...(byRecipient.get(m.userId) ?? []), circle]);
+      }
+    }
+    const out: PlannedPush[] = [];
+    for (const [userId, list] of byRecipient) {
+      if (!list.some((c) => c.total >= 2)) continue;
+      const dedupeKey = `daily_summary:${list[0].localDate}`;
+      if (list.length === 1) {
+        const c = list[0];
+        out.push({
+          userId,
+          type: 'circle_daily_summary',
+          data: {
+            title: `${c.circleName} today`,
+            body: c.body,
+            circleName: c.circleName,
+            circleId: c.circleId,
+            deepLink: `fitcircle://circles/${c.circleId}/chat`,
+            dedupeKey,
+          },
+        });
+        continue;
+      }
+      const lines = list.slice(0, SUMMARY_PUSH_MAX_LINES).map((c) => this.summaryLine(c, userId));
+      const more = list.length - lines.length;
+      out.push({
+        userId,
+        type: 'circle_daily_summary',
+        data: {
+          title: 'Your circles today',
+          body: `${lines.join(' · ')}${more > 0 ? ` · +${more} more` : ''}`,
+          // No circleId → the circles list (screenFor falls back).
+          deepLink: 'fitcircle://circles',
+          circleCount: list.length,
+          dedupeKey,
+        },
+      });
+    }
+    return out;
+  }
+
+  /** Load mute state, plan, and send the bundled pushes. Never throws. */
+  static async sendBundledPushes(circles: SummarizedCircle[]): Promise<number> {
+    if (circles.length === 0) return 0;
+    try {
+      const membersByCircle = new Map<string, ActiveMember[]>();
+      await Promise.all(
+        circles.map(async (c) => {
+          try {
+            membersByCircle.set(c.circleId, await ChatNotificationService.activeMembersOf(c.circleId));
+          } catch (err) {
+            console.error(`[DailySummaryService.sendBundledPushes] members of ${c.circleId}:`, err);
+          }
+        })
+      );
+      const planned = this.planSummaryPushes(circles, membersByCircle);
+      await Promise.all(
+        planned.map((p) =>
+          NotificationOrchestrator.send(p.userId, p.type, p.data).catch((err) =>
+            console.error(`[DailySummaryService.sendBundledPushes] ${p.userId}:`, err)
+          )
+        )
+      );
+      return planned.length;
+    } catch (err) {
+      console.error('[DailySummaryService.sendBundledPushes] Failed:', err);
+      return 0;
+    }
+  }
+
   // ---- entrypoint ---------------------------------------------------------------
 
   /**
@@ -109,6 +228,7 @@ export class DailySummaryService {
 
     let circlesProcessed = 0;
     let postsAttempted = 0;
+    const summarized: SummarizedCircle[] = [];
 
     // 1. All currently-running circles, with the zone their day is measured in.
     const { data: circles, error: circlesError } = await supabaseAdmin
@@ -176,6 +296,7 @@ export class DailySummaryService {
 
         // 5. How many checked in on the circle's local day.
         let checkedIn = 0;
+        let checkedInIds = new Set<string>();
         if (memberIds.length > 0) {
           const { data: activities, error: activityError } = await supabaseAdmin
             .from('engagement_activities')
@@ -185,9 +306,8 @@ export class DailySummaryService {
 
           if (activityError) throw activityError;
 
-          checkedIn = new Set(
-            (activities ?? []).map((a) => a.user_id as string)
-          ).size;
+          checkedInIds = new Set((activities ?? []).map((a) => a.user_id as string));
+          checkedIn = checkedInIds.size;
         }
 
         // 6. Nothing to celebrate: "0 of N checked in" is not a message anyone
@@ -215,7 +335,19 @@ export class DailySummaryService {
         // The engine handles rate-limit / quiet-hours / dedupe-by-window and the
         // write. It is itself failure-isolated (never throws), but we await so
         // the batch is sequential and predictable.
-        await engine.ingest(signal);
+        // push: 'collect' — the engine never pushes daily summaries itself.
+        const result = await engine.ingest(signal, { push: 'collect' });
+        const post = result.written.find((w) => w.eventType === 'daily_summary');
+        if (post) {
+          summarized.push({
+            circleId: circle.id,
+            circleName: circle.name ?? 'Your circle',
+            localDate,
+            total,
+            checkedInIds,
+            body: post.body,
+          });
+        }
       } catch (err) {
         console.error(
           `[DailySummaryService.generateForAllActiveCircles] Failed for circle ${circle.id}:`,
@@ -225,6 +357,7 @@ export class DailySummaryService {
       }
     }
 
-    return { circlesProcessed, postsAttempted };
+    const pushesPlanned = await this.sendBundledPushes(summarized);
+    return { circlesProcessed, postsAttempted, pushesPlanned };
   }
 }

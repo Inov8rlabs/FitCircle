@@ -74,6 +74,7 @@ const TYPE_CATEGORY_MAP: Record<string, NotificationCategory> = {
   chat_mention: 'social',
   chat_rally: 'celebration',
   chat_reaction: 'social',
+  circle_daily_summary: 'social',
 
   // Referrals
   referral_friend_joined: 'social',

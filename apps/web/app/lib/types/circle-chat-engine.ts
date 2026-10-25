@@ -36,6 +36,7 @@ export interface SignalPayload {
   checkedIn?: number;             // daily_summary: "{checkedIn} of {total} checked in"
   total?: number;                 // daily_summary: circle member count
   coveredName?: string;           // circle_streak_saved: who was covered
+  coveredUserId?: string;         // circle_streak_saved: gets a dedicated push, not the chat one
   circleName?: string;            // circle_kickoff
   memberCount?: number;           // circle_kickoff
   kickoffReason?: 'full' | 'timer' | 'manual'; // circle_kickoff
@@ -153,7 +154,9 @@ export interface CopyContext {
 //   // Side-effectful entrypoint the hooks call (resolves circles, loads recent-post
 //   // counts, calls plan(), writes via CircleChatService.emitSystemPost, broadcasts).
 //   // Fire-and-forget / failure-isolated: never throws back into the source write.
-//   async ingest(signal: ActivitySignal): Promise<void>
+//   async ingest(signal: ActivitySignal, opts?: IngestOptions): Promise<IngestResult>
+//   (additive 2026-10-25: returns the push intents; opts.push='collect' lets a
+//   cross-circle caller push once per recipient — docs/PUSH_NOTIFICATIONS.md)
 // }
 // ============================================================================
 

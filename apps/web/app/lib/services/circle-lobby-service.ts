@@ -157,7 +157,12 @@ export class CircleLobbyService {
     void ChatActivityHooks.onCircleKickoff(circle.id, circle.name, members.length, reason);
     for (const id of members) {
       if (reason === 'manual' && id === circle.creator_id) continue; // they just tapped it
-      push(id, 'circle_kickoff', { circleName: circle.name, circleId: circle.id, kickoffReason: reason });
+      push(id, 'circle_kickoff', {
+        circleName: circle.name,
+        circleId: circle.id,
+        kickoffReason: reason,
+        dedupeKey: `circle_kickoff:${circle.id}`,
+      });
     }
     return true;
   }

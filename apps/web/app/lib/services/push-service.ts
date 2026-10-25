@@ -25,6 +25,19 @@ export interface PushNotification {
    */
   androidChannelId?: string;
   /**
+   * Replace-instead-of-stack key (the caller's dedupeKey, ≤ 64 bytes): sent as
+   * the APNs `apns-collapse-id` header on both shapes and, for the legacy
+   * (notification-message) shape, as the Android notification `tag`. Data-only
+   * Android chat pushes have no FCM notification block, so the app gets it as
+   * `data.dedupeKey` instead.
+   */
+  collapseId?: string;
+  /**
+   * APNs `thread-id` for the legacy shape (chat uses `chat.threadId`): groups
+   * the notification centre per category.
+   */
+  threadId?: string;
+  /**
    * iOS rich-notification fields (see push-presentation.ts). Additive: merged
    * into `aps` for both wire shapes; `custom` keys sit beside `aps` in the
    * APNs payload (objects allowed — unlike FCM `data`, which is strings only).
@@ -97,6 +110,7 @@ interface FCMMessage {
       notification?: {
         sound?: string;
         channel_id?: string;
+        tag?: string;
       };
     };
   };
@@ -188,7 +202,10 @@ export function buildFCMMessage(token: string, notification: PushNotification): 
           priority: 'HIGH',
         },
         apns: {
-          headers: { 'apns-priority': '10' },
+          headers: {
+            'apns-priority': '10',
+            ...(notification.collapseId ? { 'apns-collapse-id': notification.collapseId } : {}),
+          },
           payload: {
             ...custom,
             aps: {
@@ -214,11 +231,15 @@ export function buildFCMMessage(token: string, notification: PushNotification): 
       },
       data: notification.data,
       apns: {
+        ...(notification.collapseId
+          ? { headers: { 'apns-collapse-id': notification.collapseId } }
+          : {}),
         payload: {
           ...custom,
           aps: {
             badge: notification.badge,
             sound: notification.sound || 'default',
+            ...(notification.threadId ? { 'thread-id': notification.threadId } : {}),
             ...extras,
           },
         },
@@ -227,6 +248,7 @@ export function buildFCMMessage(token: string, notification: PushNotification): 
         notification: {
           sound: notification.sound || 'default',
           ...(notification.androidChannelId ? { channel_id: notification.androidChannelId } : {}),
+          ...(notification.collapseId ? { tag: notification.collapseId } : {}),
         },
       },
     },

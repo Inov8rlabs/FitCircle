@@ -6,22 +6,64 @@
 // mute (but still respects the recipient's own 'social' category toggle, which
 // NotificationOrchestrator.send() already checks).
 //
-// P0 system "rally" posts produce a celebratory 'chat_rally' push to all active
-// members.
+// System posts (rallies, streaks, workouts) and meal cards are posted per
+// circle, but PUSHED once per recipient per underlying event
+// (docs/PUSH_NOTIFICATIONS.md §2): callers hand notifySystemEvent() every
+// circle's post for the event, and planEventPushes() — pure — computes the
+// recipient set across all those circles, minus the actor(s), minus anyone who
+// muted every one of them (rallies respect mute too), and one push each.
 //
 // Every fan-out is fire-and-forget and failure-isolated: a notification failure
 // must never break a message send or a post write.
 
 import { createAdminSupabase } from '../supabase-admin';
 
-import { NotificationOrchestrator } from './notification-orchestrator';
+import {
+  NotificationOrchestrator,
+  type NotificationData,
+  type NotificationType,
+} from './notification-orchestrator';
 
 const PREVIEW_MAX_LENGTH = 80;
 const PHOTO_PREVIEW = '📷 sent a photo';
 
-interface ActiveMember {
+export interface ActiveMember {
   userId: string;
   muted: boolean;
+}
+
+/**
+ * One circle's post for an underlying event, as far as push is concerned.
+ * Several intents with the same eventKey (the same event posted to several
+ * circles) become ONE push per recipient.
+ *  - rally:       P0 celebration → chat_rally
+ *  - system:      ordinary system post (workout, quest, join…) → chat_message
+ *  - member_post: a member's own content posted as a card (meal) → chat_message
+ *                 with the member as Communication Notification sender
+ */
+export interface SystemPushIntent {
+  kind: 'rally' | 'system' | 'member_post';
+  /** Identical for every circle the event was posted to; scopes the dedupeKey. */
+  eventKey: string;
+  circleId: string;
+  circleName: string;
+  /** The in-app post body. */
+  body: string;
+  eventType: string;
+  /** Members the post is about — never pushed about it. */
+  actorUserIds: string[];
+  actorName: string;
+  /** A real user behind the post (avatar / senderId); null for circle-level events. */
+  senderUserId?: string | null;
+  messageId?: string | null;
+  /** Additional members not to push (e.g. the covered friend, who gets a dedicated push). */
+  excludeUserIds?: string[];
+}
+
+export interface PlannedPush {
+  userId: string;
+  type: NotificationType;
+  data: NotificationData;
 }
 
 export class ChatNotificationService {
@@ -74,6 +116,7 @@ export class ChatNotificationService {
           deepLink,
           messageId,
           circleId,
+          dedupeKey: `msg:${messageId}`,
         }).catch((err) => {
           console.error(
             `[ChatNotificationService.notifyNewMessage] Failed for member ${member.userId}:`,
@@ -140,6 +183,7 @@ export class ChatNotificationService {
         deepLink: `fitcircle://circles/${params.circleId}/chat`,
         messageId: params.messageId,
         circleId: params.circleId,
+        dedupeKey: `react:${params.messageId}:${params.reactorId}:${params.emoji}`,
       });
     } catch (err) {
       console.error(
@@ -150,82 +194,173 @@ export class ChatNotificationService {
   }
 
   /**
-   * Notify all active members of an ordinary (non-rally) system post — a
-   * streak, a workout, the daily summary, a bundled "all got moving" line.
-   * Rides the plain `chat_message` template ("<actor> in <circle>: <body>"),
-   * skips the actor and muted members. Never throws.
+   * Single-circle convenience wrapper: an ordinary (non-rally) system post.
+   * Skips the actor and muted members. Never throws.
    */
   static async notifySystemPost(
     circleId: string,
     circleName: string,
     body: string,
     actorUserId: string | null,
-    actorName: string
+    actorName: string,
+    eventKey: string = `system:${circleId}:${actorUserId ?? 'circle'}:${body}`
   ): Promise<void> {
-    try {
-      const members = await this.getActiveMembers(circleId);
-      const recipients = members.filter((m) => m.userId !== actorUserId && !m.muted);
-      if (recipients.length === 0) return;
-      const preview = this.truncatePreview(body);
-      const deepLink = `fitcircle://circles/${circleId}/chat`;
-      const senderAvatarUrl = actorUserId ? await this.avatarUrlOf(actorUserId) : null;
-      for (const member of recipients) {
-        void NotificationOrchestrator.send(member.userId, 'chat_message', {
-          circleName,
-          friendName: actorName,
-          senderName: actorName,
-          ...(actorUserId ? { senderId: actorUserId, senderAvatarUrl } : {}),
-          preview,
-          deepLink,
-          circleId,
-        }).catch((err) => {
-          console.error(
-            `[ChatNotificationService.notifySystemPost] Failed for member ${member.userId}:`,
-            err
-          );
-        });
-      }
-    } catch (err) {
-      console.error(`[ChatNotificationService.notifySystemPost] Failed for circle ${circleId}:`, err);
-    }
+    await this.notifySystemEvent([
+      {
+        kind: 'system',
+        eventKey,
+        circleId,
+        circleName,
+        body,
+        eventType: 'system',
+        actorUserIds: actorUserId ? [actorUserId] : [],
+        actorName,
+        senderUserId: actorUserId,
+      },
+    ]);
   }
 
   /**
-   * Notify all active members of a P0 "rally" system post. Caller must only
-   * invoke this for priority='p0' posts. Never throws.
+   * Single-circle convenience wrapper: a P0 "rally" post. Never pushes the
+   * actor; respects mute. Never throws.
    */
   static async notifyRallyPost(
     circleId: string,
     circleName: string,
     body: string,
-    eventType: string
+    eventType: string,
+    actorUserIds: string[] = [],
+    eventKey: string = `rally:${circleId}:${eventType}:${body}`
   ): Promise<void> {
+    await this.notifySystemEvent([
+      { kind: 'rally', eventKey, circleId, circleName, body, eventType, actorUserIds, actorName: '' },
+    ]);
+  }
+
+  /**
+   * Push a system event that was posted to one or more circles: ONE push per
+   * recipient per eventKey (see planEventPushes). Returns what was planned
+   * (for tests / logs). Never throws.
+   */
+  static async notifySystemEvent(intents: SystemPushIntent[]): Promise<PlannedPush[]> {
     try {
-      const members = await this.getActiveMembers(circleId);
-      if (members.length === 0) return;
+      if (intents.length === 0) return [];
+      const circleIds = [...new Set(intents.map((i) => i.circleId))];
+      const membersByCircle = new Map<string, ActiveMember[]>();
+      await Promise.all(
+        circleIds.map(async (circleId) => {
+          try {
+            membersByCircle.set(circleId, await this.getActiveMembers(circleId));
+          } catch (err) {
+            console.error(`[ChatNotificationService.notifySystemEvent] members of ${circleId}:`, err);
+            membersByCircle.set(circleId, []);
+          }
+        })
+      );
+      const senderIds = [...new Set(intents.map((i) => i.senderUserId).filter((id): id is string => !!id))];
+      const avatars = new Map<string, string | null>();
+      await Promise.all(senderIds.map(async (id) => avatars.set(id, await this.avatarUrlOf(id))));
 
-      const deepLink = `fitcircle://circles/${circleId}/chat`;
-
-      for (const member of members) {
-        void NotificationOrchestrator.send(member.userId, 'chat_rally', {
-          circleName,
-          body,
-          eventType,
-          deepLink,
-          circleId,
-        }).catch((err) => {
+      const planned = this.planEventPushes(intents, membersByCircle, avatars);
+      for (const push of planned) {
+        // Fire-and-forget per member; a single failure never affects others.
+        void NotificationOrchestrator.send(push.userId, push.type, push.data).catch((err) => {
           console.error(
-            `[ChatNotificationService.notifyRallyPost] Failed for member ${member.userId}:`,
+            `[ChatNotificationService.notifySystemEvent] Failed for member ${push.userId}:`,
             err
           );
         });
       }
+      return planned;
     } catch (err) {
-      console.error(
-        `[ChatNotificationService.notifyRallyPost] Failed for circle ${circleId}:`,
-        err
-      );
+      console.error('[ChatNotificationService.notifySystemEvent] Failed:', err);
+      return [];
     }
+  }
+
+  /**
+   * PURE fan-out planner. For each eventKey:
+   *   recipients = ∪ active members of the event's circles
+   *                − the actor(s) − excludeUserIds
+   *                − members who muted EVERY one of those circles they are in;
+   * one push each, about the first circle (in the caller's order) the
+   * recipient shares unmuted with the event, naming how many others.
+   */
+  static planEventPushes(
+    intents: SystemPushIntent[],
+    membersByCircle: Map<string, ActiveMember[]>,
+    avatars: Map<string, string | null> = new Map()
+  ): PlannedPush[] {
+    const groups = new Map<string, SystemPushIntent[]>();
+    for (const intent of intents) {
+      const list = groups.get(intent.eventKey) ?? [];
+      // Same circle twice for one event (a retried post) still counts once.
+      if (!list.some((i) => i.circleId === intent.circleId)) list.push(intent);
+      groups.set(intent.eventKey, list);
+    }
+
+    const out: PlannedPush[] = [];
+    for (const [eventKey, group] of groups) {
+      const excluded = new Set(group.flatMap((i) => [...i.actorUserIds, ...(i.excludeUserIds ?? [])]));
+      // recipient -> the event's circles they hear about (unmuted), in order.
+      const audience = new Map<string, SystemPushIntent[]>();
+      for (const intent of group) {
+        for (const member of membersByCircle.get(intent.circleId) ?? []) {
+          if (excluded.has(member.userId) || member.muted) continue;
+          audience.set(member.userId, [...(audience.get(member.userId) ?? []), intent]);
+        }
+      }
+
+      for (const [userId, circles] of audience) {
+        const primary = circles[0];
+        const others = circles.length - 1;
+        const deepLink = `fitcircle://circles/${primary.circleId}/chat`;
+        const common: NotificationData = {
+          circleName: primary.circleName,
+          circleId: primary.circleId,
+          deepLink,
+          dedupeKey: `evt:${eventKey}`,
+          ...(others > 0 ? { otherCircleCount: others } : {}),
+        };
+        if (primary.kind === 'rally') {
+          out.push({
+            userId,
+            type: 'chat_rally',
+            data: {
+              ...common,
+              body: primary.body,
+              eventType: primary.eventType,
+              ...(others > 0 ? { headline: this.rallyHeadline(primary.body) } : {}),
+            },
+          });
+          continue;
+        }
+        const sender = primary.senderUserId ?? null;
+        out.push({
+          userId,
+          type: 'chat_message',
+          data: {
+            ...common,
+            friendName: primary.actorName,
+            senderName: primary.actorName,
+            ...(sender ? { senderId: sender, senderAvatarUrl: avatars.get(sender) ?? null } : {}),
+            preview: this.truncatePreview(primary.body),
+            ...(primary.messageId ? { messageId: primary.messageId } : {}),
+          },
+        });
+      }
+    }
+    return out;
+  }
+
+  /** "Ani's on a 7-day streak — nice 🔥" → "Ani's on a 7-day streak 🔥" (title use). */
+  static rallyHeadline(body: string): string {
+    return (body ?? '').replace(/\s+—\s+nice\b/, '').trim();
+  }
+
+  /** Active members of a circle with their per-circle mute state (public for DailySummaryService). */
+  static async activeMembersOf(circleId: string): Promise<ActiveMember[]> {
+    return this.getActiveMembers(circleId);
   }
 
   // --------------------------------------------------------------------------
