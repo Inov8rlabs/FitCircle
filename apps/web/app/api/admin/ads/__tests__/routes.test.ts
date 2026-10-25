@@ -113,8 +113,8 @@ beforeEach(async () => {
   const today = todayInTz(TZ);
   db.rows('profiles').push(
     { id: ADMIN, is_admin: true, email: 'ani@inov8rlabs.com', display_name: 'Ani', created_at: '2026-01-01T00:00:00Z' },
-    { id: USER, is_admin: false, email: 'ben@example.com', display_name: 'Ben', created_at: '2026-01-01T00:00:00Z' },
-    { id: PAYER, is_admin: false, email: 'p@example.com', display_name: 'P', created_at: `${today}T16:00:00Z` }
+    { id: USER, is_admin: false, email: 'ben.real@gmail.com', display_name: 'Ben', created_at: '2026-01-01T00:00:00Z' },
+    { id: PAYER, is_admin: false, email: 'payer.real@gmail.com', display_name: 'P', created_at: `${today}T16:00:00Z` }
   );
   db.rows('user_attribution').push({ user_id: PAYER, channel: 'apple_ads', platform: 'ios', source: 'apple_search_ads', campaign_external_id: 'C1', ad_group_external_id: 'G1', keyword_external_id: 'K1', ad_external_id: null, is_test: false });
   db.rows('subscription_events').push(
@@ -194,7 +194,7 @@ describe('overview / timeseries / campaign shapes', () => {
   it('overview by channel: rows, totals, lastSync', async () => {
     const res = await overview(req('/api/admin/ads/overview?groupBy=channel', { as: ADMIN }));
     const { data } = await res.json();
-    expect(Object.keys(data).sort()).toEqual(['groupBy', 'lastSync', 'range', 'rows', 'targets', 'testUsers', 'totals']);
+    expect(Object.keys(data).sort()).toEqual(['excludedUsers', 'groupBy', 'lastSync', 'range', 'rows', 'targets', 'testUsers', 'totals']);
     const apple = data.rows.find((r: any) => r.key === 'apple_ads');
     expect(apple.metrics).toMatchObject({ spend: 20, installs: 4, users: 1, activated: 1, payers: 1, revenueToDate: 8.49, cpi: 5, costPerPayer: 20 });
     expect(apple.metrics.roasToDate).toBeCloseTo(8.49 / 20);

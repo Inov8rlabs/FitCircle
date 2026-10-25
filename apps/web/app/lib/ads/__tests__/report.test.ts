@@ -129,12 +129,12 @@ describe('buildRows', () => {
 });
 
 describe('totals + timeseries', () => {
-  it('totals: all spend, all non-test users', () => {
-    expect(buildTotals(input()).metrics).toMatchObject({ spend: 20, users: 6, payers: 1 });
+  it('totals: all spend, only ad-attributed users (organic / unknown / mock payload left out)', () => {
+    expect(buildTotals(input()).metrics).toMatchObject({ spend: 20, users: 3, payers: 1, costPerUser: 20 / 3 });
   });
   it('timeseries per day with cumulative ROAS', () => {
     const pts = buildTimeseries('2026-10-23', '2026-10-24', input());
     expect(pts[0]).toMatchObject({ date: '2026-10-23', spend: 0, users: 0, cumulativeRoas: null });
-    expect(pts[1]).toMatchObject({ date: '2026-10-24', spend: 20, users: 6, payers: 1, revenue: 10, cumulativeRoas: 0.5, activated: 6 });
+    expect(pts[1]).toMatchObject({ date: '2026-10-24', spend: 20, users: 3, payers: 1, revenue: 10, cumulativeRoas: 0.5, activated: 3 });
   });
 });

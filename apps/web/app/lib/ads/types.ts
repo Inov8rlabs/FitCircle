@@ -249,7 +249,9 @@ export interface AdsOverview {
   rows: AdsRow[];
   totals: AdsRow;
   lastSync: ChannelSyncStatus[];
+  /** Sign-ups left out of the counts (= excludedUsers.total; kept for older clients). */
   testUsers: number;
+  excludedUsers: ExcludedUsers;
   targets: AdsTargets;
 }
 
@@ -349,4 +351,12 @@ export interface AdChangeLogEntry {
   forced: boolean;
   error: string | null;
   createdAt: string;
+}
+
+/** Internal / review / test-lab / Play-tester sign-ups in the range (lib/ads/test-users.ts). */
+export interface ExcludedUsers {
+  total: number;
+  byReason: Partial<Record<import('./test-users').TestUserReason, number>>;
+  /** True when ?includeTest=1 counted them anyway. */
+  included: boolean;
 }

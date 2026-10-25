@@ -83,6 +83,8 @@ const round2 = (n: number) => Math.round(n * 100) / 100;
 // ---------------------------------------------------------------------------
 
 export interface CohortUser {
+  /** Why this sign-up is not a real customer (lib/ads/test-users.ts), else null/absent. */
+  testReason?: import('./test-users').TestUserReason | null;
   userId: string;
   /** profiles.created_at (ISO). */
   signupAt: string;

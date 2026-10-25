@@ -14,6 +14,7 @@ import { editability } from '../guardrails';
 import type { CohortUser, RevenueEvent } from '../metrics';
 import { computeMetrics, defaultRange, emptyDelivery } from '../metrics';
 import { buildRows, buildTimeseries, buildTotals, entityView, type SliceInput } from '../report';
+import { classifyTestUser, type TestUserReason } from '../test-users';
 import type {
   AdChannel,
   AdEntityRow,
@@ -23,6 +24,7 @@ import type {
   AttributionRow,
   CampaignDetail,
   CampaignDetailEntity,
+  ExcludedUsers,
   GroupBy,
 } from '../types';
 import { AD_CHANNELS, GROUP_BYS } from '../types';
@@ -38,6 +40,8 @@ export interface RangeQuery {
   end: string;
   today: string;
   timeZone: string;
+  /** Count internal / review / test-lab / Play-tester sign-ups too (default: excluded). */
+  includeTest?: boolean;
 }
 
 export function parseRange(params: URLSearchParams, now = new Date()): RangeQuery {
@@ -49,7 +53,8 @@ export function parseRange(params: URLSearchParams, now = new Date()): RangeQuer
   if (!isYmd(start) || !isYmd(end)) throw new CampaignError(400, 'VALIDATION_ERROR', 'start and end must be YYYY-MM-DD');
   if (start > end) throw new CampaignError(400, 'VALIDATION_ERROR', 'start must be on or before end');
   if (diffDays(start, end) > MAX_RANGE_DAYS) throw new CampaignError(400, 'VALIDATION_ERROR', `Range is limited to ${MAX_RANGE_DAYS} days`);
-  return { start, end, today, timeZone };
+  const inc = (params.get('includeTest') ?? '').toLowerCase();
+  return { includeTest: inc === '1' || inc === 'true', start, end, today, timeZone };
 }
 
 export function parseGroupBy(v: string | null): GroupBy {
@@ -91,8 +96,8 @@ export class AdsReportService {
     const from = new Date(Date.parse(`${range.start}T00:00:00Z`) - 14 * 3600_000).toISOString();
     const to = new Date(Date.parse(`${addDays(range.end, 1)}T00:00:00Z`) + 14 * 3600_000).toISOString();
     const profiles = (
-      await selectAll<{ id: string; created_at: string }>(() =>
-        db().from('profiles').select('id, created_at').gte('created_at', from).lt('created_at', to).order('created_at', { ascending: true })
+      await selectAll<{ id: string; created_at: string; email: string | null; is_admin: boolean | null }>(() =>
+        db().from('profiles').select('id, created_at, email, is_admin').gte('created_at', from).lt('created_at', to).order('created_at', { ascending: true })
       )
     )
       .map((p) => ({ ...p, day: ymdInTz(p.created_at, range.timeZone) }))
@@ -139,6 +144,7 @@ export class AdsReportService {
     }
 
     return profiles.map((p) => ({
+      testReason: classifyTestUser({ email: p.email, isAdmin: p.is_admin, mockAttribution: attribution.get(p.id)?.is_test === true }),
       userId: p.id,
       signupAt: p.created_at,
       signupDate: p.day,
@@ -148,13 +154,26 @@ export class AdsReportService {
     }));
   }
 
+  /** The cohort the report counts, plus what was left out as test / internal sign-ups. */
+  static async reportCohort(range: RangeQuery): Promise<{ cohort: CohortUser[]; excluded: ExcludedUsers }> {
+    const all = await this.loadCohort(range);
+    const byReason: Partial<Record<TestUserReason, number>> = {};
+    for (const u of all) if (u.testReason) byReason[u.testReason] = (byReason[u.testReason] ?? 0) + 1;
+    const total = all.filter((u) => u.testReason).length;
+    return {
+      cohort: range.includeTest ? all : all.filter((u) => !u.testReason),
+      excluded: { total, byReason, included: range.includeTest === true },
+    };
+  }
+
   static async overview(range: RangeQuery, groupBy: GroupBy): Promise<AdsOverview> {
-    const [metricRows, entities, cohort, lastSync] = await Promise.all([
+    const [metricRows, entities, cohortResult, lastSync] = await Promise.all([
       this.loadMetrics(range.start, range.end),
       this.loadEntities(),
-      this.loadCohort(range),
+      this.reportCohort(range),
       AdsSyncService.status(),
     ]);
+    const { cohort, excluded } = cohortResult;
     const input: SliceInput = { metricRows, entities, cohort, rangeEnd: range.end, today: range.today };
     return {
       range: { start: range.start, end: range.end, timeZone: range.timeZone },
@@ -162,13 +181,15 @@ export class AdsReportService {
       rows: buildRows(groupBy, input),
       totals: buildTotals(input),
       lastSync,
-      testUsers: cohort.filter((u) => u.attribution?.is_test).length,
+      testUsers: excluded.total,
+      excludedUsers: excluded,
       targets: TARGETS,
     };
   }
 
   static async timeseries(range: RangeQuery, filter: { channel: AdChannel | null; campaignExternalId: string | null }): Promise<AdsTimeseries> {
-    const [metricRows, cohort] = await Promise.all([this.loadMetrics(range.start, range.end), this.loadCohort(range)]);
+    const [metricRows, cohortResult] = await Promise.all([this.loadMetrics(range.start, range.end), this.reportCohort(range)]);
+    const { cohort } = cohortResult;
     const points = buildTimeseries(range.start, range.end, {
       metricRows,
       entities: [],
@@ -185,10 +206,10 @@ export class AdsReportService {
     const campaignRow = entities.find((e) => e.level === 'campaign' && e.external_id === externalId);
     if (!campaignRow) throw new CampaignError(404, 'NOT_FOUND', 'Campaign not found (sync first?)');
 
-    const [metricsAll, todayRows, cohort, status] = await Promise.all([
+    const [metricsAll, todayRows, { cohort }, status] = await Promise.all([
       this.loadMetrics(range.start, range.end),
       this.loadMetrics(range.today, range.today),
-      this.loadCohort(range),
+      this.reportCohort(range),
       AdsSyncService.status(),
     ]);
     const metricRows = metricsAll.filter((r) => r.channel === channel && r.campaign_external_id === externalId);

@@ -8,6 +8,7 @@
 import { eachDay } from './dates';
 import { addDelivery, computeMetrics, cumulativeRoas, type CohortUser, type DeliveryTotals, emptyDelivery, userOutcome, type UserOutcome } from './metrics';
 import {
+  AD_CHANNELS,
   type AdEntityRow,
   type AdEntityView,
   type AdLevel,
@@ -121,6 +122,17 @@ function inFilterUser(u: CohortUser, f: SliceInput['filter']): boolean {
   return true;
 }
 
+/**
+ * Totals and the time series pair spend with users, so with no channel /
+ * campaign filter they count only users an ad network brought in (organic and
+ * unknown sign-ups keep their own rows in the by-channel table).
+ */
+function inTotalsUser(u: CohortUser, f: SliceInput['filter']): boolean {
+  if (f?.channel || f?.campaignExternalId) return inFilterUser(u, f);
+  const a = effectiveAttribution(u);
+  return !!a && (AD_CHANNELS as string[]).includes(a.channel);
+}
+
 function inFilterRow(r: { channel: string; campaign_external_id: string | null }, f: SliceInput['filter']): boolean {
   if (f?.channel && r.channel !== f.channel) return false;
   if (f?.campaignExternalId && r.campaign_external_id !== f.campaignExternalId) return false;
@@ -204,7 +216,7 @@ function describe(groupBy: GroupBy, key: string, byEntity: Map<string, AdEntityR
 export function buildTotals(input: SliceInput): AdsRow {
   let d = emptyDelivery();
   for (const r of input.metricRows) if (r.level === 'campaign' && inFilterRow(r, input.filter)) d = addDelivery(d, r);
-  const outs = input.cohort.filter((u) => inFilterUser(u, input.filter)).map(userOutcome);
+  const outs = input.cohort.filter((u) => inTotalsUser(u, input.filter)).map(userOutcome);
   return {
     key: 'total',
     groupBy: 'channel',
@@ -232,7 +244,7 @@ export function buildTimeseries(start: string, end: string, input: SliceInput): 
     pts[i].installs += Number(r.installs) || 0;
   }
   for (const u of input.cohort) {
-    if (!inFilterUser(u, input.filter)) continue;
+    if (!inTotalsUser(u, input.filter)) continue;
     const i = idx.get(u.signupDate);
     if (i === undefined) continue;
     const o = userOutcome(u);
