@@ -3,6 +3,7 @@
  * the services behind /api/admin/ads/*, and the admin UI (types only — the UI
  * talks to the API, never to Supabase).
  */
+import type { TestUserReason } from './test-users';
 
 export type AdChannel = 'apple_ads' | 'meta' | 'google_ads';
 /** Attribution channels also include outcome-only buckets. */
@@ -253,6 +254,149 @@ export interface AdsOverview {
   testUsers: number;
   excludedUsers: ExcludedUsers;
   targets: AdsTargets;
+  /** Reconciliation / freshness checks computed on read (lib/ads/data-health.ts). */
+  dataHealth: DataHealth;
+  /** Metric key (AdsMetrics field) → one-line definition for UI tooltips (docs/ADS_METRICS_METHODOLOGY.md). */
+  definitions: Record<string, string>;
+}
+
+// ---------------------------------------------------------------------------
+// Data health (overview.dataHealth) and live verification (/api/admin/ads/verify)
+// ---------------------------------------------------------------------------
+
+export type HealthStatus = 'ok' | 'warn' | 'error';
+
+/** One line of the "Data health" panel. */
+export interface HealthCheck {
+  key: 'sync' | 'spend_reconciliation' | 'attribution' | 'revenue' | 'currency';
+  label: string;
+  status: HealthStatus;
+  /** Human-readable reasons (first one is the headline). */
+  reasons: string[];
+}
+
+export interface SyncHealth {
+  channel: AdChannel;
+  configured: boolean;
+  /** finished_at of the latest ok run (null = never succeeded). */
+  lastSuccessAt: string | null;
+  /** Minutes since lastSuccessAt (null = never). */
+  ageMinutes: number | null;
+  /** True when the latest finished run failed. */
+  lastRunFailed: boolean;
+  lastError: string | null;
+  status: HealthStatus;
+}
+
+export interface SpendMismatch {
+  channel: AdChannel;
+  campaignExternalId: string;
+  date: string;
+  campaignSpend: number;
+  adGroupSpend: number;
+  /** campaignSpend − adGroupSpend. */
+  diff: number;
+}
+
+export interface SpendReconciliation {
+  status: HealthStatus;
+  /** (campaign, day) pairs with delivery checked. */
+  campaignDays: number;
+  mismatchedCampaignDays: number;
+  /** Worst first, at most 20. */
+  mismatches: SpendMismatch[];
+  /** Σ |campaign − ad group| over mismatched pairs. */
+  totalAbsDiff: number;
+  /** Apple Ads: Σ keyword spend ÷ Σ campaign spend × 100 (0–100, 1 decimal; the rest is Search Match / no keyword). Null with no Apple spend. */
+  keywordCoveragePct: number | null;
+  keywordSpend: number;
+  appleCampaignSpend: number;
+}
+
+export interface AttributionCoverage {
+  status: HealthStatus;
+  /** Σ network-reported installs on paid channels in the range. */
+  paidInstalls: number;
+  /** Sign-ups in the cohort attributed to a paid channel (test users excluded). */
+  attributedPaidUsers: number;
+  /** attributedPaidUsers ÷ paidInstalls × 100 (0–100+, 1 decimal; null with 0 installs). */
+  coveragePct: number | null;
+  /** attributedPaidUsers by user_attribution.source (apple_search_ads, revenuecat, …). */
+  bySource: Record<string, number>;
+  explanation: string;
+}
+
+export interface RevenueHealth {
+  status: HealthStatus;
+  /** PRODUCTION revenue-bearing events (purchases, renewals, refunds) after de-duplication. */
+  revenueEvents: number;
+  /** Events without takehome_percentage (deprecated by RevenueCat). */
+  missingTakehome: number;
+  /** Events with neither tax/commission percentages nor takehome → store fallback rate used. */
+  fallbackRateUsed: number;
+  /** Events with no usable USD price (counted as $0). */
+  missingPrice: number;
+  /** Family Sharing grants (no revenue; the organiser's purchase counts once). */
+  familyShareExcluded: number;
+  /** Duplicate deliveries of the same store transaction dropped. */
+  duplicatesDropped: number;
+}
+
+export interface CurrencyHealth {
+  status: HealthStatus;
+  mixedCurrency: boolean;
+  /** Currencies with non-zero spend in the range. */
+  currencies: string[];
+}
+
+export interface DataHealth {
+  /** Worst of the checks. */
+  status: HealthStatus;
+  generatedAt: string;
+  checks: HealthCheck[];
+  sync: SyncHealth[];
+  spend: SpendReconciliation;
+  attribution: AttributionCoverage;
+  revenue: RevenueHealth;
+  currency: CurrencyHealth;
+}
+
+export type VerifyField = 'spend' | 'impressions' | 'taps' | 'installs';
+
+export interface VerifyFieldDiff {
+  field: VerifyField;
+  /** Live from the network (grand totals for the range). */
+  network: number;
+  /** Σ ad_metrics_daily campaign-level rows for the range. */
+  stored: number;
+  /** stored − network. */
+  diff: number;
+  /** diff ÷ network × 100 (percent, 2 decimals; null when network is 0). */
+  diffPct: number | null;
+  ok: boolean;
+}
+
+export interface VerifyCampaignDiff {
+  campaignExternalId: string;
+  name: string | null;
+  fields: VerifyFieldDiff[];
+}
+
+export interface AdsVerifyResult {
+  channel: AdChannel;
+  range: { start: string; end: string; timeZone: string };
+  fetchedAt: string;
+  /** All four fields match within tolerance. */
+  ok: boolean;
+  totals: VerifyFieldDiff[];
+  /** Campaigns where any field differs (empty when everything matches). */
+  campaigns: VerifyCampaignDiff[];
+  /** The network account's report time zone (Apple org time zone), when known. */
+  networkTimeZone: string | null;
+  /** False when the network's time zone differs from the console's report time zone. */
+  timeZoneMatches: boolean | null;
+  lastSyncAt: string | null;
+  notes: string[];
 }
 
 export interface AdsTargets {
@@ -358,7 +502,7 @@ export interface AdChangeLogEntry {
 /** Internal / review / test-lab / Play-tester sign-ups in the range (lib/ads/test-users.ts). */
 export interface ExcludedUsers {
   total: number;
-  byReason: Partial<Record<import('./test-users').TestUserReason, number>>;
+  byReason: Partial<Record<TestUserReason, number>>;
   /** True when ?includeTest=1 counted them anyway. */
   included: boolean;
 }

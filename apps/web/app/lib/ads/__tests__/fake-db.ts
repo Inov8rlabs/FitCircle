@@ -1,7 +1,7 @@
 /**
  * In-memory Supabase stand-in for the ads console tests. Supports the query
  * shapes the ads services use: select / eq / in / gte / lte / lt / not-is-null
- * / order / limit / range / maybeSingle / single / insert(+select) / update /
+ * / order (multi-column) / limit / range / maybeSingle / single / insert(+select) / update /
  * upsert(onConflict).
  */
 type Row = Record<string, any>;
@@ -19,6 +19,12 @@ const PK: Record<string, string[]> = {
 export class AdsFakeDb {
   tables: Record<string, Row[]> = {};
   failing = new Set<string>();
+  /**
+   * Like Postgres, give no guarantee for rows the ORDER BY doesn't distinguish:
+   * each query sees ties in a different (shuffled) order, so offset pagination
+   * without a unique order skips / repeats rows.
+   */
+  unstableTies = false;
   private seq = 0;
 
   rows(table: string): Row[] {
@@ -42,7 +48,7 @@ class FakeQuery implements PromiseLike<any> {
   private filters: Filter[] = [];
   private payload: Row | Row[] | null = null;
   private returning = false;
-  private orderBy: { col: string; asc: boolean } | null = null;
+  private orderBy: Array<{ col: string; asc: boolean }> = [];
   private lim: number | null = null;
   private rng: [number, number] | null = null;
   private conflict: string[] | null = null;
@@ -97,7 +103,7 @@ class FakeQuery implements PromiseLike<any> {
     return this;
   }
   order(col: string, opts?: { ascending?: boolean }) {
-    this.orderBy = { col, asc: opts?.ascending !== false };
+    this.orderBy.push({ col, asc: opts?.ascending !== false });
     return this;
   }
   limit(n: number) {
@@ -146,9 +152,21 @@ class FakeQuery implements PromiseLike<any> {
       return { data: this.returning ? hit : null, error: null };
     }
     let hit = rows.filter(this.matches);
-    if (this.orderBy) {
-      const { col, asc } = this.orderBy;
-      hit = [...hit].sort((a, b) => (a[col] === b[col] ? 0 : (a[col] ?? '') < (b[col] ?? '') ? (asc ? -1 : 1) : asc ? 1 : -1));
+    if (this.db.unstableTies) {
+      hit = [...hit];
+      for (let i = hit.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [hit[i], hit[j]] = [hit[j], hit[i]];
+      }
+    }
+    if (this.orderBy.length) {
+      hit = [...hit].sort((a, b) => {
+        for (const { col, asc } of this.orderBy) {
+          if (a[col] === b[col]) continue;
+          return (a[col] ?? '') < (b[col] ?? '') ? (asc ? -1 : 1) : asc ? 1 : -1;
+        }
+        return 0;
+      });
     }
     if (this.rng) hit = hit.slice(this.rng[0], this.rng[1] + 1);
     if (this.lim !== null) hit = hit.slice(0, this.lim);

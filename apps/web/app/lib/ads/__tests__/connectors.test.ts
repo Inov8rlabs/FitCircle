@@ -143,6 +143,46 @@ describe('Apple Ads connector (mocked fetch)', () => {
 
   const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
 
+  it('fetchTotals: POST /reports/campaigns without granularity, grand totals + per-campaign row totals (read-only)', async () => {
+    const calls: Array<{ url: string; init?: RequestInit }> = [];
+    const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+      calls.push({ url, init });
+      if (url.includes('oauth2/token')) return json({ access_token: 'tok', expires_in: 3600 });
+      return json({
+        data: {
+          reportingDataResponse: {
+            row: [
+              { metadata: { campaignId: 11, campaignName: 'US Search' }, total: { localSpend: { amount: '80.25', currency: 'USD' }, impressions: 4000, taps: 200, tapInstalls: 38, viewInstalls: 2, totalInstalls: 40 } },
+              { metadata: { campaignId: 12, campaignName: 'Brand' }, total: { localSpend: { amount: '19.75', currency: 'USD' }, impressions: 1000, taps: 50, tapInstalls: 10, totalInstalls: 10 } },
+            ],
+            grandTotals: { total: { localSpend: { amount: '100.00', currency: 'USD' }, impressions: 5000, taps: 250, tapInstalls: 48, viewInstalls: 2, totalInstalls: 50 } },
+          },
+        },
+        pagination: { totalResults: 2, startIndex: 0, itemsPerPage: 2 },
+      });
+    });
+    const res = await new AppleAdsConnector({ fetch: fetchMock, credentials: CREDS }).fetchTotals('2026-10-01', '2026-10-10');
+    expect(res.totals).toEqual({ spend: 100, currency: 'USD', impressions: 5000, taps: 250, installs: 50 });
+    expect(res.campaigns.map((c) => [c.campaignExternalId, c.name, c.fields.spend, c.fields.installs])).toEqual([
+      ['11', 'US Search', 80.25, 40],
+      ['12', 'Brand', 19.75, 10],
+    ]);
+    const api = calls.filter((c) => !c.url.includes('oauth2'));
+    expect(api).toHaveLength(1);
+    expect(api[0].url).toBe('https://api.searchads.apple.com/api/v5/reports/campaigns');
+    expect(api[0].init?.method).toBe('POST'); // Apple reports are POST but read-only
+    const body = JSON.parse(String(api[0].init?.body));
+    expect(body).toMatchObject({ startTime: '2026-10-01', endTime: '2026-10-10', timeZone: 'ORTZ', returnRowTotals: true, returnGrandTotals: true });
+    expect(body.granularity).toBeUndefined();
+  });
+
+  it('reportTimeZone reads the org time zone from GET /acls', async () => {
+    const fetchMock = vi.fn(async (url: string) =>
+      url.includes('oauth2/token') ? json({ access_token: 'tok' }) : json({ data: [{ orgId: 1, timeZone: 'UTC' }, { orgId: 25006540, orgName: 'FitCircle', timeZone: 'America/New_York', currency: 'USD' }] })
+    );
+    expect(await new AppleAdsConnector({ fetch: fetchMock, credentials: CREDS }).reportTimeZone()).toBe('America/New_York');
+  });
+
   it('caches the token and sends X-AP-Context', async () => {
     const calls: Array<{ url: string; init?: RequestInit }> = [];
     const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {

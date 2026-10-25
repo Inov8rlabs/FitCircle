@@ -177,6 +177,26 @@ export class AdsSyncService {
     return results;
   }
 
+  /** finished_at of the latest successful run per channel (absent = never succeeded). */
+  static async lastSuccess(): Promise<Partial<Record<AdChannel, string>>> {
+    const out: Partial<Record<AdChannel, string>> = {};
+    await Promise.all(
+      AD_CHANNELS.filter((c) => c !== 'google_ads').map(async (channel) => {
+        const { data } = await db()
+          .from('ad_sync_runs')
+          .select('finished_at')
+          .eq('channel', channel)
+          .eq('ok', true)
+          .not('finished_at', 'is', null)
+          .order('finished_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        if (data?.finished_at) out[channel] = data.finished_at;
+      })
+    );
+    return out;
+  }
+
   /** Latest finished run per channel + configuration state. */
   static async status(): Promise<ChannelSyncStatus[]> {
     const supabase = db();

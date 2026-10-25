@@ -166,6 +166,17 @@ export function buildRows(groupBy: GroupBy, input: SliceInput): AdsRow[] {
     keys.add(k);
     delivery.set(k, addDelivery(delivery.get(k) ?? emptyDelivery(), r));
   }
+  // Below campaign level, delivery the network reports on no child entity
+  // (Apple Search Match has no keyword; Meta has no keywords at all) goes to the
+  // channel's "(none)" row, so every breakdown adds up to the campaign totals.
+  if (level !== 'campaign') {
+    for (const [channel, rest] of childRemainders(input.metricRows, level, input.filter)) {
+      const k = `${channel}:none`;
+      keys.add(k);
+      const d = delivery.get(k) ?? emptyDelivery();
+      delivery.set(k, addDelivery(d, rest));
+    }
+  }
   for (const u of input.cohort) {
     if (!inFilterUser(u, input.filter)) continue;
     const k = userKey(u, groupBy);
@@ -184,6 +195,36 @@ export function buildRows(groupBy: GroupBy, input: SliceInput): AdsRow[] {
   return rows;
 }
 
+type DeliveryFields = Pick<AdMetricRow, 'spend' | 'currency' | 'impressions' | 'taps' | 'installs'>;
+
+/**
+ * Per channel: campaign-level delivery minus the delivery reported on `level`
+ * rows (clamped at 0 per field; a negative gap is a data problem that
+ * dataHealth reports, not something to show as negative spend).
+ */
+export function childRemainders(rows: AdMetricRow[], level: AdLevel, filter?: SliceInput['filter']): Map<string, DeliveryFields> {
+  const camp = new Map<string, DeliveryTotals>();
+  const child = new Map<string, DeliveryTotals>();
+  for (const r of rows) {
+    if (!inFilterRow(r, filter)) continue;
+    if (r.level === 'campaign') camp.set(r.channel, addDelivery(camp.get(r.channel) ?? emptyDelivery(), r));
+    else if (r.level === level) child.set(r.channel, addDelivery(child.get(r.channel) ?? emptyDelivery(), r));
+  }
+  const out = new Map<string, DeliveryFields>();
+  for (const [channel, c] of camp) {
+    const k = child.get(channel) ?? emptyDelivery();
+    const rest = {
+      spend: Math.max(0, Math.round(c.spend * 100) - Math.round(k.spend * 100)) / 100,
+      currency: c.currency,
+      impressions: Math.max(0, c.impressions - k.impressions),
+      taps: Math.max(0, c.taps - k.taps),
+      installs: Math.max(0, c.installs - k.installs),
+    };
+    if (rest.spend > 0 || rest.impressions > 0 || rest.taps > 0 || rest.installs > 0) out.set(channel, rest as DeliveryFields);
+  }
+  return out;
+}
+
 function describe(groupBy: GroupBy, key: string, byEntity: Map<string, AdEntityRow>, campaigns: Map<string, AdEntityRow>): Omit<AdsRow, 'metrics'> {
   const base = { key, groupBy, sublabel: null, platform: null, level: null, externalId: null, campaignExternalId: null, entity: null } as Omit<AdsRow, 'metrics' | 'label' | 'channel'>;
   if (groupBy === 'channel') return { ...base, label: CHANNEL_LABEL[key as AttributionChannel] ?? key, channel: key as AttributionChannel };
@@ -192,7 +233,12 @@ function describe(groupBy: GroupBy, key: string, byEntity: Map<string, AdEntityR
   const ch = channel as AttributionChannel;
   if (rest[0] === 'none') {
     const label = PAID.has(ch) ? `${CHANNEL_LABEL[ch]} · unattributed ${groupBy.replace('_', ' ')}` : CHANNEL_LABEL[ch] ?? channel;
-    return { ...base, label, channel: ch, sublabel: PAID.has(ch) ? 'Attributed users without this level' : 'No ad spend' };
+    return {
+      ...base,
+      label,
+      channel: ch,
+      sublabel: PAID.has(ch) ? `Delivery and attributed users not tied to one ${groupBy.replace('_', ' ')} (e.g. Search Match)` : 'No ad spend',
+    };
   }
   const level = rest[0] as AdLevel;
   const id = rest.slice(1).join(':');
@@ -240,7 +286,7 @@ export function buildTimeseries(start: string, end: string, input: SliceInput): 
     if (r.level !== 'campaign' || !inFilterRow(r, input.filter)) continue;
     const i = idx.get(r.date);
     if (i === undefined) continue;
-    pts[i].spend = Math.round((pts[i].spend + (Number(r.spend) || 0)) * 100) / 100;
+    pts[i].spend = (Math.round(pts[i].spend * 100) + Math.round((Number(r.spend) || 0) * 100)) / 100;
     pts[i].installs += Number(r.installs) || 0;
   }
   for (const u of input.cohort) {
@@ -251,7 +297,7 @@ export function buildTimeseries(start: string, end: string, input: SliceInput): 
     pts[i].users += 1;
     if (o.activated) pts[i].activated += 1;
     if (o.payer) pts[i].payers += 1;
-    pts[i].revenue = Math.round((pts[i].revenue + o.revenueToDate) * 100) / 100;
+    pts[i].revenue = (Math.round(pts[i].revenue * 100) + Math.round(o.revenueToDate * 100)) / 100;
   }
   const roas = cumulativeRoas(pts);
   pts.forEach((p, i) => (p.cumulativeRoas = roas[i]));

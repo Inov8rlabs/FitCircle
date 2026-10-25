@@ -60,8 +60,9 @@ describe('netRevenue', () => {
     // A plain unsubscribe is not a refund.
     expect(netRevenue(ev({ type: 'CANCELLATION', raw: { price: 9.99, cancel_reason: 'UNSUBSCRIBE' } }))).toBe(0);
   });
-  it('Stripe charge.refunded subtracts', () => {
-    expect(netRevenue(ev({ type: 'REFUND', store: 'STRIPE', raw: { type: 'charge.refunded', price: null, amount_refunded: 999 } }))).toBeCloseTo(-9.69, 2);
+  it('Stripe-native webhook rows are audit-only (RevenueCat reports the same refund as a STRIPE CANCELLATION)', () => {
+    expect(netRevenue(ev({ id: 'stripe:evt_1', type: 'charge.refunded', store: 'STRIPE', raw: { object: 'event', type: 'charge.refunded', amount_refunded: 999 } }))).toBe(0);
+    expect(netRevenue(ev({ type: 'CANCELLATION', store: 'STRIPE', raw: { price: -9.99, cancel_reason: 'CUSTOMER_SUPPORT', tax_percentage: 0, commission_percentage: 0.03 } }))).toBeCloseTo(-9.69, 2);
   });
 });
 

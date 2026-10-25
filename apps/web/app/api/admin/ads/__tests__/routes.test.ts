@@ -194,13 +194,43 @@ describe('overview / timeseries / campaign shapes', () => {
   it('overview by channel: rows, totals, lastSync', async () => {
     const res = await overview(req('/api/admin/ads/overview?groupBy=channel', { as: ADMIN }));
     const { data } = await res.json();
-    expect(Object.keys(data).sort()).toEqual(['excludedUsers', 'groupBy', 'lastSync', 'range', 'rows', 'targets', 'testUsers', 'totals']);
+    expect(Object.keys(data).sort()).toEqual(['dataHealth', 'definitions', 'excludedUsers', 'groupBy', 'lastSync', 'range', 'rows', 'targets', 'testUsers', 'totals']);
     const apple = data.rows.find((r: any) => r.key === 'apple_ads');
     expect(apple.metrics).toMatchObject({ spend: 20, installs: 4, users: 1, activated: 1, payers: 1, revenueToDate: 8.49, cpi: 5, costPerPayer: 20 });
     expect(apple.metrics.roasToDate).toBeCloseTo(8.49 / 20);
     expect(data.totals.metrics.users).toBe(1); // admin/user profiles signed up outside the range
     expect(data.lastSync.find((s: any) => s.channel === 'apple_ads')).toMatchObject({ configured: true, writeEnabled: true, ok: true });
     expect(data.targets).toEqual({ costPerPayerMax: 35, roasD7Min: 0.1, roasD30Min: 0.3, roas12mMin: 1 });
+  });
+
+  it('overview carries dataHealth (computed on read) and KPI definitions', async () => {
+    const { data } = await (await overview(req('/api/admin/ads/overview?groupBy=channel', { as: ADMIN }))).json();
+    const h = data.dataHealth;
+    expect(h.checks.map((c: any) => c.key)).toEqual(['sync', 'spend_reconciliation', 'attribution', 'revenue', 'currency']);
+    // Just synced by the cron in beforeEach.
+    expect(h.sync.find((s: any) => s.channel === 'apple_ads')).toMatchObject({ configured: true, status: 'ok', lastRunFailed: false });
+    expect(h.sync.find((s: any) => s.channel === 'apple_ads').ageMinutes).toBeLessThan(5);
+    // The fake connector reports campaign + keyword rows but no ad-group rows: $20 unreconciled.
+    expect(h.spend).toMatchObject({ status: 'error', mismatchedCampaignDays: 1, totalAbsDiff: 20, keywordCoveragePct: 100 });
+    // 1 attributed paid user for 4 Apple installs.
+    expect(h.attribution).toMatchObject({ status: 'warn', paidInstalls: 4, attributedPaidUsers: 1, coveragePct: 25, bySource: { apple_search_ads: 1 } });
+    expect(h.attribution.explanation).toMatch(/RevenueCat/);
+    // The SANDBOX event is not even loaded; the PRODUCTION one has takehome_percentage.
+    expect(h.revenue).toMatchObject({ status: 'ok', revenueEvents: 1, missingTakehome: 0, fallbackRateUsed: 0, missingPrice: 0, duplicatesDropped: 0 });
+    expect(h.currency).toEqual({ status: 'ok', mixedCurrency: false, currencies: ['USD'] });
+    expect(h.status).toBe('error');
+    expect(data.definitions.costPerPayer).toMatch(/payers/);
+    for (const k of Object.keys(data.totals.metrics).filter((k) => !['currency', 'mixedCurrency', 'incomplete'].includes(k))) expect(data.definitions[k]).toBeTruthy();
+  });
+
+  it('dataHealth: a failed latest sync with no earlier success is an error', async () => {
+    db.rows('ad_sync_runs').length = 0;
+    db.rows('ad_sync_runs').push({ id: 'r1', channel: 'apple_ads', trigger: 'cron', started_at: new Date().toISOString(), finished_at: new Date().toISOString(), ok: false, error: 'HTTP 500' });
+    const { data } = await (await overview(req('/api/admin/ads/overview', { as: ADMIN }))).json();
+    const apple = data.dataHealth.sync.find((s: any) => s.channel === 'apple_ads');
+    expect(apple).toMatchObject({ status: 'error', lastSuccessAt: null, lastRunFailed: true, lastError: 'HTTP 500' });
+    expect(data.dataHealth.status).toBe('error');
+    expect(data.dataHealth.checks[0].reasons.join(' ')).toMatch(/never synced successfully/);
   });
 
   it('validates params', async () => {

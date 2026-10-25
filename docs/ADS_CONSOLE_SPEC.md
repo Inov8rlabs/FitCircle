@@ -48,7 +48,7 @@ interface AdsConnector {
 - `ad_change_log` — audit of every change attempt: `id`, `actor_user_id`, `channel`, `level`, `external_id`, `field` (bid|daily_budget|status), `old_value`, `new_value`, `requested_value`, `outcome` (applied|rejected|failed|dry_run), `error`, `created_at`.
 - `ad_sync_runs` — `id`, `channel`, `started_at`, `finished_at`, `ok`, `rows_entities`, `rows_metrics`, `error`.
 
-Revenue is **not** copied: it is read from `subscription_events` (RevenueCat webhook, already the single writer). Only `environment = 'PRODUCTION'` rows count. Net revenue per event = `price × takehome_percentage` (fallback 0.85 for App Store / Play, 0.97 Stripe minus fees not modelled). Refunds (`type = 'CANCELLATION'` with `cancel_reason = 'CUSTOMER_SUPPORT'` / Stripe `charge.refunded`) subtract.
+Revenue is **not** copied: it is read from `subscription_events` (RevenueCat webhook, already the single writer). Only `environment = 'PRODUCTION'` rows count. Net revenue per event = `price × (1 − tax_percentage − commission_percentage)` (RevenueCat's proceeds formula; `takehome_percentage` is deprecated and only a fallback; last resort 0.85 App Store / Play, 0.97 Stripe). Refunds (`CANCELLATION` with a negative price or `cancel_reason = 'CUSTOMER_SUPPORT'`) subtract; `REFUND_REVERSED` adds back. Trials, Family Sharing copies, promotional grants and Stripe-native webhook rows are $0; a store transaction counts once. Exact rules: `docs/ADS_METRICS_METHODOLOGY.md`.
 
 ## 4. Attribution: how a user is tied to an ad
 
@@ -63,15 +63,15 @@ Install counts come from the networks (they see installs we can't); everything a
 
 ## 5. Metrics (computed in `lib/ads/metrics.ts`, pure, unit-tested)
 
-For any slice (channel, platform, campaign, ad group, keyword, ad) and date range (by **attribution cohort**: users whose `profiles.created_at` falls in the range):
+For any slice (channel, platform, campaign, ad group, keyword, ad) and date range (by **attribution cohort**: users whose `profiles.created_at` falls in the range). Precise definitions, windows and limitations: **`docs/ADS_METRICS_METHODOLOGY.md`** (the source of truth for every KPI).
 
 | Metric | Definition |
 |---|---|
 | Spend | Σ `ad_metrics_daily.spend` in range (USD; non-USD converted at the daily rate stored on sync, v1: USD only and flag others) |
 | Installs | Σ network installs |
 | Users | attributed users with `profiles.created_at` in range |
-| Activated | users with ≥1 `food_log_entries` row or check-in within 7 days of sign-up |
-| Payers | users with a PRODUCTION `INITIAL_PURCHASE` / `NON_RENEWING_PURCHASE` (lifetime) |
+| Activated | users with ≥1 `food_log_entries` row (not a Health import) or manual check-in within 7 × 24 h of sign-up |
+| Payers | users with ≥1 paid PRODUCTION charge (`INITIAL_PURCHASE`, `RENEWAL` incl. trial conversion, `NON_RENEWING_PURCHASE`) not cancelled out by a refund |
 | Revenue (to date) | Σ net revenue of those users' events, all time |
 | Revenue D7 / D30 | same, events within 7 / 30 days of the user's sign-up |
 | CPI | Spend ÷ Installs |
@@ -93,7 +93,8 @@ Targets shown as reference lines (configurable in `ads_settings` later; v1 const
 
 ## 7. Admin API (all behind `requireAdmin`)
 
-- `GET /api/admin/ads/overview?start&end&groupBy=channel|platform|campaign|ad_group|keyword|ad` → `{ rows: AdsRow[], totals: AdsRow, lastSync: {channel, finishedAt, ok}[] }`.
+- `GET /api/admin/ads/overview?start&end&groupBy=channel|platform|campaign|ad_group|keyword|ad` → `{ rows: AdsRow[], totals: AdsRow, lastSync: {channel, finishedAt, ok}[], dataHealth, definitions }` (`dataHealth`: sync freshness, spend reconciliation, attribution coverage, revenue-data quality, currency — computed on read; `definitions`: metric key → one-line definition).
+- `GET /api/admin/ads/verify?start&end&channel=apple_ads` → live Apple grand totals for the range vs stored spend / impressions / taps / installs, per-field and per-campaign diffs, org time zone check. Read-only.
 - `GET /api/admin/ads/campaigns/[channel]/[externalId]?start&end` → campaign entity + ad groups + keywords + creatives, each with metrics.
 - `GET /api/admin/ads/timeseries?start&end&channel?&campaign?` → daily spend / users / payers / revenue.
 - `POST /api/admin/ads/changes` → body `{ channel, level, externalId, field, value, dryRun? }` → `AdChangeResult` (see §8).

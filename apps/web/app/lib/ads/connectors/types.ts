@@ -12,6 +12,23 @@ export interface AdsConnector {
   readEntity(ref: AdEntityRef): Promise<AdEntityInput | null>;
   /** Apply one change. Must re-read the entity afterwards and return the new value. */
   applyChange(change: AdChangeRequest): Promise<ConnectorChangeResult>;
+  /** Network's own totals for [start, end] (read-only; used by /api/admin/ads/verify). */
+  fetchTotals?(start: string, end: string): Promise<NetworkTotals>;
+  /** The time zone the network reports days in (Apple: org time zone), when known. */
+  reportTimeZone?(): Promise<string | null>;
+}
+
+export interface DeliveryFieldTotals {
+  spend: number;
+  currency: string | null;
+  impressions: number;
+  taps: number;
+  installs: number;
+}
+
+export interface NetworkTotals {
+  totals: DeliveryFieldTotals;
+  campaigns: Array<{ campaignExternalId: string; name: string | null; fields: DeliveryFieldTotals }>;
 }
 
 export class ConnectorError extends Error {

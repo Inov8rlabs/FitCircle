@@ -21,7 +21,7 @@ import { createSign } from 'node:crypto';
 import { addDays } from '../dates';
 import type { AdChangeRequest, AdDailyMetricInput, AdEntityInput, AdEntityRef, ConnectorChangeResult } from '../types';
 
-import { type AdsConnector, ConnectorError, type FetchLike } from './types';
+import { type AdsConnector, ConnectorError, type DeliveryFieldTotals, type FetchLike, type NetworkTotals } from './types';
 
 export const APPLE_API = 'https://api.searchads.apple.com/api/v5';
 export const APPLE_TOKEN_URL = 'https://appleid.apple.com/auth/oauth2/token';
@@ -259,6 +259,31 @@ export function reportBody(start: string, end: string, offset = 0) {
   };
 }
 
+/** Report body for range totals: no granularity, so Apple requires returnRowTotals and allows returnGrandTotals. */
+export function totalsReportBody(start: string, end: string, offset = 0) {
+  return {
+    startTime: start,
+    endTime: end,
+    timeZone: 'ORTZ',
+    returnRecordsWithNoMetrics: false,
+    returnRowTotals: true,
+    returnGrandTotals: true,
+    selector: { orderBy: [{ field: 'localSpend', sortOrder: 'DESCENDING' }], pagination: { offset, limit: PAGE } },
+  };
+}
+
+/** One Apple totals object (`row[].total` / `grandTotals.total`) → the four reconciled fields. Same install basis as mapAppleReport. */
+export function mapAppleTotals(t: Json | null | undefined): DeliveryFieldTotals {
+  const v = t ?? {};
+  return {
+    spend: appleMoney(v.localSpend) ?? 0,
+    currency: appleCurrency(v.localSpend),
+    impressions: int(v.impressions),
+    taps: int(v.taps),
+    installs: int(v.totalInstalls ?? v.tapInstalls ?? v.installs),
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Connector
 // ---------------------------------------------------------------------------
@@ -344,6 +369,47 @@ export class AppleAdsConnector implements AdsConnector {
       if (page.length < PAGE || rows.length >= total) break;
     }
     return rows;
+  }
+
+  /** Apple's own totals for the range (campaign report, grand totals + per-campaign row totals). Read-only. */
+  async fetchTotals(start: string, end: string): Promise<NetworkTotals> {
+    const rows: Json[] = [];
+    let grand: Json | null = null;
+    for (let offset = 0; offset < 50_000; offset += PAGE) {
+      const json = await this.call('POST', '/reports/campaigns', totalsReportBody(start, end, offset));
+      const resp = json?.data?.reportingDataResponse ?? {};
+      const page: Json[] = resp.row ?? [];
+      rows.push(...page);
+      grand = resp.grandTotals?.total ?? grand;
+      const total = Number(json.pagination?.totalResults ?? page.length);
+      if (page.length < PAGE || rows.length >= total) break;
+    }
+    const campaigns = rows
+      .filter((r) => r.metadata?.campaignId !== undefined && r.metadata?.campaignId !== null)
+      .map((r) => ({ campaignExternalId: String(r.metadata.campaignId), name: r.metadata.campaignName ?? null, fields: mapAppleTotals(r.total) }));
+    let totals: DeliveryFieldTotals;
+    if (grand) totals = mapAppleTotals(grand);
+    else {
+      // No grand totals (empty range): sum the row totals in cents.
+      totals = { spend: 0, currency: null, impressions: 0, taps: 0, installs: 0 };
+      for (const c of campaigns) {
+        totals.spend = (Math.round(totals.spend * 100) + Math.round(c.fields.spend * 100)) / 100;
+        totals.currency = totals.currency ?? c.fields.currency;
+        totals.impressions += c.fields.impressions;
+        totals.taps += c.fields.taps;
+        totals.installs += c.fields.installs;
+      }
+    }
+    return { totals, campaigns };
+  }
+
+  /** The org time zone Apple reports ORTZ days in (GET /acls). */
+  async reportTimeZone(): Promise<string | null> {
+    const c = this.requireCreds();
+    const json = await this.call('GET', '/acls');
+    const list: Json[] = Array.isArray(json.data) ? json.data : [];
+    const org = list.find((o) => String(o.orgId) === String(c.orgId)) ?? null;
+    return org?.timeZone ?? null;
   }
 
   async listCampaigns(): Promise<Json[]> {

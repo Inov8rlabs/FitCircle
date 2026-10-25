@@ -7,10 +7,17 @@ export const db = (): Db => createAdminSupabase();
 
 const PAGE = 1000;
 
-/** Read every row of a query, 1000 at a time (`build` must return a fresh query each call). */
-export async function selectAll<T>(build: () => any, max = 100_000): Promise<T[]> {
+/**
+ * Read every row of a query, 1000 at a time (`build` must return a fresh query
+ * each call). `build` MUST order by a unique key: offset pagination over an
+ * unordered (or tie-ordered) query can skip or repeat rows between pages, which
+ * would silently drop or double-count spend / revenue. Throws instead of
+ * silently truncating past `max` rows.
+ */
+export async function selectAll<T>(build: () => any, max = 200_000): Promise<T[]> {
   const out: T[] = [];
-  for (let from = 0; from < max; from += PAGE) {
+  for (let from = 0; ; from += PAGE) {
+    if (from >= max) throw new Error(`selectAll: more than ${max} rows; narrow the query`);
     const { data, error } = await build().range(from, from + PAGE - 1);
     if (error) throw new Error(error.message ?? String(error));
     const rows = (data ?? []) as T[];
