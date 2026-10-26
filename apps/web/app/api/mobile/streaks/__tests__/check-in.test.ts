@@ -171,14 +171,29 @@ describe('POST /api/mobile/streaks/check-in', () => {
     expect(tracking().weight_kg).toBeUndefined();
   });
 
+  it('1.0.9 builds check in without mood or energy', async () => {
+    seedUser();
+    const res = await checkIn(post({ date: TODAY, timezone: 'UTC' }));
+    expect(res.status).toBe(200);
+    expect((await res.json()).data.isFirstCheckInToday).toBe(true);
+    expect(tracking().mood_score).toBeUndefined();
+    expect(tracking().energy_level).toBeUndefined();
+  });
+
+  it('a check-in without mood never blanks mood stored earlier the same day', async () => {
+    seedUser();
+    await checkIn(post({ date: TODAY, mood: 4, energy: 2 }));
+    const res = await checkIn(post({ date: TODAY, mood: null, energy: null, weight: 70 }));
+    expect(res.status).toBe(200);
+    expect(tracking()).toMatchObject({ mood_score: 4, energy_level: 2, weight_kg: 70 });
+  });
+
   it('keeps rejecting what was rejected, now with a readable message', async () => {
     seedUser();
 
     const cases: Array<[Record<string, unknown>, RegExp]> = [
       [{ mood: 0, energy: 3 }, /^mood: /],
       [{ mood: 3, energy: 6 }, /^energy: /],
-      [{ energy: 3 }, /^mood: /],
-      [{ mood: null, energy: 3 }, /^mood: /],
       [{ mood: 3, energy: 3, previousDaySentiment: 'meh' }, /^previousDaySentiment: /],
       [{ mood: 3, energy: 3, date: '28/09/2026' }, /^date: /],
       [{ mood: 3, energy: 3, weight: -2 }, /^weight: /],

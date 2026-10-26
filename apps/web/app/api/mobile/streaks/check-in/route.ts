@@ -18,8 +18,10 @@ const checkInSchema = z.object({
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   timezone: z.string().max(100).optional(),
   previousDaySentiment: z.enum(SENTIMENTS).optional(),
-  mood: z.number().min(1).max(5),
-  energy: z.number().min(1).max(5),
+  // Optional since iOS/Android 1.0.9 dropped the mood/energy step; older
+  // builds still send them and they are still stored when present.
+  mood: z.number().min(1).max(5).optional(),
+  energy: z.number().min(1).max(5).optional(),
   weight: z.number().positive().optional(),
   notes: z.string().max(500).optional(),
 });
@@ -53,8 +55,8 @@ function withSentimentAlias(body: Record<string, unknown>): Record<string, unkno
  *   date?: string,              // ISO date (YYYY-MM-DD), defaults to today
  *   previousDaySentiment?: string,  // 'great' | 'ok' | 'could_be_better'
  *                                   // (also read from previous_day_sentiment)
- *   mood: number,               // 1-5
- *   energy: number,             // 1-5
+ *   mood?: number,              // 1-5 (optional; sent by builds before 1.0.9)
+ *   energy?: number,            // 1-5 (optional)
  *   weight?: number,            // kg
  *   notes?: string
  * }

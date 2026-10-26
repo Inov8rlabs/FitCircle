@@ -32,8 +32,8 @@ export interface DailyCheckInRequest {
   date?: string; // ISO date string (YYYY-MM-DD), defaults to today
   timezone?: string; // IANA timezone from the client
   previousDaySentiment?: 'great' | 'ok' | 'could_be_better';
-  mood: number; // 1-5
-  energy: number; // 1-5
+  mood?: number; // 1-5, optional (builds before 1.0.9 send it)
+  energy?: number; // 1-5, optional
   weight?: number; // kg
   notes?: string;
 }
@@ -186,7 +186,11 @@ export async function performDailyCheckIn(
         claim_method: 'explicit',
         timezone: timezone || 'UTC',
         health_data_synced: checkInData.weight !== undefined,
-        metadata: { source: 'daily_checkin', mood: checkInData.mood, energy: checkInData.energy },
+        metadata: {
+          source: 'daily_checkin',
+          ...(checkInData.mood !== undefined ? { mood: checkInData.mood } : {}),
+          ...(checkInData.energy !== undefined ? { energy: checkInData.energy } : {}),
+        },
       },
       { onConflict: 'user_id,claim_date' }
     );
@@ -274,10 +278,11 @@ export async function performDailyCheckIn(
     .eq('tracking_date', checkInDate)
     .maybeSingle();
 
-  const trackingData: Record<string, unknown> = {
-    mood_score: checkInData.mood,
-    energy_level: checkInData.energy,
-  };
+  // Only write mood/energy when sent, so a 1.0.9 check-in never blanks values
+  // an older build stored earlier the same day.
+  const trackingData: Record<string, unknown> = {};
+  if (checkInData.mood !== undefined) trackingData.mood_score = checkInData.mood;
+  if (checkInData.energy !== undefined) trackingData.energy_level = checkInData.energy;
   if (checkInData.weight !== undefined) trackingData.weight_kg = checkInData.weight;
   if (checkInData.notes !== undefined) trackingData.notes = checkInData.notes;
   if (checkInData.previousDaySentiment !== undefined) {
