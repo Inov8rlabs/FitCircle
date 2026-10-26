@@ -8,6 +8,7 @@ import { after, type NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
+import { promosConfig } from '@/lib/promos/config';
 import { FeatureFlagService } from '@/lib/services/feature-flag-service';
 import { FoodLogImageService } from '@/lib/services/food-log-image-service';
 import { FoodLogService } from '@/lib/services/food-log-service';
@@ -289,8 +290,9 @@ export async function POST(request: NextRequest) {
 
     // Promo conversion hook (first_meal / log_meal_now). Lives here, not in
     // FoodLogService: that service is also bundled into a web client component,
-    // and the promo engine is server-only (node:crypto). Never throws.
-    if (result.data?.entry_type === 'food') {
+    // and the promo engine is server-only (node:crypto). Only scheduled while
+    // promos are on, so the create path is untouched otherwise. Never throws.
+    if (result.data?.entry_type === 'food' && promosConfig().enabled) {
       runAfterResponse(() => PromoService.recordConversion(user.id, 'meal_logged'), 'promo conversion');
     }
 
