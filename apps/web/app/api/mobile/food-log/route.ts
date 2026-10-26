@@ -12,6 +12,7 @@ import { FeatureFlagService } from '@/lib/services/feature-flag-service';
 import { FoodLogImageService } from '@/lib/services/food-log-image-service';
 import { FoodLogService } from '@/lib/services/food-log-service';
 import { NutritionTrainingService } from '@/lib/services/nutrition-training-service';
+import { PromoService } from '@/lib/services/promo-service';
 import { StreakClaimingService } from '@/lib/services/streak-claiming-service';
 import { VitalsService } from '@/lib/services/vitals-service';
 import { createAdminSupabase } from '@/lib/supabase-admin';
@@ -284,6 +285,13 @@ export async function POST(request: NextRequest) {
 
     if (result.error) {
       throw result.error;
+    }
+
+    // Promo conversion hook (first_meal / log_meal_now). Lives here, not in
+    // FoodLogService: that service is also bundled into a web client component,
+    // and the promo engine is server-only (node:crypto). Never throws.
+    if (result.data?.entry_type === 'food') {
+      runAfterResponse(() => PromoService.recordConversion(user.id, 'meal_logged'), 'promo conversion');
     }
 
     // Production accuracy signal: tie this entry back to the AI draft it came from (if
