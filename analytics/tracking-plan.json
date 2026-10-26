@@ -1,7 +1,7 @@
 {
   "$schema": "./tracking-plan.schema.json",
-  "version": 13,
-  "updated": "2026-10-22",
+  "version": 14,
+  "updated": "2026-10-26",
   "conventions": {
     "eventNames": "Title Case, '<Object> <Past-tense verb>' (e.g. 'Meal Logged'). Names are frozen once shipped: rename in the analytics tool, never in code.",
     "propertyNames": "snake_case. Enum values are lowercase snake_case.",
@@ -97,6 +97,16 @@
       "server",
       "cache",
       "default"
+    ],
+    "promo_layout": [
+      "hero",
+      "banner",
+      "compact"
+    ],
+    "fitzy_intro_surface": [
+      "post_meal_sheet",
+      "feed",
+      "push"
     ]
   },
   "globalProperties": [
@@ -475,6 +485,43 @@
           "name": "joined_circle",
           "type": "bool",
           "required": false
+        }
+      ]
+    },
+    {
+      "name": "Onboarding Meal Step Viewed",
+      "category": "onboarding",
+      "platforms": [
+        "ios",
+        "android"
+      ],
+      "description": "The 'Snap your first meal' onboarding step was shown (ACTIVATION_JOURNEY_SPEC §2).",
+      "properties": []
+    },
+    {
+      "name": "Onboarding Meal Step Skipped",
+      "category": "onboarding",
+      "platforms": [
+        "ios",
+        "android"
+      ],
+      "description": "The user tapped 'Skip for now' on the first-meal onboarding step.",
+      "properties": []
+    },
+    {
+      "name": "Onboarding Meal Logged",
+      "category": "onboarding",
+      "platforms": [
+        "ios",
+        "android"
+      ],
+      "description": "A meal was saved from the first-meal onboarding step (also send Meal Logged).",
+      "properties": [
+        {
+          "name": "method",
+          "type": "enum",
+          "enum": "meal_method",
+          "required": true
         }
       ]
     },
@@ -1474,12 +1521,52 @@
         "android",
         "web"
       ],
-      "description": "The Fitzy assistant was opened.",
+      "description": "The Fitzy assistant was opened (any entry point). Also call POST /api/mobile/me/journey/events {event:\"fitzy_opened\"} (ACTIVATION_JOURNEY_SPEC).",
       "properties": [
         {
           "name": "surface",
           "type": "string",
           "required": false
+        },
+        {
+          "name": "source",
+          "type": "string",
+          "required": false,
+          "description": "Entry point, snake_case: post_meal_sheet, feed_promo, push, home_focus_card, tab, deep_link, onboarding."
+        }
+      ]
+    },
+    {
+      "name": "Fitzy Intro Viewed",
+      "category": "ai",
+      "platforms": [
+        "ios",
+        "android"
+      ],
+      "description": "A 'Meet Fitzy' introduction was shown (post-first-meal sheet, meet_fitzy feed promo, or fitzy_intro push opened).",
+      "properties": [
+        {
+          "name": "surface",
+          "type": "enum",
+          "enum": "fitzy_intro_surface",
+          "required": true
+        }
+      ]
+    },
+    {
+      "name": "Fitzy Intro Accepted",
+      "category": "ai",
+      "platforms": [
+        "ios",
+        "android"
+      ],
+      "description": "The user accepted a 'Meet Fitzy' introduction (Chat with Fitzy).",
+      "properties": [
+        {
+          "name": "surface",
+          "type": "enum",
+          "enum": "fitzy_intro_surface",
+          "required": true
         }
       ]
     },
@@ -1610,7 +1697,7 @@
           "name": "source",
           "type": "string",
           "required": true,
-          "description": "Snake_case trigger id: ai_limit, pro_card, settings, circle_limit, history_limit, remove_ads, body_scan, milestone, streak_shield, locked_feature, pricing_page, onboarding, landing, landing_footer (web). Never camelCase."
+          "description": "Snake_case trigger id: ai_limit, pro_card, settings, circle_limit, history_limit, remove_ads, body_scan, milestone, streak_shield, locked_feature, pricing_page, onboarding, landing, landing_footer (web), first_meal_aha (post-first-meal soft paywall), feed_pro_value (home feed pro_value promo). Never camelCase."
         }
       ]
     },
@@ -1628,7 +1715,7 @@
           "name": "source",
           "type": "string",
           "required": true,
-          "description": "Snake_case trigger id: ai_limit, pro_card, settings, circle_limit, history_limit, remove_ads, body_scan, milestone, streak_shield, locked_feature, pricing_page, onboarding, landing, landing_footer (web). Never camelCase."
+          "description": "Snake_case trigger id: ai_limit, pro_card, settings, circle_limit, history_limit, remove_ads, body_scan, milestone, streak_shield, locked_feature, pricing_page, onboarding, landing, landing_footer (web), first_meal_aha (post-first-meal soft paywall), feed_pro_value (home feed pro_value promo). Never camelCase."
         },
         {
           "name": "plan",
@@ -1658,7 +1745,7 @@
           "name": "source",
           "type": "string",
           "required": true,
-          "description": "Snake_case trigger id: ai_limit, pro_card, settings, circle_limit, history_limit, remove_ads, body_scan, milestone, streak_shield, locked_feature, pricing_page, onboarding, landing, landing_footer (web). Never camelCase."
+          "description": "Snake_case trigger id: ai_limit, pro_card, settings, circle_limit, history_limit, remove_ads, body_scan, milestone, streak_shield, locked_feature, pricing_page, onboarding, landing, landing_footer (web), first_meal_aha (post-first-meal soft paywall), feed_pro_value (home feed pro_value promo). Never camelCase."
         }
       ]
     },
@@ -3316,6 +3403,180 @@
           "name": "experiment_arm",
           "type": "string",
           "required": false
+        }
+      ]
+    },
+    {
+      "name": "Promo Viewed",
+      "category": "engagement",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "description": "A promo@1 card was >= 50% visible for >= 1 s (once per decision per card; PROMO_CARD_SPEC §12).",
+      "properties": [
+        {
+          "name": "promo",
+          "type": "string",
+          "required": true,
+          "description": "Promo key (props.promoId), e.g. first_meal, log_meal_now, pro_value, meet_fitzy."
+        },
+        {
+          "name": "creative",
+          "type": "string",
+          "required": true,
+          "description": "props.creativeId (A/B variant)."
+        },
+        {
+          "name": "layout",
+          "type": "enum",
+          "enum": "promo_layout",
+          "required": true
+        },
+        {
+          "name": "position",
+          "type": "int",
+          "required": true
+        },
+        {
+          "name": "campaign",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "decision_id",
+          "type": "string",
+          "required": false,
+          "description": "Home feed decision_id of the response that carried the card."
+        }
+      ]
+    },
+    {
+      "name": "Promo Tapped",
+      "category": "engagement",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "description": "A promo@1 button (or the whole banner/compact card) was tapped.",
+      "properties": [
+        {
+          "name": "promo",
+          "type": "string",
+          "required": true,
+          "description": "Promo key (props.promoId), e.g. first_meal, log_meal_now, pro_value, meet_fitzy."
+        },
+        {
+          "name": "creative",
+          "type": "string",
+          "required": true,
+          "description": "props.creativeId (A/B variant)."
+        },
+        {
+          "name": "button",
+          "type": "enum",
+          "values": [
+            "primary",
+            "secondary"
+          ],
+          "required": true
+        },
+        {
+          "name": "action",
+          "type": "string",
+          "required": true,
+          "description": "The resolved action type, e.g. open_screen, paywall."
+        },
+        {
+          "name": "decision_id",
+          "type": "string",
+          "required": false,
+          "description": "Home feed decision_id of the response that carried the card."
+        }
+      ]
+    },
+    {
+      "name": "Promo Dismissed",
+      "category": "engagement",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "description": "A promo@1 card was dismissed (x or a dismiss action).",
+      "properties": [
+        {
+          "name": "promo",
+          "type": "string",
+          "required": true,
+          "description": "Promo key (props.promoId), e.g. first_meal, log_meal_now, pro_value, meet_fitzy."
+        },
+        {
+          "name": "creative",
+          "type": "string",
+          "required": true,
+          "description": "props.creativeId (A/B variant)."
+        },
+        {
+          "name": "decision_id",
+          "type": "string",
+          "required": false,
+          "description": "Home feed decision_id of the response that carried the card."
+        }
+      ]
+    },
+    {
+      "name": "Promo Converted",
+      "category": "engagement",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "description": "SERVER-RECORDED (promo_user_state.converted_at): the promo's completion event (first meal, subscription, Fitzy opened) happened within 7 days of a tap. Clients do not send this; listed so the name is reserved.",
+      "properties": [
+        {
+          "name": "promo",
+          "type": "string",
+          "required": true,
+          "description": "Promo key (props.promoId), e.g. first_meal, log_meal_now, pro_value, meet_fitzy."
+        },
+        {
+          "name": "creative",
+          "type": "string",
+          "required": true,
+          "description": "props.creativeId (A/B variant)."
+        },
+        {
+          "name": "action",
+          "type": "string",
+          "required": true,
+          "description": "Conversion kind: meal_logged, subscription_started, fitzy_opened."
+        },
+        {
+          "name": "decision_id",
+          "type": "string",
+          "required": false,
+          "description": "Home feed decision_id of the response that carried the card."
+        }
+      ]
+    },
+    {
+      "name": "Meal Reminder Opened",
+      "category": "navigation",
+      "platforms": [
+        "ios",
+        "android"
+      ],
+      "description": "App opened from a meal-slot reminder push (meal_reminder_breakfast|lunch|snack|dinner). Also send Push Notification Opened.",
+      "properties": [
+        {
+          "name": "slot",
+          "type": "enum",
+          "enum": "meal_type",
+          "required": true
         }
       ]
     }

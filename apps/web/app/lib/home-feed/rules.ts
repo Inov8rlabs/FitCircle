@@ -16,14 +16,14 @@ import { createHash } from 'node:crypto';
 
 import { z } from 'zod';
 
-import { CARD_TYPE_PATTERN } from './catalog';
+import { CARD_REF_PATTERN } from './catalog';
 import type { AppPlatform, FeedContext, FeedExperiment } from './types';
 
 // ---------------------------------------------------------------------------
 // Schema
 // ---------------------------------------------------------------------------
 
-const cardRef = z.string().regex(CARD_TYPE_PATTERN, 'card must be a lowercase snake_case card type');
+const cardRef = z.string().regex(CARD_REF_PATTERN, 'card must be a lowercase snake_case card type or promo:<key>');
 const versionString = z.string().regex(/^\d+(\.\d+){0,3}$/, 'version must look like 1.0.8');
 const slug = z.string().regex(/^[a-z0-9][a-z0-9_.-]{0,63}$/i, 'use letters, digits, _ . - (≤ 64)');
 

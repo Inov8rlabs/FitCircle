@@ -5,8 +5,10 @@ import { paywallFor } from '@/lib/fitzy/paywall';
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { FitzyNotFoundError } from '@/lib/services/fitzy-conversation-service';
 import { FitzyService } from '@/lib/services/fitzy-service';
+import { JourneyService } from '@/lib/services/journey-service';
 import { UpgradeRequiredError } from '@/lib/services/usage-service';
 import type { FitzyChatResponse } from '@/lib/types/fitzy';
+import { runAfterResponse } from '@/lib/utils/after-response';
 import { safeParseLenient } from '@/lib/validation/lenient-parse';
 
 /**
@@ -40,6 +42,8 @@ export async function POST(request: NextRequest) {
 
   try {
     const user = await requireMobileAuth(request);
+    // First Fitzy open → profiles.fitzy_opened_at (ACTIVATION_JOURNEY_SPEC §6). Zero queries once set.
+    runAfterResponse(() => JourneyService.markFitzyOpened(user.id, user), 'fitzy opened');
 
     let body: unknown;
     try {

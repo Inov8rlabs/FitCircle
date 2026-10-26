@@ -35,9 +35,24 @@ import {
   type FeedProfile,
   type FeedRequestInfo,
 } from '@/lib/home-feed/context';
+import { localParts, resolveTimezone } from '@/lib/home-feed/context';
 import { HomeFeedError } from '@/lib/home-feed/http';
+import {
+  PROMO_CARD_TYPE,
+  PROMO_CARD_VERSION,
+  SYSTEM_PROMOS,
+  buildJourneyContext,
+  isPromoLive,
+  parsePromoClient,
+  promosConfig,
+  selectPromos,
+  type PromoClientSupport,
+  type PromoTraceEntry,
+} from '@/lib/promos';
 import { createAdminSupabase } from '@/lib/supabase-admin';
 import { runAfterResponse } from '@/lib/utils/after-response';
+
+import { PromoService, defaultPromoLoaders, liveProFeaturesCache, type PromoLoaders } from './promo-service';
 
 /** Rules: fresh 30 s, then served stale (≤ 10 min) while one refresh runs — never blocks a warm request. */
 const RULES_TTL_MS = 30_000;
@@ -89,6 +104,10 @@ export const feedEventsBodySchema = z
             position: z.number().int().min(0).max(500),
             event: z.enum(['impression', 'tap', 'dismiss', 'cta']),
             at: z.string().max(40).optional(),
+            // promo@1 cards (PROMO_CARD_SPEC §6.3): all optional.
+            promo_id: z.string().regex(/^[a-z0-9_]{3,60}$/).optional(),
+            creative_id: z.string().regex(/^[a-z0-9_]{1,60}$/).optional(),
+            button: z.enum(['primary', 'secondary']).optional(),
           })
           .passthrough()
       )
@@ -162,6 +181,7 @@ export class HomeFeedService {
     enabledRulesCache.clear();
     activeCampaignsCache.clear();
     feedFlagsCache.clear();
+    liveProFeaturesCache.clear();
   }
 
   /**
@@ -173,6 +193,7 @@ export class HomeFeedService {
     if (areRulesEnabled()) void quiet(enabledRulesCache.get());
     void quiet(activeCampaignsCache.get());
     void quiet(feedFlagsCache.get());
+    if (promosConfig().enabled) void quiet(liveProFeaturesCache.get());
   }
 
   /** All rule rows (enabled or not), newest config first. */
@@ -209,7 +230,15 @@ export class HomeFeedService {
     profile: FeedProfile,
     info: FeedRequestInfo,
     support: ClientCardSupport,
-    opts: { loaders?: ContextLoaders; now?: Date; record?: boolean; timing?: FeedTiming } = {}
+    opts: {
+      loaders?: ContextLoaders;
+      promoLoaders?: PromoLoaders;
+      /** promo@1 support (`actions=`, `promoLayouts=`). Default: derived from `cards=` with no actions → no promos. */
+      promoClient?: PromoClientSupport;
+      now?: Date;
+      record?: boolean;
+      timing?: FeedTiming;
+    } = {}
   ): Promise<HomeFeedResponse> {
     const now = opts.now ?? new Date();
     const timing = opts.timing ?? {};
@@ -217,17 +246,64 @@ export class HomeFeedService {
     if (!isFeedEnabled(info.platform)) {
       return composeFeed({ support, ctx: null, now }).response;
     }
-    const [ctx, rules] = await Promise.all([
+    const promoClient = opts.promoClient ?? defaultPromoClient(support);
+    const promoRound = this.promoRound(profile, info, promoClient, now, opts.promoLoaders);
+    const [ctx, rules, promoData] = await Promise.all([
       buildFeedContext(profile, info, { loaders: opts.loaders, now }),
       areRulesEnabled() ? softly(() => this.loadRules(), RULES_LOAD_TIMEOUT_MS) : Promise.resolve([] as FeedRule[]),
+      promoRound,
     ]);
     timing.contextMs = Math.round(performance.now() - started);
-    const result = composeFeed({ support, ctx, rules: rules ?? [], now });
+    const promos = this.selectPromosFor(profile, ctx, promoClient, promoData);
+    const result = composeFeed({ support, ctx, rules: rules ?? [], now, ...promos.compose });
+    if (promos.trace) result.trace.promos = promos.trace;
     if (opts.record !== false) {
       // Runs after the response, by which time the route has set timing.totalMs.
       runAfterResponse(() => this.recordDecision(profile.id, info, ctx, result, timing), 'home-feed decision');
     }
     return result.response;
+  }
+
+  /**
+   * The promo reads (journey facts, promo_user_state, live Pro gates) — in the
+   * SAME parallel round as the feed context, each capped at the 250 ms budget.
+   * Skipped entirely (zero cost) unless PROMOS_ENABLED and the client declared promo@1.
+   */
+  static async promoRound(profile: FeedProfile, info: FeedRequestInfo, client: PromoClientSupport, now: Date, loaders: PromoLoaders = defaultPromoLoaders): Promise<PromoRoundData | null> {
+    if (!promosConfig().enabled || !client.promoCard) return null;
+    const timezone = resolveTimezone(info, profile);
+    const localDate = localParts(now, timezone).date;
+    const [facts, state, liveProFeatures] = await Promise.all([
+      softly(() => loaders.journeyFacts(profile.id, localDate)),
+      softly(() => loaders.promoState(profile.id)),
+      softly(() => loaders.liveProFeatures()),
+    ]);
+    return { facts, state, liveProFeatures, timezone, localDate };
+  }
+
+  /** Pure-ish: promo candidates + what they replace, for composeFeed. */
+  static selectPromosFor(
+    profile: FeedProfile,
+    ctx: FeedContext,
+    client: PromoClientSupport,
+    data: PromoRoundData | null
+  ): { compose: { promos?: ReturnType<typeof selectPromos>['candidates']; replacedTypes?: Set<string>; promoV1: boolean }; trace: PromoTraceEntry[] | null } {
+    const cfg = promosConfig();
+    const promoV1 = client.promoCard;
+    if (!cfg.enabled || !client.promoCard || !data) return { compose: { promoV1 }, trace: null };
+    const journey = buildJourneyContext(profile, data.facts, { now: ctx.now, timezone: data.timezone, localDate: data.localDate });
+    const { candidates, trace } = selectPromos({
+      definitions: SYSTEM_PROMOS,
+      ctx,
+      journey,
+      state: data.state,
+      liveProFeatures: data.liveProFeatures,
+      client,
+      config: cfg,
+    });
+    // pro_value replaces the legacy pro_upsell card for promo@1 clients (while pro_value is live).
+    const replacedTypes = new Set<string>(isPromoLive('pro_value', cfg) ? ['pro_upsell'] : []);
+    return { compose: { promos: candidates, replacedTypes, promoV1 }, trace };
   }
 
   static async recordDecision(userId: string, info: FeedRequestInfo, ctx: FeedContext | null, result: ComposeResult, timing: FeedTiming = {}): Promise<void> {
@@ -251,21 +327,36 @@ export class HomeFeedService {
     if (error) throw error;
   }
 
-  /** POST /api/mobile/home-feed/events — validated by the route; inserted after responding. */
-  static recordEvents(userId: string, body: FeedEventsBody, now = new Date()): number {
-    const rows = body.events.map((e) => ({
-      decision_id: body.decision_id,
-      user_id: userId,
-      card_id: e.card_id,
-      card_type: e.card_type,
-      position: e.position,
-      event: e.event,
-      occurred_at: occurredAt(e.at, now),
-    }));
+  /**
+   * POST /api/mobile/home-feed/events — validated by the route; inserted after
+   * responding. Promo events (card_id `promo:<key>` or promo_id) also update
+   * promo_user_state (caps, dismissal, taps) in the viewer's local day.
+   */
+  static recordEvents(userId: string, body: FeedEventsBody, now = new Date(), timezone = 'UTC'): number {
+    const rows = body.events.map((e) => {
+      const promoKey = e.promo_id ?? (e.card_id.startsWith('promo:') ? e.card_id.slice('promo:'.length) : undefined);
+      return {
+        decision_id: body.decision_id,
+        user_id: userId,
+        card_id: e.card_id,
+        card_type: e.card_type,
+        position: e.position,
+        event: e.event,
+        occurred_at: occurredAt(e.at, now),
+        // Promo columns (migration 110) only on promo events, so non-promo batches are unchanged.
+        ...(promoKey ? { promo_key: promoKey, creative_id: e.creative_id ?? null, button: e.button ?? null } : {}),
+      };
+    });
     runAfterResponse(async () => {
       const { error } = await createAdminSupabase().from('home_feed_events').insert(rows);
       if (error) throw error;
     }, 'home-feed events');
+    const promoEvents = body.events
+      .map((e, i) => ({ card_id: e.card_id, event: e.event, promo_id: e.promo_id, creative_id: e.creative_id, button: e.button, occurredAt: rows[i].occurred_at }))
+      .filter((e) => e.promo_id || e.card_id.startsWith('promo:'));
+    if (promoEvents.length > 0) {
+      runAfterResponse(() => PromoService.recordFeedEvents(userId, promoEvents, timezone, now), 'promo state');
+    }
     return rows.length;
   }
 
@@ -321,7 +412,7 @@ export class HomeFeedService {
    * Query: userId (required), cards (default: the full v1 catalog), platform,
    * version, build, timezone, includeDisabled=true (evaluate disabled rules too).
    */
-  static async preview(params: URLSearchParams, opts: { loaders?: ContextLoaders; now?: Date } = {}) {
+  static async preview(params: URLSearchParams, opts: { loaders?: ContextLoaders; promoLoaders?: PromoLoaders; now?: Date } = {}) {
     const userId = params.get('userId');
     if (!userId || !z.string().uuid().safeParse(userId).success) throw new HomeFeedError(400, 'USER_ID_REQUIRED', 'userId (uuid) is required');
     const { data: profile, error } = await createAdminSupabase().from('profiles').select('*').eq('id', userId).maybeSingle();
@@ -342,7 +433,18 @@ export class HomeFeedService {
 
     const ctx = await buildFeedContext(profile as FeedProfile, info, { loaders: opts.loaders, now });
     const rules = areRulesEnabled() ? await this.loadRules({ includeDisabled, fresh: true }) : [];
-    const live = enabled ? composeFeed({ support, ctx, rules, includeDisabledRules: includeDisabled, now }) : composeFeed({ support, ctx: null, now });
+    // promo@1 preview: pass cards=…,promo@1&actions=…&promoLayouts=… like a client would.
+    const promoClient = parsePromoClient({
+      cardsSupportPromo: (support.get(PROMO_CARD_TYPE) ?? 0) >= PROMO_CARD_VERSION,
+      actions: params.get('actions'),
+      promoLayouts: params.get('promoLayouts'),
+    });
+    const promoData = enabled ? await this.promoRound(profile as FeedProfile, info, promoClient, now, opts.promoLoaders) : null;
+    const promos = this.selectPromosFor(profile as FeedProfile, ctx, promoClient, promoData);
+    const live = enabled
+      ? composeFeed({ support, ctx, rules, includeDisabledRules: includeDisabled, now, ...promos.compose })
+      : composeFeed({ support, ctx: null, now });
+    if (enabled && promos.trace) live.trace.promos = promos.trace;
     return {
       feed: live.response,
       killSwitch: { feedEnabled: enabled, rulesEnabled: areRulesEnabled() },
@@ -351,6 +453,24 @@ export class HomeFeedService {
       rulesEvaluated: rules.map((r) => ({ key: r.key, enabled: r.enabled, priority: r.priority, applied: live.trace.appliedRules.includes(r.key) })),
     };
   }
+}
+
+/** What the promo read round returned (each part null = unknown). */
+export interface PromoRoundData {
+  facts: Awaited<ReturnType<PromoLoaders['journeyFacts']>> | null;
+  state: Awaited<ReturnType<PromoLoaders['promoState']>> | null;
+  liveProFeatures: Set<string> | null;
+  timezone: string;
+  localDate: string;
+}
+
+/** promo@1 support when the caller didn't parse `actions=` / `promoLayouts=` (e.g. admin preview default). */
+export function defaultPromoClient(support: ClientCardSupport): PromoClientSupport {
+  return {
+    promoCard: (support.get(PROMO_CARD_TYPE) ?? 0) >= PROMO_CARD_VERSION,
+    actions: new Map([['dismiss', 1]]),
+    layouts: new Set(),
+  };
 }
 
 const enabledRulesCache = swrCache<FeedRule[]>(async () => HomeFeedService.parseRules(await HomeFeedService.fetchRuleRows(), false), {

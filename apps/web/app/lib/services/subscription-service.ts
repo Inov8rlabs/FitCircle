@@ -1,5 +1,7 @@
 import { createAdminSupabase } from '../supabase-admin';
+
 import { ComplimentaryGrantService } from './complimentary-grant-service';
+import { PromoService } from './promo-service';
 
 /**
  * SubscriptionService — the ONLY code that writes subscription state (MONETIZATION-PLAN.md).
@@ -193,6 +195,9 @@ export class SubscriptionService {
       .update(update)
       .eq('id', profile.id);
     if (updateError) throw new Error(`profiles update failed: ${updateError.message}`);
+
+    // Promo conversion hook (pro_value → Subscription Started). No-op while promos are off; never throws.
+    if (event.type === 'INITIAL_PURCHASE') await PromoService.recordConversion(profile.id, 'subscription_started');
 
     if (payment) {
       const { error: paymentError } = await supabase.from('payments').insert({

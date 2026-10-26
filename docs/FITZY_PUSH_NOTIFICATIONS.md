@@ -15,8 +15,9 @@ All five types are category **`coach`**, which has its own toggle, **"Coaching t
 | `fitzy_weekly_plan` | morning | Monday morning, **instead of** the daily focus | Pro without a plan this week → "Plan your week". Free → plan teaser, at most once every 14 days, and only if no preview exists yet this week | Template | ≤ 1/week (Pro), ≤ 1/14 days (free) |
 | `fitzy_hydration_nudge` | contextual | 11:00–11:59 | Water loggers (water on ≥ 2 of the previous 7 days) with no water logged today | Template (3 deterministic variants per user/day) | ≤ 1/day contextual, ≤ 2 per rolling 7 days |
 | `fitzy_protein_nudge` | contextual | 15:00–16:59 | Logged ≥ 1 food entry today, and today's protein is below 40 % of their **own** usual. The usual is the mean over ≥ 3 of the last 7 days with ≥ 2 entries, and must be ≥ 30 g. There are no targets | **AI** for users who have chatted with Fitzy (diet, allergens, memory for Pro). Template otherwise, and on any failure | ≤ 1/day contextual, ≤ 2 per rolling 7 days |
+| `fitzy_intro` | morning (takes the slot that day) | 08:00–10:59 | Day 2–4 after sign-up (local), ≥ 1 meal ever, `profiles.fitzy_opened_at` null (migration 110), never sent before (ACTIVATION_JOURNEY_SPEC §6). Dedupe `fitzy_intro:<userId>` | Template ("A tip on yesterday's meals? 💬" only when they logged yesterday; else "Meet Fitzy, your coach 💬"); `fitzyTip` = Fitzy's opening line | Once ever |
 
-**No coach-voiced streak push.** The evening is already covered by `meal_reminder_dinner` (18:00, carries the streak) and `momentum_at_risk` (19:00, suppressed behind the dinner reminder). A third evening streak nudge would only duplicate them. Instead, Fitzy keeps one daily-cap slot free for them (§2).
+**No coach-voiced streak push.** The evening is already covered by `meal_reminder_dinner` (18:30 since 2026-10-26, carries the streak) and `momentum_at_risk` (19:00, suppressed behind the dinner reminder). A third evening streak nudge would only duplicate them. Instead, Fitzy keeps one daily-cap slot free for them (§2).
 
 ### Copy examples (live model output, 2026-10-23, production prompts and parsers)
 
@@ -143,7 +144,7 @@ The orchestrator's general duplicate, burst and grouping rules (docs/PUSH_NOTIFI
 | Existing | Interaction |
 |---|---|
 | Daily cap (3) | Fitzy counts toward it and leaves one slot free for the evening streak reminder |
-| `meal_reminder_lunch` 13:00 / `meal_reminder_dinner` 18:00 | 90-min spacing. Hydration at 11:00. Protein needs a food log today, so it never overlaps "you haven't logged" |
+| Meal-slot reminders (ACTIVATION_JOURNEY_SPEC §4): breakfast 08:30 / lunch 12:30 / snack 15:30 (opt-in) / dinner 18:30, cron every 15 min | 90-min spacing. Hydration at 11:00. Protein needs a food log today, so it never overlaps "you haven't logged" |
 | `momentum_at_risk` / `near_milestone` 19:00 | No Fitzy streak push. A slot is reserved for these |
 | `daily_drop`, campaigns (hourly :02), chat | 90-min spacing. If they fill 2 cap slots before Fitzy, Fitzy stays silent that day |
 | `weekly_summary`, journey / dormancy ladder | Fitzy requires activity in the last 3 days, so dormant users only get the ladder |

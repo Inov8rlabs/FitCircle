@@ -80,13 +80,25 @@ function candidateFor(type: CardType, ctx: FeedContext | null): Candidate {
  * Catalog cards ∩ client support, split by the context hints. `ctx = null`
  * (kill switch / no context) → every client-supported card is eligible.
  */
-export function buildCandidates(ctx: FeedContext | null, support: ClientCardSupport): CandidateSet {
+export function buildCandidates(
+  ctx: FeedContext | null,
+  support: ClientCardSupport,
+  opts: {
+    /** Legacy types a promo replaces for this client (e.g. pro_upsell → pro_value): suppressed, a rule `show` can restore. */
+    replaced?: ReadonlySet<CardType>;
+    /** Extra eligible cards from the promo engine (already client-checked). */
+    promos?: readonly Candidate[];
+  } = {}
+): CandidateSet {
   const eligible: Candidate[] = [];
   const suppressed: Candidate[] = [];
   for (const type of DEFAULT_ORDER) {
     if (!clientSupports(support, type, CATALOG[type].version)) continue;
     const candidate = candidateFor(type, ctx);
-    (ineligibleReason(type, ctx) ? suppressed : eligible).push(candidate);
+    (ineligibleReason(type, ctx) || opts.replaced?.has(type) ? suppressed : eligible).push(candidate);
+  }
+  for (const p of opts.promos ?? []) {
+    if (clientSupports(support, p.type, p.version)) eligible.push(p);
   }
   return { eligible, suppressed };
 }

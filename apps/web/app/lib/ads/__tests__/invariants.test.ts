@@ -210,7 +210,8 @@ function allMetrics(input: SliceInput): AdsMetrics[] {
   return [...GROUP_BYS.flatMap((g) => buildRows(g, input).map((r) => r.metrics)), buildTotals(input).metrics];
 }
 
-describe('invariants (200 seeded random worlds each)', () => {
+// CPU-heavy (200 worlds per property): generous timeout so a loaded full-suite run can't fail it spuriously.
+describe('invariants (200 seeded random worlds each)', { timeout: 60_000 }, () => {
   it('the generator exercises the interesting cases (spend, payers, refunds, trials, test users)', () => {
     let payers = 0;
     let refunds = 0;

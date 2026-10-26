@@ -47,7 +47,9 @@ const TYPE_CATEGORY_MAP: Record<string, NotificationCategory> = {
   momentum_at_risk: 'momentum',
   near_milestone: 'momentum',
   reset_encouragement: 'momentum',
+  meal_reminder_breakfast: 'momentum',
   meal_reminder_lunch: 'momentum',
+  meal_reminder_snack: 'momentum',
   meal_reminder_dinner: 'momentum',
   shield_applied: 'momentum',
   streak_lost: 'momentum',
@@ -97,6 +99,7 @@ const TYPE_CATEGORY_MAP: Record<string, NotificationCategory> = {
   fitzy_weekly_plan: 'coach',
   fitzy_hydration_nudge: 'coach',
   fitzy_protein_nudge: 'coach',
+  fitzy_intro: 'coach',
 };
 
 // ============================================================================

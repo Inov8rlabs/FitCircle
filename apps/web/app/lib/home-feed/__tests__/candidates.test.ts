@@ -10,7 +10,7 @@ describe('catalog', () => {
     expect(DEFAULT_ORDER).toHaveLength(17);
     expect(DEFAULT_ORDER.indexOf('missing_days')).toBe(DEFAULT_ORDER.indexOf('streak_warning') + 1);
     for (const t of DEFAULT_ORDER) expect(CATALOG[t]).toMatchObject({ type: t, version: 1 });
-    expect([...PROMO_TYPES].sort()).toEqual(['campaign', 'pro_upsell', 'referral']);
+    expect([...PROMO_TYPES].sort()).toEqual(['campaign', 'pro_upsell', 'promo', 'referral']);
     expect(isPromo('hydration')).toBe(false);
     expect(catalogEntry('toString')).toBeUndefined();
     expect(catalogEntry('future_card')).toBeUndefined();

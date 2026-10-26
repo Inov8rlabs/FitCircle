@@ -22,6 +22,9 @@ import {
   focusPushCopy,
   hydrationCopy,
   hydrationRelevant,
+  introCopy,
+  introDedupeKey,
+  introSkip,
   localParts,
   morningKind,
   nudgeRequest,
@@ -166,7 +169,7 @@ export class FitzyPushService {
     const since14 = new Date(now.getTime() - 14 * 86_400_000).toISOString();
     const sinceDate = addDays(now.toISOString().slice(0, 10), -(ACTIVE_WITHIN_DAYS + 1));
     const since8 = addDays(now.toISOString().slice(0, 10), -9);
-    const [logRows, claims, food, workouts, convs] = await Promise.all([
+    const [logRows, claims, food, workouts, convs, profileRows] = await Promise.all([
       chunked(ids, async (part) =>
         ((await supabase.from('notification_log').select('user_id, notification_type, sent_at').in('user_id', part).eq('suppressed', false).gte('sent_at', since14)).data ?? []) as any[]
       ),
@@ -178,7 +181,10 @@ export class FitzyPushService {
         ((await supabase.from('exercise_logs').select('user_id, exercise_date').in('user_id', part).gte('exercise_date', sinceDate).eq('is_deleted', false)).data ?? []) as any[]
       ),
       chunked(ids, async (part) => ((await supabase.from('fitzy_conversations').select('user_id').in('user_id', part).limit(part.length * 50)).data ?? []) as any[]),
+      // fitzy_intro facts (migration 110). Missing column → error → [] → intro never sends (unknown).
+      chunked(ids, async (part) => ((await supabase.from('profiles').select('id, created_at, fitzy_opened_at').in('id', part)).data ?? []) as any[]),
     ]);
+    const profileBy = new Map<string, { created_at: string | null; fitzy_opened_at: string | null }>(profileRows.map((p: any) => [p.id, p]));
     const group = <T extends { user_id: string }>(rows: T[]) => {
       const m = new Map<string, T[]>();
       for (const r of rows) m.set(r.user_id, [...(m.get(r.user_id) ?? []), r]);
@@ -214,6 +220,7 @@ export class FitzyPushService {
               ],
               food: foodBy.get(u.userId) ?? [],
               aiEligible: aiEligible.has(u.userId),
+              intro: introFacts(u, profileBy.get(u.userId), foodBy.get(u.userId) ?? [], logs.get(u.userId) ?? []),
             });
           } catch (err: any) {
             console.error('[FitzyPush] user failed:', u.userId, err?.message ?? err);
@@ -247,6 +254,8 @@ export class FitzyPushService {
       activityDates: string[];
       food: Array<{ entry_date: string; entry_type: string | null; protein_g: number | null; water_ml: number | null }>;
       aiEligible: boolean;
+      /** fitzy_intro facts; null = unknown (never sends). */
+      intro?: IntroFacts | null;
     }
   ): Promise<FitzyPushDecision> {
     const base = { userId: u.userId, localDate: u.local.date, hour: u.local.hour, slot: u.slot };
@@ -280,6 +289,11 @@ export class FitzyPushService {
     let tier: FitzyTier | null = null;
     if (x.force) {
       kind = x.force;
+    } else if (u.slotKind === 'morning' && x.intro && !x.cfg.disabledKinds.has('fitzy_intro') && introSkip({ ...x.intro, today }) === null) {
+      // Day 2–4, activated, never opened Fitzy: the intro takes the morning slot (once ever).
+      kind = 'fitzy_intro';
+      const pre = commonSkip(kind, ctx, x.cfg);
+      if (pre) return { ...base, kind, skip: pre };
     } else if (u.slotKind === 'morning') {
       const pre = commonSkip('fitzy_daily_focus', ctx, x.cfg);
       if (pre) return { ...base, kind: null, skip: pre };
@@ -349,6 +363,8 @@ export class FitzyPushService {
       }
     } else if (kind === 'fitzy_weekly_plan') {
       copy = weeklyPlanCopy(tier);
+    } else if (kind === 'fitzy_intro') {
+      copy = introCopy(x.intro?.loggedYesterday ?? false);
     } else if (kind === 'fitzy_hydration_nudge') {
       copy = hydrationCopy(seed);
     } else {
@@ -356,7 +372,14 @@ export class FitzyPushService {
     }
 
     // 5. Send (prefs, master switch, daily cap, quiet hours, suppression, logging).
-    const res = await NotificationOrchestrator.send(u.userId, kind, { title: copy.title, body: copy.body, fitzyTip: copy.tip, fitzySource: copy.source, localDate: today });
+    const res = await NotificationOrchestrator.send(u.userId, kind, {
+      title: copy.title,
+      body: copy.body,
+      fitzyTip: copy.tip,
+      fitzySource: copy.source,
+      localDate: today,
+      ...(kind === 'fitzy_intro' ? { dedupeKey: introDedupeKey(u.userId) } : {}),
+    });
     await supabase
       .from('fitzy_push_deliveries')
       .update({ kind, status: res.sent ? 'sent' : res.reason ?? 'not_sent', updated_at: new Date().toISOString() })
@@ -379,6 +402,42 @@ export class FitzyPushService {
       return template;
     }
   }
+}
+
+export interface IntroFacts {
+  signupLocalDate: string | null;
+  fitzyOpenedAt: string | null | undefined;
+  activated: boolean;
+  introEverSent: boolean;
+  loggedYesterday: boolean;
+}
+
+/**
+ * fitzy_intro facts from the batched reads. The intro window is day 2–4 after sign-up, so the
+ * 9-day food window and 14-day notification_log window cover the user's whole history.
+ */
+export function introFacts(
+  u: { tz: string; local: { date: string } },
+  profile: { created_at: string | null; fitzy_opened_at?: string | null } | undefined,
+  food: Array<{ entry_date: string; entry_type: string | null }>,
+  sent: Array<{ notification_type: string }>
+): IntroFacts | null {
+  if (!profile || !('fitzy_opened_at' in profile) || !profile.created_at) return null;
+  let signupLocalDate: string | null = null;
+  try {
+    signupLocalDate = localParts(u.tz, new Date(profile.created_at)).date;
+  } catch {
+    signupLocalDate = null;
+  }
+  const meals = food.filter((f) => f.entry_type !== 'water' && f.entry_type !== 'supplement');
+  const yesterday = addDays(u.local.date, -1);
+  return {
+    signupLocalDate,
+    fitzyOpenedAt: profile.fitzy_opened_at ?? null,
+    activated: meals.length > 0,
+    introEverSent: sent.some((r) => r.notification_type === 'fitzy_intro'),
+    loggedYesterday: meals.some((f) => f.entry_date === yesterday),
+  };
 }
 
 /** Per-day entry count + protein from food_log_entries rows (water rows excluded). */

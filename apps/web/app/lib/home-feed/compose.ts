@@ -10,7 +10,7 @@ import { DEFAULT_LAYOUT_KEY, FEED_TTL_SECONDS } from './catalog';
 import { applyGuardrails } from './guardrails';
 import { DefaultRanker, RulesRanker, type Ranker } from './rankers';
 import type { FeedRule } from './rules';
-import type { ClientCardSupport, FeedCard, FeedContext, HomeFeedResponse, ScoredCard } from './types';
+import type { Candidate, CardType, ClientCardSupport, FeedCard, FeedContext, HomeFeedResponse, ScoredCard } from './types';
 
 const MAX_LAYOUT_KEY = 200;
 
@@ -24,6 +24,12 @@ export interface ComposeInput {
   includeDisabledRules?: boolean;
   now?: Date;
   decisionId?: string;
+  /** promo@1 cards from the promo engine (lib/promos). */
+  promos?: readonly Candidate[];
+  /** Legacy card types replaced by promos for this client (suppressed). */
+  replacedTypes?: ReadonlySet<CardType>;
+  /** The client declared promo@1 → promo guardrails G7–G9 apply. */
+  promoV1?: boolean;
 }
 
 export interface ComposeTrace {
@@ -31,6 +37,8 @@ export interface ComposeTrace {
   appliedRules: string[];
   suppressed: string[];
   guardrailAdjustments: string[];
+  /** Promo engine outcomes (key → selected / skip reason), when promos ran. */
+  promos?: Array<{ key: string; outcome: string; creativeId?: string }>;
   /** Cards a ranker produced that the client can't render (always 0 unless a ranker misbehaves). */
   droppedUnsupported: string[];
 }
@@ -50,7 +58,7 @@ export function toFeedCard(c: ScoredCard): FeedCard {
 export function composeFeed(input: ComposeInput): ComposeResult {
   const { support, ctx } = input;
   const now = input.now ?? new Date();
-  const candidates = buildCandidates(ctx, support);
+  const candidates = buildCandidates(ctx, support, ctx === null ? {} : { replaced: input.replacedTypes, promos: input.promos });
   const ranker: Ranker = ctx === null ? new DefaultRanker() : input.ranker ?? new RulesRanker(input.rules ?? [], { includeDisabled: input.includeDisabledRules });
 
   const ranked = ranker.rank({ candidates, ctx, support });
@@ -63,7 +71,7 @@ export function composeFeed(input: ComposeInput): ComposeResult {
     return ok;
   });
 
-  const guarded = applyGuardrails(renderable);
+  const guarded = applyGuardrails(renderable, { promoV1: input.promoV1 === true && ctx !== null });
   const layoutKey = [DEFAULT_LAYOUT_KEY, ...ranked.layoutSegments].join('+').slice(0, MAX_LAYOUT_KEY);
 
   return {

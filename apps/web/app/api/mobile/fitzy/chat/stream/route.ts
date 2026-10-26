@@ -4,6 +4,8 @@ import { z } from 'zod';
 import { describeFitzyError, fitzyFail, readJson } from '@/lib/fitzy/http';
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { FitzyService, type FitzyStreamEvent } from '@/lib/services/fitzy-service';
+import { JourneyService } from '@/lib/services/journey-service';
+import { runAfterResponse } from '@/lib/utils/after-response';
 import { safeParseLenient } from '@/lib/validation/lenient-parse';
 
 export const dynamic = 'force-dynamic';
@@ -37,6 +39,8 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     return fitzyFail(error);
   }
+  // First Fitzy open → profiles.fitzy_opened_at (ACTIVATION_JOURNEY_SPEC §6). Zero queries once set.
+  runAfterResponse(() => JourneyService.markFitzyOpened(user.id, user), 'fitzy opened');
   const parsed = safeParseLenient(bodySchema, await readJson(request));
   if (!parsed.success) {
     return fitzyFail({ code: 'VALIDATION_ERROR', message: parsed.error.issues[0]?.message ?? 'Invalid request body' });

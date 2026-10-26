@@ -6,12 +6,16 @@ import { fail, feedFailFrom } from '@/lib/home-feed/http';
 import { SUPPORTED_FEED_SCHEMAS } from '@/lib/home-feed/types';
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { addAutoRefreshHeaders } from '@/lib/middleware/mobile-auto-refresh';
+import { PROMO_CARD_TYPE, PROMO_CARD_VERSION, parsePromoClient } from '@/lib/promos';
 import { HomeFeedService, SLOW_FEED_MS, type FeedTiming } from '@/lib/services/home-feed-service';
 
 export const dynamic = 'force-dynamic';
 
 /**
  * GET /api/mobile/home-feed?cards=header@1,campaign@1,…  (docs/HOME_FEED_SPEC.md §2)
+ *   promo@1 clients (docs/PROMO_CARD_SPEC.md §6.1) add `promo@1` to cards plus
+ *   &actions=open_screen@1,paywall@1,…&promoLayouts=hero,banner,compact
+ *   (missing actions → only dismiss@1 → no promo with a primary button is sent).
  *
  * Headers: X-Feed-Schema: 1 (required), X-App-Platform (or X-Platform),
  * X-App-Version, X-App-Build, x-client-timezone.
@@ -47,7 +51,12 @@ export async function GET(request: NextRequest) {
     }
 
     const info = readRequestInfo(request);
-    const feed = await HomeFeedService.getFeed(user, info, support, { timing });
+    const promoClient = parsePromoClient({
+      cardsSupportPromo: (support.get(PROMO_CARD_TYPE) ?? 0) >= PROMO_CARD_VERSION,
+      actions: request.nextUrl.searchParams.get('actions'),
+      promoLayouts: request.nextUrl.searchParams.get('promoLayouts'),
+    });
+    const feed = await HomeFeedService.getFeed(user, info, support, { timing, promoClient });
     timing.totalMs = Math.round(performance.now() - started);
     const response = NextResponse.json(feed, {
       headers: {

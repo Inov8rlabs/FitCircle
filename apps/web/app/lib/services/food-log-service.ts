@@ -22,6 +22,7 @@ import type {
 } from '@/lib/types/food-log';
 
 import { CircleMealPostService } from './circle-meal-post-service';
+import { PromoService } from './promo-service';
 
 /**
  * Runs best-effort work that must not hold up the response. Routes pass Next's
@@ -105,6 +106,13 @@ export class FoodLogService {
           return this.existingForRetry(opts.id, userId, supabase, error.message);
         }
         return { data: null, error: new Error(error.message) };
+      }
+
+      // Promo conversion hook (first_meal / log_meal_now; no-op while PROMOS_ENABLED is off, never throws).
+      if (entry?.entry_type === 'food') {
+        const convert = () => PromoService.recordConversion(userId, 'meal_logged');
+        if (opts.defer) opts.defer(convert);
+        else void convert();
       }
 
       if (opts.defer) {

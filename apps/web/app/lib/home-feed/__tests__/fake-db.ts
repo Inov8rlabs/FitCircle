@@ -14,6 +14,10 @@ export class HomeFeedFakeDb {
     fitcircle_members: [],
     streak_claims: [],
     feature_flags: [],
+    // promo@1 / activation journey (migration 110)
+    food_log_entries: [],
+    promo_user_state: [],
+    feature_gates: [],
   };
   /** Tables whose next query errors (simulate outages). */
   failing = new Set<string>();
@@ -37,7 +41,11 @@ export class HomeFeedFakeDb {
 }
 
 class FakeQuery implements PromiseLike<any> {
-  private op: 'select' | 'insert' | 'update' = 'select';
+  private op: 'select' | 'insert' | 'update' | 'upsert' = 'select';
+  private conflictCols: string[] = [];
+  private orderBy: { col: string; asc: boolean } | null = null;
+  private limitN: number | null = null;
+  private preds: Array<(r: Row) => boolean> = [];
   private filters: Array<[string, any]> = [];
   private payload: Row | Row[] | null = null;
   private countMode = false;
@@ -58,6 +66,24 @@ class FakeQuery implements PromiseLike<any> {
     this.payload = rows;
     return this;
   }
+  upsert(rows: Row | Row[], opts?: { onConflict?: string }) {
+    this.op = 'upsert';
+    this.payload = rows;
+    this.conflictCols = (opts?.onConflict ?? 'id').split(',').map((c) => c.trim());
+    return this;
+  }
+  gte(col: string, val: any) {
+    this.preds.push((r) => r[col] !== null && r[col] !== undefined && r[col] >= val);
+    return this;
+  }
+  lte(col: string, val: any) {
+    this.preds.push((r) => r[col] !== null && r[col] !== undefined && r[col] <= val);
+    return this;
+  }
+  is(col: string, val: any) {
+    this.preds.push((r) => (val === null ? r[col] === null || r[col] === undefined : r[col] === val));
+    return this;
+  }
   update(patch: Row) {
     this.op = 'update';
     this.payload = patch;
@@ -71,15 +97,18 @@ class FakeQuery implements PromiseLike<any> {
     this.inFilters.push([col, vals]);
     return this;
   }
-  order() {
+  order(col?: string, opts?: { ascending?: boolean }) {
+    if (col) this.orderBy = { col, asc: opts?.ascending !== false };
     return this;
   }
-  limit() {
+  limit(n?: number) {
+    if (typeof n === 'number') this.limitN = n;
     return this;
   }
 
   private inFilters: Array<[string, any[]]> = [];
-  private matches = (r: Row) => this.filters.every(([c, v]) => r[c] === v) && this.inFilters.every(([c, vs]) => vs.includes(r[c]));
+  private matches = (r: Row) =>
+    this.filters.every(([c, v]) => r[c] === v) && this.inFilters.every(([c, vs]) => vs.includes(r[c])) && this.preds.every((p) => p(r));
 
   private run(): { data: any; error: any; count?: number } {
     this.db.queries[this.table] = (this.db.queries[this.table] ?? 0) + 1;
@@ -99,12 +128,28 @@ class FakeQuery implements PromiseLike<any> {
       }
       return { data: this.returning ? inserted : null, error: null };
     }
+    if (this.op === 'upsert') {
+      const list = (Array.isArray(this.payload) ? this.payload : [this.payload]) as Row[];
+      const out: Row[] = [];
+      for (const r of list) {
+        const hit = rows.find((x) => this.conflictCols.every((c) => x[c] === r[c]));
+        if (hit) Object.assign(hit, r);
+        else rows.push({ ...r });
+        out.push(hit ?? r);
+      }
+      return { data: this.returning ? out : null, error: null };
+    }
     if (this.op === 'update') {
       const hit = rows.filter(this.matches);
       for (const r of hit) Object.assign(r, this.payload);
       return { data: hit, error: null };
     }
-    const hit = rows.filter(this.matches);
+    let hit = rows.filter(this.matches);
+    if (this.orderBy) {
+      const { col, asc } = this.orderBy;
+      hit = [...hit].sort((a, b) => (a[col] === b[col] ? 0 : (a[col] < b[col] ? -1 : 1) * (asc ? 1 : -1)));
+    }
+    if (this.limitN !== null) hit = hit.slice(0, this.limitN);
     return this.countMode ? { data: null, error: null, count: hit.length } : { data: hit, error: null };
   }
 

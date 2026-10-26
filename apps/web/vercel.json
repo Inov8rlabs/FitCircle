@@ -5,6 +5,10 @@
       "schedule": "0 * * * *"
     },
     {
+      "path": "/api/cron/meal-reminders",
+      "schedule": "*/15 * * * *"
+    },
+    {
       "path": "/api/cron/foods-loader",
       "schedule": "0 4 * * 0"
     },

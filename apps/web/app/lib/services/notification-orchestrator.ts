@@ -115,7 +115,10 @@ export type NotificationType =
   | 'momentum_at_risk'
   | 'near_milestone'
   | 'reset_encouragement'
+  // Meal-slot reminders (docs/ACTIVATION_JOURNEY_SPEC.md §4; MealReminderService)
+  | 'meal_reminder_breakfast'
   | 'meal_reminder_lunch'
+  | 'meal_reminder_snack'
   | 'meal_reminder_dinner'
   // State - Streak shields
   | 'shield_applied'
@@ -160,7 +163,9 @@ export type NotificationType =
   | 'fitzy_weekly_recap'
   | 'fitzy_weekly_plan'
   | 'fitzy_hydration_nudge'
-  | 'fitzy_protein_nudge';
+  | 'fitzy_protein_nudge'
+  // Day-2 "meet Fitzy" for activated users who never opened Fitzy (ACTIVATION_JOURNEY_SPEC §6)
+  | 'fitzy_intro';
 
 interface NotificationContent {
   title: string;
@@ -204,7 +209,11 @@ export const TYPE_SCREEN_MAP: Record<NotificationType, NotificationScreen> = {
   momentum_at_risk: 'streaks',
   near_milestone: 'streaks',
   reset_encouragement: 'streaks',
+  // Shipped 1.0.8/1.0.9 apps route screen=food_log to the Food Log tab (they ignore mealType);
+  // 1.1.0 reads data.mealType to open the logger with the slot preselected.
+  meal_reminder_breakfast: 'food_log',
   meal_reminder_lunch: 'food_log',
+  meal_reminder_snack: 'food_log',
   meal_reminder_dinner: 'food_log',
   shield_applied: 'streaks',
   streak_lost: 'streaks',
@@ -248,6 +257,8 @@ export const TYPE_SCREEN_MAP: Record<NotificationType, NotificationScreen> = {
   fitzy_weekly_plan: 'fitzy_chat',
   fitzy_hydration_nudge: 'fitzy_chat',
   fitzy_protein_nudge: 'fitzy_chat',
+  // Older builds without screen=fitzy_chat still route fitzy_* types to Fitzy (iOS) / fitzy_chat (Android).
+  fitzy_intro: 'fitzy_chat',
 };
 
 /** Coach pushes: Android "Coach" channel (FCM falls back to the default channel on older builds). */
@@ -382,17 +393,28 @@ export const NOTIFICATION_TEMPLATES: Record<
     body: 'Yesterday ended a streak, today starts one. A single log is all it takes.',
     category: 'momentum',
   }),
+  // Meal-slot reminders: warm, short, no guilt (ACTIVATION_JOURNEY_SPEC §4).
+  meal_reminder_breakfast: () => ({
+    title: 'Morning! ☀️',
+    body: 'Snap breakfast 📸 — calories & macros in seconds.',
+    category: 'momentum',
+  }),
   meal_reminder_lunch: () => ({
-    title: 'Lunch logged? 🥗',
-    body: "Haven't seen lunch yet. Snap it or type it — ten seconds.",
+    title: 'Lunch break? 🥗',
+    body: "Snap your lunch and see what's on your plate in seconds.",
+    category: 'momentum',
+  }),
+  meal_reminder_snack: () => ({
+    title: 'Snack time 🍎',
+    body: 'Having a snack? A quick photo keeps your day complete.',
     category: 'momentum',
   }),
   meal_reminder_dinner: (data) => ({
     title: 'Dinner time 🍽️',
     body:
       data.currentMomentum && data.currentMomentum > 0
-        ? `Log dinner to keep your ${data.currentMomentum}-day streak alive.`
-        : "Log tonight's dinner to close out the day.",
+        ? `Snap dinner to keep your ${data.currentMomentum}-day streak going.`
+        : 'Snap dinner to round out your day.',
     category: 'momentum',
   }),
 
@@ -584,6 +606,11 @@ export const NOTIFICATION_TEMPLATES: Record<
     body: String(data.body || 'A protein-rich snack you enjoy could round out your afternoon.'),
     category: 'coach',
   }),
+  fitzy_intro: (data) => ({
+    title: String(data.title || 'Meet Fitzy, your coach 💬'),
+    body: String(data.body || 'Ask me anything about your meals: what is working, and one easy idea to try next.'),
+    category: 'coach',
+  }),
 };
 
 /** " and 2 other circles" for a cross-circle coalesced push; "" otherwise. */
@@ -731,13 +758,17 @@ class InProcessSendGuard {
 
 const sendGuard = new InProcessSendGuard();
 
-// Cap-exempt: chat (conversation traffic), the two meal reminders (decided
-// 2026-09-13: "3 + lunch and dinner"), and outcomes that report something
+// Cap-exempt: chat (conversation traffic), the meal-slot reminders (decided
+// 2026-09-13: "3 + meal reminders" — they never COUNT toward the cap, but since
+// ACTIVATION_JOURNEY_SPEC §4 they are skipped once the cap is reached, see
+// CAP_RESPECTING_EXEMPT_TYPES), and outcomes that report something
 // that already happened to the user's streak or challenge — those must never
 // be dropped in favour of a nudge sent earlier the same day.
 export const CAP_EXEMPT_TYPES: ReadonlySet<NotificationType> = new Set<NotificationType>([
   ...CHAT_NOTIFICATION_TYPES,
+  'meal_reminder_breakfast',
   'meal_reminder_lunch',
+  'meal_reminder_snack',
   'meal_reminder_dinner',
   'streak_lost',
   'shield_applied',
@@ -761,6 +792,25 @@ export const CAP_EXEMPT_TYPES: ReadonlySet<NotificationType> = new Set<Notificat
 
 export function isCapExempt(type: NotificationType): boolean {
   return CAP_EXEMPT_TYPES.has(type);
+}
+
+/** Meal-slot reminder types (MealReminderService). */
+export const MEAL_REMINDER_TYPES: ReadonlySet<NotificationType> = new Set<NotificationType>([
+  'meal_reminder_breakfast',
+  'meal_reminder_lunch',
+  'meal_reminder_snack',
+  'meal_reminder_dinner',
+]);
+
+/**
+ * Exempt from COUNTING toward the daily cap, but still skipped once the cap
+ * is reached (ACTIVATION_JOURNEY_SPEC §4: "skip … if the per-day push cap is hit").
+ */
+export const CAP_RESPECTING_EXEMPT_TYPES: ReadonlySet<NotificationType> = MEAL_REMINDER_TYPES;
+
+/** Does the daily cap block this type (when reached)? */
+export function isCapChecked(type: NotificationType): boolean {
+  return !isCapExempt(type) || CAP_RESPECTING_EXEMPT_TYPES.has(type);
 }
 
 /** Start of the current day in an IANA timezone, as a UTC instant. */
@@ -849,8 +899,8 @@ export class NotificationOrchestrator {
         return { sent: false, reason: 'category_disabled' };
       }
 
-      // 2. Check frequency cap (see CAP_EXEMPT_TYPES)
-      if (!isCapExempt(type)) {
+      // 2. Check frequency cap (see CAP_EXEMPT_TYPES / CAP_RESPECTING_EXEMPT_TYPES)
+      if (isCapChecked(type)) {
         const capResult = await this.checkFrequencyCap(userId);
         if (!capResult.allowed) {
           await this.logNotification(userId, type, content, data, true, 'frequency_cap');
@@ -1016,6 +1066,8 @@ export class NotificationOrchestrator {
     if (data.messageId) pushData.messageId = String(data.messageId);
     if (data.deepLink) pushData.deepLink = data.deepLink;
     if (data.campaignSlug) pushData.campaignSlug = String(data.campaignSlug);
+    // Meal-slot reminders: the slot, so 1.1.0 opens the logger preselected (older apps ignore it).
+    if (MEAL_REMINDER_TYPES.has(type) && typeof data.mealType === 'string') pushData.mealType = data.mealType;
     // Fitzy chat context (the tip the push came from); clients render it as plain text.
     if (content.category === 'coach' && data.fitzyTip) {
       pushData.fitzyTip = [...String(data.fitzyTip)].slice(0, FITZY_TIP_DATA_MAX).join('');

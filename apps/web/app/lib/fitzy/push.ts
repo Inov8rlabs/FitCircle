@@ -9,6 +9,8 @@
  *     fitzy_daily_focus    08:00–10:59  today's focus card, as a push (AI; same text as the in-app card)
  *     fitzy_weekly_recap   Sunday morning, Pro with a plan (the focus card IS the recap that day)
  *     fitzy_weekly_plan    Monday morning instead of the focus: Pro without a plan / free teaser (template)
+ *     fitzy_intro          day 2–4 after sign-up, ONCE EVER: activated (≥ 1 meal) users who never opened
+ *                          Fitzy (ACTIVATION_JOURNEY_SPEC §6); takes the morning slot that day (template)
  *   contextual slot (at most one per local day)
  *     fitzy_hydration_nudge 11:00–11:59 water logger with no water logged today (template)
  *     fitzy_protein_nudge   15:00–16:59 protein well below the user's own usual by mid-afternoon (AI + template fallback)
@@ -29,6 +31,7 @@ export const FITZY_PUSH_TYPES = [
   'fitzy_weekly_plan',
   'fitzy_hydration_nudge',
   'fitzy_protein_nudge',
+  'fitzy_intro',
 ] as const;
 export type FitzyPushType = (typeof FITZY_PUSH_TYPES)[number];
 
@@ -40,6 +43,7 @@ export const SLOT_OF: Record<FitzyPushType, FitzyPushSlot> = {
   fitzy_weekly_plan: 'morning',
   fitzy_hydration_nudge: 'contextual',
   fitzy_protein_nudge: 'contextual',
+  fitzy_intro: 'morning',
 };
 
 const intEnv = (env: NodeJS.ProcessEnv, name: string, def: number, min: number, max: number) => {
@@ -215,6 +219,40 @@ export function proteinBehind(days: ProteinDay[], today: string): boolean {
   return usual >= 30 && t.proteinG < usual * 0.4;
 }
 
+// ---------------------------------------------------------------------------- fitzy_intro
+
+/** Account-age window (local days after the sign-up day) in which the intro may go: day 2 … day 4. */
+export const INTRO_FIRST_DAY = 1;
+export const INTRO_LAST_DAY = 3;
+
+export interface IntroInput {
+  /** Sign-up day in the user's timezone (YYYY-MM-DD); null = unknown. */
+  signupLocalDate: string | null;
+  today: string;
+  /** profiles.fitzy_opened_at; undefined = column/row unknown → never send. */
+  fitzyOpenedAt: string | null | undefined;
+  /** ≥ 1 food entry ever (activated). */
+  activated: boolean;
+  /** A fitzy_intro was ever delivered (once ever). */
+  introEverSent: boolean;
+}
+
+export type IntroSkip = 'intro_unknown' | 'intro_not_day' | 'fitzy_opened' | 'not_activated' | 'intro_sent';
+
+/** Null = send the intro in this morning slot. */
+export function introSkip(i: IntroInput): IntroSkip | null {
+  if (i.fitzyOpenedAt === undefined || !i.signupLocalDate) return 'intro_unknown';
+  if (i.fitzyOpenedAt !== null) return 'fitzy_opened';
+  if (i.introEverSent) return 'intro_sent';
+  if (!i.activated) return 'not_activated';
+  const day = Math.round((Date.parse(`${i.today}T00:00:00Z`) - Date.parse(`${i.signupLocalDate}T00:00:00Z`)) / 86_400_000);
+  if (day < INTRO_FIRST_DAY || day > INTRO_LAST_DAY) return 'intro_not_day';
+  return null;
+}
+
+/** `fitzy_intro:<userId>` — the dedupe key (once ever is enforced by introEverSent; this guards concurrent runs). */
+export const introDedupeKey = (userId: string) => `fitzy_intro:${userId}`;
+
 // ---------------------------------------------------------------------------- content
 
 /** iOS shows ~1 line of title and ~4 lines of body on the lock screen; Android collapsed ~1 + 1. */
@@ -315,6 +353,27 @@ export function proteinTemplate(diet: string, allergens: string[], seed: string)
   const title = variant(['A protein boost for later 💪', 'Afternoon snack idea 🥣', 'Fuel for the afternoon 💪'] as const, seed);
   const body = fitBody(`${list[0].toUpperCase()}${list.slice(1)} could round out your afternoon.`, BODY_MAX) ?? 'A protein-rich snack could round out your afternoon.';
   return { title, body, tip: `${title.replace(/\s*\p{Extended_Pictographic}$/u, '')}\n\n${body}`, source: 'template' };
+}
+
+/**
+ * The intro is a template (the user has not used Fitzy yet, so no AI copy — see the privacy note in
+ * FitzyPushService). "Yesterday's meals" only when they really logged meals yesterday. The tip is
+ * Fitzy's opening chat message (data payload, never on the lock screen).
+ */
+export function introCopy(loggedYesterday: boolean): PushCopy {
+  return loggedYesterday
+    ? {
+        title: "A tip on yesterday's meals? 💬",
+        body: "I'm Fitzy, your coach. I can look at what you logged yesterday and suggest one easy idea for today.",
+        tip: "Hi, I'm Fitzy, your coach! I can look at the meals you logged yesterday and suggest one easy idea for today. Want my take?",
+        source: 'template',
+      }
+    : {
+        title: 'Meet Fitzy, your coach 💬',
+        body: 'Ask me anything about your meals: what is working, and one easy idea to try next.',
+        tip: "Hi, I'm Fitzy, your coach! Ask me anything about your meals, or I can suggest one easy idea for today.",
+        source: 'template',
+      };
 }
 
 export const WEEKLY_PLAN_COPY: Record<FitzyTier, { title: string; body: string }> = {

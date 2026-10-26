@@ -53,6 +53,8 @@ export interface Candidate {
   version: number;
   props?: Record<string, unknown>;
   variant?: string;
+  /** Score override (promo cards): otherwise the default-order score of `type`. */
+  baseScore?: number;
 }
 
 /** A ranked card: candidate + score + per-decision annotations. */

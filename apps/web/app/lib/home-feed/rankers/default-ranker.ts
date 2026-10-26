@@ -23,7 +23,12 @@ export function scoreDefault(cards: readonly Candidate[]): ScoredCard[] {
   const campaignPresent = cards.some((c) => c.type === 'campaign');
   return cards.map((c) => ({
     ...c,
-    score: c.type === 'referral' && campaignPresent ? baseScore('progress') - SLOT_POINTS / 2 : baseScore(c.type),
+    score:
+      c.baseScore !== undefined
+        ? c.baseScore
+        : c.type === 'referral' && campaignPresent
+          ? baseScore('progress') - SLOT_POINTS / 2
+          : baseScore(c.type),
     boost: 0,
   }));
 }

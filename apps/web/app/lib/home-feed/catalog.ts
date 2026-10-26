@@ -67,7 +67,26 @@ export const CATALOG: Readonly<Record<string, CatalogEntry>> = Object.freeze({
   past_date_log: entry('past_date_log', 'utility'),
   native_ad: entry('native_ad', 'ad'),
   charts: entry('charts', 'utility'),
+  /**
+   * Server-driven promo card (docs/PROMO_CARD_SPEC.md): creative + actions
+   * inline, id `promo:<key>`. Never in DEFAULT_ORDER — only the promo engine
+   * adds it, and only for clients that declare promo@1.
+   */
+  promo: entry('promo', 'promo', true),
 });
+
+/**
+ * Promo cards that are utility, not marketing (ACTIVATION_JOURNEY_SPEC §3):
+ * exempt from the promo density guardrails, and pinned to position ≤ 2.
+ * Must match the `kind: 'utility'` system promos (lib/promos/system-promos.ts).
+ */
+export const UTILITY_PROMO_IDS: ReadonlySet<string> = new Set(['promo:first_meal']);
+
+/** Promo-category card (guardrails): promo-kind catalog types, except utility promos. */
+export function isPromoCard(c: { id: string; type: CardType }): boolean {
+  if (c.type === 'promo') return !UTILITY_PROMO_IDS.has(c.id);
+  return isPromo(c.type);
+}
 
 export const PROMO_TYPES: ReadonlySet<CardType> = new Set(
   Object.values(CATALOG)
@@ -83,6 +102,14 @@ export const FEED_TTL_SECONDS = 900;
 
 /** Card type names: lowercase snake_case, ≤ 40 chars (also what `cards=` accepts). */
 export const CARD_TYPE_PATTERN = /^[a-z][a-z0-9_]{0,39}$/;
+
+/** What a rule may reference: a card type, or one promo card by id (`promo:<key>`). */
+export const CARD_REF_PATTERN = /^(?:[a-z][a-z0-9_]{0,39}|promo:[a-z0-9_]{3,60})$/;
+
+/** Does a rule's card reference (type or id) select this card? */
+export function cardMatchesRef(c: { id: string; type: CardType }, ref: string): boolean {
+  return c.type === ref || c.id === ref;
+}
 
 export function catalogEntry(type: CardType): CatalogEntry | undefined {
   return Object.prototype.hasOwnProperty.call(CATALOG, type) ? CATALOG[type] : undefined;
