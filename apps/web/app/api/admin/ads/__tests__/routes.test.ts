@@ -339,6 +339,46 @@ describe('sync', () => {
     expect(data.results.find((r: any) => r.channel === 'meta')).toMatchObject({ ok: false, error: 'Meta down' });
   });
 
+  it('Google Ads: a failing Google sync never blocks Apple; status lists google_ads', async () => {
+    const google = { ...fakeConnector(), channel: 'google_ads', fetchEntities: async () => { throw new Error('Google Ads search: HTTP 403 [authorizationError=USER_PERMISSION_DENIED]'); } } as any;
+    setConnectorsForTest({ apple_ads: conn, google_ads: google });
+    const { data } = await (await cronSync(req('/api/cron/ads/sync', { auth: 'Bearer cron' }))).json();
+    expect(data.results.find((r: any) => r.channel === 'apple_ads')).toMatchObject({ ok: true, rowsMetrics: 3 });
+    expect(data.results.find((r: any) => r.channel === 'google_ads')).toMatchObject({ ok: false, error: expect.stringContaining('USER_PERMISSION_DENIED') });
+    expect(db.rows('ad_sync_runs').filter((r) => r.channel === 'google_ads').at(-1)).toMatchObject({ ok: false, error: expect.stringContaining('403') });
+    const { data: ov } = await (await overview(req('/api/admin/ads/overview?groupBy=channel', { as: ADMIN }))).json();
+    expect(ov.lastSync.find((s: any) => s.channel === 'google_ads')).toMatchObject({ configured: true, writeEnabled: false, ok: false });
+  });
+
+  it('Google Ads: real connector without GOOGLE_ADS_SA_KEY is skipped (no-op)', async () => {
+    delete process.env.GOOGLE_ADS_SA_KEY;
+    setConnectorsForTest(null);
+    const { data } = await (await cronSync(req('/api/cron/ads/sync?channel=google_ads', { auth: 'Bearer shh' }))).json();
+    expect(data.results).toEqual([expect.objectContaining({ channel: 'google_ads', skipped: 'not_configured' })]);
+    expect(db.rows('ad_sync_runs').some((r) => r.channel === 'google_ads')).toBe(false);
+  });
+
+  it('first successful run of a channel backfills since the earliest campaign start; later runs pull 3 days', async () => {
+    const today = todayInTz(TZ);
+    const tenDaysAgo = new Date(Date.parse(`${today}T12:00:00Z`) - 10 * 86_400_000).toISOString();
+    const ranges: string[][] = [];
+    const google = {
+      ...fakeConnector(),
+      channel: 'google_ads',
+      fetchEntities: async () => [{ ...kw(0), channel: 'google_ads', platform: 'android', level: 'campaign', externalId: 'G1', parentExternalId: null, campaignExternalId: 'G1', bidStrategy: 'TARGET_CPA', startAt: tenDaysAgo }],
+      fetchDailyMetrics: async (start: string, end: string) => {
+        ranges.push([start, end]);
+        return [];
+      },
+    } as any;
+    setConnectorsForTest({ google_ads: google });
+    await cronSync(req('/api/cron/ads/sync', { auth: 'Bearer cron' }));
+    await cronSync(req('/api/cron/ads/sync', { auth: 'Bearer cron' }));
+    expect(ranges[0]).toEqual([tenDaysAgo.slice(0, 10), today]);
+    expect(db.rows('ad_sync_runs').filter((r) => r.channel === 'google_ads')[0]).toMatchObject({ ok: true, range_start: tenDaysAgo.slice(0, 10) });
+    expect(ranges[1][0] > ranges[0][0]).toBe(true);
+  });
+
   it('sync now is debounced (< 2 min since the last run)', async () => {
     const { data } = await (await syncNow(req('/api/admin/ads/sync', { as: ADMIN, method: 'POST', body: {} }))).json();
     expect(data.results[0]).toMatchObject({ channel: 'apple_ads', skipped: 'debounced' });

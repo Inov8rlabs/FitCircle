@@ -20,7 +20,7 @@ Non-goals for v1: creating campaigns or ad groups, uploading creatives, automate
 |---|---|---|---|---|
 | Apple Ads (`apple_ads`) | iOS | Apple Ads Campaign Management API v5 (reports + entities) | keyword bid, ad-group default bid, campaign daily budget, status pause/enable | **live** |
 | Meta (`meta`) | Android (iOS later) | Marketing API v23 insights + campaigns/adsets/ads | ad-set bid amount (when bid strategy is a cap), ad-set / campaign daily budget, status | built, **off until `META_ADS_ACCESS_TOKEN` is set** |
-| Google Ads (`google_ads`) | Android | — | — | not built; connector interface leaves room |
+| Google Ads (`google_ads`) | Android | Google Ads API v26 REST `googleAds:search` (GAQL), service-account auth | **none — read-only by design** (no mutate calls; guardrails list no writable fields) | built, **off until `GOOGLE_ADS_SA_KEY` is set** (§2.1) |
 | Organic (`organic`) | all | — | — | outcomes only, for comparison |
 
 Each channel is a connector implementing one interface (`lib/ads/connectors/types.ts`):
@@ -37,6 +37,18 @@ interface AdsConnector {
   applyChange(change: AdChangeRequest): Promise<AdChangeResult>
 }
 ```
+
+### 2.1 Google Ads connector (`lib/ads/connectors/google-ads.ts`)
+
+- **Auth**: Google Cloud service account `google-ads-reporting@fitcircle-fitness-app.iam.gserviceaccount.com`, added directly as a **Read-only** user on the client account 770-813-7566 (no user OAuth, no domain-wide delegation, no manager login). Access token minted with the OAuth 2.0 JWT-bearer grant (RS256 via node crypto, scope `https://www.googleapis.com/auth/adwords`), cached until expiry.
+- **Developer token**: sunset 2026-09-09. API access levels now belong to the Google Cloud project that owns the OAuth credentials (project `fitcircle-fitness-app`, Explorer = 2,880 production ops/day), managed on the Google Ads API Overview page in Cloud Console. The `developer-token` header is optional and ignored by the API, so it is sent only when `GOOGLE_ADS_DEVELOPER_TOKEN` is set. Source: https://developers.google.com/google-ads/api/docs/api-policy/developer-token (known issue there: projects upgraded after 2026-09-09 may get `AUTHORIZATION_ERROR` on production accounts until Google's fix rolls out; workaround is a new Cloud project).
+- **Queries** (each one `googleAds:search` operation; ~4 per hourly sync ≈ 96/day):
+  - campaigns: `campaign.id/name/status/serving_status/primary_status/advertising_channel_type/advertising_channel_sub_type/bidding_strategy_type/start_date_time/end_date_time/app_campaign_setting.*`, `campaign.target_cpa.target_cpa_micros`, `campaign_budget.amount_micros/total_amount_micros`, `customer.currency_code/time_zone` `FROM campaign WHERE campaign.status != 'REMOVED'`
+  - ad groups: `ad_group.id/name/status/primary_status/type/target_cpa_micros, campaign.id FROM ad_group` (non-removed)
+  - daily metrics, once `FROM campaign` and once `FROM ad_group`: `segments.date, metrics.cost_micros, impressions, clicks, conversions, all_conversions, biddable_app_install_conversions, biddable_app_post_install_conversions WHERE segments.date BETWEEN start AND end`
+- **Mapping**: micros ÷ 1,000,000 → dollars (spend, daily budget, target CPA shown as `bid_amount`); clicks → `taps`; **installs = `metrics.biddable_app_install_conversions`** (Google's "Number of app installs" column for App campaigns), rounded per row, also stored as `new_downloads`; `segments.date` is in the account time zone (America/Toronto, same offsets as the console's America/New_York). Platform from `app_campaign_setting.app_store` (GOOGLE_APP_STORE → android). `serving_status` = `campaign.serving_status` (SERVING counts as live in the email); `primary_status` stays in `raw`.
+- **Window**: hourly today-3 … today like the other channels; the channel's first successful run pulls from its earliest campaign start (capped at 90 days).
+- Live verification (`/api/admin/ads/verify`) stays Apple-only; the connector implements `fetchTotals` for later.
 
 ## 3. Data model (migration 108, tables only — no stored procedures, no triggers)
 
@@ -89,7 +101,8 @@ Targets shown as reference lines (configurable in `ads_settings` later; v1 const
 
 - Cron `GET /api/cron/ads/sync` hourly at :20 (`CRON_SECRET` like the other crons). Per configured connector: entities, then daily metrics for `today-3 … today`. Writes an `ad_sync_runs` row; one failing channel never blocks another.
 - Backfill: `?start=YYYY-MM-DD&end=YYYY-MM-DD&channel=apple_ads` (admin secret only).
-- Rate limits: Apple Ads ~ 10 req/s — connector paginates with limit 1000 and serial requests. Meta: uses async insights only above 50 ad sets (not needed in v1).
+- First successful run per channel (no earlier `ok` row in `ad_sync_runs`): metrics from the earliest campaign start (≤ 90 days), so a newly connected channel backfills itself.
+- Rate limits: Apple Ads ~ 10 req/s — connector paginates with limit 1000 and serial requests. Meta: uses async insights only above 50 ad sets (not needed in v1). Google Ads: ~4 search ops per run (Explorer access: 2,880/day).
 
 ## 7. Admin API (all behind `requireAdmin`)
 
@@ -117,7 +130,7 @@ UI: inline edit → confirm sheet showing old → new, % change, today's spend, 
 ## 9. Later (designed, not built)
 
 - Rule engine on top of `metrics.ts` + `applyChange` (e.g. "lower keyword bid 20% if spend > $30 and 0 activated users"), proposals reviewed in the UI before applying.
-- Google Ads connector. Meta iOS (SKAN/AdAttributionKit postbacks) — needs postback storage.
+- Google Ads writes (deliberately not built). Meta iOS (SKAN/AdAttributionKit postbacks) — needs postback storage.
 - Currency conversion table; per-territory campaigns.
 - RevenueCat → Amplitude integration for product-side charts (independent of this console).
 
@@ -130,6 +143,10 @@ UI: inline edit → confirm sheet showing old → new, % change, today's spend, 
 | `APPLE_ADS_WRITE_ENABLED` | `true` to allow bid/budget writes (needs the API user's role upgraded to **API Account Manager**) |
 | `META_ADS_ACCESS_TOKEN`, `META_ADS_ACCOUNT_ID` | system-user token with `ads_read` (+ `ads_management` for writes), `act_1141795138521735` |
 | `META_ADS_WRITE_ENABLED` | as above |
+| `GOOGLE_ADS_SA_KEY` | **required for Google**: the service-account key JSON (raw, or base64 of it). Missing → Google is skipped (`not_configured`), email says "not configured" |
+| `GOOGLE_ADS_CUSTOMER_ID` | optional, default `7708137566` (dashes allowed) |
+| `GOOGLE_ADS_LOGIN_CUSTOMER_ID` | optional manager id (e.g. `7300585097`); only when access comes through the manager, not needed while the SA is a direct user |
+| `GOOGLE_ADS_DEVELOPER_TOKEN` | optional; sent as `developer-token` only when set (ignored by the API since 2026-09-09) |
 | `ADS_MAX_BID_USD`, `ADS_MAX_DAILY_BUDGET_USD` | guardrail caps |
 
 ## 11. Testing

@@ -6,7 +6,7 @@
  */
 import { writeEnabled, reportTimeZone } from '../config';
 import { getConnector, allConnectors } from '../connectors';
-import { addDays, todayInTz } from '../dates';
+import { addDays, todayInTz, ymdInTz } from '../dates';
 import { externalChangeRows } from '../external-changes';
 import type { AdChannel, AdDailyMetricInput, AdEntityInput, AdEntityRow, ChannelSyncStatus } from '../types';
 import { AD_CHANNELS } from '../types';
@@ -68,6 +68,8 @@ export function metricToRow(m: AdDailyMetricInput, syncedAt: string) {
 }
 
 const DEBOUNCE_MS = 2 * 60 * 1000;
+/** First-run backfill cap (days before today). */
+const FIRST_RUN_MAX_DAYS = 90;
 
 export class AdsSyncService {
   /**
@@ -162,26 +164,49 @@ export class AdsSyncService {
       let rowsEntities = 0;
       let rowsMetrics = 0;
       let error: string | null = null;
+      let rangeStart = start;
       try {
         const syncedAt = new Date().toISOString();
-        rowsEntities = await this.upsertEntities(await connector.fetchEntities(), syncedAt);
-        rowsMetrics = await this.upsertMetrics(await connector.fetchDailyMetrics(start, end), syncedAt);
+        const entities = await connector.fetchEntities();
+        rowsEntities = await this.upsertEntities(entities, syncedAt);
+        // First successful run for a channel (e.g. Google Ads just connected): pull
+        // since the earliest campaign start instead of only the last 3 days.
+        if (!opts.start) rangeStart = await this.firstRunStart(channel, entities, start, end);
+        rowsMetrics = await this.upsertMetrics(await connector.fetchDailyMetrics(rangeStart, end), syncedAt);
       } catch (e: any) {
         error = String(e?.message ?? e).slice(0, 1000);
         console.error(`[ads/sync] ${channel} failed:`, error);
       }
-      const patch = { finished_at: new Date().toISOString(), ok: !error, rows_entities: rowsEntities, rows_metrics: rowsMetrics, error };
+      const patch = { finished_at: new Date().toISOString(), ok: !error, rows_entities: rowsEntities, rows_metrics: rowsMetrics, error, ...(rangeStart !== start ? { range_start: rangeStart } : {}) };
       if (runId) await supabase.from('ad_sync_runs').update(patch).eq('id', runId);
       results.push({ channel, ok: !error, rowsEntities, rowsMetrics, error, runId });
     }
     return results;
   }
 
+  /**
+   * Start of the metrics window: `start`, or — when the channel has never synced
+   * successfully — the earliest campaign start date (report time zone), capped
+   * at FIRST_RUN_MAX_DAYS before `end`.
+   */
+  static async firstRunStart(channel: AdChannel, entities: AdEntityInput[], start: string, end: string): Promise<string> {
+    const { data, error } = await db().from('ad_sync_runs').select('id').eq('channel', channel).eq('ok', true).limit(1).maybeSingle();
+    if (error || data) return start;
+    const starts = entities
+      .filter((e) => e.level === 'campaign' && e.startAt)
+      .map((e) => ymdInTz(e.startAt!, reportTimeZone()))
+      .sort();
+    const floor = addDays(end, -FIRST_RUN_MAX_DAYS);
+    const earliest = starts[0];
+    if (!earliest || earliest >= start) return start;
+    return earliest < floor ? floor : earliest;
+  }
+
   /** finished_at of the latest successful run per channel (absent = never succeeded). */
   static async lastSuccess(): Promise<Partial<Record<AdChannel, string>>> {
     const out: Partial<Record<AdChannel, string>> = {};
     await Promise.all(
-      AD_CHANNELS.filter((c) => c !== 'google_ads').map(async (channel) => {
+      AD_CHANNELS.map(async (channel) => {
         const { data } = await db()
           .from('ad_sync_runs')
           .select('finished_at')
@@ -206,8 +231,7 @@ export class AdsSyncService {
       .order('started_at', { ascending: false })
       .limit(50);
     const rows = (data ?? []) as Array<{ channel: AdChannel; started_at: string; finished_at: string | null; ok: boolean | null; error: string | null }>;
-    const channels = AD_CHANNELS.filter((c) => c !== 'google_ads');
-    return channels.map((channel) => {
+    return AD_CHANNELS.map((channel) => {
       const connector = getConnector(channel);
       const last = rows.find((r) => r.channel === channel && r.finished_at) ?? rows.find((r) => r.channel === channel) ?? null;
       return {

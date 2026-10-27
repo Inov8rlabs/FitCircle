@@ -135,7 +135,7 @@ export interface BuildReportInput {
 export const STALE_SYNC_MS = 3 * 3600_000;
 const CPI_SPIKE_FACTOR = 2;
 const LIVE_STATUSES = new Set(['ENABLED', 'ACTIVE']);
-const SERVING_OK = new Set(['RUNNING', 'ACTIVE']);
+const SERVING_OK = new Set(['RUNNING', 'ACTIVE', 'SERVING']); // Apple, Meta, Google
 
 // ---------------------------------------------------------------------------
 // Windows
@@ -258,8 +258,11 @@ export function buildAdsEmailReport(input: BuildReportInput): AdsEmailReport {
   for (const channel of AD_CHANNELS) {
     if (campaigns.some((c) => c.channel === channel)) continue;
     const s = input.sync.find((x) => x.channel === channel);
-    if (channel === 'google_ads') notConnected.push({ channel, text: 'Google Ads (Android): not connected yet — API access pending' });
-    else if (!s?.configured) notConnected.push({ channel, text: `${CHANNEL_LABEL[channel]}: not connected (no API credentials configured)` });
+    if (channel === 'google_ads') {
+      if (!s?.configured) notConnected.push({ channel, text: 'Google Ads (Android): not configured (GOOGLE_ADS_SA_KEY missing)' });
+      else if (!s.lastSuccessAt) notConnected.push({ channel, text: 'Google Ads (Android): connected, awaiting first successful sync' });
+      else notConnected.push({ channel, text: 'Google Ads (Android): connected, awaiting data (no live campaigns or spend since launch)' });
+    } else if (!s?.configured) notConnected.push({ channel, text: `${CHANNEL_LABEL[channel]}: not connected (no API credentials configured)` });
     else notConnected.push({ channel, text: `${CHANNEL_LABEL[channel]}: connected, no live campaigns or spend since launch` });
   }
 

@@ -349,6 +349,7 @@ describe('GOLDEN: hand-computed KPIs through the real overview / timeseries rout
     expect(h.sync).toEqual([
       { channel: 'apple_ads', configured: true, lastSuccessAt: '2026-10-24T15:30:00Z', ageMinutes: 30, lastRunFailed: false, lastError: null, status: 'ok' },
       { channel: 'meta', configured: true, lastSuccessAt: '2026-10-24T12:00:00Z', ageMinutes: 240, lastRunFailed: false, lastError: null, status: 'warn' },
+      { channel: 'google_ads', configured: false, lastSuccessAt: null, ageMinutes: null, lastRunFailed: false, lastError: null, status: 'ok' },
     ]);
     // 10 Apple + 10 Meta campaign-days, all reconcile; keyword coverage (35 + 15 + 40) / 100 = 90%.
     expect(h.spend).toEqual({ status: 'ok', campaignDays: 20, mismatchedCampaignDays: 0, mismatches: [], totalAbsDiff: 0, keywordCoveragePct: 90, keywordSpend: 90, appleCampaignSpend: 100 });

@@ -158,12 +158,17 @@ describe('aggregation', () => {
     expect(renderText(buildAdsEmailReport(input({ metricRows: [] })))).toContain('—');
   });
 
-  it('Google Ads shows "not connected yet" until it has data; Meta reports its config state', () => {
+  it('Google Ads reports its config state until it has data; Meta too', () => {
     const r = buildAdsEmailReport(input());
     expect(r.notConnected.map((n) => n.text)).toEqual([
       'Meta: not connected (no API credentials configured)',
-      'Google Ads (Android): not connected yet — API access pending',
+      'Google Ads (Android): not configured (GOOGLE_ADS_SA_KEY missing)',
     ]);
+    const g = (over: Partial<SyncState>): SyncState => ({ channel: 'google_ads', configured: true, lastSuccessAt: null, lastFinishedAt: null, lastFinishedOk: null, lastError: null, ...over });
+    const awaitingSync = buildAdsEmailReport(input({ sync: [...okSync(AM), g({})] }));
+    expect(awaitingSync.notConnected.find((n) => n.channel === 'google_ads')?.text).toBe('Google Ads (Android): connected, awaiting first successful sync');
+    const awaitingData = buildAdsEmailReport(input({ sync: [...okSync(AM), g({ lastSuccessAt: AM.toISOString(), lastFinishedAt: AM.toISOString(), lastFinishedOk: true })] }));
+    expect(awaitingData.notConnected.find((n) => n.channel === 'google_ads')?.text).toBe('Google Ads (Android): connected, awaiting data (no live campaigns or spend since launch)');
     const withGoogle = buildAdsEmailReport(
       input({
         entities: [campaign(), campaign({ channel: 'google_ads', platform: 'android', external_id: 'G1', campaign_external_id: 'G1', name: 'Android UAC', status: 'ENABLED', serving_status: null })],
@@ -254,7 +259,7 @@ describe('rendering', () => {
     expect(text).toContain('Time zone: America/Toronto');
     expect(text).toContain('https://www.fitcircle.ai/admin/ads');
     expect(text).toContain('Data notes');
-    expect(text).toContain('Google Ads (Android): not connected yet');
+    expect(text).toContain('Google Ads (Android): not configured (GOOGLE_ADS_SA_KEY missing)');
     const html = renderHtml(r);
     expect(html).toContain('A &lt;b&gt;&amp;&lt;/b&gt; B');
     expect(html).not.toContain('<b>&</b>');

@@ -10,8 +10,9 @@ export const dynamic = 'force-dynamic';
 export const maxDuration = 300;
 
 /**
- * GET /api/cron/ads/sync (hourly at :20) — Apple Ads / Meta entities + daily
- * metrics for today-3 … today (ADS_CONSOLE_SPEC §6). CRON_SECRET bearer.
+ * GET /api/cron/ads/sync (hourly at :20) — Apple Ads / Meta / Google Ads entities
+ * + daily metrics for today-3 … today (ADS_CONSOLE_SPEC §6). CRON_SECRET bearer.
+ * A channel's first successful run backfills since its earliest campaign start.
  *
  * Backfill: ?start=YYYY-MM-DD&end=YYYY-MM-DD[&channel=apple_ads] — requires the
  * ADMIN_API_SECRET bearer instead.
