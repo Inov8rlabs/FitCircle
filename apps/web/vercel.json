@@ -87,6 +87,10 @@
     {
       "path": "/api/cron/ads/report",
       "schedule": "0 12,22 * * *"
+    },
+    {
+      "path": "/api/cron/releases/sync",
+      "schedule": "35 * * * *"
     }
   ]
 }

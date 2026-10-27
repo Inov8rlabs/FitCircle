@@ -1,0 +1,2721 @@
+{
+  "generatedAt": "2026-10-27T15:46:21.327Z",
+  "releases": [
+    {
+      "releaseKey": "ios:app_store:1.0",
+      "platform": "ios",
+      "track": "app_store",
+      "version": "1.0",
+      "build": "38",
+      "status": "superseded",
+      "releaseType": "manual",
+      "countries": [
+        "US",
+        "CA",
+        "GB",
+        "IN",
+        "SG"
+      ],
+      "internalNotes": "First App Store release (build 38, iOS 62685d4).\n- Food log with AI photo nutrition, circles, circle chat, streaks, Pro subscriptions ($9.99 / $29.99 / $179.99)\n- App Review fixes after the 2026-09-29 rejection: nothing asked after Sign in with Apple; ATT prompt shown on launch; AI-permission consent before anything is sent\n- Chat safety: block users, report with a reason, join by invite code\n- Sign in with Apple double-authorization fix (b398e55); Google sign-in fixes\n- Builds 35 (ITMS-91064 privacy manifest) and 36 (Guideline 4 / 2.1) were rejected before build 38",
+      "knownIssues": "Sign in with Apple \"Sign Up Not Completed\" server-side issue for new accounts was under an open Apple Developer Support case (102967725033) around launch (unverified whether fully resolved).",
+      "commits": [
+        {
+          "sha": "62685d4",
+          "subject": "AI permission before anything is sent; health wording and guardrails",
+          "repo": "FitCircle-iOS",
+          "date": "2026-09-29"
+        },
+        {
+          "sha": "0e60a99",
+          "subject": "Chat safety: block users, report with a reason, join by invite code",
+          "repo": "FitCircle-iOS",
+          "date": "2026-09-29"
+        },
+        {
+          "sha": "19c5ae8",
+          "subject": "Tracking prompt appears on launch; paywall leads with the billed price",
+          "repo": "FitCircle-iOS",
+          "date": "2026-09-29"
+        },
+        {
+          "sha": "7d1b8ac",
+          "subject": "Sign-in, legal and settings: clear errors, accurate terms, full account wipe",
+          "repo": "FitCircle-iOS",
+          "date": "2026-09-29"
+        },
+        {
+          "sha": "fb891b8",
+          "subject": "Onboarding: nothing asked after Sign in with Apple, no invented content",
+          "repo": "FitCircle-iOS",
+          "date": "2026-09-29"
+        },
+        {
+          "sha": "0fcacdc",
+          "subject": "Pro prices: screenshot host + mocks match App Store Connect ($9.99 / $29.99 / $179.99)",
+          "repo": "FitCircle-iOS",
+          "date": "2026-09-23"
+        },
+        {
+          "sha": "b485c3b",
+          "subject": "Fix ITMS-91064: privacy manifest tracking declaration",
+          "repo": "FitCircle-iOS",
+          "date": "2026-09-23"
+        },
+        {
+          "sha": "9aa0329",
+          "subject": "Food log edit: always row-by-row with the photo; keep ingredients in the cache",
+          "repo": "FitCircle-iOS",
+          "date": "2026-09-23"
+        },
+        {
+          "sha": "139c1db",
+          "subject": "Chat: one reaction tray at a time, tap outside dismisses",
+          "repo": "FitCircle-iOS",
+          "date": "2026-09-23"
+        },
+        {
+          "sha": "9428d3c",
+          "subject": "Amplitude product analytics + null-safe member Weight Progress card",
+          "repo": "FitCircle-iOS",
+          "date": "2026-09-23"
+        },
+        {
+          "sha": "97a7299",
+          "subject": "feat(chat): long-press reactions with 👍 🙌 ❤️, pills on the bubble corner; centered confirm alerts",
+          "repo": "FitCircle-iOS",
+          "date": "2026-09-22"
+        },
+        {
+          "sha": "b7010d1",
+          "subject": "feat(chat): day headers, meal cards in the timeline, sharing chip in the header; editor shows the plate",
+          "repo": "FitCircle-iOS",
+          "date": "2026-09-22"
+        },
+        {
+          "sha": "ed5a6c6",
+          "subject": "fix(auth,food): social sign-in enters the app; meal editor edits slot and time",
+          "repo": "FitCircle-iOS",
+          "date": "2026-09-22"
+        },
+        {
+          "sha": "b2f6d84",
+          "subject": "build: quote the local swift-sharing package path",
+          "repo": "FitCircle-iOS",
+          "date": "2026-09-22"
+        },
+        {
+          "sha": "cbd7214",
+          "subject": "build: compile on Xcode 27 (TCA 1.26.1, vendored swift-sharing linker fix)",
+          "repo": "FitCircle-iOS",
+          "date": "2026-09-22"
+        }
+      ],
+      "migrations": [],
+      "links": {
+        "App Store": "https://apps.apple.com/app/id6811432467"
+      },
+      "submittedAt": "2026-09-23T15:55:00Z",
+      "releasedAt": "2026-10-08T12:00:00Z",
+      "events": [
+        {
+          "toStatus": "waiting_for_review",
+          "occurredAt": "2026-09-23T15:55:00Z",
+          "note": "Resubmitted with build 36 after ITMS-91064 auto-rejection of build 35 (privacy manifest)"
+        },
+        {
+          "toStatus": "rejected",
+          "occurredAt": "2026-09-29T12:00:00Z",
+          "note": "App Review rejected build 36: Guideline 4 (name asked after Sign in with Apple), 2.1 (ATT prompt not shown on iPadOS 27). Day only."
+        },
+        {
+          "toStatus": "waiting_for_review",
+          "occurredAt": "2026-09-29T17:40:00Z",
+          "note": "Resubmitted with build 38 + ATT screen recording"
+        },
+        {
+          "toStatus": "live",
+          "occurredAt": "2026-10-08T12:00:00Z",
+          "note": "Released manually by Ani (day only)"
+        }
+      ]
+    },
+    {
+      "releaseKey": "ios:app_store:1.0.1",
+      "platform": "ios",
+      "track": "app_store",
+      "version": "1.0.1",
+      "build": "40",
+      "status": "superseded",
+      "releaseType": "manual",
+      "countries": [
+        "US",
+        "CA",
+        "GB",
+        "IN",
+        "SG"
+      ],
+      "internalNotes": "iOS 27 SDK build (build 40).\n- Built with Xcode 27 / iOS 27 SDK (Xcode Cloud workflow pinned to Xcode 27)\n- Recommendations + nutrition-challenge decoding contract fixes\n- Dashboard tour: removed reward / real-money wording\n- Release date not recorded (live before 1.0.2 on 2026-10-14) (unverified)",
+      "commits": [
+        {
+          "sha": "a99e925",
+          "subject": "1.0.1: iOS 27 SDK build, recommendations + nutrition challenge contract fixes",
+          "repo": "FitCircle-iOS",
+          "date": "2026-10-08"
+        },
+        {
+          "sha": "734090b",
+          "subject": "Dashboard tour: drop reward and real-money wording",
+          "repo": "FitCircle-iOS",
+          "date": "2026-09-30"
+        },
+        {
+          "sha": "a705d44",
+          "subject": "Screenshot mode rounds the monthly equivalent down, as the store does",
+          "repo": "FitCircle-iOS",
+          "date": "2026-09-29"
+        }
+      ],
+      "migrations": [],
+      "links": {
+        "App Store": "https://apps.apple.com/app/id6811432467"
+      },
+      "supersededAt": "2026-10-14T12:00:00Z",
+      "events": [
+        {
+          "toStatus": "superseded",
+          "occurredAt": "2026-10-14T12:00:00Z",
+          "note": "Replaced by 1.0.2"
+        }
+      ]
+    },
+    {
+      "releaseKey": "ios:app_store:1.0.2",
+      "platform": "ios",
+      "track": "app_store",
+      "version": "1.0.2",
+      "build": "44",
+      "status": "superseded",
+      "releaseType": "manual",
+      "countries": [
+        "US",
+        "CA",
+        "GB",
+        "IN",
+        "SG"
+      ],
+      "internalNotes": "Build 44 (iOS 4b85807).\n- Tolerant decoding so one unexpected field can't fail a screen (paired with BE defc8d3 unified user shape)\n- App Store rating prompt at positive moments; Rate FitCircle in Settings\n- Circle Chat: grouped runs, jump-to-latest, refreshed composer\n- Analytics: provider-agnostic facade on the canonical tracking plan",
+      "commits": [
+        {
+          "sha": "4b85807",
+          "subject": "1.0.2: tolerant decoding so one unexpected field can't fail a screen",
+          "repo": "FitCircle-iOS",
+          "date": "2026-10-13"
+        },
+        {
+          "sha": "e062fcb",
+          "subject": "1.0.2: App Store rating prompt at positive moments, Rate FitCircle in Settings",
+          "repo": "FitCircle-iOS",
+          "date": "2026-10-09"
+        },
+        {
+          "sha": "5808afd",
+          "subject": "Circle Chat: grouped runs, jump-to-latest, refreshed composer",
+          "repo": "FitCircle-iOS",
+          "date": "2026-10-09"
+        },
+        {
+          "sha": "c685a91",
+          "subject": "Analytics: provider-agnostic facade on the canonical tracking plan",
+          "repo": "FitCircle-iOS",
+          "date": "2026-10-09"
+        }
+      ],
+      "migrations": [],
+      "links": {
+        "App Store": "https://apps.apple.com/app/id6811432467"
+      },
+      "releasedAt": "2026-10-14T12:00:00Z",
+      "events": [
+        {
+          "toStatus": "live",
+          "occurredAt": "2026-10-14T12:00:00Z",
+          "note": "Released manually (day only)"
+        }
+      ]
+    },
+    {
+      "releaseKey": "ios:app_store:1.0.3",
+      "platform": "ios",
+      "track": "app_store",
+      "version": "1.0.3",
+      "build": "50",
+      "status": "superseded",
+      "releaseType": "manual",
+      "countries": [
+        "US",
+        "CA",
+        "GB",
+        "IN",
+        "SG"
+      ],
+      "internalNotes": "Build 50 (iOS d61e523), built on Xcode 27.1 RC.\n- iPhone Duo: inner-display experience (sidebar, meal review split, progress, chat, kitchen counter) + large-screen auth/onboarding\n- Text → AI nutrition estimate on manual entries; no-photo entries fixed\n- Nutrition confirm: photo pinned while editing, \"fix it\" correction, did-you-mean chips, rating\n- Ads hidden for server-side Pro (complimentary grants), not only RevenueCat Pro\n- READY_FOR_SALE by 2026-10-19; exact release date not recorded (unverified)",
+      "commits": [
+        {
+          "sha": "d61e523",
+          "subject": "Text → AI nutrition estimate on manual entries; no-photo entries fixed",
+          "repo": "FitCircle-iOS",
+          "date": "2026-10-15"
+        },
+        {
+          "sha": "373d849",
+          "subject": "iPhone Duo: large-screen auth, onboarding and screen audit",
+          "repo": "FitCircle-iOS",
+          "date": "2026-10-14"
+        },
+        {
+          "sha": "e35b2cf",
+          "subject": "iPhone Duo: inner-display experience for 1.0.3 (sidebar, meal review split, progress, chat, kitchen counter)",
+          "repo": "FitCircle-iOS",
+          "date": "2026-10-14"
+        },
+        {
+          "sha": "6d002d6",
+          "subject": "1.0.3: open the next release train",
+          "repo": "FitCircle-iOS",
+          "date": "2026-10-14"
+        },
+        {
+          "sha": "d4eda14",
+          "subject": "Nutrition confirm: photo pinned while editing, \"fix it\" correction, did-you-mean chips, rating",
+          "repo": "FitCircle-iOS",
+          "date": "2026-10-14"
+        },
+        {
+          "sha": "cbc45bc",
+          "subject": "Ads: hide ads for server-side Pro, not only RevenueCat Pro",
+          "repo": "FitCircle-iOS",
+          "date": "2026-10-13"
+        }
+      ],
+      "migrations": [],
+      "links": {
+        "App Store": "https://apps.apple.com/app/id6811432467"
+      },
+      "supersededAt": "2026-10-21T12:00:00Z",
+      "events": [
+        {
+          "toStatus": "superseded",
+          "occurredAt": "2026-10-21T12:00:00Z",
+          "note": "Replaced by 1.0.4"
+        }
+      ]
+    },
+    {
+      "releaseKey": "ios:app_store:1.0.4",
+      "platform": "ios",
+      "track": "app_store",
+      "version": "1.0.4",
+      "build": "57",
+      "status": "superseded",
+      "releaseType": "manual",
+      "countries": [
+        "US",
+        "CA",
+        "GB",
+        "IN",
+        "SG"
+      ],
+      "internalNotes": "Build 57 (iOS 147cd64, local archive on Xcode 27.1 RC).\n- Better Together referrals v1–v3: invite friends & earn Pro, invite by email/text, nudges, lobby + seats, circle streak saves, seasonal circles\n- Campaigns: home card, Circles banners, wizard prefill, Advent calendar + door reveal, push/link routing\n- Auth: stop signing users out on transient failures (147cd64)",
+      "commits": [
+        {
+          "sha": "147cd64",
+          "subject": "Auth: stop signing users out on transient failures (1.0.4 build 57)",
+          "repo": "FitCircle-iOS",
+          "date": "2026-10-19"
+        },
+        {
+          "sha": "b7f837e",
+          "subject": "Campaigns: home card, Circles banners, wizard prefill, Advent calendar + door reveal, push/link routing (CAMPAIGNS_SPEC)",
+          "repo": "FitCircle-iOS",
+          "date": "2026-10-16"
+        },
+        {
+          "sha": "506c3c2",
+          "subject": "Referrals: log circle seat/lobby invites with the circle source (tracking plan v9)",
+          "repo": "FitCircle-iOS",
+          "date": "2026-10-16"
+        },
+        {
+          "sha": "5cbeaee",
+          "subject": "Better Together v3: lobby + seats, circle streak saves, seasonal circles, invite prompts (iOS)",
+          "repo": "FitCircle-iOS",
+          "date": "2026-10-16"
+        },
+        {
+          "sha": "8bd03e6",
+          "subject": "Better Together v2: invite by email or text, nudges (iOS)",
+          "repo": "FitCircle-iOS",
+          "date": "2026-10-15"
+        },
+        {
+          "sha": "ec65848",
+          "subject": "Better Together: invite friends, earn Pro (iOS 1.0.4)",
+          "repo": "FitCircle-iOS",
+          "date": "2026-10-15"
+        }
+      ],
+      "migrations": [
+        "100_referrals",
+        "101_referral_invites",
+        "102_circle_streak_lobby_progress",
+        "103_campaigns"
+      ],
+      "links": {
+        "App Store": "https://apps.apple.com/app/id6811432467"
+      },
+      "releasedAt": "2026-10-21T12:00:00Z",
+      "events": [
+        {
+          "toStatus": "live",
+          "occurredAt": "2026-10-21T12:00:00Z",
+          "note": "Day only"
+        }
+      ]
+    },
+    {
+      "releaseKey": "ios:app_store:1.0.5",
+      "platform": "ios",
+      "track": "app_store",
+      "version": "1.0.5",
+      "build": "61",
+      "status": "superseded",
+      "releaseType": "manual",
+      "countries": [
+        "US",
+        "CA",
+        "GB",
+        "IN",
+        "SG"
+      ],
+      "internalNotes": "Build 61.\n- Fitzy v2: streaming coach, today's focus, weekly plan, memory, Pro teasers\n- Hydration card, campaign info sheet v2, \"Fill your seats\" invite step\n- Approved ~2026-10-21; exact release date not recorded (unverified); build→commit mapping 3af7f80 (unverified)",
+      "commits": [
+        {
+          "sha": "3af7f80",
+          "subject": "Hydration card, campaign info sheet v2, \"Fill your seats\" invite step",
+          "repo": "FitCircle-iOS",
+          "date": "2026-10-21"
+        },
+        {
+          "sha": "25137b6",
+          "subject": "Fitzy v2: streaming coach, today's focus, weekly plan, memory, Pro teasers (1.0.5)",
+          "repo": "FitCircle-iOS",
+          "date": "2026-10-20"
+        }
+      ],
+      "migrations": [
+        "105_fitzy_v2"
+      ],
+      "links": {
+        "App Store": "https://apps.apple.com/app/id6811432467"
+      },
+      "approvedAt": "2026-10-21T12:00:00Z",
+      "supersededAt": "2026-10-23T12:00:00Z",
+      "events": [
+        {
+          "toStatus": "superseded",
+          "occurredAt": "2026-10-23T12:00:00Z",
+          "note": "Replaced by 1.0.7"
+        }
+      ]
+    },
+    {
+      "releaseKey": "ios:app_store:1.0.7",
+      "platform": "ios",
+      "track": "app_store",
+      "version": "1.0.7",
+      "build": "66",
+      "status": "superseded",
+      "releaseType": "manual",
+      "countries": [
+        "US",
+        "CA",
+        "GB",
+        "IN",
+        "SG"
+      ],
+      "internalNotes": "Build 66. Includes the 1.0.6 work (build 62 never went to the App Store).\n- Apple surfaces: widgets (incl. steps/exercise/macros), Live Activity, Controls, Siri, Apple Watch app + complications\n- Rich notifications: categories + actions, Circle Ring content extension, service extension (images)\n- Ad attribution: Apple Search Ads, Meta SDK, SKAN 4 values; privacy labels updated for Meta\n- Water logging local-first; food-log sync hardening (from 1.0.6)\n- Login scales with Dynamic Type; test automation (snapshots, Maestro)",
+      "commits": [
+        {
+          "sha": "54c5fa1",
+          "subject": "Dashboard: referral card steps below today's progress while a campaign card leads; wrap its headline",
+          "repo": "FitCircle-iOS",
+          "date": "2026-10-22"
+        },
+        {
+          "sha": "ba4137f",
+          "subject": "Xcode Cloud: build number = run number + 1000",
+          "repo": "FitCircle-iOS",
+          "date": "2026-10-22"
+        },
+        {
+          "sha": "51a68fa",
+          "subject": "Bump version to 1.0.7",
+          "repo": "FitCircle-iOS",
+          "date": "2026-10-22"
+        },
+        {
+          "sha": "dbb9c01",
+          "subject": "Surfaces: '4 to go today' on a fresh day; keep 5-digit step counts clear of the arc",
+          "repo": "FitCircle-iOS",
+          "date": "2026-10-22"
+        },
+        {
+          "sha": "1691ef1",
+          "subject": "Snapshots: re-record large-text login with the padded Google button",
+          "repo": "FitCircle-iOS",
+          "date": "2026-10-22"
+        },
+        {
+          "sha": "12f2054",
+          "subject": "Login: keep the Google button label inside the button at large text sizes",
+          "repo": "FitCircle-iOS",
+          "date": "2026-10-22"
+        },
+        {
+          "sha": "fbca051",
+          "subject": "Login: keep the Google button label inside the button at large text sizes",
+          "repo": "FitCircle-iOS",
+          "date": "2026-10-22"
+        },
+        {
+          "sha": "9b76a74",
+          "subject": "Snapshots: re-record login after the Dynamic Type fix (XXL now actually scales)",
+          "repo": "FitCircle-iOS",
+          "date": "2026-10-22"
+        },
+        {
+          "sha": "a4af0f1",
+          "subject": "1.0.7: one snapshot model per side; phone converts for the watch",
+          "repo": "FitCircle-iOS",
+          "date": "2026-10-22"
+        },
+        {
+          "sha": "53c4d1d",
+          "subject": "Project: add the FitCircleWatch group to the main group (lost in the merge)",
+          "repo": "FitCircle-iOS",
+          "date": "2026-10-22"
+        },
+        {
+          "sha": "f8b7c58",
+          "subject": "Project: renumber snapshot-testing object IDs to avoid colliding with the widgets target",
+          "repo": "FitCircle-iOS",
+          "date": "2026-10-22"
+        },
+        {
+          "sha": "5cbc57d",
+          "subject": "Test automation: accessibility identifiers, key-screen snapshot tests, Maestro flows, self-hosted runner workflow, TESTING.md",
+          "repo": "FitCircle-iOS",
+          "date": "2026-10-22"
+        },
+        {
+          "sha": "62397a9",
+          "subject": "Rich notifications: shared RichPushMedia for the service extension, in-app preview, more tests",
+          "repo": "FitCircle-iOS",
+          "date": "2026-10-22"
+        },
+        {
+          "sha": "2cb9f7d",
+          "subject": "Login: scale with Dynamic Type",
+          "repo": "FitCircle-iOS",
+          "date": "2026-10-22"
+        },
+        {
+          "sha": "256b0b0",
+          "subject": "Surfaces: Steps, Exercise, Calories & Macros widgets; richer Live Activity",
+          "repo": "FitCircle-iOS",
+          "date": "2026-10-21"
+        }
+      ],
+      "migrations": [],
+      "links": {
+        "App Store": "https://apps.apple.com/app/id6811432467"
+      },
+      "releasedAt": "2026-10-23T12:00:00Z",
+      "supersededAt": "2026-10-24T12:00:00Z",
+      "events": [
+        {
+          "toStatus": "live",
+          "occurredAt": "2026-10-23T12:00:00Z",
+          "note": "Released via the ASC API (day only)"
+        },
+        {
+          "toStatus": "superseded",
+          "occurredAt": "2026-10-24T12:00:00Z",
+          "note": "Replaced by 1.0.8"
+        }
+      ]
+    },
+    {
+      "releaseKey": "ios:app_store:1.0.8",
+      "platform": "ios",
+      "track": "app_store",
+      "version": "1.0.8",
+      "build": "70",
+      "status": "superseded",
+      "releaseType": "manual",
+      "countries": [
+        "US",
+        "CA",
+        "GB",
+        "IN",
+        "SG"
+      ],
+      "internalNotes": "Build 70 (iOS 9cf1330).\n- Apple Watch v2: Activity + Fuel pages, one-tap meal re-log, Nudge / Save their day, Steps / Calories / Protein complications\n- Widgets v2: re-log meals, nudge/save, water amount, streak-at-risk, Weight & Week, new Controls, circle picker\n- Server-driven home feed (HOME_FEED_SPEC schema 1) with calm first paint\n- Food log: one expandable water card per day\n- Fitzy coaching pushes deep link (server kill switch off)\n- Build 69 pulled; run 68 failed upload ITMS-90683 (watch NSHealthUpdateUsageDescription, fixed bb17046)",
+      "commits": [
+        {
+          "sha": "9cf1330",
+          "subject": "Home: campaign card paints immediately (no 30-45 s wait)",
+          "repo": "FitCircle-iOS",
+          "date": "2026-10-23"
+        },
+        {
+          "sha": "bb17046",
+          "subject": "Watch: add NSHealthUpdateUsageDescription (ITMS-90683 blocked 1.0.8 upload; required with the HealthKit entitlement)",
+          "repo": "FitCircle-iOS",
+          "date": "2026-10-22"
+        },
+        {
+          "sha": "8b6ba35",
+          "subject": "Fitzy coaching pushes: fitzy_chat deep link opens a tip-seeded Fitzy chat; coach toggle",
+          "repo": "FitCircle-iOS",
+          "date": "2026-10-22"
+        },
+        {
+          "sha": "e4ec8e3",
+          "subject": "Version 1.0.8: Watch v2, Widgets v2, server-driven home feed, calm first paint, water day card",
+          "repo": "FitCircle-iOS",
+          "date": "2026-10-22"
+        },
+        {
+          "sha": "d1e86e2",
+          "subject": "feat(home): calm first paint for the server-driven dashboard",
+          "repo": "FitCircle-iOS",
+          "date": "2026-10-22"
+        },
+        {
+          "sha": "63aff7c",
+          "subject": "Home feed: server-driven dashboard card order (HOME_FEED_SPEC schema 1)",
+          "repo": "FitCircle-iOS",
+          "date": "2026-10-22"
+        },
+        {
+          "sha": "c6ded60",
+          "subject": "Food log: fold each day's water logs into one expandable water card",
+          "repo": "FitCircle-iOS",
+          "date": "2026-10-22"
+        },
+        {
+          "sha": "3117906",
+          "subject": "Widgets v2 (1.0.8): re-log meals, nudge/save, water amount, streak-at-risk, Weight & Week, new Controls, circle picker",
+          "repo": "FitCircle-iOS",
+          "date": "2026-10-22"
+        },
+        {
+          "sha": "ed0fadd",
+          "subject": "Apple Watch v2: Activity + Fuel pages, one-tap meal re-log, Nudge / Save their day, Steps / Calories / Protein complications",
+          "repo": "FitCircle-iOS",
+          "date": "2026-10-22"
+        },
+        {
+          "sha": "fea7bdf",
+          "subject": "App Store marketing renders: widgets, Lock Screen + Live Activity, Apple Watch (real surface views, 6.9\" and 6.5\")",
+          "repo": "FitCircle-iOS",
+          "date": "2026-10-22"
+        },
+        {
+          "sha": "638eaa4",
+          "subject": "Xcode Cloud: drop the build-number offset (Xcode Cloud overrides it); note where the next number is set",
+          "repo": "FitCircle-iOS",
+          "date": "2026-10-22"
+        }
+      ],
+      "migrations": [
+        "106_home_feed",
+        "107_fitzy_coach_push"
+      ],
+      "links": {
+        "App Store": "https://apps.apple.com/app/id6811432467"
+      },
+      "releasedAt": "2026-10-24T12:00:00Z",
+      "supersededAt": "2026-10-27T12:00:00Z",
+      "events": [
+        {
+          "toStatus": "waiting_for_review",
+          "occurredAt": "2026-10-23T13:38:51Z",
+          "note": "Submitted with build 69"
+        },
+        {
+          "toStatus": "waiting_for_review",
+          "occurredAt": "2026-10-23T14:21:15Z",
+          "note": "Build 69 pulled; resubmitted with build 70 (campaign-card fix 9cf1330)"
+        },
+        {
+          "toStatus": "live",
+          "occurredAt": "2026-10-24T12:00:00Z",
+          "note": "Day only"
+        },
+        {
+          "toStatus": "superseded",
+          "occurredAt": "2026-10-27T12:00:00Z",
+          "note": "Replaced by 1.0.9"
+        }
+      ]
+    },
+    {
+      "releaseKey": "ios:app_store:1.0.9",
+      "platform": "ios",
+      "track": "app_store",
+      "version": "1.0.9",
+      "build": "71",
+      "status": "live",
+      "releaseType": "manual",
+      "countries": [
+        "US",
+        "CA",
+        "GB",
+        "IN",
+        "SG"
+      ],
+      "internalNotes": "Build 71 (iOS c618085).\n- Install attribution reported to the backend once per user (user_attribution); Apple mock ASA payload tagged as test\n- Notifications: no duplicate \"Workouts Synced\", stable local ids, no overlap with server pushes (with BE push dedupe 9d5a6b7)\n- Daily check-in: mood/energy step removed\n- iPhone Duo bug fixes (unverified — planned for 1.0.9 per release notes)",
+      "commits": [
+        {
+          "sha": "c618085",
+          "subject": "Keep analytics codegen at v12 on release/1.0.9",
+          "repo": "FitCircle-iOS",
+          "date": "2026-10-26"
+        },
+        {
+          "sha": "0560062",
+          "subject": "1.0.9: drop mood/energy from the daily check-in; bump MARKETING_VERSION",
+          "repo": "FitCircle-iOS",
+          "date": "2026-10-26"
+        },
+        {
+          "sha": "eacf8f3",
+          "subject": "Local notifications: no duplicate 'Workouts Synced', stable ids, no overlap with server pushes",
+          "repo": "FitCircle-iOS",
+          "date": "2026-10-25"
+        },
+        {
+          "sha": "01bd2dc",
+          "subject": "Report install attribution to the backend once per user",
+          "repo": "FitCircle-iOS",
+          "date": "2026-10-24"
+        },
+        {
+          "sha": "e349c65",
+          "subject": "Attribution: tag Apple's mock ASA payload as apple_search_ads_test",
+          "repo": "FitCircle-iOS",
+          "date": "2026-10-24"
+        },
+        {
+          "sha": "989cd3e",
+          "subject": "Debug marketing captures: -FixtureCircleName and -reviewPhoto (debug-only, no release effect)",
+          "repo": "FitCircle-iOS",
+          "date": "2026-10-24"
+        }
+      ],
+      "migrations": [
+        "108_ads_console",
+        "109_notification_log_dedupe_index"
+      ],
+      "links": {
+        "App Store": "https://apps.apple.com/app/id6811432467"
+      },
+      "approvedAt": "2026-10-27T12:00:00Z",
+      "releasedAt": "2026-10-27T12:00:00Z",
+      "events": [
+        {
+          "toStatus": "live",
+          "occurredAt": "2026-10-27T12:00:00Z",
+          "note": "Approved and released manually by Ani (day only)"
+        }
+      ]
+    },
+    {
+      "releaseKey": "ios:testflight:1.0.6(62)",
+      "platform": "ios",
+      "track": "testflight",
+      "version": "1.0.6",
+      "build": "62",
+      "status": "in_testing",
+      "uploadedAt": "2026-10-21T12:00:00Z",
+      "internalNotes": "Internal TestFlight only; never submitted to the App Store (its changes shipped in 1.0.7).\n- Water logging local-first via FoodLogService/SwiftData\n- Food-log sync hardening: offline create, user scoping, stuck-syncing retry, safe reap; log-time timezone + image_key",
+      "commits": [
+        {
+          "sha": "204f27f",
+          "subject": "Water logging local-first; food-log sync hardening (1.0.6)",
+          "repo": "FitCircle-iOS",
+          "date": "2026-10-21"
+        }
+      ],
+      "migrations": [],
+      "links": {},
+      "events": [
+        {
+          "toStatus": "in_testing",
+          "occurredAt": "2026-10-21T12:00:00Z",
+          "note": "Internal TestFlight (day only)"
+        }
+      ]
+    },
+    {
+      "releaseKey": "ios:testflight:1.1.0(72)",
+      "platform": "ios",
+      "track": "testflight",
+      "version": "1.1.0",
+      "build": "72",
+      "status": "in_testing",
+      "uploadedAt": "2026-10-26T22:34:41Z",
+      "internalNotes": "Activation journey (iOS c0592c2), on TestFlight.\n- promo@1 feed cards, skippable first-meal onboarding step\n- Meet Fitzy + post-aha paywall\n- Breakfast / lunch / snack / dinner meal reminder slots\n- Visual QA fixes + JourneyPreviewHost debug harness",
+      "commits": [
+        {
+          "sha": "c0592c2",
+          "subject": "1.1.0 activation journey: visual QA fixes + JourneyPreviewHost",
+          "repo": "FitCircle-iOS",
+          "date": "2026-10-26"
+        },
+        {
+          "sha": "ab46599",
+          "subject": "1.1.0 activation journey (iOS): promo@1 cards, first-meal onboarding, Meet Fitzy + post-aha paywall, meal reminder slots",
+          "repo": "FitCircle-iOS",
+          "date": "2026-10-26"
+        }
+      ],
+      "migrations": [
+        "110_promos_activation_journey"
+      ],
+      "links": {},
+      "events": [
+        {
+          "toStatus": "in_testing",
+          "occurredAt": "2026-10-26T22:34:41Z",
+          "note": "Build 72 uploaded (VALID, internal testing)"
+        }
+      ]
+    },
+    {
+      "releaseKey": "android:play_production:8",
+      "platform": "android",
+      "track": "play_production",
+      "version": "1.0.0",
+      "build": "8",
+      "status": "superseded",
+      "rolloutFraction": 1,
+      "countries": [
+        "US",
+        "CA",
+        "GB",
+        "IN",
+        "SG"
+      ],
+      "internalNotes": "First Google Play production release (versionCode 8, Android b0ffd82), 5 countries (US, CA, GB, IN, SG).\n- Adaptive launcher + notification icons use the real FitCircle logo (fix for the release-6 Misleading Claims rejection)\n- iOS-parity polish: floating tab bar, motion, meal detail, nutrition cards\n- Photo meals: compress + size-batch uploads (raw camera files exceeded Vercel's 4.5 MB body limit)\n- Foldables / large-screen layouts; AI routes 65 s timeout; push (FCM) config\n- Also published to internal testing 2026-10-15 14:46",
+      "commits": [
+        {
+          "sha": "b0ffd82",
+          "subject": "Android iOS-parity polish: floating tab bar, deliberate motion, meal detail, nutrition cards",
+          "repo": "Fitcircle-Android",
+          "date": "2026-10-15"
+        },
+        {
+          "sha": "db97e13",
+          "subject": "Food log photos: compress and size-batch uploads so photo meals keep their photo",
+          "repo": "Fitcircle-Android",
+          "date": "2026-10-15"
+        },
+        {
+          "sha": "63853c0",
+          "subject": "Large-screen today nutrition: key the Food Log back-stack lookup on the current entry",
+          "repo": "Fitcircle-Android",
+          "date": "2026-10-15"
+        },
+        {
+          "sha": "1656a0a",
+          "subject": "Rail Check in: use the highlighted tab instead of the restricted NavController.currentBackStack",
+          "repo": "Fitcircle-Android",
+          "date": "2026-10-15"
+        },
+        {
+          "sha": "ead03a8",
+          "subject": "Launcher + notification icons: use the real FitCircle logo",
+          "repo": "Fitcircle-Android",
+          "date": "2026-10-15"
+        },
+        {
+          "sha": "a97d0cb",
+          "subject": "Text → AI nutrition estimate on manual entries",
+          "repo": "Fitcircle-Android",
+          "date": "2026-10-14"
+        },
+        {
+          "sha": "d7b3432",
+          "subject": "Push notifications: add Firebase config and apply google-services plugin",
+          "repo": "Fitcircle-Android",
+          "date": "2026-10-14"
+        },
+        {
+          "sha": "ac624b6",
+          "subject": "Foldables: large-screen auth, onboarding and screen audit",
+          "repo": "Fitcircle-Android",
+          "date": "2026-10-14"
+        },
+        {
+          "sha": "bd7a6d3",
+          "subject": "Foldables and large screens: rail, meal review on the hinge, tabletop, list-detail, progress",
+          "repo": "Fitcircle-Android",
+          "date": "2026-10-14"
+        },
+        {
+          "sha": "6c0b809",
+          "subject": "Nutrition confirm: photo pinned while editing, \"fix it\" correction, did-you-mean chips, rating",
+          "repo": "Fitcircle-Android",
+          "date": "2026-10-14"
+        },
+        {
+          "sha": "8d0e8c2",
+          "subject": "AI routes: 65 s timeout and readable network errors",
+          "repo": "Fitcircle-Android",
+          "date": "2026-10-13"
+        },
+        {
+          "sha": "ac8fcc1",
+          "subject": "Analytics: regenerate for tracking plan v5",
+          "repo": "Fitcircle-Android",
+          "date": "2026-10-09"
+        }
+      ],
+      "migrations": [],
+      "links": {
+        "Play Console": "https://play.google.com/console/u/0/developers/5331707730640650608/app/4975667298975477758/app-dashboard",
+        "Google Play": "https://play.google.com/store/apps/details?id=com.inov8rlabs.apps.fitcircle"
+      },
+      "submittedAt": "2026-10-15T12:00:00Z",
+      "releasedAt": "2026-10-19T12:00:00Z",
+      "supersededAt": "2026-10-20T12:00:00Z",
+      "events": [
+        {
+          "toStatus": "rejected",
+          "occurredAt": "2026-10-15T12:00:00Z",
+          "note": "Earlier production release 6 rejected (Misleading Claims: installed icon ≠ listing); fixed by ead03a8"
+        },
+        {
+          "toStatus": "in_review",
+          "occurredAt": "2026-10-15T12:00:00Z",
+          "note": "Release 8 sent for review with all listing changes"
+        },
+        {
+          "toStatus": "live",
+          "occurredAt": "2026-10-19T12:00:00Z",
+          "note": "Live by 2026-10-19 (exact approval time not recorded)"
+        },
+        {
+          "toStatus": "superseded",
+          "occurredAt": "2026-10-20T12:00:00Z",
+          "note": "Replaced by 1.0.3 (vc12)"
+        }
+      ]
+    },
+    {
+      "releaseKey": "android:play_production:12",
+      "platform": "android",
+      "track": "play_production",
+      "version": "1.0.3",
+      "build": "12",
+      "status": "superseded",
+      "rolloutFraction": 1,
+      "countries": [
+        "US",
+        "CA",
+        "GB",
+        "IN",
+        "SG"
+      ],
+      "internalNotes": "\"1.0.3 Seasonal campaigns\" (versionCode 12).\n- Better Together referrals v1–v3 (invite & earn Pro, email/text invites, nudges, lobby + seats, circle streak saves, seasonal circles)\n- Campaigns: home card, Circles banners, wizard prefill, Advent calendar + door reveal, push/App Link routing\n- Build commit 05909e5 is inferred from dates (vc11 = 0bfeecd; vc12 published to internal 2026-10-16) (unverified)",
+      "commits": [
+        {
+          "sha": "05909e5",
+          "subject": "Campaigns: home card, Circles banners, wizard prefill, Advent calendar + door reveal, push/App Link routing (CAMPAIGNS_SPEC)",
+          "repo": "Fitcircle-Android",
+          "date": "2026-10-16"
+        },
+        {
+          "sha": "c2e3e6a",
+          "subject": "Referrals: circle invite source; fix crash sending invites from a peak-moment prompt (tracking plan v9)",
+          "repo": "Fitcircle-Android",
+          "date": "2026-10-16"
+        },
+        {
+          "sha": "0bfeecd",
+          "subject": "Better Together v3: lobby + seats, circle streak saves, seasonal circles, invite prompts (Android 1.0.3)",
+          "repo": "Fitcircle-Android",
+          "date": "2026-10-16"
+        },
+        {
+          "sha": "cfab25b",
+          "subject": "Better Together v2: invite by email or text, nudges (Android 1.0.2)",
+          "repo": "Fitcircle-Android",
+          "date": "2026-10-15"
+        },
+        {
+          "sha": "1c8c2d5",
+          "subject": "Better Together: invite friends, earn Pro (Android 1.0.1)",
+          "repo": "Fitcircle-Android",
+          "date": "2026-10-15"
+        }
+      ],
+      "migrations": [],
+      "links": {
+        "Play Console": "https://play.google.com/console/u/0/developers/5331707730640650608/app/4975667298975477758/app-dashboard",
+        "Google Play": "https://play.google.com/store/apps/details?id=com.inov8rlabs.apps.fitcircle"
+      },
+      "submittedAt": "2026-10-19T12:00:00Z",
+      "releasedAt": "2026-10-20T12:00:00Z",
+      "supersededAt": "2026-10-21T14:51:00Z",
+      "events": [
+        {
+          "toStatus": "in_review",
+          "occurredAt": "2026-10-19T12:00:00Z",
+          "note": "Promoted internal → production at 100%"
+        },
+        {
+          "toStatus": "live",
+          "occurredAt": "2026-10-20T12:00:00Z",
+          "note": "Approved + active, 5 countries"
+        },
+        {
+          "toStatus": "superseded",
+          "occurredAt": "2026-10-21T14:51:00Z",
+          "note": "Replaced by 1.0.4 (vc15)"
+        }
+      ]
+    },
+    {
+      "releaseKey": "android:play_production:15",
+      "platform": "android",
+      "track": "play_production",
+      "version": "1.0.4",
+      "build": "15",
+      "status": "superseded",
+      "rolloutFraction": 1,
+      "countries": [
+        "US",
+        "CA",
+        "GB",
+        "IN",
+        "SG"
+      ],
+      "internalNotes": "versionCode 15 (Android fd9e8c1).\n- Fitzy v2: streaming coach, today's focus, weekly plan, memory, Pro teasers\n- Polish: milestone celebration, instant hydration card, campaign info sheet\n- Campaign sheet v2 + \"Fill your seats\" invite step; foldable layouts\n- vc13/vc14 (1.0.4) were internal-only; 14 published to internal 2026-10-20",
+      "commits": [
+        {
+          "sha": "fd9e8c1",
+          "subject": "Campaign sheet v2 + \"Fill your seats\" invite step; foldable layouts",
+          "repo": "Fitcircle-Android",
+          "date": "2026-10-21"
+        },
+        {
+          "sha": "dc8fb50",
+          "subject": "Polish: milestone celebration, instant hydration card, campaign info sheet",
+          "repo": "Fitcircle-Android",
+          "date": "2026-10-20"
+        },
+        {
+          "sha": "d9728d0",
+          "subject": "Fitzy v2: streaming coach, today's focus, weekly plan, memory, Pro teasers (1.0.4)",
+          "repo": "Fitcircle-Android",
+          "date": "2026-10-20"
+        }
+      ],
+      "migrations": [],
+      "links": {
+        "Play Console": "https://play.google.com/console/u/0/developers/5331707730640650608/app/4975667298975477758/app-dashboard",
+        "Google Play": "https://play.google.com/store/apps/details?id=com.inov8rlabs.apps.fitcircle"
+      },
+      "releasedAt": "2026-10-21T14:51:00Z",
+      "supersededAt": "2026-10-21T12:00:00Z",
+      "events": [
+        {
+          "toStatus": "live",
+          "occurredAt": "2026-10-21T14:51:00Z",
+          "note": "Production live 2026-10-21 10:51 (assumed ET)"
+        },
+        {
+          "toStatus": "superseded",
+          "occurredAt": "2026-10-21T12:00:00Z",
+          "note": "Replaced by 1.0.5 (vc16)"
+        }
+      ]
+    },
+    {
+      "releaseKey": "android:play_production:16",
+      "platform": "android",
+      "track": "play_production",
+      "version": "1.0.5",
+      "build": "16",
+      "status": "superseded",
+      "rolloutFraction": 1,
+      "countries": [
+        "US",
+        "CA",
+        "GB",
+        "IN",
+        "SG"
+      ],
+      "internalNotes": "Offline-first food log (versionCode 16, Android ecdec7a).\n- Room v5 outbox + WorkManager sync; client UUID = server id; reconcile never reaps unsynced rows\n- Offline photo meals analysed later; water goes through the outbox\n- Pairs with BE retry-safe food-log contract f748ce8",
+      "commits": [
+        {
+          "sha": "ecdec7a",
+          "subject": "Food log: local-first with background sync (food, photo meals, water) — 1.0.5",
+          "repo": "Fitcircle-Android",
+          "date": "2026-10-21"
+        }
+      ],
+      "migrations": [],
+      "links": {
+        "Play Console": "https://play.google.com/console/u/0/developers/5331707730640650608/app/4975667298975477758/app-dashboard",
+        "Google Play": "https://play.google.com/store/apps/details?id=com.inov8rlabs.apps.fitcircle"
+      },
+      "releasedAt": "2026-10-21T12:00:00Z",
+      "supersededAt": "2026-10-22T12:00:00Z",
+      "events": [
+        {
+          "toStatus": "live",
+          "occurredAt": "2026-10-21T12:00:00Z",
+          "note": "Production, full rollout (day only)"
+        },
+        {
+          "toStatus": "superseded",
+          "occurredAt": "2026-10-22T12:00:00Z",
+          "note": "Replaced by 1.0.7 (vc19)"
+        }
+      ]
+    },
+    {
+      "releaseKey": "android:play_production:19",
+      "platform": "android",
+      "track": "play_production",
+      "version": "1.0.7",
+      "build": "19",
+      "status": "superseded",
+      "rolloutFraction": 1,
+      "countries": [
+        "US",
+        "CA",
+        "GB",
+        "IN",
+        "SG"
+      ],
+      "internalNotes": "versionCode 19 (Android 70304eb). Includes the 1.0.6 work (vc17/18 never reached production).\n- Ad attribution: Play install referrer, Firebase Analytics, Meta SDK (off until configured)\n- Data safety: purchase history shared for ads/analytics\n- Dashboard: referral card steps below today's progress while a campaign card leads\n- Test automation: Roborazzi screenshots, Compose UI smoke, Maestro flows\n- Build→commit mapping 70304eb inferred from the versionName bump (unverified)",
+      "commits": [
+        {
+          "sha": "70304eb",
+          "subject": "Dashboard: referral card steps below today's progress while a campaign card leads; 1.0.7",
+          "repo": "Fitcircle-Android",
+          "date": "2026-10-22"
+        },
+        {
+          "sha": "85ccccd",
+          "subject": "Maestro: scroll before typing in the meal text flow so slow hosts don't reset the form",
+          "repo": "Fitcircle-Android",
+          "date": "2026-10-22"
+        },
+        {
+          "sha": "204b043",
+          "subject": "Maestro: QA creds via MAESTRO_QA_* env, sturdier sign-in/meal flows, CI emulator tweaks",
+          "repo": "Fitcircle-Android",
+          "date": "2026-10-22"
+        },
+        {
+          "sha": "534fcf0",
+          "subject": "Test automation: Roborazzi screenshots, JVM Compose UI smoke, Maestro flows, CI entrypoint",
+          "repo": "Fitcircle-Android",
+          "date": "2026-10-22"
+        },
+        {
+          "sha": "1bed4f5",
+          "subject": "Ad attribution: Play install referrer, Firebase Analytics, Meta SDK (off until configured) — 1.0.6",
+          "repo": "Fitcircle-Android",
+          "date": "2026-10-21"
+        }
+      ],
+      "migrations": [],
+      "links": {
+        "Play Console": "https://play.google.com/console/u/0/developers/5331707730640650608/app/4975667298975477758/app-dashboard",
+        "Google Play": "https://play.google.com/store/apps/details?id=com.inov8rlabs.apps.fitcircle"
+      },
+      "releasedAt": "2026-10-22T12:00:00Z",
+      "supersededAt": "2026-10-27T12:00:00Z",
+      "events": [
+        {
+          "toStatus": "in_review",
+          "occurredAt": "2026-10-22T12:00:00Z",
+          "note": "Production (full rollout) + Data safety update sent for review"
+        },
+        {
+          "toStatus": "live",
+          "occurredAt": "2026-10-22T12:00:00Z",
+          "note": "Published 2026-10-22 (day only)"
+        },
+        {
+          "toStatus": "superseded",
+          "occurredAt": "2026-10-27T12:00:00Z",
+          "note": "Replaced by 1.0.9 (vc36)"
+        }
+      ]
+    },
+    {
+      "releaseKey": "android:play_production:36",
+      "platform": "android",
+      "track": "play_production",
+      "version": "1.0.9",
+      "build": "36",
+      "status": "live",
+      "storeStatus": "completed",
+      "rolloutFraction": 1,
+      "countries": [
+        "US",
+        "CA",
+        "GB",
+        "IN",
+        "SG"
+      ],
+      "internalNotes": "versionCode 36 (Android release/1.0.9 ae342c0). Includes the unreleased 1.0.8 work.\n- 1.0.8: server-driven home feed, nine Glance home-screen widgets, Wear OS app, Fitzy coaching pushes channel, one water card per day\n- Install attribution reported to the backend once per user\n- No duplicate local reminders, stable ids, single-flight Health Connect import\n- Daily check-in: mood/energy removed; paywall cancellation wording per Terms 11.2\n- iOS parity: full Hold the Line hero art, no This Week / Plate Score cards\n- Health Connect partial-access fix (c2bb4f8) is on main; whether it is in vc36 is unverified\n- vc34 (1.0.8 health sync) and vc35 (1.0.9) were uploaded but not used in production",
+      "commits": [
+        {
+          "sha": "ae342c0",
+          "subject": "iOS parity: full Hold the Line hero art, no This Week / Plate Score cards",
+          "repo": "Fitcircle-Android",
+          "date": "2026-10-26"
+        },
+        {
+          "sha": "6468129",
+          "subject": "Release 1.0.9: drop mood/energy from the daily check-in, bump version",
+          "repo": "Fitcircle-Android",
+          "date": "2026-10-26"
+        },
+        {
+          "sha": "c83c15c",
+          "subject": "Align history sync tests with steps-only permission checks",
+          "repo": "Fitcircle-Android",
+          "date": "2026-10-26"
+        },
+        {
+          "sha": "4b867e9",
+          "subject": "Local notifications: stop duplicate local reminders, stable ids, single-flight Health Connect import",
+          "repo": "Fitcircle-Android",
+          "date": "2026-10-25"
+        },
+        {
+          "sha": "3bb01f9",
+          "subject": "Report install attribution to the backend once per user",
+          "repo": "Fitcircle-Android",
+          "date": "2026-10-24"
+        },
+        {
+          "sha": "c2bb4f8",
+          "subject": "Fix Android Health Connect partial access and provider setup",
+          "repo": "Fitcircle-Android",
+          "date": "2026-10-24"
+        },
+        {
+          "sha": "b58cff6",
+          "subject": "Paywall: say cancelling stops the next renewal (no partial-period refunds, per Terms 11.2)",
+          "repo": "Fitcircle-Android",
+          "date": "2026-10-23"
+        },
+        {
+          "sha": "e88cd6e",
+          "subject": "Check-ins: remove mood and energy (never collected on iOS/web; no fake wellness data)",
+          "repo": "Fitcircle-Android",
+          "date": "2026-10-23"
+        },
+        {
+          "sha": "d094d26",
+          "subject": "Widgets: polish from on-device QA",
+          "repo": "Fitcircle-Android",
+          "date": "2026-10-23"
+        },
+        {
+          "sha": "ebfb38e",
+          "subject": "Wear OS: polish from emulator QA, tile previews, small-screen layout, docs",
+          "repo": "Fitcircle-Android",
+          "date": "2026-10-22"
+        },
+        {
+          "sha": "ca9043d",
+          "subject": "Android home-screen widgets (1.0.8): nine Glance widgets at iOS parity",
+          "repo": "Fitcircle-Android",
+          "date": "2026-10-22"
+        },
+        {
+          "sha": "0076e2d",
+          "subject": "Wear OS app: :wear + :wear-shared modules, phone Data Layer sync",
+          "repo": "Fitcircle-Android",
+          "date": "2026-10-22"
+        },
+        {
+          "sha": "3fec761",
+          "subject": "Fitzy coaching pushes: Coach channel, fitzy_chat deep link with the tip, coach toggle",
+          "repo": "Fitcircle-Android",
+          "date": "2026-10-22"
+        },
+        {
+          "sha": "069e7db",
+          "subject": "Home: loading state that is fast and never reorders cards in front of the person (1.0.8)",
+          "repo": "Fitcircle-Android",
+          "date": "2026-10-22"
+        },
+        {
+          "sha": "1aa2801",
+          "subject": "Home feed: default puts the Pro card before missing days (no-adjacent-promos guardrail)",
+          "repo": "Fitcircle-Android",
+          "date": "2026-10-22"
+        }
+      ],
+      "migrations": [],
+      "links": {
+        "Play Console": "https://play.google.com/console/u/0/developers/5331707730640650608/app/4975667298975477758/app-dashboard",
+        "Google Play": "https://play.google.com/store/apps/details?id=com.inov8rlabs.apps.fitcircle"
+      },
+      "submittedAt": "2026-10-26T12:00:00Z",
+      "releasedAt": "2026-10-27T12:00:00Z",
+      "events": [
+        {
+          "toStatus": "in_review",
+          "occurredAt": "2026-10-26T12:00:00Z",
+          "note": "Production sent for review by Ani (managed publishing off)"
+        },
+        {
+          "toStatus": "live",
+          "occurredAt": "2026-10-27T12:00:00Z",
+          "note": "Live 2026-10-27 (day only)"
+        }
+      ]
+    },
+    {
+      "releaseKey": "android:play_internal:9",
+      "platform": "android",
+      "track": "play_internal",
+      "version": "1.0.1",
+      "build": "9",
+      "status": "superseded",
+      "internalNotes": "Better Together referrals v1 (invite friends, earn Pro). Internal testing only.",
+      "commits": [
+        {
+          "sha": "1c8c2d5",
+          "subject": "Better Together: invite friends, earn Pro (Android 1.0.1)",
+          "repo": "Fitcircle-Android",
+          "date": "2026-10-15"
+        }
+      ],
+      "migrations": [],
+      "links": {
+        "Play Console": "https://play.google.com/console/u/0/developers/5331707730640650608/app/4975667298975477758/app-dashboard",
+        "Google Play": "https://play.google.com/store/apps/details?id=com.inov8rlabs.apps.fitcircle"
+      },
+      "releasedAt": "2026-10-16T12:00:00Z",
+      "supersededAt": "2026-10-16T12:00:00Z",
+      "events": [
+        {
+          "toStatus": "in_testing",
+          "occurredAt": "2026-10-16T12:00:00Z",
+          "note": "Published to internal testing"
+        },
+        {
+          "toStatus": "superseded",
+          "occurredAt": "2026-10-16T12:00:00Z"
+        }
+      ]
+    },
+    {
+      "releaseKey": "android:play_internal:10",
+      "platform": "android",
+      "track": "play_internal",
+      "version": "1.0.2",
+      "build": "10",
+      "status": "superseded",
+      "internalNotes": "Better Together v2: invite by email or text, nudges. Internal testing only.",
+      "commits": [
+        {
+          "sha": "cfab25b",
+          "subject": "Better Together v2: invite by email or text, nudges (Android 1.0.2)",
+          "repo": "Fitcircle-Android",
+          "date": "2026-10-15"
+        }
+      ],
+      "migrations": [],
+      "links": {
+        "Play Console": "https://play.google.com/console/u/0/developers/5331707730640650608/app/4975667298975477758/app-dashboard",
+        "Google Play": "https://play.google.com/store/apps/details?id=com.inov8rlabs.apps.fitcircle"
+      },
+      "releasedAt": "2026-10-16T12:00:00Z",
+      "supersededAt": "2026-10-16T12:00:00Z",
+      "events": [
+        {
+          "toStatus": "in_testing",
+          "occurredAt": "2026-10-16T12:00:00Z",
+          "note": "Published to internal testing"
+        },
+        {
+          "toStatus": "superseded",
+          "occurredAt": "2026-10-16T12:00:00Z"
+        }
+      ]
+    },
+    {
+      "releaseKey": "android:play_internal:11",
+      "platform": "android",
+      "track": "play_internal",
+      "version": "1.0.3",
+      "build": "11",
+      "status": "superseded",
+      "internalNotes": "Better Together v3: lobby + seats, circle streak saves, seasonal circles, invite prompts. Internal testing only.",
+      "commits": [
+        {
+          "sha": "0bfeecd",
+          "subject": "Better Together v3: lobby + seats, circle streak saves, seasonal circles, invite prompts (Android 1.0.3)",
+          "repo": "Fitcircle-Android",
+          "date": "2026-10-16"
+        }
+      ],
+      "migrations": [],
+      "links": {
+        "Play Console": "https://play.google.com/console/u/0/developers/5331707730640650608/app/4975667298975477758/app-dashboard",
+        "Google Play": "https://play.google.com/store/apps/details?id=com.inov8rlabs.apps.fitcircle"
+      },
+      "releasedAt": "2026-10-16T12:00:00Z",
+      "supersededAt": "2026-10-16T12:00:00Z",
+      "events": [
+        {
+          "toStatus": "in_testing",
+          "occurredAt": "2026-10-16T12:00:00Z",
+          "note": "Published to internal testing"
+        },
+        {
+          "toStatus": "superseded",
+          "occurredAt": "2026-10-16T12:00:00Z"
+        }
+      ]
+    },
+    {
+      "releaseKey": "android:play_internal:12",
+      "platform": "android",
+      "track": "play_internal",
+      "version": "1.0.3",
+      "build": "12",
+      "status": "superseded",
+      "internalNotes": "Internal testing; promoted to production 2026-10-19. Build commit inferred (unverified).",
+      "commits": [
+        {
+          "sha": "05909e5",
+          "subject": "Campaigns: home card, Circles banners, wizard prefill, Advent calendar + door reveal, push/App Link routing (CAMPAIGNS_SPEC)",
+          "repo": "Fitcircle-Android",
+          "date": "2026-10-16"
+        }
+      ],
+      "migrations": [],
+      "links": {
+        "Play Console": "https://play.google.com/console/u/0/developers/5331707730640650608/app/4975667298975477758/app-dashboard",
+        "Google Play": "https://play.google.com/store/apps/details?id=com.inov8rlabs.apps.fitcircle"
+      },
+      "releasedAt": "2026-10-16T12:00:00Z",
+      "supersededAt": "2026-10-21T02:28:00Z",
+      "events": [
+        {
+          "toStatus": "in_testing",
+          "occurredAt": "2026-10-16T12:00:00Z",
+          "note": "Published to internal testing"
+        },
+        {
+          "toStatus": "superseded",
+          "occurredAt": "2026-10-21T02:28:00Z"
+        }
+      ]
+    },
+    {
+      "releaseKey": "android:play_internal:14",
+      "platform": "android",
+      "track": "play_internal",
+      "version": "1.0.4",
+      "build": "14",
+      "status": "superseded",
+      "internalNotes": "Milestone polish, instant hydration card, campaign info sheet (on top of Fitzy v2). Published by Ani 2026-10-20 10:28 PM (assumed ET). Never promoted; superseded by vc15.",
+      "commits": [
+        {
+          "sha": "dc8fb50",
+          "subject": "Polish: milestone celebration, instant hydration card, campaign info sheet",
+          "repo": "Fitcircle-Android",
+          "date": "2026-10-20"
+        }
+      ],
+      "migrations": [],
+      "links": {
+        "Play Console": "https://play.google.com/console/u/0/developers/5331707730640650608/app/4975667298975477758/app-dashboard",
+        "Google Play": "https://play.google.com/store/apps/details?id=com.inov8rlabs.apps.fitcircle"
+      },
+      "releasedAt": "2026-10-21T02:28:00Z",
+      "supersededAt": "2026-10-26T12:00:00Z",
+      "events": [
+        {
+          "toStatus": "in_testing",
+          "occurredAt": "2026-10-21T02:28:00Z",
+          "note": "Published to internal testing"
+        },
+        {
+          "toStatus": "superseded",
+          "occurredAt": "2026-10-26T12:00:00Z"
+        }
+      ]
+    },
+    {
+      "releaseKey": "android:play_internal:36",
+      "platform": "android",
+      "track": "play_internal",
+      "version": "1.0.9",
+      "build": "36",
+      "status": "in_testing",
+      "internalNotes": "1.0.9 internal testing release 36; promoted to production 2026-10-26.",
+      "commits": [
+        {
+          "sha": "ae342c0",
+          "subject": "iOS parity: full Hold the Line hero art, no This Week / Plate Score cards",
+          "repo": "Fitcircle-Android",
+          "date": "2026-10-26"
+        }
+      ],
+      "migrations": [],
+      "links": {
+        "Play Console": "https://play.google.com/console/u/0/developers/5331707730640650608/app/4975667298975477758/app-dashboard",
+        "Google Play": "https://play.google.com/store/apps/details?id=com.inov8rlabs.apps.fitcircle"
+      },
+      "releasedAt": "2026-10-26T12:00:00Z",
+      "events": [
+        {
+          "toStatus": "in_testing",
+          "occurredAt": "2026-10-26T12:00:00Z",
+          "note": "Published to internal testing"
+        }
+      ]
+    },
+    {
+      "releaseKey": "android:firebase_dev:37",
+      "platform": "android",
+      "track": "firebase_dev",
+      "version": "1.1.0",
+      "build": "37",
+      "status": "in_testing",
+      "releasedAt": "2026-10-26T12:00:00Z",
+      "internalNotes": "1.1.0 activation journey (Android eb41b7a) on Firebase App Distribution (dev package com.inov8rlabs.apps.fitcircle.dev, release 5ui84l8rl9uo8).\n- promo@1 feed cards, first-meal onboarding step\n- Meet Fitzy + post-aha paywall; meal reminder slots",
+      "commits": [
+        {
+          "sha": "eb41b7a",
+          "subject": "1.1.0 activation journey (Android): promo@1 cards, first-meal onboarding, Meet Fitzy + post-aha paywall, meal reminder slots",
+          "repo": "Fitcircle-Android",
+          "date": "2026-10-26"
+        }
+      ],
+      "migrations": [
+        "110_promos_activation_journey"
+      ],
+      "links": {},
+      "events": [
+        {
+          "toStatus": "in_testing",
+          "occurredAt": "2026-10-26T12:00:00Z",
+          "note": "Distributed to Firebase dev testers (day only)"
+        }
+      ]
+    },
+    {
+      "releaseKey": "backend:production:a46e92f",
+      "platform": "backend",
+      "track": "production",
+      "version": "2026-09-29",
+      "build": "a46e92f",
+      "status": "superseded",
+      "internalNotes": "App Review hardening for the iOS 1.0 resubmission.\n- Account deletion finishes for every account (13 blocking FKs + chat CHECK), revokes Apple tokens\n- Mobile API accepts what iOS/Android actually send (parity fixes)\n- Terms/Privacy match the app; App Review demo account kept current and its circle open to late joins\n- Migrations 088/092/093/095/096 applied 2026-09-29\n\n_Release time = commit time on main (≈ Vercel production deploy; approximate)._",
+      "commits": [
+        {
+          "sha": "a46e92f",
+          "subject": "Demo account: keep the review circle open to late joins",
+          "repo": "FitCircleBE",
+          "date": "2026-09-29"
+        },
+        {
+          "sha": "986ec92",
+          "subject": "Mobile API: accept what the apps actually send (iOS and Android parity)",
+          "repo": "FitCircleBE",
+          "date": "2026-09-29"
+        },
+        {
+          "sha": "52a01a6",
+          "subject": "Terms and Privacy match the app; keep the App Review demo account current",
+          "repo": "FitCircleBE",
+          "date": "2026-09-29"
+        },
+        {
+          "sha": "fa45b28",
+          "subject": "Account deletion: finish cleanly for every account, revoke Apple tokens",
+          "repo": "FitCircleBE",
+          "date": "2026-09-29"
+        }
+      ],
+      "migrations": [
+        "088_profiles_gender",
+        "092_exercise_logs_source_platform",
+        "093_body_comp_import_tombstones",
+        "095_streak_shield_xp_spent",
+        "096_apple_auth_tokens"
+      ],
+      "links": {
+        "Commit": "https://github.com/Inov8rlabs/FitCircle/commit/a46e92f"
+      },
+      "releasedAt": "2026-09-29T15:52:02.000Z",
+      "supersededAt": "2026-10-01T03:53:59.000Z",
+      "events": [
+        {
+          "toStatus": "live",
+          "occurredAt": "2026-09-29T15:52:02.000Z",
+          "note": "Merged to main / deployed"
+        },
+        {
+          "toStatus": "superseded",
+          "occurredAt": "2026-10-01T03:53:59.000Z"
+        }
+      ]
+    },
+    {
+      "releaseKey": "backend:production:3df529c",
+      "platform": "backend",
+      "track": "production",
+      "version": "2026-10-01",
+      "build": "3df529c",
+      "status": "superseded",
+      "internalNotes": "Launch fixes ahead of web payments.\n- Circle leave/rejoin behaviour; displayed pricing aligned\n- Plate score, streak and meal-day fixes found in Android testing\n- Web pricing checkout no longer promises a free week (Stripe web payments went live 2026-10-01; exact deploy unverified)\n\n_Release time = commit time on main (≈ Vercel production deploy; approximate)._",
+      "commits": [
+        {
+          "sha": "3df529c",
+          "subject": "Web pricing: checkout button no longer promises a free week",
+          "repo": "FitCircleBE",
+          "date": "2026-09-30"
+        },
+        {
+          "sha": "6ea566f",
+          "subject": "Plate score, streak and meal-day fixes found in Android testing",
+          "repo": "FitCircleBE",
+          "date": "2026-09-30"
+        },
+        {
+          "sha": "1e92b93",
+          "subject": "Fix circle leave and rejoin behavior and align displayed pricing",
+          "repo": "FitCircleBE",
+          "date": "2026-09-29"
+        }
+      ],
+      "migrations": [],
+      "links": {
+        "Commit": "https://github.com/Inov8rlabs/FitCircle/commit/3df529c"
+      },
+      "releasedAt": "2026-10-01T03:53:59.000Z",
+      "supersededAt": "2026-10-06T03:00:46.000Z",
+      "events": [
+        {
+          "toStatus": "live",
+          "occurredAt": "2026-10-01T03:53:59.000Z",
+          "note": "Merged to main / deployed"
+        },
+        {
+          "toStatus": "superseded",
+          "occurredAt": "2026-10-06T03:00:46.000Z"
+        }
+      ]
+    },
+    {
+      "releaseKey": "backend:production:fb4399e",
+      "platform": "backend",
+      "track": "production",
+      "version": "2026-10-06",
+      "build": "fb4399e",
+      "status": "superseded",
+      "internalNotes": "Android launch support.\n- App Links (assetlinks), account deletion page, app-ads.txt, privacy policy v1.2\n\n_Release time = commit time on main (≈ Vercel production deploy; approximate)._",
+      "commits": [
+        {
+          "sha": "fb4399e",
+          "subject": "Android launch: App Links, account deletion page, app-ads.txt, privacy v1.2",
+          "repo": "FitCircleBE",
+          "date": "2026-10-05"
+        }
+      ],
+      "migrations": [],
+      "links": {
+        "Commit": "https://github.com/Inov8rlabs/FitCircle/commit/fb4399e"
+      },
+      "releasedAt": "2026-10-06T03:00:46.000Z",
+      "supersededAt": "2026-10-10T00:54:00.000Z",
+      "events": [
+        {
+          "toStatus": "live",
+          "occurredAt": "2026-10-06T03:00:46.000Z",
+          "note": "Merged to main / deployed"
+        },
+        {
+          "toStatus": "superseded",
+          "occurredAt": "2026-10-10T00:54:00.000Z"
+        }
+      ]
+    },
+    {
+      "releaseKey": "backend:production:5c8920a",
+      "platform": "backend",
+      "track": "production",
+      "version": "2026-10-10",
+      "build": "5c8920a",
+      "status": "superseded",
+      "internalNotes": "Analytics v2.\n- Canonical tracking plan + codegen, provider-agnostic web analytics\n- Smart App Banner; tracking plan v5\n- Production build fix: Amplitude fetchRemoteConfig (2.25.4)\n\n_Release time = commit time on main (≈ Vercel production deploy; approximate)._",
+      "commits": [
+        {
+          "sha": "5c8920a",
+          "subject": "Web analytics: use fetchRemoteConfig (Amplitude 2.25.4) to fix production build",
+          "repo": "FitCircleBE",
+          "date": "2026-10-09"
+        },
+        {
+          "sha": "979a12b",
+          "subject": "Web: Smart App Banner; tracking plan v5 (Review Prompt Requested)",
+          "repo": "FitCircleBE",
+          "date": "2026-10-09"
+        },
+        {
+          "sha": "2026a62",
+          "subject": "Analytics: canonical tracking plan, codegen and provider-agnostic web analytics",
+          "repo": "FitCircleBE",
+          "date": "2026-10-09"
+        }
+      ],
+      "migrations": [],
+      "links": {
+        "Commit": "https://github.com/Inov8rlabs/FitCircle/commit/5c8920a"
+      },
+      "releasedAt": "2026-10-10T00:54:00.000Z",
+      "supersededAt": "2026-10-13T17:40:43.000Z",
+      "events": [
+        {
+          "toStatus": "live",
+          "occurredAt": "2026-10-10T00:54:00.000Z",
+          "note": "Merged to main / deployed"
+        },
+        {
+          "toStatus": "superseded",
+          "occurredAt": "2026-10-13T17:40:43.000Z"
+        }
+      ]
+    },
+    {
+      "releaseKey": "backend:production:defc8d3",
+      "platform": "backend",
+      "track": "production",
+      "version": "2026-10-13",
+      "build": "defc8d3",
+      "status": "superseded",
+      "internalNotes": "Mobile decode contracts.\n- One shared decodable user shape (toMobileUser) everywhere\n- Fixed response contracts iOS could not read\n\n_Release time = commit time on main (≈ Vercel production deploy; approximate)._",
+      "commits": [
+        {
+          "sha": "defc8d3",
+          "subject": "Mobile API: one decodable user shape everywhere; fix response contracts iOS could not read",
+          "repo": "FitCircleBE",
+          "date": "2026-10-13"
+        }
+      ],
+      "migrations": [],
+      "links": {
+        "Commit": "https://github.com/Inov8rlabs/FitCircle/commit/defc8d3"
+      },
+      "releasedAt": "2026-10-13T17:40:43.000Z",
+      "supersededAt": "2026-10-14T15:55:45.000Z",
+      "events": [
+        {
+          "toStatus": "live",
+          "occurredAt": "2026-10-13T17:40:43.000Z",
+          "note": "Merged to main / deployed"
+        },
+        {
+          "toStatus": "superseded",
+          "occurredAt": "2026-10-14T15:55:45.000Z"
+        }
+      ]
+    },
+    {
+      "releaseKey": "backend:production:a8dba9a",
+      "platform": "backend",
+      "track": "production",
+      "version": "2026-10-14",
+      "build": "a8dba9a",
+      "status": "superseded",
+      "internalNotes": "Food AI accuracy Phase 0.\n- Eval harness v2, model bake-off (prod = Gemini primary / Haiku fallback via env), parse resilience, training capture\n\n_Release time = commit time on main (≈ Vercel production deploy; approximate)._",
+      "commits": [
+        {
+          "sha": "a8dba9a",
+          "subject": "Food AI accuracy Phase 0: eval harness v2, model bake-off, parse resilience, production signal",
+          "repo": "FitCircleBE",
+          "date": "2026-10-14"
+        }
+      ],
+      "migrations": [
+        "097_nutrition_draft_reconciliation"
+      ],
+      "links": {
+        "Commit": "https://github.com/Inov8rlabs/FitCircle/commit/a8dba9a"
+      },
+      "releasedAt": "2026-10-14T15:55:45.000Z",
+      "supersededAt": "2026-10-15T02:27:11.000Z",
+      "events": [
+        {
+          "toStatus": "live",
+          "occurredAt": "2026-10-14T15:55:45.000Z",
+          "note": "Merged to main / deployed"
+        },
+        {
+          "toStatus": "superseded",
+          "occurredAt": "2026-10-15T02:27:11.000Z"
+        }
+      ]
+    },
+    {
+      "releaseKey": "backend:production:1b7cb65",
+      "platform": "backend",
+      "track": "production",
+      "version": "2026-10-15",
+      "build": "1b7cb65",
+      "status": "superseded",
+      "internalNotes": "Food AI Phase 1 + correction flow.\n- Generic-foods grounding, density clamp, plate-coverage prompt\n- \"Fix it\" correction flow, did-you-mean alternates, result rating\n- Text → AI nutrition estimate for typed descriptions\n\n_Release time = commit time on main (≈ Vercel production deploy; approximate)._",
+      "commits": [
+        {
+          "sha": "1b7cb65",
+          "subject": "Text → AI nutrition estimate: typed descriptions + stated assumptions",
+          "repo": "FitCircleBE",
+          "date": "2026-10-14"
+        },
+        {
+          "sha": "7574315",
+          "subject": "Food AI: \"fix it\" correction flow, did-you-mean alternates, result rating",
+          "repo": "FitCircleBE",
+          "date": "2026-10-14"
+        },
+        {
+          "sha": "610da57",
+          "subject": "Food AI: Cal AI head-to-head benchmark (30 SNAPMe plates) and scorer",
+          "repo": "FitCircleBE",
+          "date": "2026-10-14"
+        },
+        {
+          "sha": "80ea6f5",
+          "subject": "Food AI Phase 1: generic-foods grounding, density clamp, plate-coverage prompt",
+          "repo": "FitCircleBE",
+          "date": "2026-10-14"
+        }
+      ],
+      "migrations": [
+        "098_generic_foods_layer",
+        "099_nutrition_feedback_and_refine"
+      ],
+      "links": {
+        "Commit": "https://github.com/Inov8rlabs/FitCircle/commit/1b7cb65"
+      },
+      "releasedAt": "2026-10-15T02:27:11.000Z",
+      "supersededAt": "2026-10-16T02:20:42.000Z",
+      "events": [
+        {
+          "toStatus": "live",
+          "occurredAt": "2026-10-15T02:27:11.000Z",
+          "note": "Merged to main / deployed"
+        },
+        {
+          "toStatus": "superseded",
+          "occurredAt": "2026-10-16T02:20:42.000Z"
+        }
+      ]
+    },
+    {
+      "releaseKey": "backend:production:6b35d8c",
+      "platform": "backend",
+      "track": "production",
+      "version": "2026-10-16",
+      "build": "6b35d8c",
+      "status": "superseded",
+      "internalNotes": "Better Together referrals v1: invite friends, earn Pro. Migration 100 applied 2026-10-16.\n\n_Release time = commit time on main (≈ Vercel production deploy; approximate)._",
+      "commits": [
+        {
+          "sha": "6b35d8c",
+          "subject": "Analytics: Circle Wizard Started sources app_launch + hub",
+          "repo": "FitCircleBE",
+          "date": "2026-10-15"
+        },
+        {
+          "sha": "e46724c",
+          "subject": "Better Together: invite friends, earn Pro (referral program)",
+          "repo": "FitCircleBE",
+          "date": "2026-10-15"
+        }
+      ],
+      "migrations": [
+        "100_referrals"
+      ],
+      "links": {
+        "Commit": "https://github.com/Inov8rlabs/FitCircle/commit/6b35d8c"
+      },
+      "releasedAt": "2026-10-16T02:20:42.000Z",
+      "supersededAt": "2026-10-16T03:06:23.000Z",
+      "events": [
+        {
+          "toStatus": "live",
+          "occurredAt": "2026-10-16T02:20:42.000Z",
+          "note": "Merged to main / deployed"
+        },
+        {
+          "toStatus": "superseded",
+          "occurredAt": "2026-10-16T03:06:23.000Z"
+        }
+      ]
+    },
+    {
+      "releaseKey": "backend:production:4648d0e",
+      "platform": "backend",
+      "track": "production",
+      "version": "2026-10-16",
+      "build": "4648d0e",
+      "status": "superseded",
+      "internalNotes": "Better Together v2: invite by email (Resend) or text (native composer), nudges, guaranteed reward delivery, scanner-safe unsubscribe.\n\n_Release time = commit time on main (≈ Vercel production deploy; approximate)._",
+      "commits": [
+        {
+          "sha": "4648d0e",
+          "subject": "Better Together v2: invite by email or text, nudges, guaranteed reward delivery",
+          "repo": "FitCircleBE",
+          "date": "2026-10-15"
+        }
+      ],
+      "migrations": [
+        "101_referral_invites"
+      ],
+      "links": {
+        "Commit": "https://github.com/Inov8rlabs/FitCircle/commit/4648d0e"
+      },
+      "releasedAt": "2026-10-16T03:06:23.000Z",
+      "supersededAt": "2026-10-16T04:04:58.000Z",
+      "events": [
+        {
+          "toStatus": "live",
+          "occurredAt": "2026-10-16T03:06:23.000Z",
+          "note": "Merged to main / deployed"
+        },
+        {
+          "toStatus": "superseded",
+          "occurredAt": "2026-10-16T04:04:58.000Z"
+        }
+      ]
+    },
+    {
+      "releaseKey": "backend:production:f2d1488",
+      "platform": "backend",
+      "track": "production",
+      "version": "2026-10-16",
+      "build": "f2d1488",
+      "status": "superseded",
+      "internalNotes": "Better Together v3: 3-day qualification, lobby + seats, circle streak save pool, seasonal circles.\n\n_Release time = commit time on main (≈ Vercel production deploy; approximate)._",
+      "commits": [
+        {
+          "sha": "f2d1488",
+          "subject": "Better Together v3: 3-day qualification, lobby + seats, circle streak save pool, seasonal circles, activation",
+          "repo": "FitCircleBE",
+          "date": "2026-10-16"
+        }
+      ],
+      "migrations": [
+        "102_circle_streak_lobby_progress"
+      ],
+      "links": {
+        "Commit": "https://github.com/Inov8rlabs/FitCircle/commit/f2d1488"
+      },
+      "releasedAt": "2026-10-16T04:04:58.000Z",
+      "supersededAt": "2026-10-16T18:26:17.000Z",
+      "events": [
+        {
+          "toStatus": "live",
+          "occurredAt": "2026-10-16T04:04:58.000Z",
+          "note": "Merged to main / deployed"
+        },
+        {
+          "toStatus": "superseded",
+          "occurredAt": "2026-10-16T18:26:17.000Z"
+        }
+      ]
+    },
+    {
+      "releaseKey": "backend:production:b0bfd7a",
+      "platform": "backend",
+      "track": "production",
+      "version": "2026-10-16",
+      "build": "b0bfd7a",
+      "status": "superseded",
+      "internalNotes": "Campaigns system.\n- Admin portal, campaign API, push/email delivery, App Store in-app events\n- Seasons: Hold the Line ends Dec 15; New Year Reset → Fresh Start\n- App Store sync fixes: screenshot commit, retry Apple 5xx, adopt orphaned events\n\n_Release time = commit time on main (≈ Vercel production deploy; approximate)._",
+      "commits": [
+        {
+          "sha": "b0bfd7a",
+          "subject": "Campaigns App Store sync: fix screenshot commit, retry Apple 5xx, adopt orphaned events",
+          "repo": "FitCircleBE",
+          "date": "2026-10-16"
+        },
+        {
+          "sha": "0740816",
+          "subject": "Campaigns: admin portal, campaign API, push/email delivery, App Store events",
+          "repo": "FitCircleBE",
+          "date": "2026-10-16"
+        },
+        {
+          "sha": "dbcc6bb",
+          "subject": "Seasons: Hold the Line ends Dec 15, New Year Reset becomes Fresh Start; analytics plan v9 adds circle invite source",
+          "repo": "FitCircleBE",
+          "date": "2026-10-16"
+        }
+      ],
+      "migrations": [
+        "103_campaigns"
+      ],
+      "links": {
+        "Commit": "https://github.com/Inov8rlabs/FitCircle/commit/b0bfd7a"
+      },
+      "releasedAt": "2026-10-16T18:26:17.000Z",
+      "supersededAt": "2026-10-19T18:27:45.000Z",
+      "events": [
+        {
+          "toStatus": "live",
+          "occurredAt": "2026-10-16T18:26:17.000Z",
+          "note": "Merged to main / deployed"
+        },
+        {
+          "toStatus": "superseded",
+          "occurredAt": "2026-10-19T18:27:45.000Z"
+        }
+      ]
+    },
+    {
+      "releaseKey": "backend:production:5db490f",
+      "platform": "backend",
+      "track": "production",
+      "version": "2026-10-19",
+      "build": "5db490f",
+      "status": "superseded",
+      "internalNotes": "Auth refresh: a profile-lookup DB error returns 500, not \"invalid session\" (stopped spurious sign-outs; paired with iOS 147cd64).\n\n_Release time = commit time on main (≈ Vercel production deploy; approximate)._",
+      "commits": [
+        {
+          "sha": "5db490f",
+          "subject": "Auth refresh: a profile-lookup DB error is a 500, not an invalid session",
+          "repo": "FitCircleBE",
+          "date": "2026-10-19"
+        }
+      ],
+      "migrations": [],
+      "links": {
+        "Commit": "https://github.com/Inov8rlabs/FitCircle/commit/5db490f"
+      },
+      "releasedAt": "2026-10-19T18:27:45.000Z",
+      "supersededAt": "2026-10-20T18:05:28.000Z",
+      "events": [
+        {
+          "toStatus": "live",
+          "occurredAt": "2026-10-19T18:27:45.000Z",
+          "note": "Merged to main / deployed"
+        },
+        {
+          "toStatus": "superseded",
+          "occurredAt": "2026-10-20T18:05:28.000Z"
+        }
+      ]
+    },
+    {
+      "releaseKey": "backend:production:75d6d32",
+      "platform": "backend",
+      "track": "production",
+      "version": "2026-10-20",
+      "build": "75d6d32",
+      "status": "superseded",
+      "internalNotes": "Fitzy v2.\n- Streaming coach, daily focus, weekly plans, memory, Pro teasers (Haiku chat / Sonnet plans)\n- Stream route fails auth/validation as JSON 401/400 before SSE\n- Plan truncation + refusal-guard fixes; live-model eval suite (fitzy:eval) + guard corpus\n- Migration 105 applied 2026-10-20\n\n_Release time = commit time on main (≈ Vercel production deploy; approximate)._",
+      "commits": [
+        {
+          "sha": "75d6d32",
+          "subject": "Fitzy: live-model eval suite, guard regression corpus, and fixes it found",
+          "repo": "FitCircleBE",
+          "date": "2026-10-20"
+        },
+        {
+          "sha": "55d1d47",
+          "subject": "Fitzy: fix plan truncation, refusal guard trips, equipment weights in plans",
+          "repo": "FitCircleBE",
+          "date": "2026-10-20"
+        },
+        {
+          "sha": "19aff27",
+          "subject": "Fitzy stream: fail auth/validation as JSON 401/400 before opening SSE",
+          "repo": "FitCircleBE",
+          "date": "2026-10-20"
+        },
+        {
+          "sha": "7373dfc",
+          "subject": "Fitzy v2: streaming coach, daily focus, weekly plans, memory, Pro teasers",
+          "repo": "FitCircleBE",
+          "date": "2026-10-20"
+        }
+      ],
+      "migrations": [
+        "105_fitzy_v2"
+      ],
+      "links": {
+        "Commit": "https://github.com/Inov8rlabs/FitCircle/commit/75d6d32"
+      },
+      "releasedAt": "2026-10-20T18:05:28.000Z",
+      "supersededAt": "2026-10-21T02:41:56.000Z",
+      "events": [
+        {
+          "toStatus": "live",
+          "occurredAt": "2026-10-20T18:05:28.000Z",
+          "note": "Merged to main / deployed"
+        },
+        {
+          "toStatus": "superseded",
+          "occurredAt": "2026-10-21T02:41:56.000Z"
+        }
+      ]
+    },
+    {
+      "releaseKey": "backend:production:cb8b82a",
+      "platform": "backend",
+      "track": "production",
+      "version": "2026-10-21",
+      "build": "cb8b82a",
+      "status": "superseded",
+      "internalNotes": "Food log + campaigns for 1.0.5 clients.\n- Lean water path, idempotent creates, hydration totals in responses\n- Campaigns: howItWorks steps for the in-app info sheet; heroAspect for uncropped hero art\n\n_Release time = commit time on main (≈ Vercel production deploy; approximate)._",
+      "commits": [
+        {
+          "sha": "cb8b82a",
+          "subject": "Campaigns: heroAspect for uncropped hero art; shorter howItWorks steps",
+          "repo": "FitCircleBE",
+          "date": "2026-10-20"
+        },
+        {
+          "sha": "f438cc8",
+          "subject": "Food log: lean water path, idempotent creates, hydration totals in responses",
+          "repo": "FitCircleBE",
+          "date": "2026-10-20"
+        },
+        {
+          "sha": "4100ac5",
+          "subject": "Campaigns: howItWorks steps on CampaignView for the in-app info sheet",
+          "repo": "FitCircleBE",
+          "date": "2026-10-20"
+        }
+      ],
+      "migrations": [],
+      "links": {
+        "Commit": "https://github.com/Inov8rlabs/FitCircle/commit/cb8b82a"
+      },
+      "releasedAt": "2026-10-21T02:41:56.000Z",
+      "supersededAt": "2026-10-21T17:47:02.000Z",
+      "events": [
+        {
+          "toStatus": "live",
+          "occurredAt": "2026-10-21T02:41:56.000Z",
+          "note": "Merged to main / deployed"
+        },
+        {
+          "toStatus": "superseded",
+          "occurredAt": "2026-10-21T17:47:02.000Z"
+        }
+      ]
+    },
+    {
+      "releaseKey": "backend:production:f748ce8",
+      "platform": "backend",
+      "track": "production",
+      "version": "2026-10-21",
+      "build": "f748ce8",
+      "status": "superseded",
+      "internalNotes": "Food log retry-safe sync contract for offline-first clients (docs/FOOD_LOG_SYNC_CONTRACT.md), with shipped-client-compat replay test.\n\n_Release time = commit time on main (≈ Vercel production deploy; approximate)._",
+      "commits": [
+        {
+          "sha": "f748ce8",
+          "subject": "Food log: retry-safe sync contract for offline-first clients",
+          "repo": "FitCircleBE",
+          "date": "2026-10-21"
+        }
+      ],
+      "migrations": [],
+      "links": {
+        "Commit": "https://github.com/Inov8rlabs/FitCircle/commit/f748ce8"
+      },
+      "releasedAt": "2026-10-21T17:47:02.000Z",
+      "supersededAt": "2026-10-22T21:05:20.000Z",
+      "events": [
+        {
+          "toStatus": "live",
+          "occurredAt": "2026-10-21T17:47:02.000Z",
+          "note": "Merged to main / deployed"
+        },
+        {
+          "toStatus": "superseded",
+          "occurredAt": "2026-10-22T21:05:20.000Z"
+        }
+      ]
+    },
+    {
+      "releaseKey": "backend:production:7b5fb9b",
+      "platform": "backend",
+      "track": "production",
+      "version": "2026-10-22",
+      "build": "7b5fb9b",
+      "status": "superseded",
+      "internalNotes": "Privacy + test automation.\n- Privacy policy discloses ad measurement (Meta, Google Firebase/Ads, Apple Search Ads), ATT/ad-ID controls\n- Test automation: QA account seed, prod smoke, CI entrypoint, always-on Mac runner\n\n_Release time = commit time on main (≈ Vercel production deploy; approximate)._",
+      "commits": [
+        {
+          "sha": "7b5fb9b",
+          "subject": "Privacy policy: disclose ad measurement (Meta, Google Firebase/Ads, Apple Search Ads), events shared, ATT/ad-ID controls, US state opt-out",
+          "repo": "FitCircleBE",
+          "date": "2026-10-22"
+        },
+        {
+          "sha": "d69bfdc",
+          "subject": "Test plan: findings from building the automation; 30 s vitest timeout on the shared runner",
+          "repo": "FitCircleBE",
+          "date": "2026-10-22"
+        },
+        {
+          "sha": "3a44c3d",
+          "subject": "Test plan + always-on Mac runner (launchd)",
+          "repo": "FitCircleBE",
+          "date": "2026-10-21"
+        },
+        {
+          "sha": "3021179",
+          "subject": "Test automation: QA account seed, prod smoke, CI entrypoint, self-hosted smoke workflow",
+          "repo": "FitCircleBE",
+          "date": "2026-10-21"
+        }
+      ],
+      "migrations": [],
+      "links": {
+        "Commit": "https://github.com/Inov8rlabs/FitCircle/commit/7b5fb9b"
+      },
+      "releasedAt": "2026-10-22T21:05:20.000Z",
+      "supersededAt": "2026-10-23T02:08:23.000Z",
+      "events": [
+        {
+          "toStatus": "live",
+          "occurredAt": "2026-10-22T21:05:20.000Z",
+          "note": "Merged to main / deployed"
+        },
+        {
+          "toStatus": "superseded",
+          "occurredAt": "2026-10-23T02:08:23.000Z"
+        }
+      ]
+    },
+    {
+      "releaseKey": "backend:production:8b18b9e",
+      "platform": "backend",
+      "track": "production",
+      "version": "2026-10-23",
+      "build": "8b18b9e",
+      "status": "superseded",
+      "internalNotes": "Server-driven home feed (HOME_FEED_SPEC).\n- Layout endpoint, rules engine, guardrails; missing_days@1 card; analytics plan v12\n- Fast first screen: SWR caches, 250 ms context cap, prewarm, Server-Timing\n- Migration 106 applied alone 2026-10-22\n\n_Release time = commit time on main (≈ Vercel production deploy; approximate)._",
+      "commits": [
+        {
+          "sha": "8b18b9e",
+          "subject": "Home feed: fast first screen — SWR caches for rules/campaigns/flags, 250 ms context cap, prewarm, Server-Timing + server_ms",
+          "repo": "FitCircleBE",
+          "date": "2026-10-22"
+        },
+        {
+          "sha": "7cec15a",
+          "subject": "Home feed: missing_days@1 card, Android-aligned tracking plan, position semantics",
+          "repo": "FitCircleBE",
+          "date": "2026-10-22"
+        },
+        {
+          "sha": "d60d2b4",
+          "subject": "Analytics: Home Feed Card Viewed / Tapped / Dismissed (plan v12, web codegen)",
+          "repo": "FitCircleBE",
+          "date": "2026-10-22"
+        },
+        {
+          "sha": "aec6d2e",
+          "subject": "Home feed: server-driven layout endpoint, rules engine, guardrails, migration 106",
+          "repo": "FitCircleBE",
+          "date": "2026-10-22"
+        }
+      ],
+      "migrations": [
+        "106_home_feed"
+      ],
+      "links": {
+        "Commit": "https://github.com/Inov8rlabs/FitCircle/commit/8b18b9e"
+      },
+      "releasedAt": "2026-10-23T02:08:23.000Z",
+      "supersededAt": "2026-10-23T12:27:56.000Z",
+      "events": [
+        {
+          "toStatus": "live",
+          "occurredAt": "2026-10-23T02:08:23.000Z",
+          "note": "Merged to main / deployed"
+        },
+        {
+          "toStatus": "superseded",
+          "occurredAt": "2026-10-23T12:27:56.000Z"
+        }
+      ]
+    },
+    {
+      "releaseKey": "backend:production:d69359c",
+      "platform": "backend",
+      "track": "production",
+      "version": "2026-10-23",
+      "build": "d69359c",
+      "status": "superseded",
+      "internalNotes": "release/2026-10-23 merge.\n- Web redesign to iOS quality + web-to-app flow + screenshot-led landing page\n- Push categories: iOS rich-notification fields; weekly summary + referral progress stay audible\n- Fitzy coaching tips as push notifications (FITZY_PUSH_ENABLED kill switch off by default)\n- Migration 107 applied alone 2026-10-23\n\n_Release time = commit time on main (≈ Vercel production deploy; approximate)._",
+      "commits": [
+        {
+          "sha": "d69359c",
+          "subject": "Merge branch 'feat/web-redesign' into release/2026-10-23",
+          "repo": "FitCircleBE",
+          "date": "2026-10-23"
+        },
+        {
+          "sha": "b8ab743",
+          "subject": "Web redesign to iOS quality + web-to-app flow + screenshot-led landing page",
+          "repo": "FitCircleBE",
+          "date": "2026-10-23"
+        },
+        {
+          "sha": "3d52a64",
+          "subject": "Merge branch 'feat/push-categories' into release/2026-10-23",
+          "repo": "FitCircleBE",
+          "date": "2026-10-23"
+        },
+        {
+          "sha": "7f2718a",
+          "subject": "Push: weekly summary + referral progress stay audible; passive list reversible via env",
+          "repo": "FitCircleBE",
+          "date": "2026-10-23"
+        },
+        {
+          "sha": "4f4aafc",
+          "subject": "Push: iOS rich-notification fields (category, mutable-content, interruption level, relevance, circle card)",
+          "repo": "FitCircleBE",
+          "date": "2026-10-21"
+        },
+        {
+          "sha": "70c6cb9",
+          "subject": "Merge branch 'feat/fitzy-push' into release/2026-10-23",
+          "repo": "FitCircleBE",
+          "date": "2026-10-23"
+        },
+        {
+          "sha": "bc85fec",
+          "subject": "Fitzy coaching tips as push notifications (category coach, kill switch off by default)",
+          "repo": "FitCircleBE",
+          "date": "2026-10-22"
+        }
+      ],
+      "migrations": [
+        "107_fitzy_coach_push"
+      ],
+      "links": {
+        "Commit": "https://github.com/Inov8rlabs/FitCircle/commit/d69359c"
+      },
+      "releasedAt": "2026-10-23T12:27:56.000Z",
+      "supersededAt": "2026-10-24T12:15:27.000Z",
+      "events": [
+        {
+          "toStatus": "live",
+          "occurredAt": "2026-10-23T12:27:56.000Z",
+          "note": "Merged to main / deployed"
+        },
+        {
+          "toStatus": "superseded",
+          "occurredAt": "2026-10-24T12:15:27.000Z"
+        }
+      ]
+    },
+    {
+      "releaseKey": "backend:production:7891e65",
+      "platform": "backend",
+      "track": "production",
+      "version": "2026-10-24",
+      "build": "7891e65",
+      "status": "superseded",
+      "internalNotes": "Ads Console v1: spend, ROAS and bid control across Apple Ads / Meta (admin/ads, hourly sync, change log). Migration 108 applied alone 2026-10-24.\n\n_Release time = commit time on main (≈ Vercel production deploy; approximate)._",
+      "commits": [
+        {
+          "sha": "7891e65",
+          "subject": "Ads console: spend, ROAS and bid control across channels",
+          "repo": "FitCircleBE",
+          "date": "2026-10-24"
+        }
+      ],
+      "migrations": [
+        "108_ads_console"
+      ],
+      "links": {
+        "Commit": "https://github.com/Inov8rlabs/FitCircle/commit/7891e65"
+      },
+      "releasedAt": "2026-10-24T12:15:27.000Z",
+      "supersededAt": "2026-10-25T03:55:58.000Z",
+      "events": [
+        {
+          "toStatus": "live",
+          "occurredAt": "2026-10-24T12:15:27.000Z",
+          "note": "Merged to main / deployed"
+        },
+        {
+          "toStatus": "superseded",
+          "occurredAt": "2026-10-25T03:55:58.000Z"
+        }
+      ]
+    },
+    {
+      "releaseKey": "backend:production:f0564e0",
+      "platform": "backend",
+      "track": "production",
+      "version": "2026-10-25",
+      "build": "f0564e0",
+      "status": "superseded",
+      "internalNotes": "Ads console audit.\n- Exclude test sign-ups; totals count only ad-attributed users\n- Log bid/budget/status changes made outside the console\n- 13 revenue/metric fixes, invariants, golden test, data health, verify against Apple\n\n_Release time = commit time on main (≈ Vercel production deploy; approximate)._",
+      "commits": [
+        {
+          "sha": "f0564e0",
+          "subject": "Ads console audit: 13 revenue/metric fixes, invariants, golden test, data health, verify",
+          "repo": "FitCircleBE",
+          "date": "2026-10-24"
+        },
+        {
+          "sha": "846f07f",
+          "subject": "Ads console: log bid/budget/status changes made outside the console",
+          "repo": "FitCircleBE",
+          "date": "2026-10-24"
+        },
+        {
+          "sha": "2114a1c",
+          "subject": "Ads console: exclude test sign-ups; totals count only ad-attributed users",
+          "repo": "FitCircleBE",
+          "date": "2026-10-24"
+        }
+      ],
+      "migrations": [],
+      "links": {
+        "Commit": "https://github.com/Inov8rlabs/FitCircle/commit/f0564e0"
+      },
+      "releasedAt": "2026-10-25T03:55:58.000Z",
+      "supersededAt": "2026-10-25T11:45:25.000Z",
+      "events": [
+        {
+          "toStatus": "live",
+          "occurredAt": "2026-10-25T03:55:58.000Z",
+          "note": "Merged to main / deployed"
+        },
+        {
+          "toStatus": "superseded",
+          "occurredAt": "2026-10-25T11:45:25.000Z"
+        }
+      ]
+    },
+    {
+      "releaseKey": "backend:production:9d5a6b7",
+      "platform": "backend",
+      "track": "production",
+      "version": "2026-10-25",
+      "build": "9d5a6b7",
+      "status": "superseded",
+      "internalNotes": "Push dedupe (2026-10-25 incident: 5 self \"Big moment\" pushes).\n- No self-pushes; one push per recipient per event across circles; rally respects mute\n- circle_daily_summary bundled per recipient; dedupeKey + identical-content + burst guards; APNs thread/collapse ids, FCM tag\n- Migration 109 applied alone\n\n_Release time = commit time on main (≈ Vercel production deploy; approximate)._",
+      "commits": [
+        {
+          "sha": "9d5a6b7",
+          "subject": "Push dedupe: no self-pushes, one push per recipient per event, bundled daily summary",
+          "repo": "FitCircleBE",
+          "date": "2026-10-25"
+        }
+      ],
+      "migrations": [
+        "109_notification_log_dedupe_index"
+      ],
+      "links": {
+        "Commit": "https://github.com/Inov8rlabs/FitCircle/commit/9d5a6b7"
+      },
+      "releasedAt": "2026-10-25T11:45:25.000Z",
+      "supersededAt": "2026-10-26T20:06:18.000Z",
+      "events": [
+        {
+          "toStatus": "live",
+          "occurredAt": "2026-10-25T11:45:25.000Z",
+          "note": "Merged to main / deployed"
+        },
+        {
+          "toStatus": "superseded",
+          "occurredAt": "2026-10-26T20:06:18.000Z"
+        }
+      ]
+    },
+    {
+      "releaseKey": "backend:production:aa88b10",
+      "platform": "backend",
+      "track": "production",
+      "version": "2026-10-26",
+      "build": "aa88b10",
+      "status": "superseded",
+      "internalNotes": "Check-in: mood and energy are optional (1.0.9 clients drop the step).\n\n_Release time = commit time on main (≈ Vercel production deploy; approximate)._",
+      "commits": [
+        {
+          "sha": "aa88b10",
+          "subject": "Check-in: mood and energy are optional (1.0.9 drops the step)",
+          "repo": "FitCircleBE",
+          "date": "2026-10-26"
+        }
+      ],
+      "migrations": [],
+      "links": {
+        "Commit": "https://github.com/Inov8rlabs/FitCircle/commit/aa88b10"
+      },
+      "releasedAt": "2026-10-26T20:06:18.000Z",
+      "supersededAt": "2026-10-26T22:28:26.000Z",
+      "events": [
+        {
+          "toStatus": "live",
+          "occurredAt": "2026-10-26T20:06:18.000Z",
+          "note": "Merged to main / deployed"
+        },
+        {
+          "toStatus": "superseded",
+          "occurredAt": "2026-10-26T22:28:26.000Z"
+        }
+      ]
+    },
+    {
+      "releaseKey": "backend:production:4d4d887",
+      "platform": "backend",
+      "track": "production",
+      "version": "2026-10-26",
+      "build": "4d4d887",
+      "status": "superseded",
+      "internalNotes": "Activation journey backend (1.1.0).\n- promo@1 cards, 4-slot meal reminders, Fitzy intro, journey API; PROMOS_ENABLED on in prod (only promo@1 clients get cards)\n- d231599 FAILED the Vercel production build (promo engine/node:crypto pulled into a client bundle); fixed by e2ee880 + 4d4d887, which is what went live\n- Migration 110 applied\n\n_Release time = commit time on main (≈ Vercel production deploy; approximate)._",
+      "commits": [
+        {
+          "sha": "4d4d887",
+          "subject": "Food-log promo hook: only schedule while promos are on (create path untouched otherwise)",
+          "repo": "FitCircleBE",
+          "date": "2026-10-26"
+        },
+        {
+          "sha": "e2ee880",
+          "subject": "Fix production build: promo conversion hook moves from FoodLogService to the food-log route",
+          "repo": "FitCircleBE",
+          "date": "2026-10-26"
+        },
+        {
+          "sha": "d231599",
+          "subject": "Activation journey backend: promo@1 cards, 4-slot meal reminders, Fitzy intro, journey API",
+          "repo": "FitCircleBE",
+          "date": "2026-10-26"
+        }
+      ],
+      "migrations": [
+        "110_promos_activation_journey"
+      ],
+      "links": {
+        "Commit": "https://github.com/Inov8rlabs/FitCircle/commit/4d4d887"
+      },
+      "releasedAt": "2026-10-26T22:28:26.000Z",
+      "supersededAt": "2026-10-27T14:25:36.000Z",
+      "events": [
+        {
+          "toStatus": "live",
+          "occurredAt": "2026-10-26T22:28:26.000Z",
+          "note": "Merged to main / deployed"
+        },
+        {
+          "toStatus": "superseded",
+          "occurredAt": "2026-10-27T14:25:36.000Z"
+        }
+      ]
+    },
+    {
+      "releaseKey": "backend:production:894e0a0",
+      "platform": "backend",
+      "track": "production",
+      "version": "2026-10-27",
+      "build": "894e0a0",
+      "status": "superseded",
+      "internalNotes": "Ads: twice-daily performance email report (cron /api/cron/ads/report, 12:00 + 22:00 UTC).\n\n_Release time = commit time on main (≈ Vercel production deploy; approximate)._",
+      "commits": [
+        {
+          "sha": "894e0a0",
+          "subject": "Ads: twice-daily performance email report (cron /api/cron/ads/report)",
+          "repo": "FitCircleBE",
+          "date": "2026-10-27"
+        }
+      ],
+      "migrations": [],
+      "links": {
+        "Commit": "https://github.com/Inov8rlabs/FitCircle/commit/894e0a0"
+      },
+      "releasedAt": "2026-10-27T14:25:36.000Z",
+      "supersededAt": "2026-10-27T14:41:23.000Z",
+      "events": [
+        {
+          "toStatus": "live",
+          "occurredAt": "2026-10-27T14:25:36.000Z",
+          "note": "Merged to main / deployed"
+        },
+        {
+          "toStatus": "superseded",
+          "occurredAt": "2026-10-27T14:41:23.000Z"
+        }
+      ]
+    },
+    {
+      "releaseKey": "backend:production:c77137b",
+      "platform": "backend",
+      "track": "production",
+      "version": "2026-10-27",
+      "build": "c77137b",
+      "status": "superseded",
+      "internalNotes": "Ads: read-only Google Ads channel (service-account REST connector, hourly sync, email states).\n\n_Release time = commit time on main (≈ Vercel production deploy; approximate)._",
+      "commits": [
+        {
+          "sha": "c77137b",
+          "subject": "Ads: read-only Google Ads channel (service-account REST connector, hourly sync, email states)",
+          "repo": "FitCircleBE",
+          "date": "2026-10-27"
+        }
+      ],
+      "migrations": [],
+      "links": {
+        "Commit": "https://github.com/Inov8rlabs/FitCircle/commit/c77137b"
+      },
+      "releasedAt": "2026-10-27T14:41:23.000Z",
+      "supersededAt": "2026-10-27T14:48:43.000Z",
+      "events": [
+        {
+          "toStatus": "live",
+          "occurredAt": "2026-10-27T14:41:23.000Z",
+          "note": "Merged to main / deployed"
+        },
+        {
+          "toStatus": "superseded",
+          "occurredAt": "2026-10-27T14:48:43.000Z"
+        }
+      ]
+    },
+    {
+      "releaseKey": "backend:production:606827e",
+      "platform": "backend",
+      "track": "production",
+      "version": "2026-10-27",
+      "build": "606827e",
+      "status": "superseded",
+      "internalNotes": "Ads console: Virality report (invites, friends brought in, K-factor, socially activated, blended CAC).\n\n_Release time = commit time on main (≈ Vercel production deploy; approximate)._",
+      "commits": [
+        {
+          "sha": "606827e",
+          "subject": "Ads console: Virality report (invites, friends brought in, K-factor, socially activated, blended CAC)",
+          "repo": "FitCircleBE",
+          "date": "2026-10-27"
+        }
+      ],
+      "migrations": [],
+      "links": {
+        "Commit": "https://github.com/Inov8rlabs/FitCircle/commit/606827e"
+      },
+      "releasedAt": "2026-10-27T14:48:43.000Z",
+      "supersededAt": "2026-10-27T15:07:28.000Z",
+      "events": [
+        {
+          "toStatus": "live",
+          "occurredAt": "2026-10-27T14:48:43.000Z",
+          "note": "Merged to main / deployed"
+        },
+        {
+          "toStatus": "superseded",
+          "occurredAt": "2026-10-27T15:07:28.000Z"
+        }
+      ]
+    },
+    {
+      "releaseKey": "backend:production:a79331f",
+      "platform": "backend",
+      "track": "production",
+      "version": "2026-10-27",
+      "build": "a79331f",
+      "status": "superseded",
+      "internalNotes": "Ads Console: email links point to Admin Tools; old /admin/ads pages redirect there.\n\n_Release time = commit time on main (≈ Vercel production deploy; approximate)._",
+      "commits": [
+        {
+          "sha": "a79331f",
+          "subject": "Ads Console: email links to Admin Tools; old /admin/ads pages redirect there",
+          "repo": "FitCircleBE",
+          "date": "2026-10-27"
+        }
+      ],
+      "migrations": [],
+      "links": {
+        "Commit": "https://github.com/Inov8rlabs/FitCircle/commit/a79331f"
+      },
+      "releasedAt": "2026-10-27T15:07:28.000Z",
+      "supersededAt": "2026-10-27T15:26:22.000Z",
+      "events": [
+        {
+          "toStatus": "live",
+          "occurredAt": "2026-10-27T15:07:28.000Z",
+          "note": "Merged to main / deployed"
+        },
+        {
+          "toStatus": "superseded",
+          "occurredAt": "2026-10-27T15:26:22.000Z"
+        }
+      ]
+    },
+    {
+      "releaseKey": "backend:production:517d8e1",
+      "platform": "backend",
+      "track": "production",
+      "version": "2026-10-27",
+      "build": "517d8e1",
+      "status": "live",
+      "internalNotes": "Google Ads sync fix: don't select app-install metrics FROM ad_group (GAQL PROHIBITED_METRIC_IN_SELECT_OR_WHERE_CLAUSE).\n\n_Release time = commit time on main (≈ Vercel production deploy; approximate)._",
+      "commits": [
+        {
+          "sha": "517d8e1",
+          "subject": "Google Ads sync: don't select app-install metrics FROM ad_group",
+          "repo": "FitCircleBE",
+          "date": "2026-10-27"
+        }
+      ],
+      "migrations": [],
+      "links": {
+        "Commit": "https://github.com/Inov8rlabs/FitCircle/commit/517d8e1"
+      },
+      "releasedAt": "2026-10-27T15:26:22.000Z",
+      "events": [
+        {
+          "toStatus": "live",
+          "occurredAt": "2026-10-27T15:26:22.000Z",
+          "note": "Merged to main / deployed"
+        }
+      ]
+    }
+  ]
+}
