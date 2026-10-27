@@ -11,7 +11,7 @@ import { planRelease, type ExistingRelease, type ObservedRelease } from '../stat
 import type { ReleaseStatus, ReleaseSyncStatus, SyncSource, SyncSourceResult } from '../types';
 
 const DEBOUNCE_MS = 2 * 60 * 1000;
-const EXISTING_COLS = 'id, release_key, status, store_created_at, uploaded_at, submitted_at, approved_at, released_at, superseded_at, whats_new';
+const EXISTING_COLS = 'id, release_key, status, store_created_at, uploaded_at, submitted_at, approved_at, released_at, superseded_at, whats_new, countries';
 /** Rows of a fully-listed track that are "current" and get superseded when they drop off the list. */
 const CURRENT_ON_TRACK: ReleaseStatus[] = ['live', 'rolling_out', 'in_testing', 'halted'];
 

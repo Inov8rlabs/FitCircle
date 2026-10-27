@@ -147,6 +147,7 @@ describe('planRelease (status-change events)', () => {
     const p = planRelease(existing(), obs({ whatsNew: null }), 'app_store_connect', NOW);
     for (const col of ['internal_notes', 'known_issues', 'commits', 'migrations', 'links', 'notes_updated_by']) expect(p.row).not.toHaveProperty(col);
     expect(p.row.whats_new).toBe('Old notes');
+    expect(planRelease(existing({ countries: ['US', 'CA'] }), obs({ countries: null }), 'google_play', NOW).row.countries).toEqual(['US', 'CA']);
   });
 
   it('uses the store-provided status time when given', () => {

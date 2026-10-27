@@ -162,6 +162,7 @@ export interface ExistingRelease {
   released_at: string | null;
   superseded_at: string | null;
   whats_new: string | null;
+  countries?: string[] | null;
 }
 
 export interface PlannedEvent {
@@ -201,7 +202,8 @@ export function planRelease(existing: ExistingRelease | null, o: ObservedRelease
     store_status: o.storeStatus,
     release_type: o.releaseType ?? null,
     rollout_fraction: o.rolloutFraction ?? null,
-    countries: o.countries ?? null,
+    // Play omits countryTargeting on full rollouts; keep what we know.
+    countries: o.countries ?? existing?.countries ?? null,
     // Keep stored notes when the store returns none (e.g. localization call failed).
     whats_new: o.whatsNew ?? existing?.whats_new ?? null,
     source,
