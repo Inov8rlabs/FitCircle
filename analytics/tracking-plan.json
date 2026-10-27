@@ -1,7 +1,7 @@
 {
   "$schema": "./tracking-plan.schema.json",
-  "version": 14,
-  "updated": "2026-10-26",
+  "version": 15,
+  "updated": "2026-10-27",
   "conventions": {
     "eventNames": "Title Case, '<Object> <Past-tense verb>' (e.g. 'Meal Logged'). Names are frozen once shipped: rename in the analytics tool, never in code.",
     "propertyNames": "snake_case. Enum values are lowercase snake_case.",
@@ -207,6 +207,16 @@
       "name": "primary_goal",
       "type": "string",
       "description": "Goal chosen in onboarding (e.g. lose_weight, maintain, build_muscle)."
+    },
+    {
+      "name": "exp_onboarding_v2",
+      "type": "string",
+      "description": "Arm of the onboarding_v2 experiment: control | tour_hard | tour_soft. Set on exposure."
+    },
+    {
+      "name": "onboarding_flow",
+      "type": "string",
+      "description": "v1 | v2 — which onboarding the user went through."
     }
   ],
   "events": [
@@ -383,7 +393,14 @@
         "web"
       ],
       "description": "New user reached the first onboarding step.",
-      "properties": []
+      "properties": [
+        {
+          "name": "flow",
+          "type": "string",
+          "required": false,
+          "description": "Onboarding flow: v1 (classic) or v2 (tour). Absent on builds before 1.1.1."
+        }
+      ]
     },
     {
       "name": "Onboarding Step Viewed",
@@ -399,12 +416,18 @@
           "name": "step_name",
           "type": "string",
           "required": true,
-          "description": "Stable snake_case id, one of: questionnaire, meet_fitzy, profile, goals, persona, health, first_check_in, celebration, circle_recommendations, preferences (web). Never a display title."
+          "description": "Stable snake_case id. v1: questionnaire, meet_fitzy, invite_code, profile, goals, persona, assessment_questions, circle_recommendations, assessment_done, health, first_check_in, celebration, preferences (web). v2: v2_welcome, v2_goal, v2_about_you, v2_plan, v2_try_meal, v2_try_fitzy, v2_streak, v2_reminders, v2_circles, v2_summary. Never a display title."
         },
         {
           "name": "step_number",
           "type": "int",
           "required": true
+        },
+        {
+          "name": "flow",
+          "type": "string",
+          "required": false,
+          "description": "Onboarding flow: v1 (classic) or v2 (tour). Absent on builds before 1.1.1."
         }
       ]
     },
@@ -422,12 +445,18 @@
           "name": "step_name",
           "type": "string",
           "required": true,
-          "description": "Stable snake_case id, one of: questionnaire, meet_fitzy, profile, goals, persona, health, first_check_in, celebration, circle_recommendations, preferences (web). Never a display title."
+          "description": "Stable snake_case id. v1: questionnaire, meet_fitzy, invite_code, profile, goals, persona, assessment_questions, circle_recommendations, assessment_done, health, first_check_in, celebration, preferences (web). v2: v2_welcome, v2_goal, v2_about_you, v2_plan, v2_try_meal, v2_try_fitzy, v2_streak, v2_reminders, v2_circles, v2_summary. Never a display title."
         },
         {
           "name": "step_number",
           "type": "int",
           "required": true
+        },
+        {
+          "name": "flow",
+          "type": "string",
+          "required": false,
+          "description": "Onboarding flow: v1 (classic) or v2 (tour). Absent on builds before 1.1.1."
         }
       ]
     },
@@ -445,12 +474,18 @@
           "name": "step_name",
           "type": "string",
           "required": true,
-          "description": "Stable snake_case id, one of: questionnaire, meet_fitzy, profile, goals, persona, health, first_check_in, celebration, circle_recommendations, preferences (web). Never a display title."
+          "description": "Stable snake_case id. v1: questionnaire, meet_fitzy, invite_code, profile, goals, persona, assessment_questions, circle_recommendations, assessment_done, health, first_check_in, celebration, preferences (web). v2: v2_welcome, v2_goal, v2_about_you, v2_plan, v2_try_meal, v2_try_fitzy, v2_streak, v2_reminders, v2_circles, v2_summary. Never a display title."
         },
         {
           "name": "step_number",
           "type": "int",
           "required": true
+        },
+        {
+          "name": "flow",
+          "type": "string",
+          "required": false,
+          "description": "Onboarding flow: v1 (classic) or v2 (tour). Absent on builds before 1.1.1."
         }
       ]
     },
@@ -485,6 +520,12 @@
           "name": "joined_circle",
           "type": "bool",
           "required": false
+        },
+        {
+          "name": "flow",
+          "type": "string",
+          "required": false,
+          "description": "Onboarding flow: v1 (classic) or v2 (tour). Absent on builds before 1.1.1."
         }
       ]
     },
@@ -496,7 +537,14 @@
         "android"
       ],
       "description": "The 'Snap your first meal' onboarding step was shown (ACTIVATION_JOURNEY_SPEC §2).",
-      "properties": []
+      "properties": [
+        {
+          "name": "flow",
+          "type": "string",
+          "required": false,
+          "description": "Onboarding flow: v1 (classic) or v2 (tour). Absent on builds before 1.1.1."
+        }
+      ]
     },
     {
       "name": "Onboarding Meal Step Skipped",
@@ -506,7 +554,14 @@
         "android"
       ],
       "description": "The user tapped 'Skip for now' on the first-meal onboarding step.",
-      "properties": []
+      "properties": [
+        {
+          "name": "flow",
+          "type": "string",
+          "required": false,
+          "description": "Onboarding flow: v1 (classic) or v2 (tour). Absent on builds before 1.1.1."
+        }
+      ]
     },
     {
       "name": "Onboarding Meal Logged",
@@ -522,6 +577,12 @@
           "type": "enum",
           "enum": "meal_method",
           "required": true
+        },
+        {
+          "name": "flow",
+          "type": "string",
+          "required": false,
+          "description": "Onboarding flow: v1 (classic) or v2 (tour). Absent on builds before 1.1.1."
         }
       ]
     },
@@ -1698,6 +1759,18 @@
           "type": "string",
           "required": true,
           "description": "Snake_case trigger id: ai_limit, pro_card, settings, circle_limit, history_limit, remove_ads, body_scan, milestone, streak_shield, locked_feature, pricing_page, onboarding, landing, landing_footer (web), first_meal_aha (post-first-meal soft paywall), feed_pro_value (home feed pro_value promo). Never camelCase."
+        },
+        {
+          "name": "is_hard",
+          "type": "bool",
+          "required": false,
+          "description": "Paywall has no close/skip path (onboarding_v2 tour_hard arm, locked screen)."
+        },
+        {
+          "name": "trial_eligible",
+          "type": "bool",
+          "required": false,
+          "description": "The selected/primary plan offered a free trial to this user."
         }
       ]
     },
@@ -1728,6 +1801,18 @@
           "type": "string",
           "required": true,
           "description": "Store product id; web (Stripe) uses stripe_pro_<plan>."
+        },
+        {
+          "name": "is_hard",
+          "type": "bool",
+          "required": false,
+          "description": "Paywall has no close/skip path (onboarding_v2 tour_hard arm, locked screen)."
+        },
+        {
+          "name": "trial_eligible",
+          "type": "bool",
+          "required": false,
+          "description": "The selected/primary plan offered a free trial to this user."
         }
       ]
     },
@@ -1746,6 +1831,18 @@
           "type": "string",
           "required": true,
           "description": "Snake_case trigger id: ai_limit, pro_card, settings, circle_limit, history_limit, remove_ads, body_scan, milestone, streak_shield, locked_feature, pricing_page, onboarding, landing, landing_footer (web), first_meal_aha (post-first-meal soft paywall), feed_pro_value (home feed pro_value promo). Never camelCase."
+        },
+        {
+          "name": "is_hard",
+          "type": "bool",
+          "required": false,
+          "description": "Paywall has no close/skip path (onboarding_v2 tour_hard arm, locked screen)."
+        },
+        {
+          "name": "trial_eligible",
+          "type": "bool",
+          "required": false,
+          "description": "The selected/primary plan offered a free trial to this user."
         }
       ]
     },
@@ -1782,6 +1879,24 @@
           "type": "enum",
           "enum": "store",
           "required": true
+        },
+        {
+          "name": "is_hard",
+          "type": "bool",
+          "required": false,
+          "description": "Paywall has no close/skip path (onboarding_v2 tour_hard arm, locked screen)."
+        },
+        {
+          "name": "trial_eligible",
+          "type": "bool",
+          "required": false,
+          "description": "The selected/primary plan offered a free trial to this user."
+        },
+        {
+          "name": "is_trial",
+          "type": "bool",
+          "required": false,
+          "description": "Purchase will start a free trial."
         }
       ]
     },
@@ -1828,6 +1943,24 @@
           "name": "currency",
           "type": "string",
           "required": false
+        },
+        {
+          "name": "is_hard",
+          "type": "bool",
+          "required": false,
+          "description": "Paywall has no close/skip path (onboarding_v2 tour_hard arm, locked screen)."
+        },
+        {
+          "name": "trial_eligible",
+          "type": "bool",
+          "required": false,
+          "description": "The selected/primary plan offered a free trial to this user."
+        },
+        {
+          "name": "is_trial",
+          "type": "bool",
+          "required": false,
+          "description": "Purchase started a free trial (intro free phase)."
         }
       ]
     },
@@ -1864,6 +1997,18 @@
           "type": "enum",
           "enum": "store",
           "required": true
+        },
+        {
+          "name": "is_hard",
+          "type": "bool",
+          "required": false,
+          "description": "Paywall has no close/skip path (onboarding_v2 tour_hard arm, locked screen)."
+        },
+        {
+          "name": "trial_eligible",
+          "type": "bool",
+          "required": false,
+          "description": "The selected/primary plan offered a free trial to this user."
         }
       ]
     },
@@ -1906,6 +2051,18 @@
           "type": "enum",
           "enum": "error_kind",
           "required": true
+        },
+        {
+          "name": "is_hard",
+          "type": "bool",
+          "required": false,
+          "description": "Paywall has no close/skip path (onboarding_v2 tour_hard arm, locked screen)."
+        },
+        {
+          "name": "trial_eligible",
+          "type": "bool",
+          "required": false,
+          "description": "The selected/primary plan offered a free trial to this user."
         }
       ]
     },
@@ -1981,6 +2138,64 @@
       ],
       "description": "User opened store / billing-portal subscription management.",
       "properties": []
+    },
+    {
+      "name": "Paywall Later Tapped",
+      "category": "monetization",
+      "platforms": [
+        "ios",
+        "android"
+      ],
+      "description": "User chose \"I'll do it later\" on a skippable onboarding paywall.",
+      "properties": [
+        {
+          "name": "source",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "trial_eligible",
+          "type": "bool",
+          "required": false
+        }
+      ]
+    },
+    {
+      "name": "Locked Screen Viewed",
+      "category": "monetization",
+      "platforms": [
+        "ios",
+        "android"
+      ],
+      "description": "The hard-gate locked screen (subscription required) was shown on launch/foreground.",
+      "properties": []
+    },
+    {
+      "name": "Experiment Exposed",
+      "category": "experiments",
+      "platforms": [
+        "ios",
+        "android"
+      ],
+      "description": "User first saw a surface controlled by an experiment arm (once per experiment). Pair with user property exp_<key>.",
+      "properties": [
+        {
+          "name": "experiment_key",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "arm",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "surface",
+          "type": "string",
+          "required": true,
+          "description": "Where exposure happened, e.g. onboarding."
+        }
+      ]
     },
     {
       "name": "App Store Link Clicked",
@@ -2801,6 +3016,61 @@
       ],
       "description": "Reached activation (circle of 3 + 3 logged days + a friend's reaction in the first week). Fired once.",
       "properties": []
+    },
+    {
+      "name": "Onboarding Resumed",
+      "category": "onboarding",
+      "platforms": [
+        "ios",
+        "android"
+      ],
+      "description": "An unfinished onboarding was resumed at a saved step after relaunch / reinstall.",
+      "properties": [
+        {
+          "name": "flow",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "step_name",
+          "type": "string",
+          "required": true
+        }
+      ]
+    },
+    {
+      "name": "Onboarding Plan Adjusted",
+      "category": "onboarding",
+      "platforms": [
+        "ios",
+        "android"
+      ],
+      "description": "User changed a suggested daily target on the v2 plan step.",
+      "properties": [
+        {
+          "name": "target",
+          "type": "string",
+          "required": true,
+          "description": "calories | protein | water | steps"
+        }
+      ]
+    },
+    {
+      "name": "Onboarding Fitzy Asked",
+      "category": "onboarding",
+      "platforms": [
+        "ios",
+        "android"
+      ],
+      "description": "User asked Fitzy a question on the v2 try-Fitzy step.",
+      "properties": [
+        {
+          "name": "input_kind",
+          "type": "string",
+          "required": true,
+          "description": "suggestion | typed"
+        }
+      ]
     },
     {
       "name": "Campaign Viewed",
