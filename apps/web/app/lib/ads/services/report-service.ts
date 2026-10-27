@@ -202,6 +202,30 @@ export class AdsReportService {
     return { cohort, duplicatesDropped: dropped };
   }
 
+  /**
+   * Sign-up time and test-user verdict for arbitrary users (invitees, circle
+   * co-members): the same classifyTestUser rules as the cohort. Ids with no
+   * profile are absent from the map.
+   */
+  static async classifyUsers(ids: string[]): Promise<Map<string, { createdAt: string; testReason: TestUserReason | null }>> {
+    const out = new Map<string, { createdAt: string; testReason: TestUserReason | null }>();
+    for (const part of chunk([...new Set(ids)], 150)) {
+      const [profiles, attr] = await Promise.all([
+        selectAll<{ id: string; created_at: string; email: string | null; is_admin: boolean | null }>(() =>
+          db().from('profiles').select('id, created_at, email, is_admin').in('id', part).order('id', { ascending: true })
+        ),
+        selectAll<{ user_id: string; is_test: boolean | null }>(() =>
+          db().from('user_attribution').select('user_id, is_test').in('user_id', part).order('user_id', { ascending: true })
+        ),
+      ]);
+      const mock = new Set(attr.filter((a) => a.is_test === true).map((a) => a.user_id));
+      for (const p of profiles) {
+        out.set(p.id, { createdAt: p.created_at, testReason: classifyTestUser({ email: p.email, isAdmin: p.is_admin, mockAttribution: mock.has(p.id) }) });
+      }
+    }
+    return out;
+  }
+
   /** The cohort the report counts, plus what was left out as test / internal sign-ups. */
   static async reportCohort(range: RangeQuery): Promise<{ cohort: CohortUser[]; excluded: ExcludedUsers; duplicatesDropped: number }> {
     const { cohort: all, duplicatesDropped } = await this.loadCohortWithStats(range);

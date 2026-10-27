@@ -32,3 +32,20 @@ export const METRIC_DEFINITIONS: Record<MetricKey, string> = {
   userToActivated: 'Activated ÷ users.',
   userToPayer: 'Payers ÷ users.',
 };
+
+/**
+ * Virality tooltips (virality.definitions). Keys are ViralityMetrics fields.
+ * Full definitions: docs/ADS_METRICS_METHODOLOGY.md §8 — keep the two in sync.
+ */
+export const VIRALITY_DEFINITIONS: Record<string, string> = {
+  users: 'Sign-ups in the range (report time zone), all channels; test/internal accounts excluded.',
+  sociallyActivated: 'In a non-public circle with ≥ 1 other real (non-test) member, both in the circle at the same time, within 7×24 h of sign-up. Public circles (incl. the demo circle) never count.',
+  invited: 'Invited by any route the database sees within 7×24 h of sign-up: sent an email/SMS invite, someone joined through their referral link/code, or someone joined a non-public circle with invited_by = them. Share-sheet shares are not in the database.',
+  invitesPerInviter: 'Email/SMS invites sent in the window (delivery failures excluded) ÷ users who sent ≥ 1.',
+  inviteJoinRate: 'Invites now joined/qualified whose invitee is a real account ÷ invites sent.',
+  friendsBroughtIn: 'Distinct real accounts created after the inviter that joined through the inviter’s referral or into the inviter’s non-public circle within 7×24 h of the inviter’s sign-up. Each friend counts once (referral inviter first).',
+  kFactor: 'Friends brought in ÷ sign-ups (window: 7 days after each sign-up).',
+  kFactorToDate: 'Friends brought in so far (no window) ÷ sign-ups.',
+  blendedCac: 'Spend ÷ (paid-channel users + friends those users brought in, 7-day window). — without spend.',
+  circles: 'Circle state in the first 7 days: social, alone in a private circle, only in a public circle, or no circle.',
+};

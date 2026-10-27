@@ -506,3 +506,110 @@ export interface ExcludedUsers {
   /** True when ?includeTest=1 counted them anyway. */
   included: boolean;
 }
+
+// ---------------------------------------------------------------------------
+// Virality (GET /api/admin/ads/virality, docs/ADS_METRICS_METHODOLOGY.md §8)
+// ---------------------------------------------------------------------------
+
+/** Where a cohort user stood with circles in their first 7 days (mutually exclusive, first match wins). */
+export interface ViralityCircleStates {
+  /** In a non-public circle with ≥ 1 other real active member (= sociallyActivated). */
+  social: number;
+  /** In a non-public circle, but alone (no other real active member in the window). */
+  soloPrivate: number;
+  /** Only in public circles (e.g. the public demo circle). */
+  publicOnly: number;
+  /** In no circle during the window. */
+  none: number;
+}
+
+/** Virality of one slice of the sign-up cohort. Ratios are null when the denominator is 0. */
+export interface ViralityMetrics {
+  /** Cohort users in the slice (test users excluded unless includeTest). */
+  users: number;
+  /** Users who invited by any DB-visible route within 7 days of sign-up. */
+  invited: number;
+  invitedRate: number | null;
+  /** Users per route (a user can take several routes). */
+  invitedBy: { sentInvite: number; referralJoin: number; circleJoin: number };
+  /** Users who sent ≥ 1 email/SMS invite (referral_invites) within 7 days. */
+  inviters: number;
+  /** Email/SMS invites sent within 7 days of the inviter's sign-up (status ≠ failed). */
+  invitesSent: number;
+  invitesPerInviter: number | null;
+  /** Of invitesSent: status joined/qualified and the invitee is a real user (to date). */
+  invitesJoined: number;
+  inviteJoinRate: number | null;
+  /** Invites whose delivery failed (not in invitesSent). */
+  invitesFailed: number;
+  /** Distinct new real users brought in by the slice within 7 days of the inviter's sign-up. */
+  friendsBroughtIn: number;
+  /** friendsBroughtIn ÷ users (window: 7 days after each sign-up). */
+  kFactor: number | null;
+  /** Same, with no window (joins so far). */
+  friendsToDate: number;
+  kFactorToDate: number | null;
+  /** In a non-public circle with ≥ 1 other real active member within 7 days of sign-up. */
+  sociallyActivated: number;
+  sociallyActivatedRate: number | null;
+  circles: ViralityCircleStates;
+  /** Network spend of the slice (same as the overview). */
+  spend: number;
+  /** Users of the slice an ad network brought in. */
+  paidUsers: number;
+  /** Friends (7-day window) those paid users brought in. */
+  paidFriends: number;
+  /** spend ÷ (paidUsers + paidFriends); null without spend. */
+  blendedCac: number | null;
+  /** spend ÷ paidUsers (for comparison); null without spend. */
+  costPerPaidUser: number | null;
+  /** True while a cohort day in the slice is younger than the 7-day window (numbers will still grow). */
+  maturing: boolean;
+}
+
+export interface ViralityRow {
+  key: string;
+  groupBy: GroupBy;
+  label: string;
+  sublabel: string | null;
+  channel: AttributionChannel | null;
+  platform: string | null;
+  level: AdLevel | null;
+  externalId: string | null;
+  campaignExternalId: string | null;
+  metrics: ViralityMetrics;
+}
+
+export interface ViralityDay {
+  /** Sign-up day (report time zone). */
+  date: string;
+  users: number;
+  invited: number;
+  friendsBroughtIn: number;
+  sociallyActivated: number;
+  /** The day's 7-day window has not closed yet. */
+  maturing: boolean;
+}
+
+export interface ViralityCoverage {
+  /** What the numbers include. */
+  counted: string[];
+  /** What they cannot include (not in the database). */
+  notCounted: string[];
+  /** Raw rows behind the numbers for this cohort (before test-user / window filters). */
+  sourceRows: { referralInvites: number; referrals: number; circleInviteJoins: number };
+}
+
+export interface AdsVirality {
+  range: { start: string; end: string; timeZone: string };
+  groupBy: GroupBy;
+  /** Every window used, in days after each user's sign-up. */
+  window: { days: number; label: string };
+  /** All cohort users (organic and unknown included — unlike the overview's paid-only totals). */
+  totals: ViralityRow;
+  rows: ViralityRow[];
+  days: ViralityDay[];
+  excludedUsers: ExcludedUsers;
+  coverage: ViralityCoverage;
+  definitions: Record<string, string>;
+}

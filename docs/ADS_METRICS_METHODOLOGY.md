@@ -161,3 +161,53 @@ dropped, Family Sharing copies excluded.
 range without granularity (`returnRowTotals` + `returnGrandTotals`, `timeZone: ORTZ`) and compares spend
 (±$0.01), impressions, taps and installs (`totalInstalls`, exact) with Σ stored campaign-level rows, per field and
 per campaign, plus the org time zone (`GET /acls`) vs `ADS_REPORT_TIMEZONE`. Read-only.
+
+## 8. Virality (`GET /api/admin/ads/virality`, admin app → Ads → Virality)
+
+Do new users bring in other people? Code: `lib/ads/virality.ts` (pure rules), `services/virality-service.ts`
+(loading), `definitions.ts` (`VIRALITY_DEFINITIONS`). Tests: `lib/ads/__tests__/virality.test.ts`,
+`api/admin/ads/__tests__/virality.test.ts`.
+
+**Cohort.** The same sign-up cohort as §1/§3 (`AdsReportService.reportCohort`): same range, report time zone,
+attribution and test-user exclusion. Unlike the overview's paid-only totals, the virality **totals count every
+sign-up** (organic and unknown too). Rows use the overview's breakdowns (channel, platform, campaign, ad group,
+keyword, ad), with the same keys and labels, and add up to the totals.
+
+**Window.** Every metric uses `[sign-up − 1 min, sign-up + 7 × 24 h)`, the activation window. A range is
+**maturing** while `today − end < 8` days (same rule as D7 ROAS). Each sign-up day in `days[]` has its own flag. A
+maturing number can still grow.
+
+**Test users on both sides.** The inviter must be in the cohort, so test users are already out. Every invitee,
+circle joiner and co-member is classified with the same `classifyTestUser` rules (profile email / `is_admin` /
+mock attribution). A test account, or an id with no profile (deleted), never counts. `?includeTest=1` counts test
+users on both sides.
+
+**Public circles never count.** These are circles with `visibility = public`, plus the demo circle `dc69b1b5…`
+by id. Joining one is not a social connection. Circles with status `cancelled` / `draft`, and circles that could
+not be loaded, never count either.
+
+| Key | Definition |
+|---|---|
+| `invited` | User invited within the window by **any DB-visible route**: (a) sent a `referral_invites` row (`status ≠ failed`, by `sent_at`), (b) a referral with `inviter_id` = user, status `pending`/`qualified`, real invitee, `attributed_at` in the window, (c) someone else joined a non-public circle with `fitcircle_members.invited_by` = user (creator self-rows excluded), real joiner, `joined_at` in the window. `invitedBy` counts users per route. |
+| `invitesSent` / `inviters` / `invitesPerInviter` | (a)-route invites in the window ÷ users who sent ≥ 1. Failed deliveries are reported separately (`invitesFailed`). |
+| `inviteJoinRate` | Of `invitesSent`, those with status `joined`/`qualified` whose `referral_id` resolves to a valid referral with a real invitee (to date) ÷ `invitesSent`. |
+| `friendsBroughtIn` | Distinct **new** real users brought in within the inviter's window: a valid referral of a cohort inviter, or a join into a cohort user's non-public circle with `invited_by` = them. "New" means the friend's profile was created after the inviter signed up. Each friend is credited once across the whole cohort: the referral inviter first, otherwise the earliest circle inviter. So slices add up. |
+| `kFactor` | `friendsBroughtIn ÷ users` (window: 7 days). `kFactorToDate` / `friendsToDate`: same with no upper bound. |
+| `sociallyActivated` (headline) | User was in a non-public circle **at the same time** as ≥ 1 other real member, at some point inside the window. Membership interval = `[joined_at, ∞)` while `active`/`completed`; `[joined_at, dropped_at or disqualified_at)` otherwise. A `pending` row, or an ended row with no end date, never overlaps. |
+| `circles` | Circle state in the window, first match wins: `social` (= socially activated), `soloPrivate` (in a non-public circle with no other real member), `publicOnly`, `none`. |
+| `blendedCac` | `spend ÷ (paidUsers + paidFriends)`. `paidUsers` = users of the slice attributed to an ad network; `paidFriends` = the friends those users brought in (7-day window). Null without spend. Shown beside `costPerPaidUser` = spend ÷ paidUsers. |
+
+**Rejected on purpose:** referrals in `rejected` (device fraud), `revoked` or `review`; failed invites; public
+circle joins; `referral_codes` (one is auto-created for every user, so it is not a sign of intent).
+
+**What the database cannot see (share-sheet gap).** Shares from the iOS / Android share sheet and "copy link"
+are only in Amplitude (`Referral Invite Sheet Opened`, `Invite Created`, `Invite Shared`, `Referral Invite
+Shared`). Opens of `/i/<code>` and `/join/<code>` are not recorded server-side: the landing pages only read
+(`ReferralService.preview`), and the store-button clicks go to client-side analytics. A shared link **is**
+counted when it leads to a sign-up that claims the code (`referrals.source` = `universal_link`, `app_link`,
+`play_referrer`, `paste`, `typed`, `web` or `circle_join`). So "invited" is a **lower bound**. The response
+carries `coverage.counted`, `coverage.notCounted` and `coverage.sourceRows` (raw row counts before filters).
+
+**Caveat on circle invites.** `POST /api/mobile/circles/join` sets `invited_by` to the **circle creator** for
+every join by invite code, whoever shared the code. A member who shares their circle's code therefore credits
+the creator, not themselves.

@@ -88,7 +88,8 @@ export const effectiveAttribution = (u: CohortUser): AttributionRow | null => (u
 
 const entityKey = (channel: string, level: AdLevel, id: string) => `${channel}:${level}:${id}`;
 
-function userKey(u: CohortUser, groupBy: GroupBy): string {
+/** The breakdown row a cohort user belongs to (shared with lib/ads/virality.ts). */
+export function userKey(u: CohortUser, groupBy: GroupBy): string {
   const a = effectiveAttribution(u);
   const ch: AttributionChannel = a?.channel ?? 'unknown';
   if (groupBy === 'channel') return ch;

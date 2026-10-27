@@ -113,6 +113,7 @@ Targets shown as reference lines (configurable in `ads_settings` later; v1 const
 - `POST /api/admin/ads/changes` → body `{ channel, level, externalId, field, value, dryRun? }` → `AdChangeResult` (see §8).
 - `GET /api/admin/ads/changes?limit` → audit log.
 - `POST /api/admin/ads/sync` → trigger a sync now (debounced: no-op if one finished < 2 min ago).
+- `GET /api/admin/ads/virality?start&end&groupBy&includeTest` → `AdsVirality`: invites, friends brought in, K-factor, socially activated and blended CAC of the sign-up cohort, by the overview's breakdowns, plus per-day cohorts with `maturing` flags and `coverage` (what the DB can and cannot see). Read-only. Definitions: ADS_METRICS_METHODOLOGY.md §8.
 
 ## 8. Bid and budget control — guardrails
 
