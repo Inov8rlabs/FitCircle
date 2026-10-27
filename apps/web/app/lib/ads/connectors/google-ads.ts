@@ -166,8 +166,12 @@ const METRIC_FIELDS =
 export const gaqlCampaignDaily = (start: string, end: string) =>
   `SELECT campaign.id, segments.date, customer.currency_code, ${METRIC_FIELDS} FROM campaign WHERE segments.date BETWEEN '${start}' AND '${end}'`;
 
+// The biddable_app_* install metrics are campaign-only: GAQL rejects them FROM ad_group
+// (PROHIBITED_METRIC_IN_SELECT_OR_WHERE_CLAUSE), so ad-group rows carry conversions instead.
+const AD_GROUP_METRIC_FIELDS = 'metrics.cost_micros, metrics.impressions, metrics.clicks, metrics.conversions, metrics.all_conversions';
+
 export const gaqlAdGroupDaily = (start: string, end: string) =>
-  `SELECT ad_group.id, campaign.id, segments.date, customer.currency_code, ${METRIC_FIELDS} FROM ad_group WHERE segments.date BETWEEN '${start}' AND '${end}'`;
+  `SELECT ad_group.id, campaign.id, segments.date, customer.currency_code, ${AD_GROUP_METRIC_FIELDS} FROM ad_group WHERE segments.date BETWEEN '${start}' AND '${end}'`;
 
 const YMD = /^\d{4}-\d{2}-\d{2}$/;
 const assertYmd = (v: string) => {
@@ -235,7 +239,13 @@ export function mapGoogleAdGroup(row: Json, campaign?: AdEntityInput | null, cur
 }
 
 /** Installs for a metrics row: the App-campaign install column. */
-export const googleInstalls = (m: Json | undefined | null) => int(m?.biddableAppInstallConversions);
+/**
+ * Installs: biddable_app_install_conversions where Google returns it (campaign rows).
+ * Ad-group rows can't select it, so they fall back to conversions — for an App
+ * installs campaign the bid-to conversion is the install (first open).
+ */
+export const googleInstalls = (m: Json | undefined | null) =>
+  m?.biddableAppInstallConversions !== undefined ? int(m.biddableAppInstallConversions) : int(m?.conversions);
 
 /** GAQL daily rows (campaign or ad_group resource) → AdDailyMetricInput, summing duplicates in micros. */
 export function mapGoogleDaily(rows: Json[], level: 'campaign' | 'ad_group'): AdDailyMetricInput[] {

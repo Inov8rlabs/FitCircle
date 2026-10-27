@@ -10,6 +10,8 @@ import {
   clearGoogleTokenCache,
   DEFAULT_GOOGLE_ADS_CUSTOMER_ID,
   GAQL_AD_GROUPS,
+  gaqlAdGroupDaily,
+  gaqlCampaignDaily,
   GAQL_CAMPAIGNS,
   GOOGLE_ADS_SCOPE,
   GoogleAdsConnector,
@@ -243,5 +245,25 @@ describe('Google Ads connector (mock fetch)', () => {
     await expect(c.fetchDailyMetrics("2026-10-01' OR 1=1", '2026-10-02')).rejects.toThrow(/bad date/);
     await expect(c.applyChange({ channel: 'google_ads', level: 'campaign', externalId: '1', parentExternalId: null, campaignExternalId: '1', field: 'daily_budget', value: 20, currency: 'USD' })).rejects.toThrow(/read-only/);
     expect(calls).toHaveLength(0);
+  });
+});
+
+describe('ad-group daily metrics (install metrics are campaign-only)', () => {
+  it('never selects biddable_app_* FROM ad_group; the campaign query keeps them', () => {
+    expect(gaqlAdGroupDaily('2026-10-24', '2026-10-27')).not.toContain('biddable_app');
+    expect(gaqlCampaignDaily('2026-10-24', '2026-10-27')).toContain('metrics.biddable_app_install_conversions');
+  });
+
+  it('ad-group installs fall back to conversions; campaign rows use biddable installs', () => {
+    const [ag] = mapGoogleDaily(
+      [{ segments: { date: '2026-10-27' }, campaign: { id: '1' }, adGroup: { id: '9' }, metrics: { costMicros: '5000000', conversions: 3 } }],
+      'ad_group'
+    );
+    expect(ag.installs).toBe(3);
+    const [c] = mapGoogleDaily(
+      [{ segments: { date: '2026-10-27' }, campaign: { id: '1' }, metrics: { conversions: 7, biddableAppInstallConversions: 4 } }],
+      'campaign'
+    );
+    expect(c.installs).toBe(4);
   });
 });
