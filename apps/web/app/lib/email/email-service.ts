@@ -172,6 +172,32 @@ export async function sendBatchInvitationEmails(
   return { success, failed, errors };
 }
 
+export interface SendEmailParams {
+  to: string | string[];
+  subject: string;
+  html: string;
+  text?: string;
+}
+
+/**
+ * Send a plain transactional / internal email (e.g. the ads report) from the
+ * FitCircle sender. Never throws.
+ */
+export async function sendEmail({ to, subject, html, text }: SendEmailParams): Promise<{ success: boolean; id?: string; error?: string }> {
+  const resend = getResend();
+  if (!resend) {
+    console.warn('RESEND_API_KEY not configured, skipping email send');
+    return { success: false, error: 'Email service not configured' };
+  }
+  try {
+    const { data, error } = await resend.emails.send({ from: FROM_EMAIL, to, replyTo: REPLY_TO, subject, html, text });
+    if (error) return { success: false, error: error.message };
+    return { success: true, id: data?.id };
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+  }
+}
+
 // Re-export NotificationService
 export { NotificationService } from '../services/notification-service';
 export type { NotificationPayload } from '../services/notification-service';
