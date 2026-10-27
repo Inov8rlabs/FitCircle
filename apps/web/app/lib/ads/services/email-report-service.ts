@@ -38,10 +38,13 @@ export function reportRecipients(env: Record<string, string | undefined> = proce
   return list.length ? list : DEFAULT_RECIPIENTS;
 }
 
+/** Ads Console in Admin Tools (the old /admin/ads pages on this site redirect there). */
+export const ADMIN_TOOLS_ADS_URL = 'https://admintools.inov8rlabs.com/apps/fitcircle/ads';
+
 export function consoleUrl(env: Record<string, string | undefined> = process.env): string {
-  const base = (env.NEXT_PUBLIC_APP_URL || 'https://www.fitcircle.ai').replace(/\/+$/, '');
-  // A localhost / preview base would make a useless link in an email.
-  return /^https:\/\//.test(base) && !/localhost|127\.0\.0\.1/.test(base) ? `${base}/admin/ads` : 'https://www.fitcircle.ai/admin/ads';
+  const url = (env.ADS_CONSOLE_URL ?? '').trim().replace(/\/+$/, '');
+  // Only an https override makes a usable link in an email.
+  return /^https:\/\//.test(url) && !/localhost|127\.0\.0\.1/.test(url) ? url : ADMIN_TOOLS_ADS_URL;
 }
 
 const normPlatform = (v: unknown): string | null => {

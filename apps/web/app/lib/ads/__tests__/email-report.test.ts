@@ -93,7 +93,7 @@ const user = (over: Partial<FunnelUser>): FunnelUser => ({
 const input = (over: Partial<BuildReportInput> = {}): BuildReportInput => ({
   now: AM,
   timeZone: TZ,
-  consoleUrl: 'https://www.fitcircle.ai/admin/ads',
+  consoleUrl: 'https://admintools.inov8rlabs.com/apps/fitcircle/ads',
   entities: [campaign()],
   metricRows: METRICS,
   sync: okSync(over.now ?? AM),
@@ -257,12 +257,12 @@ describe('rendering', () => {
     const r = buildAdsEmailReport(input({ entities: [campaign({ name: 'A <b>&</b> B' })] }));
     const text = renderText(r);
     expect(text).toContain('Time zone: America/Toronto');
-    expect(text).toContain('https://www.fitcircle.ai/admin/ads');
+    expect(text).toContain('https://admintools.inov8rlabs.com/apps/fitcircle/ads');
     expect(text).toContain('Data notes');
     expect(text).toContain('Google Ads (Android): not configured (GOOGLE_ADS_SA_KEY missing)');
     const html = renderHtml(r);
     expect(html).toContain('A &lt;b&gt;&amp;&lt;/b&gt; B');
     expect(html).not.toContain('<b>&</b>');
-    expect(html).toContain('href="https://www.fitcircle.ai/admin/ads"');
+    expect(html).toContain('href="https://admintools.inov8rlabs.com/apps/fitcircle/ads"');
   });
 });

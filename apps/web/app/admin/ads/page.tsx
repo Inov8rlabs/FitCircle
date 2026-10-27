@@ -1,14 +1,8 @@
-import type { Metadata } from 'next';
-import { Suspense } from 'react';
+import { permanentRedirect } from 'next/navigation';
 
-import { AdsOverviewView } from '@/components/admin/ads/AdsOverviewView';
+import { ADMIN_TOOLS_ADS_URL } from '@/lib/ads/services/email-report-service';
 
-export const metadata: Metadata = { title: 'Ads · Admin' };
-
+/** The Ads Console moved to Admin Tools; keep old links working. */
 export default function AdminAdsPage() {
-  return (
-    <Suspense>
-      <AdsOverviewView />
-    </Suspense>
-  );
+  permanentRedirect(ADMIN_TOOLS_ADS_URL);
 }

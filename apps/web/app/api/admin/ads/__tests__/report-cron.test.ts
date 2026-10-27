@@ -106,7 +106,7 @@ describe('/api/cron/ads/report', () => {
     expect(r.funnel.today).toEqual({ signups: 3, byPlatform: { ios: 2, android: 1 }, onboarded: 2, firstMeal: 1, trials: 0, payers: 0, attributedPaid: 1, excludedTest: 2 });
     expect(r.alerts).toEqual([]);
     expect(body.data.text).toContain('FUNNEL');
-    expect(body.data.html).toContain('/admin/ads');
+    expect(body.data.html).toContain('admintools.inov8rlabs.com/apps/fitcircle/ads');
 
     const html = await cronReport(req('/api/cron/ads/report?dryRun=1&format=html', 'Bearer cron'));
     expect(html.headers.get('content-type')).toContain('text/html');

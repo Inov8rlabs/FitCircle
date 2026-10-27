@@ -1,6 +1,6 @@
 # Ads Console — spend, ROAS and bid control across channels
 
-Status: v1 build, 2026-10-24. Owner: growth. Lives in the existing admin area (`/admin/ads`, gated on `profiles.is_admin`).
+Status: v1 build, 2026-10-24. Owner: growth. UI lives in Admin Tools (https://admintools.inov8rlabs.com/apps/fitcircle/ads, repo inov8r-admin) and calls this backend's `/api/admin/ads/*`; the old `/admin/ads` pages here redirect there (2026-10-27).
 
 ## 1. Goal
 
