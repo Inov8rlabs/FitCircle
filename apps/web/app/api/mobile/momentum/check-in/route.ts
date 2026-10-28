@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from 'next/server';
 
+import { iconCompatFor } from '@/lib/design/icon-compat';
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { MomentumService } from '@/lib/services/momentum-service';
 
@@ -29,7 +30,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: true,
       // Result keys win where both objects have one (they describe the same state).
-      data: { ...status, ...result },
+      data: iconCompatFor(request, { ...status, ...result }),
       error: null,
       meta: {
         timestamp: new Date().toISOString(),

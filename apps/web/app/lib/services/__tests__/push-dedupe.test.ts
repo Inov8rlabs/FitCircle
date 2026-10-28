@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 // ---------------------------------------------------------------------------
 // Push fan-out / dedupe (docs/PUSH_NOTIFICATIONS.md). Reproduces the
 // 2026-10-24 incident: Ani (in 5 circles) hit a 7-day streak and got five
-// "🎉 Big moment in <circle>" pushes about himself, and every member got one
+// "Big moment in <circle>" pushes about himself, and every member got one
 // per shared circle.
 //
 // Real code under test: ChatActivityHooks → SystemPostEngine.ingest →
@@ -203,7 +203,7 @@ describe('incident 2026-10-24: 7-day streak rally across 5 circles', () => {
     // Bob shares 3 circles → exactly 1, coalesced copy.
     const bob = pushesTo('bob');
     expect(bob).toHaveLength(1);
-    expect(bob[0].title).toBe("🎉 Ani's on a 7-day streak 🔥");
+    expect(bob[0].title).toBe("Ani's on a 7-day streak");
     expect(bob[0].body).toMatch(/^Celebrate in .+ and 2 other circles$/);
     expect(bob[0].data?.type).toBe('chat_rally');
     expect(bob[0].data?.screen).toBe('circle_chat');
@@ -215,12 +215,12 @@ describe('incident 2026-10-24: 7-day streak rally across 5 circles', () => {
     // Dee muted one of two → 1, about the unmuted circle, single-circle copy.
     const dee = pushesTo('dee');
     expect(dee).toHaveLength(1);
-    expect(dee[0].title).toBe('🎉 Big moment in Hold the Line Crew');
-    expect(dee[0].body).toBe("Ani's on a 7-day streak — nice 🔥");
+    expect(dee[0].title).toBe('Big moment in Hold the Line Crew');
+    expect(dee[0].body).toBe("Ani's on a 7-day streak — nice");
     expect(dee[0].data?.circleId).toBe('c-htl');
 
     // Eve shares one → unchanged single-circle copy.
-    expect(pushesTo('eve').map((n) => n.title)).toEqual(['🎉 Big moment in OakvilleBesties']);
+    expect(pushesTo('eve').map((n) => n.title)).toEqual(['Big moment in OakvilleBesties']);
 
     // Total: bob + dee + eve.
     expect(sendPush).toHaveBeenCalledTimes(3);
@@ -246,7 +246,7 @@ describe('incident 2026-10-24: 7-day streak rally across 5 circles', () => {
     const bob = pushesTo('bob');
     expect(bob).toHaveLength(1);
     expect(bob[0].title).toMatch(/^Ani in .+ and 2 other circles$/);
-    expect(bob[0].body).toBe('Ani just logged a workout 💪');
+    expect(bob[0].body).toBe('Ani just logged a workout');
     expect(bob[0].data?.type).toBe('chat_message');
     expect(pushesTo('carol')).toHaveLength(0);
     expect(pushesTo('dee')).toHaveLength(1);
@@ -260,7 +260,7 @@ describe('ChatNotificationService.planEventPushes (pure)', () => {
     eventKey: 'streak_milestone:ani:d7',
     circleId,
     circleName: CIRCLES.find((c) => c.id === circleId)?.name ?? circleId,
-    body: "Ani's on a 7-day streak — nice 🔥",
+    body: "Ani's on a 7-day streak — nice",
     eventType: 'streak_milestone',
     actorUserIds: [ANI],
     actorName: 'Ani',
@@ -274,7 +274,7 @@ describe('ChatNotificationService.planEventPushes (pure)', () => {
 
   it('distinct events are not coalesced with each other', () => {
     const planned = ChatNotificationService.planEventPushes(
-      [intent('c-daily'), intent('c-daily', { eventKey: 'workout_done:ani:w1', kind: 'system', body: 'Ani just logged a workout 💪' })],
+      [intent('c-daily'), intent('c-daily', { eventKey: 'workout_done:ani:w1', kind: 'system', body: 'Ani just logged a workout' })],
       members([['c-daily', ANI], ['c-daily', 'bob']])
     );
     expect(planned.map((p) => p.type)).toEqual(['chat_rally', 'chat_message']);
@@ -312,9 +312,9 @@ describe('daily summary: one bundled push per recipient per night', () => {
 
   it('bundles every circle into one push with per-circle lines', async () => {
     const circles = [
-      summarized('c-crew', 1, [ANI], 'Checked in today ✅'),
-      summarized('c-stepup', 6, [ANI, 'x'], '2 of 6 checked in today 👏'),
-      summarized('c-daily', 3, [ANI, 'bob', 'z'], 'Everyone checked in today — full house 🎉'),
+      summarized('c-crew', 1, [ANI], 'Checked in today'),
+      summarized('c-stepup', 6, [ANI, 'x'], '2 of 6 checked in today'),
+      summarized('c-daily', 3, [ANI, 'bob', 'z'], 'Everyone checked in today — full house'),
     ];
     const planned = await DailySummaryService.sendBundledPushes(circles);
     await settle();
@@ -324,7 +324,7 @@ describe('daily summary: one bundled push per recipient per night', () => {
     expect(ani).toHaveLength(1);
     expect(ani[0].title).toBe('Your circles today');
     expect(ani[0].body).toBe(
-      "Ani's Crew: you checked in ✅ · Step-Up Circle: 2 of 6 checked in · Daily Movers Club: everyone checked in 🎉"
+      "Ani's Crew: you checked in · Step-Up Circle: 2 of 6 checked in · Daily Movers Club: everyone checked in"
     );
     expect(ani[0].data).toMatchObject({ type: 'circle_daily_summary', screen: 'circles' });
     expect(ani[0].data).not.toHaveProperty('circleId');
@@ -332,7 +332,7 @@ describe('daily summary: one bundled push per recipient per night', () => {
     // Bob is in Step-Up + Daily → one push, two lines.
     const bob = pushesTo('bob');
     expect(bob).toHaveLength(1);
-    expect(bob[0].body).toBe('Step-Up Circle: 2 of 6 checked in · Daily Movers Club: everyone checked in 🎉');
+    expect(bob[0].body).toBe('Step-Up Circle: 2 of 6 checked in · Daily Movers Club: everyone checked in');
 
     // Carol muted Step-Up (her only summarized circle) → nothing.
     expect(pushesTo('carol')).toHaveLength(0);
@@ -344,7 +344,7 @@ describe('daily summary: one bundled push per recipient per night', () => {
 
   it('a single shared circle deep-links to it; a solo circle alone never pushes', () => {
     const planned = DailySummaryService.planSummaryPushes(
-      [summarized('c-crew', 1, [ANI], 'Checked in today ✅'), summarized('c-oak', 3, ['eve'], '1 of 3 checked in today 👏')],
+      [summarized('c-crew', 1, [ANI], 'Checked in today'), summarized('c-oak', 3, ['eve'], '1 of 3 checked in today')],
       new Map([
         ['c-crew', [{ userId: ANI, muted: false }]],
         ['c-oak', [{ userId: 'eve', muted: false }, { userId: 'bob', muted: false }]],
@@ -352,12 +352,12 @@ describe('daily summary: one bundled push per recipient per night', () => {
     );
     expect(planned.find((p) => p.userId === ANI)).toBeUndefined();
     const eve = planned.find((p) => p.userId === 'eve')!;
-    expect(eve.data).toMatchObject({ title: 'OakvilleBesties today', body: '1 of 3 checked in today 👏', circleId: 'c-oak' });
+    expect(eve.data).toMatchObject({ title: 'OakvilleBesties today', body: '1 of 3 checked in today', circleId: 'c-oak' });
     expect(eve.data.dedupeKey).toBe('daily_summary:2026-10-24');
   });
 
   it('a second cron tick the same night is suppressed as a duplicate', async () => {
-    const circles = [summarized('c-oak', 3, ['eve'], '1 of 3 checked in today 👏')];
+    const circles = [summarized('c-oak', 3, ['eve'], '1 of 3 checked in today')];
     await DailySummaryService.sendBundledPushes(circles);
     await settle();
     NotificationOrchestrator.resetInProcessGuards();

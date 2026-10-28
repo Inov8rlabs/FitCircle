@@ -27,7 +27,7 @@ describe('Fitzy onboarding context', () => {
   });
 
   it('addendum states the product rules; cap only for onboarding', () => {
-    expect(ONBOARDING_PROMPT_ADDENDUM).toMatch(/80 words or fewer/);
+    expect(ONBOARDING_PROMPT_ADDENDUM).toMatch(/70 words or fewer/);
     expect(ONBOARDING_PROMPT_ADDENDUM).toMatch(/NO QUESTIONS/);
     expect(ONBOARDING_PROMPT_ADDENDUM).toMatch(/No medical claims/);
     expect(ONBOARDING_PROMPT_ADDENDUM).toMatch(/Never invent statistics/);

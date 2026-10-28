@@ -219,13 +219,13 @@ describe('content: lock-screen privacy, limits, templates', () => {
     const ok = focusPushCopy(focus('Walk after lunch', 'A 10-minute stroll after lunch helps digestion and mood.'), guard, 'ai');
     expect(ok).toMatchObject({ title: 'Walk after lunch', body: 'A 10-minute stroll after lunch helps digestion and mood.', source: 'ai' });
     const unsafe = focusPushCopy(focus('Nice trend', 'Your weight is trending down, keep it up.'), guard, 'ai');
-    expect(unsafe.title).toBe("Today's focus from Fitzy ☀️");
+    expect(unsafe.title).toBe("Today's focus from Fitzy");
     expect(unsafe.tip).toContain('trending down');
     expect(unsafe.body).toBe('One small, doable idea for today is waiting for you.');
     const longTitle = focusPushCopy(focus('x'.repeat(TITLE_MAX + 1), 'Fine body here.'), guard, 'ai');
-    expect(longTitle).toMatchObject({ title: "Today's focus from Fitzy ☀️", body: 'Fine body here.' });
+    expect(longTitle).toMatchObject({ title: "Today's focus from Fitzy", body: 'Fine body here.' });
     const recap = focusPushCopy(focus('', '', 'recap'), guard, 'template');
-    expect(recap.title).toBe('Your week with Fitzy 🗓️');
+    expect(recap.title).toBe('Your week with Fitzy');
   });
   it('trims a long focus body at a sentence end within the push limit', () => {
     const body = 'Pack a piece of fruit and some yogurt for the afternoon dip. It keeps energy steady and your mood bright. Then take the stairs once or twice today, slowly and with a smile on your face.';
@@ -254,7 +254,7 @@ describe('content: lock-screen privacy, limits, templates', () => {
 
 describe('AI nudge parsing (fallback to template on anything off)', () => {
   it('accepts a short, safe JSON reply', () => {
-    expect(parseNudge('{"title":"Snack idea 🥚","body":"A boiled egg and some hummus could round out your afternoon."}', guard)).toMatchObject({ source: 'ai', title: 'Snack idea 🥚' });
+    expect(parseNudge('{"title":"Snack idea 🥚","body":"A boiled egg and some hummus could round out your afternoon."}', guard)).toMatchObject({ source: 'ai', title: 'Snack idea' }); // emoji stripped server-side
     expect(parseNudge('```json\n{"title":"Snack idea","body":"Edamame is a tasty afternoon pick.",}\n```', guard)).not.toBeNull();
   });
   it('rejects numbers, judging words, guard hits, overlong text and junk', () => {
@@ -321,7 +321,7 @@ describe('FitzyPushService.processUser (claim, dedupe, fallback)', () => {
     const d = await FitzyPushService.processUser(u, x);
     expect(d).toMatchObject({ kind: 'fitzy_protein_nudge', sent: true, source: 'ai' });
     expect(inserts).toEqual([{ table: 'fitzy_push_deliveries', row: expect.objectContaining({ delivery_key: 'contextual:2026-10-22', kind: 'fitzy_protein_nudge' }) }]);
-    expect(send).toHaveBeenCalledWith('u1', 'fitzy_protein_nudge', expect.objectContaining({ title: 'Snack idea 🥚', fitzyTip: expect.stringContaining('edamame') }));
+    expect(send).toHaveBeenCalledWith('u1', 'fitzy_protein_nudge', expect.objectContaining({ title: 'Snack idea', fitzyTip: expect.stringContaining('edamame') }));
     expect(updates[0].row.status).toBe('sent');
   });
 

@@ -62,18 +62,18 @@ export function announceStreakAutoClaim(meta: StreakAutoClaimMeta | null | undef
 
   const granted = meta.milestone?.shieldsGranted ?? 0;
   if (granted > 0) {
-    toast.success(`Shield earned 🛡️`, {
+    toast.success('You earned a streak shield', {
       description: `${meta.streakCount ?? meta.milestone?.milestone} days strong — you earned ${
         granted === 1 ? 'a streak shield' : `${granted} streak shields`
       }. It auto-protects your next missed day.`,
     });
   } else if (meta.milestone) {
-    toast.success(`${meta.milestone.reward ?? `${meta.milestone.milestone}-day streak`} 🏅`, {
+    toast.success(`${meta.milestone.reward ?? `${meta.milestone.milestone}-day streak`}`, {
       description: meta.milestone.shieldsCapped
         ? 'You earned a shield, but your bank is already full.'
         : `${meta.milestone.milestone} days in a row — keep it going!`,
     });
   } else if (meta.streakCount != null) {
-    toast.success(`🔥 Day ${meta.streakCount} — your streak is counted`);
+    toast.success(`Day ${meta.streakCount} — your streak is counted`);
   }
 }

@@ -13,6 +13,7 @@ import { fitBody } from '../fitzy/text';
 import { chatModel, deepModel, generateWithFallback, systemMessages, type ModelCall } from '../fitzy/models';
 import { addDays } from '../streaks/streak-calculator';
 import { createAdminSupabase } from '../supabase-admin';
+import { stripEmoji } from '../text/strip-emoji';
 import type { CommitmentKind, FitzyCommitment, FitzyPlan, FitzyPlanPreview } from '../types/fitzy';
 
 import { FitzyLockedError, FitzyNotFoundError } from './fitzy-conversation-service';
@@ -46,6 +47,7 @@ export const PLAN_PROMPT = [
   'NEVER set calorie, macro, weight or body-composition targets; never restrict, skip or replace meals;',
   'never label foods good/bad; never promise outcomes or rates. Add foods and habits, never take away.',
   'Also write goal (≤ 80 chars, positive, behaviour-based) and note (≤ 200 chars, encouraging).',
+  'Plain text only: never use emoji or decorative symbols in any field.',
   'Reply with ONLY JSON: {"goal":"…","note":"…","commitments":[{"kind":"move","title":"…","detail":"…","count":3}]}',
 ].join('\n');
 
@@ -77,8 +79,9 @@ export function sanitizeCommitments(raw: unknown, guard: (t: string) => boolean)
   const out: FitzyCommitment[] = [];
   for (const c of list) {
     const kind = KINDS.includes(c?.kind) ? (c.kind as CommitmentKind) : null;
-    const title = typeof c?.title === 'string' ? c.title.trim() : '';
-    const rawDetail = typeof c?.detail === 'string' ? c.detail.trim() : '';
+    // stripEmoji: server-side backstop to the prompt's no-emoji rule (titles show in the app and push).
+    const title = typeof c?.title === 'string' ? stripEmoji(c.title.trim()) : '';
+    const rawDetail = typeof c?.detail === 'string' ? stripEmoji(c.detail.trim()) : '';
     // Trim an over-long detail at a sentence end (models overshoot 140 often); '' is allowed.
     const detail = rawDetail ? fitBody(rawDetail, 140) : '';
     const count = Math.round(Number(c?.count ?? c?.target?.count));
@@ -92,7 +95,7 @@ export function sanitizeCommitments(raw: unknown, guard: (t: string) => boolean)
 }
 
 const safeText = (s: unknown, max: number, guard: (t: string) => boolean, fallback: string) => {
-  const t = typeof s === 'string' ? s.trim().slice(0, max) : '';
+  const t = typeof s === 'string' ? stripEmoji(s.trim()).slice(0, max) : '';
   return t && !guard(t) && !planUnsafe(t) ? t : fallback;
 };
 

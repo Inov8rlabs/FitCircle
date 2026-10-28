@@ -7,6 +7,8 @@
 
 import { z } from 'zod';
 
+import { stripEmoji } from '../text/strip-emoji';
+
 // ============================================================================
 // How a nutrition value got onto an entry (food_log_entries.input_method / nutrition_source)
 // ============================================================================
@@ -184,7 +186,7 @@ export function normalizeAssumptions(value: unknown): string[] {
   const seen = new Set<string>();
   for (const raw of value) {
     if (typeof raw !== 'string') continue;
-    let text = raw.replace(/\s+/g, ' ').replace(/^[\s\-*•·–—]+/, '').trim();
+    let text = stripEmoji(raw).replace(/\s+/g, ' ').replace(/^[\s\-*•·–—]+/, '').trim();
     if (!text) continue;
     if (text.length > DRAFT_ASSUMPTION_MAX_CHARS) {
       const cut = text.slice(0, DRAFT_ASSUMPTION_MAX_CHARS - 1);

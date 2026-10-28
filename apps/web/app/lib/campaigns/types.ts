@@ -2,7 +2,13 @@
  * Campaign shapes shared by the backend, the admin portal, the web app and
  * (as a reference for their Codable/serializable models) iOS and Android.
  * Contract: docs/CAMPAIGNS_SPEC.md.
+ *
+ * Icons: every `emoji` below is the legacy glyph shipped apps (≤ 1.1.x) render.
+ * Each such object also carries `icon` (design/icons.json); 1.2.0+ clients get
+ * `emoji: null` (lib/design/icon-compat.ts) and render the key.
  */
+import type { IconKey } from '@/lib/design/icons';
+
 
 export type CampaignTemplate = 'seasonal_circle' | 'daily_calendar' | 'spotlight';
 export type CampaignPhase = 'teaser' | 'live' | 'ended';
@@ -29,6 +35,8 @@ export interface CircleTemplate {
 export interface CalendarDoorContent {
   day: number; // 1-based
   emoji: string;
+  /** Icon key; derived from `emoji` when absent. */
+  icon?: IconKey;
   title: string;
   task: string;
 }
@@ -36,6 +44,8 @@ export interface CalendarDoorContent {
 export interface CampaignMark {
   date: string; // YYYY-MM-DD
   emoji: string;
+  /** Icon key; derived from `emoji` when absent. */
+  icon?: IconKey;
   label: string;
 }
 
@@ -95,6 +105,8 @@ export interface CampaignInput {
   template: CampaignTemplate;
   title: string;
   emoji: string;
+  /** Icon key (campaigns.icon, migration 114); derived from `emoji` when absent. */
+  icon?: IconKey | null;
   tagline: string;
   description: string;
   ctaLabel?: string | null;
@@ -136,6 +148,8 @@ export interface CalendarDoorView {
   date: string;
   state: DoorState;
   emoji?: string | null;
+  /** Icon key of a revealed door with content; null otherwise. */
+  icon?: IconKey | null;
   title?: string | null;
   task?: string | null;
 }
@@ -162,6 +176,7 @@ export interface CampaignView {
   template: CampaignTemplate;
   title: string;
   emoji: string;
+  icon: IconKey;
   tagline: string;
   description: string;
   accent: string;
@@ -192,6 +207,7 @@ export interface CampaignView {
 
 export interface CampaignStep {
   emoji: string;
+  icon: IconKey;
   title: string;
   body: string;
 }

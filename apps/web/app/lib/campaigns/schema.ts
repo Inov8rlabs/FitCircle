@@ -5,6 +5,7 @@
  */
 import { z } from 'zod';
 
+import { ICON_KEYS } from '@/lib/design/icons';
 import { addDays, daysBetween } from '@/lib/streaks/streak-calculator';
 
 import { totalDaysOf } from './model';
@@ -95,9 +96,13 @@ const circleSchema = z.object({
   endDate: isoDate,
 });
 
+/** An icon key (design/icons.json). Optional everywhere: readers derive one from `emoji`. */
+const iconKey = z.enum(ICON_KEYS);
+
 const doorSchema = z.object({
   day: z.number().int().min(1).max(366),
   emoji: required(LIMITS.emoji),
+  icon: iconKey.optional(),
   title: required(LIMITS.doorTitle),
   task: required(LIMITS.doorTask),
 });
@@ -121,6 +126,7 @@ export const campaignInputSchema = z
     template: z.enum(TEMPLATES),
     title: required(LIMITS.title),
     emoji: text(LIMITS.emoji),
+    icon: iconKey.nullish(),
     tagline: text(LIMITS.tagline),
     description: text(LIMITS.description),
     ctaLabel: text(LIMITS.ctaLabel).nullish(),
@@ -134,7 +140,7 @@ export const campaignInputSchema = z
     cta: z.object({ action: z.enum(CTA_ACTIONS), url: z.string().url().max(500).nullish() }),
     circle: circleSchema.nullable().default(null),
     calendar: z.object({ doors: z.array(doorSchema).max(62) }).nullable().default(null),
-    marks: z.array(z.object({ date: isoDate, emoji: required(LIMITS.emoji), label: text(40) })).max(20).default([]),
+    marks: z.array(z.object({ date: isoDate, emoji: required(LIMITS.emoji), icon: iconKey.optional(), label: text(40) })).max(20).default([]),
     notifications: z.array(notificationSchema).max(20).default([]),
     emails: z.array(emailSchema).max(10).default([]),
     appStore: appStoreSchema.default({}),

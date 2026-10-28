@@ -118,3 +118,21 @@ export function telemetry(finishReason: unknown, usage: any, providerMetadata: a
 export const fmt = (x: number | null | undefined, d = 0) => (x == null ? '–' : x.toFixed(d));
 export const pct = (x: number | null | undefined) => (x == null ? '–' : `${(x * 100).toFixed(0)}%`);
 export const usd = (x: number | null | undefined) => (x == null ? '–' : `$${x < 0.01 ? x.toFixed(5) : x.toFixed(3)}`);
+
+// ---------------------------------------------------------------- host suspension
+/**
+ * A laptop on battery drops into maintenance sleep even under `caffeinate -i` (2026-10-28: 10-s to
+ * 8-min sleeps mid-run). Every in-flight stream then freezes and looks like a model stall. A 250 ms
+ * heartbeat records gaps over 2 s; a reply whose time window overlaps one is re-run (it is not a
+ * model result) and the re-run count is reported as `hostSuspended`.
+ */
+const suspensions: Array<{ start: number; end: number }> = [];
+let lastBeat = Date.now();
+const beat = setInterval(() => {
+  const now = Date.now();
+  if (now - lastBeat > 2000) suspensions.push({ start: lastBeat, end: now });
+  lastBeat = now;
+}, 250);
+beat.unref?.();
+export const hostSuspendedDuring = (start: number, end: number) => suspensions.some((g) => g.end > start && g.start < end);
+export const hostSuspensions = () => [...suspensions];

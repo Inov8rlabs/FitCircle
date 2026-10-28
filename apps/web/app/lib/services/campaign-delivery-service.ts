@@ -24,6 +24,7 @@ import { campaignEmail } from '../email/campaign-emails';
 import type { RenderedEmail } from '../email/referral-emails';
 import { addDays, daysBetween, isValidTimezone } from '../streaks/streak-calculator';
 import { createAdminSupabase } from '../supabase-admin';
+import { stripEmoji } from '../text/strip-emoji';
 
 import { CampaignActivityService } from './campaign-activity-service';
 import { CampaignService } from './campaign-service';
@@ -102,19 +103,20 @@ export function placeholderVars(row: CampaignRow, date: string, person: { displa
 
 export function renderPush(item: CampaignNotification, row: CampaignRow, date: string, person: Recipient | Record<string, any>) {
   const vars = placeholderVars(row, date, person);
-  return { title: renderPlaceholders(item.title, vars), body: renderPlaceholders(item.body, vars) };
+  // Push goes to every app version: no emoji, even from admin-authored copy or {{door_emoji}} (DESIGN_LANGUAGE §6).
+  return { title: stripEmoji(renderPlaceholders(item.title, vars)), body: stripEmoji(renderPlaceholders(item.body, vars)) };
 }
 
 export function renderEmail(item: CampaignEmail, row: CampaignRow, date: string, person: Recipient | Record<string, any>, userId: string): RenderedEmail {
   const vars = placeholderVars(row, date, person);
   return campaignEmail({
-    subject: renderPlaceholders(item.subject, vars),
-    preheader: renderPlaceholders(item.preheader ?? '', vars),
-    heading: renderPlaceholders(item.heading, vars),
+    subject: stripEmoji(renderPlaceholders(item.subject, vars)),
+    preheader: stripEmoji(renderPlaceholders(item.preheader ?? '', vars)),
+    heading: stripEmoji(renderPlaceholders(item.heading, vars)),
     body: renderPlaceholders(item.body, vars),
     ctaLabel: renderPlaceholders(item.ctaLabel, vars) || 'Take a look',
     ctaUrl: campaignPageUrl(row.slug),
-    emoji: row.emoji,
+    emoji: null,
     headerImageUrl: row.art?.emailHeader?.url ?? null,
     unsubscribeUrl: campaignUnsubscribeUrl(userId),
   });

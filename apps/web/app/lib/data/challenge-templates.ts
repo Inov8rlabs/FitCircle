@@ -15,6 +15,7 @@ export const CHALLENGE_TEMPLATES: ChallengeTemplate[] = [
     difficulty: 'beginner',
     logging_prompt: 'How many pushups did you do?',
     icon: '💪',
+    icon_key: 'strength',
   },
   {
     id: 'squat-squad',
@@ -27,6 +28,7 @@ export const CHALLENGE_TEMPLATES: ChallengeTemplate[] = [
     difficulty: 'beginner',
     logging_prompt: 'How many squats did you crush?',
     icon: '🦵',
+    icon_key: 'strength',
   },
   {
     id: 'plank-challenge',
@@ -39,6 +41,7 @@ export const CHALLENGE_TEMPLATES: ChallengeTemplate[] = [
     difficulty: 'intermediate',
     logging_prompt: 'How long did you hold? (minutes)',
     icon: '🧱',
+    icon_key: 'strength',
   },
   {
     id: 'burpee-blitz',
@@ -51,6 +54,7 @@ export const CHALLENGE_TEMPLATES: ChallengeTemplate[] = [
     difficulty: 'intermediate',
     logging_prompt: 'How many burpees did you survive?',
     icon: '🔥',
+    icon_key: 'flame',
   },
   {
     id: 'pullup-progress',
@@ -63,6 +67,7 @@ export const CHALLENGE_TEMPLATES: ChallengeTemplate[] = [
     difficulty: 'advanced',
     logging_prompt: 'How many pull-ups did you do?',
     icon: '🏋️',
+    icon_key: 'strength_training',
   },
 
   // ============================================================================
@@ -79,6 +84,7 @@ export const CHALLENGE_TEMPLATES: ChallengeTemplate[] = [
     difficulty: 'beginner',
     logging_prompt: 'How many steps did you log?',
     icon: '👟',
+    icon_key: 'steps',
   },
   {
     id: 'miles-on-the-board',
@@ -91,6 +97,7 @@ export const CHALLENGE_TEMPLATES: ChallengeTemplate[] = [
     difficulty: 'intermediate',
     logging_prompt: 'How many miles did you cover?',
     icon: '🏃',
+    icon_key: 'run',
   },
   {
     id: 'calorie-burn-battle',
@@ -103,6 +110,7 @@ export const CHALLENGE_TEMPLATES: ChallengeTemplate[] = [
     difficulty: 'intermediate',
     logging_prompt: 'How many calories did you burn?',
     icon: '🔥',
+    icon_key: 'flame',
   },
   {
     id: 'active-minutes',
@@ -115,6 +123,7 @@ export const CHALLENGE_TEMPLATES: ChallengeTemplate[] = [
     difficulty: 'beginner',
     logging_prompt: 'How many minutes were you active?',
     icon: '⏱️',
+    icon_key: 'stopwatch',
   },
   {
     id: 'cycling-century',
@@ -127,6 +136,7 @@ export const CHALLENGE_TEMPLATES: ChallengeTemplate[] = [
     difficulty: 'intermediate',
     logging_prompt: 'How many miles did you ride?',
     icon: '🚴',
+    icon_key: 'cycle',
   },
 
   // ============================================================================
@@ -143,6 +153,7 @@ export const CHALLENGE_TEMPLATES: ChallengeTemplate[] = [
     difficulty: 'beginner',
     logging_prompt: 'How many stretching sessions today?',
     icon: '🧘',
+    icon_key: 'mindful',
   },
   {
     id: 'yoga-flow',
@@ -155,6 +166,7 @@ export const CHALLENGE_TEMPLATES: ChallengeTemplate[] = [
     difficulty: 'beginner',
     logging_prompt: 'How many minutes did you flow?',
     icon: '🧘‍♀️',
+    icon_key: 'mindful',
   },
   {
     id: 'foam-roller-recovery',
@@ -167,6 +179,7 @@ export const CHALLENGE_TEMPLATES: ChallengeTemplate[] = [
     difficulty: 'beginner',
     logging_prompt: 'Did you roll out today?',
     icon: '🔄',
+    icon_key: 'repeat',
   },
 
   // ============================================================================
@@ -183,6 +196,7 @@ export const CHALLENGE_TEMPLATES: ChallengeTemplate[] = [
     difficulty: 'beginner',
     logging_prompt: 'How many glasses of water today?',
     icon: '💧',
+    icon_key: 'water',
   },
   {
     id: 'sleep-streak',
@@ -195,6 +209,7 @@ export const CHALLENGE_TEMPLATES: ChallengeTemplate[] = [
     difficulty: 'beginner',
     logging_prompt: 'How many hours did you sleep?',
     icon: '😴',
+    icon_key: 'sleep',
   },
   {
     id: 'mindfulness-minutes',
@@ -207,6 +222,7 @@ export const CHALLENGE_TEMPLATES: ChallengeTemplate[] = [
     difficulty: 'beginner',
     logging_prompt: 'How many minutes of mindfulness?',
     icon: '🧠',
+    icon_key: 'mind',
   },
   {
     id: 'veggie-wins',
@@ -219,6 +235,7 @@ export const CHALLENGE_TEMPLATES: ChallengeTemplate[] = [
     difficulty: 'beginner',
     logging_prompt: 'How many veggie servings today?',
     icon: '🥦',
+    icon_key: 'produce',
   },
 
   // ============================================================================
@@ -235,6 +252,7 @@ export const CHALLENGE_TEMPLATES: ChallengeTemplate[] = [
     difficulty: 'intermediate',
     logging_prompt: 'Did you work out today?',
     icon: '🔥',
+    icon_key: 'flame',
   },
   {
     id: 'personal-record-hunt',
@@ -247,6 +265,7 @@ export const CHALLENGE_TEMPLATES: ChallengeTemplate[] = [
     difficulty: 'variable',
     logging_prompt: 'What was your best today?',
     icon: '🏆',
+    icon_key: 'trophy',
   },
   {
     id: 'custom',
@@ -259,6 +278,7 @@ export const CHALLENGE_TEMPLATES: ChallengeTemplate[] = [
     difficulty: 'variable',
     logging_prompt: 'How much did you do?',
     icon: '⭐',
+    icon_key: 'star',
   },
 ];
 

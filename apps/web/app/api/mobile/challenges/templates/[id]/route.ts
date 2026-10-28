@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from 'next/server';
 
+import { iconCompatFor } from '@/lib/design/icon-compat';
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { TemplateService } from '@/lib/services/template-service';
 
@@ -19,7 +20,7 @@ export async function GET(
 
     return NextResponse.json({
       success: true,
-      data: template,
+      data: iconCompatFor(request, template),
       error: null,
     });
   } catch (error: any) {

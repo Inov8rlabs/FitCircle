@@ -1,6 +1,7 @@
 import { createHash } from 'crypto';
 
 import { createAdminSupabase } from '../supabase-admin';
+import { stripEmoji } from '../text/strip-emoji';
 
 import {
   NotificationPreferencesService,
@@ -299,17 +300,17 @@ export const NOTIFICATION_TEMPLATES: Record<
 > = {
   // ---- Journey: account age + dormancy ladder ----
   day1_nothing_logged: () => ({
-    title: 'Your streak starts with one log 🍽️',
+    title: 'Your streak starts with one log',
     body: 'You joined FitCircle yesterday. Log a meal or a workout today and day 1 is yours.',
     category: 'journey',
   }),
   day3_circle_invite: () => ({
-    title: 'Better together! 👋',
+    title: 'Better together',
     body: "Three days in. Invite a friend to a FitCircle and keep each other honest.",
     category: 'journey',
   }),
   day14_challenge_nudge: () => ({
-    title: 'Ready for a challenge? 🏋️',
+    title: 'Ready for a challenge?',
     body: 'Two weeks in! Join a challenge and compete with your circle.',
     category: 'journey',
   }),
@@ -319,7 +320,7 @@ export const NOTIFICATION_TEMPLATES: Record<
     if (data.mealsThisMonth) parts.push(`${data.mealsThisMonth} days of meals logged`);
     if (data.bestStreak) parts.push(`a ${data.bestStreak}-day best streak`);
     return {
-      title: 'One month with FitCircle 🏆',
+      title: 'One month with FitCircle',
       body: parts.length
         ? `30 days in: ${parts.join(', ')}. Here's to the next 30!`
         : "30 days in. Here's to the next 30!",
@@ -327,29 +328,29 @@ export const NOTIFICATION_TEMPLATES: Record<
     };
   },
   dormant_7d: () => ({
-    title: 'We miss you 👋',
+    title: 'We miss you',
     body: "It's been a week since you last logged. One meal or workout restarts your streak.",
     category: 'journey',
   }),
   dormant_14d: () => ({
-    title: "Don't let your progress fade 🕯️",
+    title: "Don't let your progress fade",
     body: 'Two weeks away is tough, but you can bounce back. Your circle is still going — jump back in!',
     category: 'journey',
   }),
   dormant_30d: () => ({
-    title: 'Still here for you 🌱',
+    title: 'Still here for you',
     body: 'A month away happens. Open the app and log one thing. That is all it takes.',
     category: 'journey',
   }),
   win_back_60d: () => ({
-    title: 'A fresh start awaits 🌅',
+    title: 'A fresh start awaits',
     body: "It's never too late to restart. Your friends are still here, and so is your progress.",
     category: 'journey',
   }),
 
   // ---- Streak state + logging reminders ----
   momentum_at_risk: (data) => ({
-    title: 'Your streak is at risk 🔥',
+    title: 'Your streak ends at midnight',
     body: `Your ${data.currentMomentum || 0}-day streak ends at midnight unless you log a meal or workout${
       data.unlimited
         ? ' — Pro shields have your back if you can\'t.'
@@ -362,13 +363,13 @@ export const NOTIFICATION_TEMPLATES: Record<
   near_milestone: (data) => {
     const days = data.daysAway || 0;
     return {
-      title: 'So close! 🏆',
+      title: 'So close!',
       body: `You're ${days} ${days === 1 ? 'day' : 'days'} from ${data.milestoneName || 'your next milestone'}. Log today to keep going.`,
       category: 'momentum',
     };
   },
   shield_applied: (data) => ({
-    title: 'A shield saved your streak 🛡️',
+    title: 'A shield saved your streak',
     body: `You missed yesterday, so a shield kept your ${data.streakDays || 0}-day streak alive.${
       data.unlimited
         ? ' Pro keeps you covered.'
@@ -379,7 +380,7 @@ export const NOTIFICATION_TEMPLATES: Record<
     category: 'momentum',
   }),
   streak_lost: (data) => ({
-    title: `Your ${data.lostStreak || 0}-day streak ended 💔`,
+    title: `Your ${data.lostStreak || 0}-day streak ended`,
     body: data.zombieGuard
       ? 'Shields can only cover two misses in a row. Log something today to start a fresh streak.'
       : data.paywallEligible
@@ -388,33 +389,33 @@ export const NOTIFICATION_TEMPLATES: Record<
     category: 'momentum',
   }),
   shield_earned: (data) => ({
-    title: 'Shield earned 🛡️',
+    title: 'You earned a streak shield',
     body: `${data.streakDays || 0} days strong! You earned ${data.shieldsGranted === 1 ? 'a streak shield' : `${data.shieldsGranted} streak shields`} — it auto-protects your next missed day.`,
     category: 'celebration',
   }),
   reset_encouragement: () => ({
-    title: 'You got this! 💪',
+    title: "You've got this",
     body: 'Yesterday ended a streak, today starts one. A single log is all it takes.',
     category: 'momentum',
   }),
   // Meal-slot reminders: warm, short, no guilt (ACTIVATION_JOURNEY_SPEC §4).
   meal_reminder_breakfast: () => ({
-    title: 'Morning! ☀️',
-    body: 'Snap breakfast 📸 — calories & macros in seconds.',
+    title: 'Good morning',
+    body: 'Snap breakfast and see calories and macros in seconds.',
     category: 'momentum',
   }),
   meal_reminder_lunch: () => ({
-    title: 'Lunch break? 🥗',
+    title: 'Lunch break?',
     body: "Snap your lunch and see what's on your plate in seconds.",
     category: 'momentum',
   }),
   meal_reminder_snack: () => ({
-    title: 'Snack time 🍎',
+    title: 'Snack time',
     body: 'Having a snack? A quick photo keeps your day complete.',
     category: 'momentum',
   }),
   meal_reminder_dinner: (data) => ({
-    title: 'Dinner time 🍽️',
+    title: 'Dinner time',
     body:
       data.currentMomentum && data.currentMomentum > 0
         ? `Snap dinner to keep your ${data.currentMomentum}-day streak going.`
@@ -424,34 +425,34 @@ export const NOTIFICATION_TEMPLATES: Record<
 
   // ---- State - Circle (S5/S6/S12) ----
   circle_boost_threshold: (data) => ({
-    title: `${data.circleName || 'Your circle'} is heating up! 🔥`,
+    title: `${data.circleName || 'Your circle'} is heating up`,
     body: `${data.checkedIn || 0}/${data.total || 0} members checked in. Join them for a ${data.multiplier || '1.5'}x boost!`,
     category: 'circle',
   }),
   perfect_day: (data) => ({
-    title: 'Perfect day! ⭐',
+    title: 'Perfect day!',
     body: `Everyone in ${data.circleName || 'your circle'} checked in today! That's teamwork at its finest.`,
     category: 'circle',
   }),
   friend_joined_circle: (data) => ({
-    title: 'New member alert! 🎊',
+    title: `New member in ${data.circleName || 'your circle'}`,
     body: `${data.friendName || 'Someone new'} just joined ${data.circleName || 'your circle'}. Give them a warm welcome!`,
     category: 'circle',
   }),
 
   // ---- State - Challenge (S7/S8/S9) ----
   challenge_halfway: (data) => ({
-    title: 'Halfway there! 🏃',
+    title: 'Halfway there',
     body: `"${data.challengeName || 'Your challenge'}" is at the midpoint. ${data.rank ? `You're ranked #${data.rank}. ` : ''}Push through the second half!`,
     category: 'challenge',
   }),
   challenge_ending_tomorrow: (data) => ({
-    title: 'Last chance! ⏰',
+    title: 'Last day tomorrow',
     body: `"${data.challengeName || 'Your challenge'}" ends tomorrow. Give it everything you've got!`,
     category: 'challenge',
   }),
   challenge_completed: (data) => ({
-    title: 'Challenge complete! 🎉',
+    title: 'Challenge complete',
     body: `"${data.challengeName || 'Your challenge'}" is over. ${data.rank ? `You finished #${data.rank}!` : 'Great effort!'} Check your results.`,
     category: 'challenge',
   }),
@@ -462,23 +463,23 @@ export const NOTIFICATION_TEMPLATES: Record<
     if (typeof data.mealsThisWeek === 'number') parts.push(`${data.mealsThisWeek} days of meals logged`);
     parts.push(`${data.streakDays || 0}-day streak`);
     return {
-      title: 'Your week in review 📊',
+      title: 'Your week in review',
       body: `${parts.join(', ')}. Nice work this week!`,
       category: 'journey',
     };
   },
   daily_drop: (data) => ({
-    title: "Today's challenge is here! 🎯",
+    title: "Today's challenge is here",
     body: `${data.challengeTitle || 'A new daily challenge'} is waiting for you. Complete it for bonus points!`,
     category: 'challenge',
   }),
   milestone_achieved: (data) => ({
-    title: 'Milestone unlocked! 🏅',
+    title: 'Milestone unlocked',
     body: `You just hit ${data.milestoneName || 'a new milestone'}! Your dedication is paying off.`,
     category: 'celebration',
   }),
   circle_invite_received: (data) => ({
-    title: "You've been invited! 📬",
+    title: "You've been invited",
     body: `${data.friendName || 'Someone'} invited you to join "${data.circleName || 'a FitCircle'}". Check it out!`,
     category: 'social',
   }),
@@ -494,19 +495,19 @@ export const NOTIFICATION_TEMPLATES: Record<
     body: data.preview || 'mentioned you in the chat',
     category: 'social',
   }),
-  // One circle: "🎉 Big moment in <circle>" / the post. The same event posted to
+  // One circle: "Big moment in <circle>" / the post. The same event posted to
   // several circles the recipient shares: the achievement is the title and the
   // body names where to celebrate (ChatNotificationService.planEventPushes).
   chat_rally: (data) =>
     (data.otherCircleCount ?? 0) > 0
       ? {
-          title: `🎉 ${data.headline || data.body || 'Something worth celebrating just happened!'}`,
+          title: stripEmoji(String(data.headline || data.body || 'Something worth celebrating just happened!')),
           body: `Celebrate in ${data.circleName || 'your circle'}${otherCirclesSuffix(data)}`,
           category: 'celebration',
         }
       : {
-          title: `🎉 Big moment in ${data.circleName || 'your circle'}`,
-          body: data.body || 'Something worth celebrating just happened!',
+          title: `Big moment in ${data.circleName || 'your circle'}`,
+          body: stripEmoji(String(data.body || 'Something worth celebrating just happened!')),
           category: 'celebration',
         },
   // Someone reacted to a message you posted (or a meal/streak card about you).
@@ -525,59 +526,59 @@ export const NOTIFICATION_TEMPLATES: Record<
 
   // ---- Referrals (docs/REFERRALS_SPEC.md §9.3) ----
   referral_friend_joined: (data) => ({
-    title: `${data.friendName || 'Your friend'} just joined FitCircle 🎉`,
+    title: `${data.friendName || 'Your friend'} just joined FitCircle`,
     body: 'Your invite worked! Once they check in on 3 days, you both get a free week of Pro.',
     category: 'social',
   }),
   referral_reward_earned: (data) => ({
-    title: 'You both just earned a free week of Pro 🎁',
+    title: 'You both just earned a free week of Pro',
     body: `${data.friendName || 'Your friend'} checked in for the third day. Invite another friend for another free week.`,
     category: 'celebration',
   }),
   referral_reward_banked: (data) => ({
-    title: `+${data.days || 7} days banked 🎁`,
+    title: `+${data.days || 7} days of Pro banked`,
     body: `${data.friendName || 'Your friend'} checked in! Your free week kicks in when your current plan ends. Invite another friend for more.`,
     category: 'celebration',
   }),
   referral_lifetime: () => ({
-    title: 'Lifetime Pro unlocked 🏆',
+    title: 'Lifetime Pro unlocked',
     body: '100 friends moving because of you. Pro is yours, forever.',
     category: 'celebration',
   }),
   referral_invitee_welcome: (data) => ({
-    title: `You and ${data.inviterName || 'your friend'} just earned a free week of Pro ✨`,
+    title: `You and ${data.inviterName || 'your friend'} just earned a free week of Pro`,
     body: 'Thanks for showing up! Invite your own friends: every one who checks in earns you another week.',
     category: 'celebration',
   }),
   referral_progress: (data) => ({
-    title: 'One more check-in 🎁',
+    title: 'One more check-in to unlock Pro',
     body: `Check in tomorrow and you and ${data.inviterName || 'your friend'} both unlock a free week of Pro.`,
     category: 'celebration',
   }),
   circle_streak_saved: (data) => ({
-    title: `${data.friendName || 'A friend'} covered for you today 🛡️`,
+    title: `${data.friendName || 'A friend'} covered for you today`,
     body: `Your ${data.circleName || 'circle'} streak is safe. Pay it forward when someone needs it.`,
     category: 'circle',
   }),
   circle_streak_milestone: (data) => ({
-    title: `${data.circleName || 'Your circle'} hit a ${data.streakDays || 0}-day streak 🔥`,
+    title: `${data.circleName || 'Your circle'} hit a ${data.streakDays || 0}-day streak`,
     body: 'Most of you showed up every single day. Keep it rolling.',
     category: 'circle',
   }),
   circle_kickoff: (data) => ({
-    title: data.kickoffReason === 'full' ? `Your crew is in! ${data.circleName || 'Your circle'} starts now 🎉` : `${data.circleName || 'Your circle'} starts now 🎉`,
+    title: data.kickoffReason === 'full' ? `Your crew is in! ${data.circleName || 'Your circle'} starts now` : `${data.circleName || 'Your circle'} starts now`,
     body: data.kickoffReason === 'full' ? 'Log something today to get the circle streak going.' : 'Seats stay open, so keep inviting friends. Log something today to get the streak going.',
     category: 'circle',
   }),
   // Copy is authored per campaign and rendered (placeholders filled) by
   // CampaignDeliveryService before it gets here.
   campaign: (data) => ({
-    title: String(data.title || 'FitCircle'),
-    body: String(data.body || ''),
+    title: stripEmoji(String(data.title || 'FitCircle')) || 'FitCircle',
+    body: stripEmoji(String(data.body || '')),
     category: 'challenge',
   }),
   referral_nudge: (data) => ({
-    title: `${data.inviterName || 'Your friend'} is cheering you on 💪`,
+    title: `${data.inviterName || 'Your friend'} is cheering you on`,
     body: 'Check in today. 3 days of check-ins and you both get a free week of Pro.',
     category: 'social',
   }),
@@ -586,33 +587,33 @@ export const NOTIFICATION_TEMPLATES: Record<
   // Copy is generated / templated and lock-screen-checked by FitzyPushService (lib/fitzy/push.ts);
   // these defaults only apply if a caller omits it.
   fitzy_daily_focus: (data) => ({
-    title: String(data.title || "Today's focus from Fitzy ☀️"),
-    body: String(data.body || 'One small, doable idea for today is waiting for you.'),
+    title: stripEmoji(String(data.title || "Today's focus from Fitzy")),
+    body: stripEmoji(String(data.body || 'One small, doable idea for today is waiting for you.')),
     category: 'coach',
   }),
   fitzy_weekly_recap: (data) => ({
-    title: String(data.title || 'Your week with Fitzy 🗓️'),
-    body: String(data.body || 'Your weekly recap is ready. See what went well and what to carry into next week.'),
+    title: stripEmoji(String(data.title || 'Your week with Fitzy')),
+    body: stripEmoji(String(data.body || 'Your weekly recap is ready. See what went well and what to carry into next week.')),
     category: 'coach',
   }),
   fitzy_weekly_plan: (data) => ({
-    title: String(data.title || 'Plan your week with Fitzy 🗓️'),
-    body: String(data.body || 'Turn one goal into a few small, doable steps for this week.'),
+    title: stripEmoji(String(data.title || 'Plan your week with Fitzy')),
+    body: stripEmoji(String(data.body || 'Turn one goal into a few small, doable steps for this week.')),
     category: 'coach',
   }),
   fitzy_hydration_nudge: (data) => ({
-    title: String(data.title || 'Water break? 💧'),
-    body: String(data.body || 'A glass now makes the afternoon easier. Log it in a tap.'),
+    title: stripEmoji(String(data.title || 'Water break?')),
+    body: stripEmoji(String(data.body || 'A glass now makes the afternoon easier. Log it in a tap.')),
     category: 'coach',
   }),
   fitzy_protein_nudge: (data) => ({
-    title: String(data.title || 'A protein boost for later 💪'),
-    body: String(data.body || 'A protein-rich snack you enjoy could round out your afternoon.'),
+    title: stripEmoji(String(data.title || 'A protein boost for later')),
+    body: stripEmoji(String(data.body || 'A protein-rich snack you enjoy could round out your afternoon.')),
     category: 'coach',
   }),
   fitzy_intro: (data) => ({
-    title: String(data.title || 'Meet Fitzy, your coach 💬'),
-    body: String(data.body || 'Ask me anything about your meals: what is working, and one easy idea to try next.'),
+    title: stripEmoji(String(data.title || 'Meet Fitzy, your coach')),
+    body: stripEmoji(String(data.body || 'Ask me anything about your meals: what is working, and one easy idea to try next.')),
     category: 'coach',
   }),
   // Approved copy (ONBOARDING_V2_EXPERIMENT_SPEC §3.2) — the paywall timeline promises it.

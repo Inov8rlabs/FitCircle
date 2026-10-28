@@ -460,7 +460,8 @@ export class AssessmentService {
         achievement_type: 'milestone',
         achievement_name: 'Getting Started',
         achievement_description: 'Completed onboarding and started your fitness journey!',
-        achievement_icon: '🎉',
+        // An icon key (design/icons.json); no client renders this column raw (checked 2026-10-28).
+        achievement_icon: 'milestone',
         xp_awarded: xpAwarded,
       });
 

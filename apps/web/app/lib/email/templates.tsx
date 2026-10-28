@@ -243,7 +243,7 @@ export function generateWelcomeEmail({ userName, userEmail }: WelcomeEmailProps)
 
       <!-- Main content -->
       <div class="content">
-        <h2 class="title">Welcome to the Circle, ${userName}! 🎉</h2>
+        <h2 class="title">Welcome to the Circle, ${userName}!</h2>
 
         <p class="text">
           We're thrilled to have you join FitCircle! You're now part of a community that makes
@@ -252,7 +252,7 @@ export function generateWelcomeEmail({ userName, userEmail }: WelcomeEmailProps)
 
         <div class="highlight-box">
           <p class="text" style="margin: 0;">
-            <strong style="color: #c4b5fd;">🚀 Quick Start:</strong> Complete your profile,
+            <strong style="color: #c4b5fd;">Quick start:</strong> Complete your profile,
             set your goals, and join your first FitCircle to start competing with friends!
           </p>
         </div>
@@ -267,10 +267,10 @@ export function generateWelcomeEmail({ userName, userEmail }: WelcomeEmailProps)
 
         <p class="text"><strong style="color: white;">What happens next?</strong></p>
         <p class="text">
-          ✨ <strong>Set Your Goals:</strong> Define your weight loss targets<br>
-          🎯 <strong>Join or Create Circles:</strong> Compete with friends or join public challenges<br>
-          📊 <strong>Track Daily:</strong> Log your progress and climb the leaderboard<br>
-          🏆 <strong>Stay Motivated:</strong> See real-time progress and celebrate wins together
+          <strong>Set your goals:</strong> Define your weight loss targets<br>
+          <strong>Join or create circles:</strong> Compete with friends or join public challenges<br>
+          <strong>Track daily:</strong> Log your progress and climb the leaderboard<br>
+          <strong>Stay motivated:</strong> See real-time progress and celebrate wins together
         </p>
 
         <div class="divider"></div>
@@ -342,13 +342,6 @@ export function generateInvitationEmail({
     custom: 'Custom Goal'
   }[circleType] || 'Challenge';
 
-  const circleIcon = {
-    weight_loss: '⚖️',
-    step_count: '👟',
-    workout_frequency: '💪',
-    custom: '🎯'
-  }[circleType] || '🎯';
-
   return `
 <!DOCTYPE html>
 <html lang="en">
@@ -377,7 +370,7 @@ export function generateInvitationEmail({
 
         <div style="background: linear-gradient(135deg, rgba(139, 92, 246, 0.2) 0%, rgba(99, 102, 241, 0.2) 100%); border: 2px solid rgba(139, 92, 246, 0.4); padding: 24px; border-radius: 12px; margin: 16px 0 24px 0; text-align: center;">
           <p style="font-size: 28px; font-weight: 800; color: #ffffff; margin: 0 0 8px 0; line-height: 1.2;">
-            ${circleIcon} ${circleName}
+            ${circleName}
           </p>
           <p style="font-size: 13px; color: #a78bfa; margin: 0; text-transform: uppercase; letter-spacing: 1px; font-weight: 600;">
             ${circleTypeLabel} Challenge
@@ -385,7 +378,7 @@ export function generateInvitationEmail({
         </div>
 
         <p class="text" style="font-size: 16px; text-align: center;">
-          Ready to crush your goals together? Let's go! 💪
+          Ready to crush your goals together? Let's go!
         </p>
 
         <!-- Challenge Stats -->
@@ -417,7 +410,7 @@ export function generateInvitationEmail({
             <td width="49%" style="background: #0f172a; border: 1px solid rgba(71, 85, 105, 0.3); border-radius: 8px; padding: 14px 16px; text-align: center; vertical-align: top;">
               <p style="font-size: 10px; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px; margin: 0 0 6px 0; font-weight: 600;">TYPE</p>
               <p style="font-size: 14px; font-weight: 700; color: #10b981; margin: 0; line-height: 1.2;">
-                ${circleIcon} ${circleTypeLabel}
+                ${circleTypeLabel}
               </p>
             </td>
           </tr>
@@ -425,7 +418,7 @@ export function generateInvitationEmail({
 
         <div class="highlight-box">
           <p class="text" style="margin: 0;">
-            <strong style="color: #c4b5fd;">💡 How it works:</strong> Join the challenge,
+            <strong style="color: #c4b5fd;">How it works:</strong> Join the challenge,
             set your goals, track your daily progress, and compete on the leaderboard.
             The friendly competition keeps everyone motivated!
           </p>
@@ -452,11 +445,11 @@ export function generateInvitationEmail({
           <strong style="color: white;">What you'll get:</strong>
         </p>
         <p class="text" style="font-size: 14px;">
-          📊 Real-time leaderboard and progress tracking<br>
-          🎯 Personalized goals and milestones<br>
-          🏆 Achievement badges and celebrations<br>
-          💪 Daily check-ins and accountability<br>
-          👥 Compete and connect with friends
+          Real-time leaderboard and progress tracking<br>
+          Personalized goals and milestones<br>
+          Achievement badges and celebrations<br>
+          Daily check-ins and accountability<br>
+          Compete and connect with friends
         </p>
       </div>
 

@@ -4,7 +4,7 @@
  *
  * Every service, route, and cron that deals with streaks must import from
  * here. The Android/iOS milestone lists mirror MILESTONES below; if you
- * change thresholds, names, or icons, update the clients in the same PR
+ * change thresholds, names, or icon keys, update the clients in the same PR
  * (Android: ClaimMilestone.kt, iOS: StreakMilestone/AppConstants).
  *
  * Shield economy (see docs/STREAKS-SPEC.md):
@@ -18,14 +18,19 @@
  *   streak breaks and clients surface the Pro paywall.
  */
 
+import type { IconKey } from '@/lib/design/icons';
+
 export interface StreakMilestoneDef {
   days: number;
   name: string;
   description: string;
-  /** Emoji shown in feeds/messages; clients render their own vector icon per tier. */
+  /**
+   * Legacy emoji, rendered by shipped apps (≤ 1.1.x) only. 1.2.0+ get null via
+   * applyIconCompat and render `icon`. Never put it in push / feed copy (DESIGN_LANGUAGE §6).
+   */
   badge: string;
-  /** Icon hint for clients: flame | medal | trophy | crown | star | gem | mountain */
-  icon: string;
+  /** Icon key (design/icons.json): flame | medal | trophy | crown | star | gem | mountain. */
+  icon: IconKey;
 }
 
 /**

@@ -17,6 +17,7 @@
 // must never break a message send or a post write.
 
 import { createAdminSupabase } from '../supabase-admin';
+import { stripEmoji } from '../text/strip-emoji';
 
 import {
   NotificationOrchestrator,
@@ -25,7 +26,7 @@ import {
 } from './notification-orchestrator';
 
 const PREVIEW_MAX_LENGTH = 80;
-const PHOTO_PREVIEW = '📷 sent a photo';
+const PHOTO_PREVIEW = 'sent a photo';
 
 export interface ActiveMember {
   userId: string;
@@ -353,9 +354,9 @@ export class ChatNotificationService {
     return out;
   }
 
-  /** "Ani's on a 7-day streak — nice 🔥" → "Ani's on a 7-day streak 🔥" (title use). */
+  /** "Ani's on a 7-day streak — nice" → "Ani's on a 7-day streak" (title use). */
   static rallyHeadline(body: string): string {
-    return (body ?? '').replace(/\s+—\s+nice\b/, '').trim();
+    return stripEmoji((body ?? '').replace(/\s+—\s+nice\b/, '').trim());
   }
 
   /** Active members of a circle with their per-circle mute state (public for DailySummaryService). */

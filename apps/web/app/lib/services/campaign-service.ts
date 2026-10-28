@@ -9,7 +9,8 @@ import { imageInfo } from '../campaigns/image-size';
 import { adminToInput, computePhase, inputToColumns, rowToAdmin, type CampaignRow } from '../campaigns/model';
 import { ART_SLOTS, isoDate, parseCampaignInput, publishIssues } from '../campaigns/schema';
 import { ART_SLOT_SIZES, type AdminCampaign, type ArtSlot, type CampaignView, type CampaignsResponse } from '../campaigns/types';
-import { buildCampaignView, compareViews } from '../campaigns/view';
+import { buildCampaignView, campaignIcon, compareViews } from '../campaigns/view';
+import type { IconKey } from '../design/icons';
 import { localToday } from '../streaks/streak-calculator';
 import { createAdminSupabase } from '../supabase-admin';
 
@@ -25,7 +26,10 @@ type Profile = Record<string, any>;
 export interface Season {
   key: string;
   title: string;
+  /** Legacy emoji for shipped apps (≤ 1.1.x); null for 1.2.0+ (applyIconCompat). */
   emoji: string;
+  /** Icon key (design/icons.json). */
+  icon: IconKey;
   tagline: string;
   description: string;
   startsAt: string;
@@ -420,6 +424,7 @@ export function toSeason(r: CampaignRow): Season {
     key: r.legacy_season_key as string,
     title: r.title,
     emoji: r.emoji,
+    icon: campaignIcon(r),
     tagline: r.tagline,
     description: r.description,
     startsAt: r.starts_at,

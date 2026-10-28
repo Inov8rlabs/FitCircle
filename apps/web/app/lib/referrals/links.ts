@@ -44,11 +44,11 @@ export function playStoreUrl(params: { ref?: string | null; circle?: string | nu
 }
 
 export function personalShareMessage(url: string): string {
-  return `I'm using FitCircle to stay on track, join me so we keep each other honest 💪 Check in 3 days and we both get a free week of Pro: ${url}`;
+  return `I'm using FitCircle to stay on track, join me so we keep each other honest. Check in 3 days and we both get a free week of Pro: ${url}`;
 }
 
 export function circleShareMessage(circleName: string, url: string): string {
-  return `Join my circle "${circleName}" on FitCircle 💪 We keep each other honest. Check in 3 days and we both get a free week of Pro: ${url}`;
+  return `Join my circle "${circleName}" on FitCircle. We keep each other honest. Check in 3 days and we both get a free week of Pro: ${url}`;
 }
 
 /** Code generation: first-name stem (≤5 letters) + 3 random chars from an unambiguous alphabet. */

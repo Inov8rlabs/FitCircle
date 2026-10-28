@@ -1,5 +1,6 @@
 import { type NextRequest } from 'next/server';
 
+import { iconCompatFor } from '@/lib/design/icon-compat';
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { failFrom, ok } from '@/lib/referrals/http';
 import { seasonsFor } from '@/lib/seasonal/seasons';
@@ -20,10 +21,10 @@ export async function GET(request: NextRequest) {
     const profile = await requireMobileAuth(request);
     const tz = request.headers.get('x-client-timezone');
     try {
-      return ok(await CampaignService.seasonalFor(profile, tz), startTime);
+      return ok(iconCompatFor(request, await CampaignService.seasonalFor(profile, tz)), startTime);
     } catch (err: any) {
       console.error('[seasonal] campaigns query failed, using built-in seasons:', err?.message);
-      return ok(seasonsFor(viewerToday(profile, tz)), startTime);
+      return ok(iconCompatFor(request, seasonsFor(viewerToday(profile, tz))), startTime);
     }
   } catch (error) {
     return failFrom(error, 'seasonal');

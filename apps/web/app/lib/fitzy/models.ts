@@ -12,6 +12,89 @@ import { generateText, streamText, type ModelMessage } from 'ai';
 export const DEFAULT_CHAT_MODEL = 'anthropic/claude-haiku-5.5';
 export const DEFAULT_DEEP_MODEL = 'anthropic/claude-sonnet-5.5';
 export const MODEL_TIMEOUT_MS = 25_000;
+/**
+ * Stream watchdog (2026-10-28). In the live eval, 1 in 5 onboarding streams STALLED at the
+ * gateway: no chunk (or a partial reply, then nothing) for ~16 minutes, with no finishReason or
+ * usage, until the socket died. The AI SDK `timeout` above did not end them. Observed healthy
+ * streams: first chunk 0.6–2 s, chunks every < 1 s, whole reply < 4 s. So a stream that sends no
+ * first chunk within STREAM_FIRST_CHUNK_MS, goes quiet for STREAM_IDLE_MS, or runs past
+ * MODEL_TIMEOUT_MS is aborted here and surfaces as a ModelStallError (the caller retries).
+ */
+export const STREAM_FIRST_CHUNK_MS = 12_000;
+export const STREAM_IDLE_MS = 8_000;
+
+/** AbortSignal.any where available (Node ≥ 20), else a manual combination (jsdom tests). */
+export function anySignal(a: AbortSignal, b: AbortSignal): AbortSignal {
+  if (typeof (AbortSignal as any).any === 'function') return (AbortSignal as any).any([a, b]);
+  const ctl = new AbortController();
+  for (const s of [a, b]) {
+    if (s.aborted) {
+      ctl.abort(s.reason);
+      break;
+    }
+    s.addEventListener('abort', () => ctl.abort(s.reason), { once: true });
+  }
+  return ctl.signal;
+}
+
+export class ModelStallError extends Error {
+  constructor(
+    readonly kind: 'first_chunk' | 'idle' | 'total',
+    readonly afterMs: number
+  ) {
+    super(`model stream stalled (${kind} after ${afterMs} ms)`);
+    this.name = 'ModelStallError';
+  }
+}
+
+/**
+ * Re-yields `source`, failing with ModelStallError when the next item takes longer than the
+ * first-chunk / idle budget or the total deadline passes. `onStall` runs first (abort the request).
+ */
+export async function* watchdog<T>(
+  source: AsyncIterable<T>,
+  opts: { firstChunkMs?: number; idleMs?: number; totalMs?: number; onStall?: (e: ModelStallError) => void } = {}
+): AsyncGenerator<T> {
+  const firstChunkMs = opts.firstChunkMs ?? STREAM_FIRST_CHUNK_MS;
+  const idleMs = opts.idleMs ?? STREAM_IDLE_MS;
+  const totalMs = opts.totalMs ?? MODEL_TIMEOUT_MS;
+  const it = source[Symbol.asyncIterator]();
+  const started = Date.now();
+  let gotFirst = false;
+  let finished = false;
+  try {
+    for (;;) {
+      const left = totalMs - (Date.now() - started);
+      const step = gotFirst ? idleMs : firstChunkMs;
+      const budget = Math.max(0, Math.min(step, left));
+      const kind: ModelStallError['kind'] = left <= step ? 'total' : gotFirst ? 'idle' : 'first_chunk';
+      const next = it.next();
+      next.catch(() => {}); // a stalled read may reject after we gave up on it
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const stall = new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new ModelStallError(kind, kind === 'total' ? totalMs : budget)), budget);
+      });
+      let res: IteratorResult<T>;
+      try {
+        res = await Promise.race([next, stall]);
+      } catch (err) {
+        if (err instanceof ModelStallError) opts.onStall?.(err);
+        throw err;
+      } finally {
+        clearTimeout(timer);
+      }
+      if (res.done) {
+        finished = true;
+        return;
+      }
+      if (!gotFirst && (typeof res.value !== 'string' || res.value.length > 0)) gotFirst = true;
+      yield res.value;
+    }
+  } finally {
+    // Never await: return() on a stalled iterator can hang too.
+    if (!finished) void Promise.resolve(it.return?.()).catch(() => {});
+  }
+}
 
 export const chatModel = () => process.env.FITZY_CHAT_MODEL?.trim() || DEFAULT_CHAT_MODEL;
 export const deepModel = () => process.env.FITZY_DEEP_MODEL?.trim() || DEFAULT_DEEP_MODEL;
@@ -89,6 +172,30 @@ export interface AttemptInfo {
 }
 
 /**
+ * Runs `fn` with an abort signal that fires after `ms` (or with `parent`), and rejects with a
+ * ModelStallError at the deadline even if the request ignores the abort (see watchdog).
+ */
+export async function withDeadline<T>(ms: number, parent: AbortSignal | undefined, fn: (signal: AbortSignal) => Promise<T>): Promise<T> {
+  const ctl = new AbortController();
+  const signal = parent ? anySignal(ctl.signal, parent) : ctl.signal;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const work = fn(signal);
+  work.catch(() => {});
+  const deadline = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => {
+      const e = new ModelStallError('total', ms);
+      ctl.abort(e);
+      reject(e);
+    }, ms);
+  });
+  try {
+    return await Promise.race([work, deadline]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
  * generateText on `primary`, then once on the fallback model. Throws only if both fail.
  */
 export async function generateWithFallback(opts: ModelCall & { primary: string; onAttempt?: (a: AttemptInfo) => void }): Promise<GenerationResult> {
@@ -98,7 +205,9 @@ export async function generateWithFallback(opts: ModelCall & { primary: string; 
     const t0 = Date.now();
     let reported = false;
     try {
-      const res = await generateText(callOptions(model, opts) as Parameters<typeof generateText>[0]);
+      const res = await withDeadline(MODEL_TIMEOUT_MS + 2_000, opts.abortSignal, (signal) =>
+        generateText(callOptions(model, { ...opts, abortSignal: signal }) as Parameters<typeof generateText>[0])
+      );
       const text = (res.text ?? '').trim();
       reported = true;
       const truncatedStructured = res.finishReason === 'length' && opts.thinking === false;
@@ -121,8 +230,9 @@ export async function generateWithFallback(opts: ModelCall & { primary: string; 
 }
 
 /**
- * Stream text from `model`. Yields chunks; resolves usage at the end. Errors surface from the
- * iterator so the caller can decide whether a fallback is still possible (nothing emitted yet).
+ * Stream text from `model`. Yields chunks; resolves usage at the end. Errors (including a
+ * ModelStallError from the watchdog) surface from the iterator so the caller can decide whether a
+ * retry is still possible (nothing emitted yet).
  */
 export function streamFrom(opts: {
   model: string;
@@ -133,11 +243,13 @@ export function streamFrom(opts: {
   /** false disables model thinking (see thinkingOptions). Default true. */
   thinking?: boolean;
 }) {
+  const stallCtl = new AbortController();
+  const signal = opts.abortSignal ? anySignal(stallCtl.signal, opts.abortSignal) : stallCtl.signal;
   const result = streamText({
     ...callOptions(opts.model, {
       system: opts.system,
       messages: opts.messages,
-      abortSignal: opts.abortSignal,
+      abortSignal: signal,
       maxOutputTokens: opts.maxOutputTokens,
       thinking: opts.thinking,
     }),
@@ -146,7 +258,8 @@ export function streamFrom(opts: {
     },
   } as Parameters<typeof streamText>[0]);
   return {
-    textStream: result.textStream as AsyncIterable<string>,
+    /** Model text, guarded by the stall watchdog (a stall aborts the request and throws ModelStallError). */
+    textStream: watchdog(result.textStream as AsyncIterable<string>, { onStall: (e) => stallCtl.abort(e) }),
     usage: async (): Promise<{ inputTokens: number | null; outputTokens: number | null }> => {
       try {
         const u = await result.usage;

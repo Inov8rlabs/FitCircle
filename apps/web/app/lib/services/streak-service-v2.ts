@@ -45,12 +45,15 @@ export interface StreakMilestone {
   days: number;
   name: string;
   description: string;
+  /** Legacy emoji for shipped clients (nulled for 1.2.0+ by applyIconCompat). */
   badge: string;
+  /** Icon key (design/icons.json). */
+  icon: string;
 }
 
 /** @deprecated import MILESTONES from lib/streaks/streak-config instead. */
 export const STREAK_MILESTONES: StreakMilestone[] = MILESTONES.map(
-  ({ days, name, description, badge }) => ({ days, name, description, badge })
+  ({ days, name, description, badge, icon }) => ({ days, name, description, badge, icon })
 );
 
 // Internal database type (maps to engagement_streaks table)
@@ -265,7 +268,7 @@ export async function completeCheckin(
     return {
       streak: after.streak,
       milestoneReached: crossed
-        ? { days: crossed.days, name: crossed.name, description: crossed.description, badge: crossed.badge }
+        ? { days: crossed.days, name: crossed.name, description: crossed.description, badge: crossed.badge, icon: crossed.icon }
         : null,
       freezeUsed,
       error: null,
@@ -332,7 +335,7 @@ export async function getEarnedMilestones(
  */
 export function getNextMilestone(currentStreak: number): StreakMilestone | null {
   const next: StreakMilestoneDef | null = nextMilestone(currentStreak);
-  return next ? { days: next.days, name: next.name, description: next.description, badge: next.badge } : null;
+  return next ? { days: next.days, name: next.name, description: next.description, badge: next.badge, icon: next.icon } : null;
 }
 
 // ============================================================================

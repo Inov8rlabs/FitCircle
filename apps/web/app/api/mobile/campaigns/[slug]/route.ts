@@ -1,6 +1,7 @@
 import { type NextRequest } from 'next/server';
 
 import { requireUser } from '@/lib/campaigns/admin-auth';
+import { iconCompatFor } from '@/lib/design/icon-compat';
 import { campaignFailFrom, ok } from '@/lib/campaigns/http';
 import { CampaignService } from '@/lib/services/campaign-service';
 
@@ -12,7 +13,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   try {
     const profile = await requireUser(request);
     const { slug } = await params;
-    return ok(await CampaignService.getForViewer(profile, request.headers.get('x-client-timezone'), slug), startTime);
+    return ok(iconCompatFor(request, await CampaignService.getForViewer(profile, request.headers.get('x-client-timezone'), slug)), startTime);
   } catch (error) {
     return campaignFailFrom(error, 'get');
   }

@@ -9,6 +9,7 @@
  * by tier, FITZY_V2_SPEC).
  */
 import { TIER_LIMITS } from '../config/tier-limits';
+import type { IconKey } from '../design/icons';
 import { SLOT_DEFS, slotForMinutes, type MealSlot } from '../journey/meal-slots';
 
 import type { CreativeOption, PromoDefinition, PromoMatchInput } from './engine';
@@ -70,6 +71,7 @@ export const firstMeal: PromoDefinition = {
       weight: 100,
       layout: 'hero',
       theme: THEMES.firstMeal,
+      icon: 'camera',
       emoji: '📸',
       eyebrow: 'Your first step',
       title: 'Snap your first meal',
@@ -82,11 +84,11 @@ export const firstMeal: PromoDefinition = {
 
 // ---------------------------------------------------------------------------- log_meal_now
 
-export const LOG_MEAL_COPY: Record<MealSlot, { title: string; body: string; emoji: string; label: string }> = {
-  breakfast: { title: 'Log your breakfast', body: 'Snap it and see calories and macros in seconds.', emoji: '🍳', label: 'Log breakfast' },
-  lunch: { title: 'Log your lunch', body: 'A quick photo is all it takes.', emoji: '🥗', label: 'Log lunch' },
-  snack: { title: 'Log your snack', body: "Snap it so today's picture is complete.", emoji: '🍎', label: 'Log snack' },
-  dinner: { title: 'Log your dinner', body: 'Snap dinner to round out your day.', emoji: '🍽️', label: 'Log dinner' },
+export const LOG_MEAL_COPY: Record<MealSlot, { title: string; body: string; icon: IconKey; emoji: string; label: string }> = {
+  breakfast: { title: 'Log your breakfast', body: 'Snap it and see calories and macros in seconds.', icon: 'meal', emoji: '🍳', label: 'Log breakfast' },
+  lunch: { title: 'Log your lunch', body: 'A quick photo is all it takes.', icon: 'meal', emoji: '🥗', label: 'Log lunch' },
+  snack: { title: 'Log your snack', body: "Snap it so today's picture is complete.", icon: 'meal', emoji: '🍎', label: 'Log snack' },
+  dinner: { title: 'Log your dinner', body: 'Snap dinner to round out your day.', icon: 'meal', emoji: '🍽️', label: 'Log dinner' },
 };
 
 /** The open slot right now (local window, not logged, reminder pref on), or null. */
@@ -122,6 +124,7 @@ export const logMealNow: PromoDefinition = {
         weight: 100,
         layout: 'banner',
         theme: THEMES.logMeal,
+        icon: c.icon,
         emoji: c.emoji,
         title: c.title,
         body: c.body,
@@ -153,6 +156,7 @@ export function proValueCreatives(live: Set<string> | null): CreativeOption[] {
       available: has('food_ai_unlimited'),
       layout: 'banner',
       theme: THEMES.pro,
+      icon: 'camera',
       emoji: '📸',
       eyebrow: 'FitCircle Pro',
       title: "See exactly what's in every bite",
@@ -166,6 +170,7 @@ export function proValueCreatives(live: Set<string> | null): CreativeOption[] {
       weight: 33,
       layout: 'banner',
       theme: THEMES.pro,
+      icon: 'calendar',
       emoji: '🗓️',
       eyebrow: 'FitCircle Pro',
       title: 'A coach that plans your week',
@@ -179,6 +184,7 @@ export function proValueCreatives(live: Set<string> | null): CreativeOption[] {
       available: has('history_extended'),
       layout: 'banner',
       theme: THEMES.pro,
+      icon: 'trend',
       emoji: '📈',
       eyebrow: 'FitCircle Pro',
       title: 'Your whole journey, in one place',
@@ -243,6 +249,7 @@ export const meetFitzy: PromoDefinition = {
       weight: 100,
       layout: 'banner',
       theme: THEMES.fitzy,
+      icon: 'chat',
       emoji: '💬',
       title: 'Meet Fitzy, your coach',
       body: 'Ask anything about your meals. Fitzy can tell you what is working and what to try next.',

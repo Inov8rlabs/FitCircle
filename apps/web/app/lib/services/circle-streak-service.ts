@@ -268,7 +268,7 @@ export class CircleStreakService {
     await this.assertActiveMember(fitcircleId, saverUserId);
     await this.assertActiveMember(fitcircleId, coveredUserId);
     if (saverUserId === coveredUserId) {
-      throw new CircleStreakError('SELF', "You can't cover yourself — ask a friend 💜", 400);
+      throw new CircleStreakError('SELF', "You can't cover yourself — ask a friend", 400);
     }
 
     const timezone = await this.timezoneOf(fitcircleId);

@@ -90,7 +90,7 @@ describe('inviteContacts', () => {
     const msg = mail.sent[0];
     expect(msg.to).toBe('sam@example.com');
     expect(msg.from).toBe('Maya via FitCircle <team@fitcircle.ai>');
-    expect(msg.subject).toBe('Maya saved you a seat in “Morning Movers” 💪');
+    expect(msg.subject).toBe('Maya saved you a seat in “Morning Movers”');
     expect(msg.html).toContain('Hey Sam,');
     expect(msg.html).toContain('free week of FitCircle Pro');
     expect(msg.html).toContain('https://www.fitcircle.ai/join/FITAB12CD?ref=MAYA');
@@ -149,7 +149,7 @@ describe('nudges', () => {
     invite.sent_at = new Date(Date.now() - 73 * 3600_000).toISOString();
     const first = await ReferralService.nudge(MAYA, { inviteId: invite.id });
     expect(first).toMatchObject({ status: 'sent', remaining: 1 });
-    expect(mail.sent.at(-1).subject).toBe('Maya is still saving your seat 💜');
+    expect(mail.sent.at(-1).subject).toBe('Maya is still saving your seat');
 
     expect((await ReferralService.nudge(MAYA, { inviteId: invite.id })).status).toBe('too_soon');
     invite.last_nudged_at = new Date(Date.now() - 73 * 3600_000).toISOString();
@@ -237,7 +237,7 @@ describe('email-matched signup + delivery to both sides', () => {
     expect(rewards.every((r) => r.notified_at && r.emailed_at)).toBe(true);
     const rewardMails = mail.sent.filter((m) => m.subject.includes('each earned a free week'));
     expect(rewardMails.map((m) => m.to).sort()).toEqual(['maya@example.com', 'sam@example.com']);
-    expect(rewardMails.find((m) => m.to === 'sam@example.com').subject).toBe('You and Maya each earned a free week of Pro 🎉');
+    expect(rewardMails.find((m) => m.to === 'sam@example.com').subject).toBe('You and Maya each earned a free week of Pro');
     expect(db.rows('referral_invites')[0].status).toBe('qualified');
   });
 
@@ -277,7 +277,7 @@ describe('hub v2 fields', () => {
     expect(hub.invites).toHaveLength(2);
     expect(hub.invites![0]).toMatchObject({ status: 'invited', nudge: { available: false, remaining: 2, nextAt: expect.any(String) } });
     expect(hub.smsBody).toContain('Join my circle "Morning Movers"');
-    expect(hub.emailPreview).toMatchObject({ subject: 'Maya saved you a seat in “Morning Movers” 💪' });
+    expect(hub.emailPreview).toMatchObject({ subject: 'Maya saved you a seat in “Morning Movers”' });
     expect(hub.pendingCircleInvite).toBeNull();
   });
 });

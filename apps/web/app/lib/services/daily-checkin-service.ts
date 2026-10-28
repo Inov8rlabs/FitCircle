@@ -47,6 +47,8 @@ export interface DailyCheckInResponse {
     name: string;
     description: string;
     badge: string;
+    /** Icon key (design/icons.json); `badge` is the legacy emoji. */
+    icon: string;
     /** Additional keys (the iOS milestone model requires them). */
     id: number;
     /** Same value as `name`. */
@@ -211,6 +213,7 @@ export async function performDailyCheckIn(
         name: crossed.name,
         description: crossed.description,
         badge: crossed.badge,
+        icon: crossed.icon,
         // 1-based position in the milestone table, like the clients' own lists.
         id: MILESTONES.findIndex(m => m.days === crossed.days) + 1,
         title: crossed.name,
@@ -312,7 +315,7 @@ export async function performDailyCheckIn(
   } else if (freezeApplied) {
     message = `Shield applied! Streak maintained at ${newStreak} days.`;
   } else if (milestoneAchieved) {
-    message = `🎉 Milestone achieved! ${milestoneAchieved.name} - ${newStreak} days!`;
+    message = `Milestone achieved: ${milestoneAchieved.name}, ${newStreak} days!`;
   } else if (newStreak === 1 && streak.current_streak > 1) {
     message = 'Streak reset. Start fresh today!';
   } else {

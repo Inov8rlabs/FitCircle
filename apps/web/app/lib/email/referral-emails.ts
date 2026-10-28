@@ -65,17 +65,17 @@ export interface InviteEmailInput {
 export function inviteEmail(i: InviteEmailInput): RenderedEmail {
   const who = i.inviterFirstName;
   const hi = i.friendName ? `Hey ${i.friendName},` : 'Hey,';
-  const subject = i.circle ? `${who} saved you a seat in “${i.circle.name}” 💪` : `${who} invited you to FitCircle 💪`;
+  const subject = i.circle ? `${who} saved you a seat in “${i.circle.name}”` : `${who} invited you to FitCircle`;
   const lead = i.circle
     ? `${esc(who)} wants you in <b style="color:#ffffff;">${esc(i.circle.name)}</b>, their circle on FitCircle${i.circle.memberCount > 1 ? ` (${i.circle.memberCount} people so far)` : ''}. It's a small crew that keeps each other honest on workouts, meals and streaks.`
     : `${esc(who)} is using FitCircle to stay on track and wants you along. Fitness sticks when your friends are in it with you.`;
   const reward =
     i.rewardDays > 0
-      ? `<p style="margin:16px 0 0 0;font-size:15px;line-height:23px;color:#e8ecf8;">🎁 <b style="color:#ffffff;">Check in on 3 different days and you both get a free week of FitCircle Pro.</b></p>`
+      ? `<p style="margin:16px 0 0 0;font-size:15px;line-height:23px;color:#e8ecf8;"><b style="color:#ffffff;">Check in on 3 different days and you both get a free week of FitCircle Pro.</b></p>`
       : '';
   const body = `
 ${initialAvatar(who, i.inviterAvatarUrl)}
-<h1 style="margin:16px 0 4px 0;font-size:24px;line-height:30px;font-weight:800;color:#ffffff;text-align:center;">${esc(who)} saved you a seat 💜</h1>
+<h1 style="margin:16px 0 4px 0;font-size:24px;line-height:30px;font-weight:800;color:#ffffff;text-align:center;">${esc(who)} saved you a seat</h1>
 <p style="margin:20px 0 0 0;font-size:15px;line-height:23px;color:#c9d0ea;">${esc(hi)}</p>
 <p style="margin:10px 0 0 0;font-size:15px;line-height:23px;color:#c9d0ea;">${lead}</p>
 ${reward}
@@ -103,12 +103,12 @@ ${HOW_IT_WORKS}`;
 
 export function reminderEmail(i: InviteEmailInput): RenderedEmail {
   const who = i.inviterFirstName;
-  const subject = `${who} is still saving your seat 💜`;
+  const subject = `${who} is still saving your seat`;
   const body = `
 ${initialAvatar(who, i.inviterAvatarUrl)}
 <h1 style="margin:16px 0 4px 0;font-size:22px;line-height:28px;font-weight:800;color:#ffffff;text-align:center;">Your seat is still open</h1>
 <p style="margin:20px 0 0 0;font-size:15px;line-height:23px;color:#c9d0ea;">${esc(i.friendName ? `Hey ${i.friendName},` : 'Hey,')} ${esc(who)} asked us to give you a gentle nudge. ${i.circle ? `Their circle <b style="color:#ffffff;">${esc(i.circle.name)}</b> is better with you in it.` : 'Staying on track is easier together.'}</p>
-${i.rewardDays > 0 ? `<p style="margin:14px 0 0 0;font-size:15px;line-height:23px;color:#e8ecf8;">🎁 Check in on 3 different days and you both get a free week of Pro.</p>` : ''}
+${i.rewardDays > 0 ? `<p style="margin:14px 0 0 0;font-size:15px;line-height:23px;color:#e8ecf8;">Check in on 3 different days and you both get a free week of Pro.</p>` : ''}
 ${button(i.link, 'Take my seat')}`;
   const footer = `This is the last reminder unless ${esc(who)} sends another. <a href="${esc(i.unsubscribeUrl)}" style="color:#a78bfa;">Don't send me FitCircle invites</a>.<br/>FitCircle · Inov8r Labs`;
   const text = `${i.friendName ? `Hey ${i.friendName},` : 'Hey,'} ${who} asked us to give you a gentle nudge.${i.rewardDays > 0 ? ' Check in on 3 different days and you both get a free week of Pro.' : ''}\n\nJoin: ${i.link}\n\nDon't want FitCircle invites? ${i.unsubscribeUrl}`;
@@ -125,7 +125,7 @@ export interface RewardEmailInput {
 }
 
 export function rewardEmail(i: RewardEmailInput): RenderedEmail {
-  const subject = `You and ${i.friendFirstName} each earned a free week of Pro 🎉`;
+  const subject = `You and ${i.friendFirstName} each earned a free week of Pro`;
   const what =
     i.role === 'inviter'
       ? `${esc(i.friendFirstName)} just checked in for the third day on FitCircle, so your invite paid off for both of you.`
@@ -134,7 +134,6 @@ export function rewardEmail(i: RewardEmailInput): RenderedEmail {
     ? `Your ${i.days} free days are saved and start automatically when your current plan ends.`
     : `Your ${i.days} days of Pro are active now: unlimited AI meal logging, deeper insights, and every Pro feature.`;
   const body = `
-<div style="font-size:48px;line-height:56px;text-align:center;">🎁</div>
 <h1 style="margin:8px 0 4px 0;font-size:24px;line-height:30px;font-weight:800;color:#ffffff;text-align:center;">+${i.days} days of Pro for you both</h1>
 <p style="margin:20px 0 0 0;font-size:15px;line-height:23px;color:#c9d0ea;">Hi ${esc(i.recipientFirstName)}, ${what}</p>
 <p style="margin:10px 0 0 0;font-size:15px;line-height:23px;color:#c9d0ea;">${when}</p>
@@ -151,11 +150,11 @@ ${button(i.inviteLink, 'Invite friends')}`;
 export function smsInviteBody(inviterFirstName: string, circleName: string | null, link: string, rewardDays: number): string {
   const reward = rewardDays > 0 ? ' Check in 3 days and we both get a free week of Pro.' : '';
   return circleName
-    ? `Hey! Join my circle "${circleName}" on FitCircle so we keep each other on track 💪${reward} ${link}`
-    : `Hey! I'm using FitCircle to stay on track, join me so we keep each other honest 💪${reward} ${link}`;
+    ? `Hey! Join my circle "${circleName}" on FitCircle so we keep each other on track.${reward} ${link}`
+    : `Hey! I'm using FitCircle to stay on track, join me so we keep each other honest.${reward} ${link}`;
 }
 
 export function smsReminderBody(circleName: string | null, link: string, rewardDays: number): string {
   const reward = rewardDays > 0 ? ' (3 check-ins and we both get a free week of Pro)' : '';
-  return `Still saving you a seat${circleName ? ` in "${circleName}"` : ''} on FitCircle 💜${reward} ${link}`;
+  return `Still saving you a seat${circleName ? ` in "${circleName}"` : ''} on FitCircle.${reward} ${link}`;
 }

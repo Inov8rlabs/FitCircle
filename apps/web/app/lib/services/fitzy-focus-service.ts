@@ -11,6 +11,7 @@
 import { isSunday, todayFor } from '../fitzy/dates';
 import { chatModel, deepModel, generateWithFallback, systemMessages, type ModelCall } from '../fitzy/models';
 import { addDays } from '../streaks/streak-calculator';
+import { stripEmoji } from '../text/strip-emoji';
 import { createAdminSupabase } from '../supabase-admin';
 import type { FitzyAction, FitzyDailyFocus, FitzyPlan, FitzyTier } from '../types/fitzy';
 
@@ -24,6 +25,7 @@ export const FOCUS_PROMPT = [
   'headline ≤ 70 chars, body ≤ 240 chars (2 short sentences, friendly, no lists), plus one call to action.',
   'NEVER mention calorie targets, deficits, restriction, skipping meals, weight targets or rates, or',
   'good/bad foods; never shame; no medical advice. Celebrate consistency, add rather than remove.',
+  'Plain text only: never use emoji or decorative symbols.',
   'Reply with ONLY JSON: {"kind":"tip"|"plan_nudge","headline":"…","body":"…",',
   '"cta":{"label":"≤ 28 chars","type":"log_meal"|"log_workout"|"start_plan"|"open_circle"}}',
 ].join('\n');
@@ -33,6 +35,7 @@ export const RECAP_PROMPT = [
   'of the user’s plan progress — celebrate what they did (any amount counts), name one thing to carry into',
   'next week. Never judge misses. headline ≤ 70 chars, body ≤ 240 chars.',
   'NEVER mention calorie targets, deficits, restriction, weight targets or rates, or good/bad foods.',
+  'Plain text only: never use emoji or decorative symbols.',
   'Reply with ONLY JSON: {"headline":"…","body":"…"}',
 ].join('\n');
 
@@ -151,7 +154,8 @@ export class FitzyFocusService {
   static focusFromText(text: string, date: string, tier: FitzyTier): FitzyDailyFocus | null {
     const j = looseJson(text);
     const type = (CTA_TYPES as readonly string[]).includes(j?.cta?.type) ? (j.cta.type as FitzyAction['type']) : 'log_workout';
-    const label = typeof j?.cta?.label === 'string' && j.cta.label.trim() && cp(j.cta.label.trim()) <= 28 ? j.cta.label.trim() : 'Log it';
+    const ctaLabel = typeof j?.cta?.label === 'string' ? stripEmoji(j.cta.label.trim()) : '';
+    const label = ctaLabel && cp(ctaLabel) <= 28 ? ctaLabel : 'Log it';
     const kind = j?.kind === 'plan_nudge' ? 'plan_nudge' : 'tip';
     return this.validate(j, date, tier, kind, { label, action: { type, label } });
   }
@@ -163,8 +167,9 @@ export class FitzyFocusService {
 
   /** Length + guard checks; null when unusable. */
   static validate(j: any, date: string, tier: FitzyTier, kind: FitzyDailyFocus['kind'], cta: FitzyDailyFocus['cta']): FitzyDailyFocus | null {
-    const headline = typeof j?.headline === 'string' ? j.headline.trim() : '';
-    const body = fitBody(typeof j?.body === 'string' ? j.body.trim() : '', 240);
+    // Server-side backstop to the prompt's no-emoji rule: the focus feeds the home card and push.
+    const headline = typeof j?.headline === 'string' ? stripEmoji(j.headline.trim()) : '';
+    const body = fitBody(typeof j?.body === 'string' ? stripEmoji(j.body.trim()) : '', 240);
     if (!headline || !body || cp(headline) > 70) return null;
     if (FitzyService.containsForbiddenContent(`${headline}\n${body}\n${cta.label}`)) return null;
     return { date, kind, headline, body, cta, tier };

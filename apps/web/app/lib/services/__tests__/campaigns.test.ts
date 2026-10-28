@@ -234,7 +234,8 @@ describe('CampaignService viewer endpoints', () => {
   it('seasonal: legacy shape from campaigns with a legacy key', async () => {
     const out = await CampaignService.seasonalFor(me({ is_admin: true, preferences: { campaignPreview: { asOf: '2026-12-10' } } }), null);
     expect(out.current).toMatchObject({ key: 'hold_the_line', title: 'Hold the Line', startsAt: '2026-11-15', endsAt: '2026-12-15', featuredFrom: '2026-10-20', accent: '#38bdf8', circle: { name: 'Hold the Line Crew', type: 'custom' } });
-    expect(Object.keys(out.current!).sort()).toEqual(['accent', 'circle', 'description', 'emoji', 'endsAt', 'featuredFrom', 'key', 'startsAt', 'tagline', 'title']);
+    expect(Object.keys(out.current!).sort()).toEqual(['accent', 'circle', 'description', 'emoji', 'endsAt', 'featuredFrom', 'icon', 'key', 'startsAt', 'tagline', 'title']);
+    expect(out.current).toMatchObject({ emoji: '❄️', icon: 'snowflake' });
     expect(out.upcoming).toMatchObject({ key: 'new_year_reset', featuredFrom: '2026-12-16' });
   });
 });
@@ -363,7 +364,7 @@ describe('delivery cron', () => {
     const s1 = await CampaignDeliveryService.runCron(NOW);
     const daily = pushes.filter((p) => p.data.campaignKey === 'daily');
     expect(daily.map((p) => p.userId)).toEqual([ME]); // D: no reminders; E: 16:00 in London; B: opened
-    expect(daily[0]).toMatchObject({ type: 'campaign', data: { title: 'Door 7 is open 😴', body: 'Wind down: check in today to open it.', campaignSlug: 'advent_2026' } });
+    expect(daily[0]).toMatchObject({ type: 'campaign', data: { title: 'Door 7 is open', body: 'Wind down: check in today to open it.', campaignSlug: 'advent_2026' } });
     expect(s1.push.skippedOpened).toBe(1);
     expect(db.rows('campaign_deliveries').map((r) => r.delivery_key)).toEqual(['push:daily:2026-12-07']);
 
@@ -416,7 +417,7 @@ describe('delivery cron', () => {
   it('test push goes straight to the caller with the campaign route', async () => {
     const row = db.rows('campaigns')[0];
     const out = await CampaignDeliveryService.sendTestPush(row.id, me({ preferences: { campaignPreview: { asOf: '2026-12-07' } } }), 'daily');
-    expect(out).toMatchObject({ sent: true, title: 'Door 7 is open 😴' });
+    expect(out).toMatchObject({ sent: true, title: 'Door 7 is open' });
     expect(directPushes[0].n.data).toEqual({ type: 'campaign', category: 'challenge', screen: 'campaign', campaignSlug: 'advent_2026' });
     await expect(CampaignDeliveryService.sendTestPush(row.id, me(), 'nope')).rejects.toBeInstanceOf(CampaignError);
   });

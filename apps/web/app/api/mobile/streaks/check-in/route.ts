@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 
+import { iconCompatFor } from '@/lib/design/icon-compat';
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { addAutoRefreshHeaders } from '@/lib/middleware/mobile-auto-refresh';
 import {
@@ -98,7 +99,7 @@ export async function POST(request: NextRequest) {
 
     const response = NextResponse.json({
       success: true,
-      data: result,
+      data: iconCompatFor(request, result),
       error: null,
       meta: {
         timestamp: new Date().toISOString(),

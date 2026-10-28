@@ -1,3 +1,4 @@
+import { resolveIconKey, type IconKey } from '../design/icons';
 import { createAdminSupabase } from '../supabase-admin';
 
 // ============================================================================
@@ -15,12 +16,23 @@ export interface ChallengeTemplateRow {
   duration_days: number;
   logging_prompt: string | null;
   difficulty: string | null;
+  /** Legacy emoji, rendered by shipped apps (≤ 1.1.x); null for 1.2.0+ (applyIconCompat). */
   icon_name: string | null;
+  /**
+   * Icon key (design/icons.json). Column added by migration 114; until it is
+   * applied (or for a row without one) the key is derived from icon_name.
+   */
+  icon_key: IconKey;
   sort_order: number;
   is_active: boolean;
   completions_count: number;
   metadata: Record<string, unknown>;
   created_at: string;
+}
+
+/** Ensures every template row carries a valid `icon_key`. */
+export function withIconKey<T extends { icon_name?: string | null; icon_key?: string | null }>(row: T): T & { icon_key: IconKey } {
+  return { ...row, icon_key: resolveIconKey(row.icon_key, row.icon_name, 'trophy') };
 }
 
 export interface TemplateFilters {
@@ -73,7 +85,7 @@ export class TemplateService {
     const { data, error } = await query;
 
     if (error) throw error;
-    return data || [];
+    return (data || []).map(withIconKey);
   }
 
   /**
@@ -91,7 +103,7 @@ export class TemplateService {
     if (error) throw error;
     if (!data) throw new Error('Template not found');
 
-    return data;
+    return withIconKey(data);
   }
 
   // ============================================================================

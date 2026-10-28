@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from 'next/server';
 
+import { iconCompatFor } from '@/lib/design/icon-compat';
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { MomentumService } from '@/lib/services/momentum-service';
 
@@ -15,7 +16,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      data: { milestones },
+      data: iconCompatFor(request, { milestones }),
       error: null,
       meta: {
         timestamp: new Date().toISOString(),

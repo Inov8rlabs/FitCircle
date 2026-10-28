@@ -18,6 +18,7 @@
  */
 import { MAX_NOTIFICATIONS_PER_DAY } from '../services/notification-orchestrator';
 import { addDays } from '../streaks/streak-calculator';
+import { stripEmoji } from '../text/strip-emoji';
 import type { FitzyDailyFocus, FitzyTier } from '../types/fitzy';
 
 import { chatModel, systemMessages, type ModelCall } from './models';
@@ -293,13 +294,13 @@ export const FOCUS_BODY_MAX = 178;
  * The tip (data payload → Fitzy chat) always carries the full card.
  */
 export function focusPushCopy(focus: FitzyDailyFocus, guard: (t: string) => boolean, source: PushCopy['source']): PushCopy {
-  const tip = `${focus.headline}\n\n${focus.body}`.slice(0, TIP_MAX);
+  const tip = stripEmoji(`${focus.headline}\n\n${focus.body}`).slice(0, TIP_MAX);
   const recap = focus.kind === 'recap';
-  const fallbackTitle = recap ? 'Your week with Fitzy 🗓️' : "Today's focus from Fitzy ☀️";
+  const fallbackTitle = recap ? 'Your week with Fitzy' : "Today's focus from Fitzy";
   const fallbackBody = recap ? 'Your weekly recap is ready. See what went well and what to carry into next week.' : 'One small, doable idea for today is waiting for you.';
   const safe = (t: string) => lockScreenSafe(t) && !guard(t);
-  const headline = clampTitle(focus.headline.trim());
-  const body = fitBody(focus.body.trim(), FOCUS_BODY_MAX);
+  const headline = clampTitle(stripEmoji(focus.headline.trim()));
+  const body = fitBody(stripEmoji(focus.body.trim()), FOCUS_BODY_MAX);
   const bodyOk = !!body && safe(body);
   // A headline is only shown with its own body: alone it can read as a non-sequitur.
   const titleOk = !!headline && bodyOk && safe(headline);
@@ -314,14 +315,14 @@ export function variant<T>(list: readonly T[], seed: string): T {
 }
 
 const HYDRATION_TEMPLATES = [
-  { title: 'Water break? 💧', body: 'A glass now makes the afternoon easier. Log it in a tap.' },
-  { title: 'Sip check 💧', body: 'An easy win before lunch: one glass of water, then log it.' },
-  { title: 'Hydration hello 💧', body: 'Keep a glass nearby this afternoon. Future you will thank you.' },
+  { title: 'Water break?', body: 'A glass now makes the afternoon easier. Log it in a tap.' },
+  { title: 'Sip check', body: 'An easy win before lunch: one glass of water, then log it.' },
+  { title: 'Hydration check-in', body: 'Keep a glass nearby this afternoon. Future you will thank you.' },
 ] as const;
 
 export function hydrationCopy(seed: string): PushCopy {
   const t = variant(HYDRATION_TEMPLATES, seed);
-  return { ...t, tip: `${t.title.replace(/\s*💧$/, '')}\n\n${t.body}`, source: 'template' };
+  return { ...t, tip: `${t.title}\n\n${t.body}`, source: 'template' };
 }
 
 /** Protein ideas by diet, filtered by allergens; used for the template and as model guidance. */
@@ -350,9 +351,9 @@ export function proteinIdeas(diet: string, allergens: string[], n = 3, seed = ''
 export function proteinTemplate(diet: string, allergens: string[], seed: string): PushCopy {
   const ideas = proteinIdeas(diet, allergens, 3, seed);
   const list = ideas.length >= 2 ? `${ideas.slice(0, -1).join(', ')} or ${ideas[ideas.length - 1]}` : ideas[0] ?? 'a snack you enjoy';
-  const title = variant(['A protein boost for later 💪', 'Afternoon snack idea 🥣', 'Fuel for the afternoon 💪'] as const, seed);
+  const title = variant(['A protein boost for later', 'Afternoon snack idea', 'Fuel for the afternoon'] as const, seed);
   const body = fitBody(`${list[0].toUpperCase()}${list.slice(1)} could round out your afternoon.`, BODY_MAX) ?? 'A protein-rich snack could round out your afternoon.';
-  return { title, body, tip: `${title.replace(/\s*\p{Extended_Pictographic}$/u, '')}\n\n${body}`, source: 'template' };
+  return { title, body, tip: `${title}\n\n${body}`, source: 'template' };
 }
 
 /**
@@ -363,13 +364,13 @@ export function proteinTemplate(diet: string, allergens: string[], seed: string)
 export function introCopy(loggedYesterday: boolean): PushCopy {
   return loggedYesterday
     ? {
-        title: "A tip on yesterday's meals? 💬",
+        title: "A tip on yesterday's meals?",
         body: "I'm Fitzy, your coach. I can look at what you logged yesterday and suggest one easy idea for today.",
         tip: "Hi, I'm Fitzy, your coach! I can look at the meals you logged yesterday and suggest one easy idea for today. Want my take?",
         source: 'template',
       }
     : {
-        title: 'Meet Fitzy, your coach 💬',
+        title: 'Meet Fitzy, your coach',
         body: 'Ask me anything about your meals: what is working, and one easy idea to try next.',
         tip: "Hi, I'm Fitzy, your coach! Ask me anything about your meals, or I can suggest one easy idea for today.",
         source: 'template',
@@ -377,13 +378,13 @@ export function introCopy(loggedYesterday: boolean): PushCopy {
 }
 
 export const WEEKLY_PLAN_COPY: Record<FitzyTier, { title: string; body: string }> = {
-  pro: { title: 'Plan your week with Fitzy 🗓️', body: "Tell me one thing you want from this week and I'll turn it into a few small, doable commitments." },
-  free: { title: 'Your week, planned in a minute 🗓️', body: 'Fitzy can turn one goal into a few small, doable steps. Take a peek at this week’s plan.' },
+  pro: { title: 'Plan your week with Fitzy', body: "Tell me one thing you want from this week and I'll turn it into a few small, doable commitments." },
+  free: { title: 'Your week, planned in a minute', body: 'Fitzy can turn one goal into a few small, doable steps. Take a peek at this week’s plan.' },
 };
 
 export function weeklyPlanCopy(tier: FitzyTier): PushCopy {
   const c = WEEKLY_PLAN_COPY[tier];
-  return { ...c, tip: `${c.title.replace(/\s*🗓️$/, '')}\n\n${c.body}`, source: 'template' };
+  return { ...c, tip: `${c.title}\n\n${c.body}`, source: 'template' };
 }
 
 // ---------------------------------------------------------------------------- protein nudge (AI)
@@ -393,8 +394,8 @@ export const NUDGE_PROMPT = [
   'Situation: it is mid-afternoon and the user has had less protein than they usually do by now.',
   'Suggest ONE easy, specific protein-rich snack or addition for this afternoon or dinner that fits their diet,',
   'allergens and what they like (from the context). Friendly, upbeat, adds rather than removes.',
-  'title ≤ 40 characters (may end with one emoji), body ≤ 120 characters, one or two short sentences.',
-  'If you use an emoji, prefer a neutral one (💪 🌱 ✨ 🥣); NEVER name or picture anything they are allergic to.',
+  'title ≤ 40 characters, body ≤ 120 characters, one or two short sentences, plain text.',
+  'Never use emoji or decorative symbols. NEVER name anything they are allergic to.',
   'This shows on the LOCK SCREEN: NEVER include any number about food, protein, grams, calories, macros, weight or',
   'the body; never say "behind", "low", "not enough", "only", "missed" or anything that judges; never shame;',
   'never mention calorie targets, restriction, skipping meals, good/bad foods, weight or medical topics.',
@@ -442,8 +443,11 @@ export function parseNudge(text: string, guard: (t: string) => boolean, allergen
   } catch {
     return null;
   }
-  const title = typeof j?.title === 'string' ? j.title.trim() : '';
-  const body = typeof j?.body === 'string' ? j.body.trim() : '';
+  // The allergen check below runs on the raw text first (it also matches food emoji).
+  const rawAll = `${typeof j?.title === 'string' ? j.title : ''}\n${typeof j?.body === 'string' ? j.body : ''}`;
+  if (mentionsAllergen(rawAll, allergens)) return null;
+  const title = typeof j?.title === 'string' ? stripEmoji(j.title.trim()) : '';
+  const body = typeof j?.body === 'string' ? stripEmoji(j.body.trim()) : '';
   if (!title || !body || cp(title) > TITLE_MAX || cp(body) > BODY_MAX) return null;
   const all = `${title}\n${body}`;
   if (!lockScreenSafe(all) || JUDGING.test(all) || guard(all) || mentionsAllergen(all, allergens)) return null;

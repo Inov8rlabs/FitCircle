@@ -174,31 +174,31 @@ export class SystemPostEngine {
     switch (eventType) {
       case 'workout_done':
         return names.length === 1
-          ? `${names[0]} just logged a workout 💪`
-          : `${this.joinNames(names)} all got moving today 🔥`;
+          ? `${names[0]} just logged a workout`
+          : `${this.joinNames(names)} all got moving today`;
 
       case 'streak_milestone':
-        return `${this.possessive(names[0])} on a ${payload?.streakDays ?? 0}-day streak — nice 🔥`;
+        return `${this.possessive(names[0])} on a ${payload?.streakDays ?? 0}-day streak — nice`;
 
       case 'circle_streak':
-        return `The circle's kept it going ${payload?.loggedAtCount ?? payload?.streakDays ?? 0} days strong 🔥`;
+        return `The circle's kept it going ${payload?.loggedAtCount ?? payload?.streakDays ?? 0} days strong`;
 
       case 'circle_streak_saved':
-        return `${names[0]} covered ${payload?.coveredName ?? 'a friend'} — the circle streak lives 🛡️`;
+        return `${names[0]} covered ${payload?.coveredName ?? 'a friend'} — the circle streak lives`;
 
       case 'circle_kickoff':
         return payload?.kickoffReason === 'full'
-          ? `We're ${payload?.memberCount ?? 3}! ${payload?.circleName ?? 'The circle'} starts now 🎉`
-          : `Let's go! ${payload?.circleName ?? 'The circle'} starts now. Seats stay open for friends 🎉`;
+          ? `We're ${payload?.memberCount ?? 3}! ${payload?.circleName ?? 'The circle'} starts now`
+          : `Let's go! ${payload?.circleName ?? 'The circle'} starts now. Seats stay open for friends.`;
 
       case 'quest_done':
-        return `${names[0]} finished the ${payload?.questName ?? 'quest'} 🎉`;
+        return `${names[0]} finished the ${payload?.questName ?? 'quest'}`;
 
       case 'challenge_milestone':
         return this.renderChallengeMilestone(payload?.challengeMilestone, payload?.challengeName ?? 'challenge');
 
       case 'challenge_resolved':
-        return `That's a wrap on the ${payload?.challengeName ?? 'challenge'}! Tap to see how it went 🏆`;
+        return `That's a wrap on the ${payload?.challengeName ?? 'challenge'}! Tap to see how it went`;
 
       case 'daily_summary': {
         const checkedIn = (payload as { checkedIn?: number } | undefined)?.checkedIn ?? 0;
@@ -207,24 +207,24 @@ export class SystemPostEngine {
         // only when someone checked in — "0 of 2 … nice momentum" was nonsense.
         if (total > 0 && checkedIn >= total) {
           return total === 1
-            ? 'Checked in today ✅'
-            : `Everyone checked in today — full house 🎉`;
+            ? 'Checked in today'
+            : `Everyone checked in today — full house`;
         }
-        return `${checkedIn} of ${total} checked in today 👏`;
+        return `${checkedIn} of ${total} checked in today`;
       }
 
       case 'member_joined':
-        return `${this.joinNames(names)} just joined — say hi 👋`;
+        return `${this.joinNames(names)} just joined — say hi`;
 
       case 'new_challenge':
         return `New challenge just dropped: ${payload?.challengeName ?? 'a new challenge'}. Who's in?`;
 
       case 'notable_meal':
-        return `${names[0]} logged a ${payload?.mealDescriptor ?? 'meal'} 🍽️`;
+        return `${names[0]} logged a ${payload?.mealDescriptor ?? 'meal'}`;
 
       case 'meal_logged':
         // Real meal posts are authored by CircleMealPostService with the entry title.
-        return `${names[0]} logged a meal 🍽️`;
+        return `${names[0]} logged a meal`;
 
       default: {
         // Exhaustiveness guard — every SystemEventType handled above.

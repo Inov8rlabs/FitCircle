@@ -10,6 +10,9 @@ const ai = vi.hoisted(() => ({
   generate: new Map<string, Array<string | Error | { text: string; finishReason: string }>>(),
   stream: new Map<string, Array<string[] | Error | { chunks: string[]; failAfter: number }>>(),
 }));
+// META recovery is its own model call; tests opt in through `recover` (default: nothing recovered).
+const recover = vi.hoisted(() => ({ fn: vi.fn(async (..._a: any[]): Promise<string | null> => null) }));
+vi.mock('../../fitzy/meta-recovery', () => ({ recoverMeta: (...a: any[]) => recover.fn(...a) }));
 vi.mock('ai', () => ({
   generateText: async (opts: any) => {
     ai.calls.push({ fn: 'generate', model: opts.model, messages: opts.messages, opts });
@@ -37,12 +40,13 @@ vi.mock('ai', () => ({
 
 import { META_MARKER, applyGuardrails, growthNudgeAllowed, parseMeta, splitMeta } from '../../fitzy/meta';
 import { CACHE_EPHEMERAL, DEFAULT_CHAT_MODEL, DEFAULT_DEEP_MODEL, thinkingOptions } from '../../fitzy/models';
+import { FITZY_UNAVAILABLE, onboardingFallbackAnswer } from '../../fitzy/fallback-answers';
 import { StreamGuard } from '../../fitzy/stream-guard';
 import { FitzyConversationService } from '../fitzy-conversation-service';
 import { FitzyFocusService, fitBody } from '../fitzy-focus-service';
 import { FitzyMemoryService, MEMORY_CAP, isExcludedMemory } from '../fitzy-memory-service';
 import { FitzyPlanService, sanitizeCommitments } from '../fitzy-plan-service';
-import { FitzyService, SAFE_FALLBACK, SYSTEM_PROMPT, setFitzyBackgroundScheduler, type FitzyStreamEvent } from '../fitzy-service';
+import { FitzyService, ONBOARDING_MAX_WORDS, SAFE_FALLBACK, SYSTEM_PROMPT, setFitzyBackgroundScheduler, type FitzyStreamEvent } from '../fitzy-service';
 import { UpgradeRequiredError } from '../usage-service';
 
 import { ReferralFakeDb, getReferralDb, setReferralDb } from './referral-fake-db';
@@ -94,7 +98,7 @@ describe('model routing, fallback, caching', () => {
     expect(db.rows('fitzy_messages').find((m) => m.role === 'assistant')).toMatchObject({ model: DEFAULT_CHAT_MODEL, input_tokens: 1200, output_tokens: 90 });
   });
 
-  it('falls back to the other model once, then SAFE_FALLBACK', async () => {
+  it('falls back to the other model once, then an honest "try again" (not the safety fallback)', async () => {
     ai.generate.set(DEFAULT_CHAT_MODEL, [new Error('timeout')]);
     ai.generate.set(DEFAULT_DEEP_MODEL, ['Sonnet saved the day.']);
     const ok = await FitzyService.chat(FREE, [{ role: 'user', content: 'hi' }]);
@@ -105,8 +109,10 @@ describe('model routing, fallback, caching', () => {
     ai.generate.set(DEFAULT_CHAT_MODEL, [new Error('down')]);
     ai.generate.set(DEFAULT_DEEP_MODEL, [new Error('down too')]);
     const safe = await FitzyService.chat(FREE, [{ role: 'user', content: 'hi again' }]);
-    expect(safe.answer).toBe(SAFE_FALLBACK);
+    // An outage is not a safety event: no SAFE_FALLBACK lecture, and the turn isn't flagged.
+    expect(safe.answer).toBe(FITZY_UNAVAILABLE);
     expect(safe.actions).toEqual([]);
+    expect(db.rows('fitzy_messages').filter((m) => m.role === 'assistant').at(-1)).toMatchObject({ guard_tripped: false, model: null });
   });
 
   it('env overrides the models', async () => {
@@ -168,7 +174,7 @@ describe('SSE streaming', () => {
     expect((events[1].data as any).text).toBe(SAFE_FALLBACK);
   });
 
-  it('stream failure before any text falls back to the other model; mid-answer failure replaces', async () => {
+  it('stream failure before any text falls back to the other model; mid-answer failure keeps the released sentences', async () => {
     ai.stream.set(DEFAULT_CHAT_MODEL, [new Error('gateway 500')]);
     ai.stream.set(DEFAULT_DEEP_MODEL, [['From Sonnet. ', 'All good.']]);
     let events = await collect(FREE, { message: 'hi' });
@@ -177,7 +183,63 @@ describe('SSE streaming', () => {
 
     ai.stream.set(DEFAULT_CHAT_MODEL, [{ chunks: ['First sentence. ', 'second never', ' arrives.'], failAfter: 1 }]);
     events = await collect(FREE, { message: 'hi' });
-    expect(events.map((e) => e.event)).toEqual(['meta', 'delta', 'replace', 'done']);
+    // The guard-approved sentence stays; no second model is spliced in and no safety "replace".
+    expect(events.map((e) => e.event)).toEqual(['meta', 'delta', 'done']);
+    expect((events.at(-1)!.data as any).answer).toBe('First sentence.');
+    expect((events.at(-1)!.data as any).suggestions.length).toBeGreaterThan(0); // static chips (no META)
+  });
+
+  it('a reply without META gets one META-only recovery call; its chips are used', async () => {
+    recover.fn.mockResolvedValueOnce('{"suggestions":["Lunch ideas?"],"actions":[]}');
+    ai.stream.set(DEFAULT_CHAT_MODEL, [['Oats with berries are a great start.']]);
+    const events = await collect(FREE, { message: 'Breakfast idea?' });
+    expect(recover.fn).toHaveBeenCalledWith(expect.objectContaining({ system: expect.any(Array) }), 'Oats with berries are a great start.', undefined);
+    expect((events.at(-1)!.data as any).suggestions).toEqual(['Lunch ideas?']);
+  });
+
+  it('chat replies may keep emoji; chips and action labels never do', async () => {
+    ai.stream.set(DEFAULT_CHAT_MODEL, [['Great choice 💪. ', 'Oats work well.', '\n<<<FITZY_META>>>{"suggestions":["More ideas 🍓?","Lunch?"],"actions":[{"type":"log_meal","label":"Log it 📸","payload":{}}]}']]);
+    const events = await collect(PRO, { message: 'Breakfast idea?' });
+    const done = events.at(-1)!.data as any;
+    expect(done.answer).toBe('Great choice 💪. Oats work well.');
+    expect(done.suggestions).toEqual(['More ideas?', 'Lunch?']);
+    for (const a of done.actions) expect(a.label).not.toMatch(/\p{Extended_Pictographic}/u);
+  });
+
+  it('onboarding answers are emoji-free even if the model adds one', async () => {
+    ai.stream.set(DEFAULT_CHAT_MODEL, [['Protein keeps you full 🍳.\n', '- Greek yogurt 🥣\n', 'Pick one.']]);
+    const events = await collect(FREE, { message: 'High-protein breakfast ideas?', context: 'onboarding' });
+    expect((events.at(-1)!.data as any).answer).toBe('Protein keeps you full.\n- Greek yogurt\nPick one.');
+  });
+
+  it('empty stream on the first model → retry on the other model', async () => {
+    ai.calls.length = 0;
+    ai.stream.set(DEFAULT_CHAT_MODEL, [[]]);
+    ai.stream.set(DEFAULT_DEEP_MODEL, [['Second try works.']]);
+    const events = await collect(FREE, { message: 'hi' });
+    expect(ai.calls.filter((c) => c.fn === 'stream').map((c) => c.model)).toEqual([DEFAULT_CHAT_MODEL, DEFAULT_DEEP_MODEL]);
+    expect((events.at(-1)!.data as any).answer).toBe('Second try works.');
+  });
+
+  it('both models empty → deterministic answer: per onboarding chip, or "try again" in normal chat', async () => {
+    ai.stream.set(DEFAULT_CHAT_MODEL, [[], []]);
+    ai.stream.set(DEFAULT_DEEP_MODEL, [[], []]);
+    let events = await collect(FREE, { message: 'High-protein breakfast ideas?', context: 'onboarding' });
+    const onboarding = (events.at(-1)!.data as any).answer as string;
+    expect(onboarding).toBe(onboardingFallbackAnswer('High-protein breakfast ideas?'));
+    expect(events.filter((e) => e.event === 'delta').map((e) => (e.data as any).text).join('')).toBe(onboarding);
+    events = await collect(FREE, { message: 'hi' });
+    expect((events.at(-1)!.data as any).answer).toBe(FITZY_UNAVAILABLE);
+  });
+
+  it('onboarding: the visible answer is capped at ONBOARDING_MAX_WORDS at a sentence / bullet end', async () => {
+    const bullet = '- ' + 'word '.repeat(30).trim() + '\n';
+    ai.stream.set(DEFAULT_CHAT_MODEL, [['Short opener here.\n', bullet, bullet, bullet, bullet, 'Closing line.', '\n<<<FITZY_META>>>{"suggestions":["More ideas?"],"actions":[]}']]);
+    const events = await collect(FREE, { message: 'Easy ways to eat more veg?', context: 'onboarding' });
+    const done = events.at(-1)!.data as any;
+    expect(done.answer.split(/\s+/).length).toBeLessThanOrEqual(ONBOARDING_MAX_WORDS);
+    expect(done.answer.endsWith('word')).toBe(true); // cut after a whole bullet
+    expect(done.suggestions).toEqual(['More ideas?']); // META still read after the cap
   });
 
   it('quota exhausted → UpgradeRequiredError before any event', async () => {

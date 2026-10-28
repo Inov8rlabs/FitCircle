@@ -224,11 +224,26 @@ describe('POST /api/mobile/streaks/check-in', () => {
       name: '3-Day Spark',
       description: 'Habit ignited — three days in a row!',
       badge: '✨',
+      icon: 'flame',
       // iOS StreakMilestone additionally requires these
       id: 1,
       title: '3-Day Spark',
       is_achieved: true,
     });
+  });
+});
+
+describe('icon keys (1.2.0+)', () => {
+  it('X-App-Version 1.2.0 gets badge: null + icon; the message has no emoji', async () => {
+    seedUser(['2026-09-26', '2026-09-27']);
+    const req = new NextRequest('http://localhost/api/mobile/streaks/check-in', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'X-App-Version': '1.2.0' },
+      body: JSON.stringify({ mood: 4, energy: 4 }),
+    });
+    const body = await (await checkIn(req)).json();
+    expect(body.data.milestoneAchieved).toMatchObject({ days: 3, badge: null, icon: 'flame', title: '3-Day Spark' });
+    expect(body.data.message).toBe('Milestone achieved: 3-Day Spark, 3 days!');
   });
 });
 

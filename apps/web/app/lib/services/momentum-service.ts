@@ -1,3 +1,4 @@
+import type { IconKey } from '../design/icons';
 import { createAdminSupabase } from '../supabase-admin';
 
 // ============================================================================
@@ -26,12 +27,16 @@ export interface MomentumStatus {
  * A milestone is sent under two sets of keys with identical values:
  * `days` / `badge` (the original keys, read by Android and the web app) and
  * `day_threshold` / `badge_emoji` (the keys the iOS model reads). Keep both.
+ * `badge` / `badge_emoji` are legacy emoji for shipped apps (≤ 1.1.x); 1.2.0+
+ * get null (applyIconCompat) and render `icon`.
  */
 export interface MomentumMilestone {
   days: number;
   name: string;
   description: string;
   badge: string;
+  /** Icon key (design/icons.json). */
+  icon: IconKey;
   unlocked: boolean;
   unlocked_at?: string;
   /** Same value as `days`. */
@@ -59,14 +64,14 @@ export interface MomentumCheckInResult {
 // CONSTANTS
 // ============================================================================
 
-const MILESTONES: Pick<MomentumMilestone, 'days' | 'name' | 'description' | 'badge'>[] = [
-  { days: 3, name: '3-Day Spark', description: 'Your momentum is building!', badge: '🔥' },
-  { days: 7, name: '1-Week Flame', description: 'One week of momentum!', badge: '💪' },
-  { days: 14, name: '2-Week Blaze', description: 'Two weeks strong!', badge: '🏆' },
-  { days: 30, name: 'Monthly Inferno', description: 'A full month of fire!', badge: '🎖️' },
-  { days: 60, name: '60-Day Furnace', description: 'Unstoppable heat!', badge: '⭐' },
-  { days: 100, name: 'Centurion Flame', description: 'The elite 100-day fire!', badge: '👑' },
-  { days: 365, name: 'Eternal Flame', description: 'A full year of momentum!', badge: '🏅' },
+const MILESTONES: Pick<MomentumMilestone, 'days' | 'name' | 'description' | 'badge' | 'icon'>[] = [
+  { days: 3, name: '3-Day Spark', description: 'Your momentum is building!', badge: '🔥', icon: 'flame' },
+  { days: 7, name: '1-Week Flame', description: 'One week of momentum!', badge: '💪', icon: 'strength' },
+  { days: 14, name: '2-Week Blaze', description: 'Two weeks strong!', badge: '🏆', icon: 'trophy' },
+  { days: 30, name: 'Monthly Inferno', description: 'A full month of fire!', badge: '🎖️', icon: 'medal' },
+  { days: 60, name: '60-Day Furnace', description: 'Unstoppable heat!', badge: '⭐', icon: 'star' },
+  { days: 100, name: 'Centurion Flame', description: 'The elite 100-day fire!', badge: '👑', icon: 'crown' },
+  { days: 365, name: 'Eternal Flame', description: 'A full year of momentum!', badge: '🏅', icon: 'medal' },
 ];
 
 // Milestone day values for protection check
@@ -450,7 +455,7 @@ export class MomentumService {
 
   /** A milestone under both key sets (see MomentumMilestone). */
   private static withAliases(
-    milestone: Pick<MomentumMilestone, 'days' | 'name' | 'description' | 'badge'>,
+    milestone: Pick<MomentumMilestone, 'days' | 'name' | 'description' | 'badge' | 'icon'>,
     unlocked: boolean,
     unlockedAt?: string
   ): MomentumMilestone {

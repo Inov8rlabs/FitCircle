@@ -40,6 +40,14 @@ npm run fitzy:eval -- --model=anthropic/claude-haiku-4.5 --baseline=.fitzy-eval/
 
 Exit codes: `0` all gates pass, `1` a gate failed, `2` config/auth error.
 
+**Run it on a Mac that can't sleep:** `caffeinate -i npm run fitzy:eval …`. On battery, an idle Mac drops into
+maintenance sleep for minutes at a time. Every in-flight stream freezes, its socket dies, and the run reports it
+as a stall or an empty completion with no finish reason and no usage. All of the "empty completions" of
+2026-10-28 matched `pmset -g log` sleep/wake times to the second (see docs/FITZY_V2_SPEC.md §3.1).
+`caffeinate -i` is not enough on battery (maintenance sleep still happens), so the chat suite also runs a
+heartbeat. A reply that overlaps a host-sleep gap is re-run (at most 3 times) and is counted in the info gate
+"replies re-run because the eval host slept" rather than as a model result.
+
 ## Credentials
 
 The eval reads `AI_GATEWAY_API_KEY` from the environment or `apps/web/.env.local` (same loader as
@@ -53,9 +61,12 @@ is `cd apps/web && vercel env pull .env.local`, which writes a fresh `VERCEL_OID
 
 Nothing is copied from production. The eval imports:
 
-- **chat**: `chatSystemMessages` (cached `SYSTEM_PROMPT` + grounding), `streamFrom` (the exact AI SDK
-  options via `callOptions`), `StreamGuard` with `FitzyService.guard` and `SAFE_FALLBACK`,
-  `splitMeta`/`parseMeta`, and `FitzyService.resolveMeta` (chips plus server-guarded actions).
+- **chat**: `chatSystemMessages` (cached `SYSTEM_PROMPT` + grounding) and `FitzyService.runModelStream`, the
+  production streaming turn: `streamFrom` (the exact AI SDK options via `callOptions`, plus the stall watchdog),
+  `StreamGuard` with `FitzyService.guard`, `SAFE_FALLBACK` and the onboarding word cap, one retry on the other
+  model, and the deterministic fallback answer. Then `splitMeta`/`parseMeta` and `FitzyService.resolveMeta`
+  (chips plus server-guarded actions). Words are counted on what the user sees; `rawWords`, `attempts`,
+  `source` (model / partial / canned) and `capped` are reported per reply.
 - **grounding**: personas in `fixtures/cases.json` are structured data. They are rendered by the same
   builders `FitzyService.buildContext` uses (`app/lib/fitzy/grounding.ts`).
 - **plan / preview / focus / recap / memory**: the production request builders (`planRequest`,

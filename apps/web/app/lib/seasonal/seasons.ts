@@ -3,11 +3,15 @@
  * ships without an app release. Dates are calendar days (inclusive start,
  * exclusive-ish end: the circle's end_date = endsAt).
  */
+import type { IconKey } from '@/lib/design/icons';
 
 export interface Season {
   key: 'hold_the_line' | 'new_year_reset' | 'ramadan';
   title: string;
+  /** Legacy emoji for shipped apps (≤ 1.1.x); null for 1.2.0+ (applyIconCompat). */
   emoji: string;
+  /** Icon key (design/icons.json). */
+  icon: IconKey;
   tagline: string;
   description: string;
   startsAt: string;
@@ -23,6 +27,7 @@ export const SEASONS: readonly Season[] = [
     key: 'hold_the_line',
     title: 'Hold the Line',
     emoji: '❄️',
+    icon: 'snowflake',
     tagline: "Maintain, don't gain — together.",
     description:
       'From Nov 15 to Dec 15, your circle checks in daily and heads into the holidays strong. No diets, no guilt: just showing up.',
@@ -42,6 +47,7 @@ export const SEASONS: readonly Season[] = [
     key: 'new_year_reset',
     title: 'Fresh Start',
     emoji: '🌅',
+    icon: 'sunrise',
     tagline: 'New year, healthier you. Start it together.',
     description: 'Start 2027 with your people: check in every day for 31 days and build healthy habits that last all year.',
     startsAt: '2027-01-01',
@@ -60,6 +66,7 @@ export const SEASONS: readonly Season[] = [
     key: 'ramadan',
     title: 'Ramadan Circle',
     emoji: '🌙',
+    icon: 'moon',
     tagline: 'Suhoor, iftar and a gentle walk, together.',
     description:
       'Around Feb 8 to Mar 9, 2027 (dates follow the moon sighting). Log suhoor and iftar, stay hydrated, and take an evening walk with your circle.',

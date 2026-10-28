@@ -1,5 +1,8 @@
 import { type NextRequest, NextResponse } from 'next/server';
 
+import { iconKeyForEmoji, isIconKey, type IconKey } from '@/lib/design/icons';
+import { ogIconSvg, OG_ICON_KEYS } from '@/lib/design/og-icons';
+
 /**
  * GET /api/og/share-card?type=milestone&data=base64encoded
  * Renders a share card as HTML for OG image generation.
@@ -84,7 +87,7 @@ function renderCardHtml(cardType: string, data: Record<string, unknown>): string
       border-radius: 50%;
       opacity: 0.08;
     }
-    .badge { font-size: 48px; margin-bottom: 8px; }
+    .badge { display: flex; width: 48px; height: 48px; margin-bottom: 8px; color: #ffffff; }
     .title { font-size: 28px; font-weight: 700; margin-bottom: 4px; }
     .subtitle { font-size: 16px; opacity: 0.8; margin-bottom: 16px; }
     .stat { font-size: 48px; font-weight: 800; }
@@ -151,7 +154,7 @@ function getCardContent(cardType: string, data: Record<string, unknown>): string
       const days = data.dayCount ?? data.days ?? data.currentStreak ?? data.current_momentum;
       return `
         <div>
-          <div class="badge">${safeEmoji(data.badgeEmoji ?? data.badge, '🏆')}</div>
+          <div class="badge">${badgeIcon(data, 'trophy')}</div>
           <div class="title">${escapeHtml(String(name || 'Milestone'))}</div>
           <div class="subtitle">Momentum milestone achieved</div>
         </div>
@@ -169,7 +172,7 @@ function getCardContent(cardType: string, data: Record<string, unknown>): string
       const name = data.display_name ?? data.displayName;
       return `
         <div>
-          <div class="badge">${safeEmoji(data.badge ?? data.badgeEmoji, '🔥')}</div>
+          <div class="badge">${badgeIcon(data, 'flame')}</div>
           <div class="title">${escapeHtml(title)}</div>
           <div class="subtitle">${escapeHtml(name ? `${String(name)} kept the streak alive` : 'Daily streak on FitCircle')}</div>
         </div>
@@ -183,7 +186,7 @@ function getCardContent(cardType: string, data: Record<string, unknown>): string
     case 'challenge_complete':
       return `
         <div>
-          <div class="badge">🎯</div>
+          <div class="badge">${badgeIcon(data, 'target')}</div>
           <div class="title">Challenge Complete!</div>
           <div class="subtitle">${escapeHtml(String(data.challengeName || 'Challenge'))}</div>
         </div>
@@ -196,7 +199,7 @@ function getCardContent(cardType: string, data: Record<string, unknown>): string
     case 'perfect_week':
       return `
         <div>
-          <div class="badge">⭐</div>
+          <div class="badge">${badgeIcon(data, 'star')}</div>
           <div class="title">Perfect Week!</div>
           <div class="subtitle">${escapeHtml(String(data.weekStart || ''))} - ${escapeHtml(String(data.weekEnd || ''))}</div>
         </div>
@@ -209,7 +212,7 @@ function getCardContent(cardType: string, data: Record<string, unknown>): string
     case 'momentum_flame':
       return `
         <div>
-          <div class="badge">🔥</div>
+          <div class="badge">${badgeIcon(data, 'flame')}</div>
           <div class="title">On Fire!</div>
           <div class="subtitle">Momentum Level ${safeNumber(data.flameLevel, 1)}</div>
         </div>
@@ -222,7 +225,7 @@ function getCardContent(cardType: string, data: Record<string, unknown>): string
     case 'circle_boost':
       return `
         <div>
-          <div class="badge">🚀</div>
+          <div class="badge">${badgeIcon(data, 'bolt')}</div>
           <div class="title">Circle Boost!</div>
           <div class="subtitle">${escapeHtml(String(data.circleName || 'Circle'))}</div>
         </div>
@@ -247,17 +250,19 @@ function safeNumber(value: unknown, fallback = 0): number {
   return Number.isFinite(n) ? n : fallback;
 }
 
+const OG_KEYS: ReadonlySet<IconKey> = new Set(OG_ICON_KEYS);
+
 /**
- * Allowlists badgeEmoji to a short, safe string: a single grapheme (emoji or
- * plain character) up to a few code units, with no HTML-significant
- * characters. Anything else falls back to the default.
+ * The card's badge as an inline SVG icon (DESIGN_LANGUAGE §6: no emoji). The
+ * card data may name an icon key (`icon`, 1.2.0+ apps) or carry the legacy
+ * badge emoji (`badgeEmoji` / `badge`, shipped apps), which maps to its key.
+ * Only server-owned SVG markup is emitted, so client data never reaches the HTML.
  */
-function safeEmoji(value: unknown, fallback: string): string {
-  if (typeof value !== 'string') return fallback;
-  // Reject anything containing HTML-significant characters or excessive length.
-  if (value.length === 0 || value.length > 8) return fallback;
-  if (/[<>&"'`]/.test(value)) return fallback;
-  return escapeHtml(value);
+function badgeIcon(data: Record<string, unknown>, fallback: IconKey): string {
+  const legacy = data.badgeEmoji ?? data.badge;
+  const candidates = [data.icon, data.icon_key, typeof legacy === 'string' ? iconKeyForEmoji(legacy) : null];
+  const key = candidates.find((k): k is IconKey => isIconKey(k) && OG_KEYS.has(k)) ?? fallback;
+  return ogIconSvg(key) ?? ogIconSvg(fallback) ?? '';
 }
 
 function escapeHtml(str: string): string {

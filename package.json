@@ -16,7 +16,9 @@
     "postinstall": "node scripts/patch-amplitude-diagnostics.cjs",
     "clean": "rm -rf node_modules apps/*/node_modules packages/*/node_modules",
     "analytics:generate": "node analytics/codegen.mjs",
-    "analytics:check": "node analytics/codegen.mjs --check --only web"
+    "analytics:check": "node analytics/codegen.mjs --check --only web",
+    "design:generate": "node design/codegen.mjs",
+    "design:check": "node design/codegen.mjs --check --only web"
   },
   "devDependencies": {
     "@types/node": "^20.11.0",

@@ -5,6 +5,8 @@
  * preview (CAMPAIGNS_SPEC §1, §3, §7, §9). No React / Next imports.
  */
 
+import { resolveIconKey, type IconKey } from '@/lib/design/icons';
+
 import type {
   AdminCampaign,
   ArtSlot,
@@ -100,18 +102,21 @@ export const PALETTE_PRESETS: readonly PalettePreset[] = [
   { id: 'brand', name: 'Brand', colors: ['#8b5cf6', '#6366f1', '#f97316'], accent: '#8b5cf6', particles: 'none' },
 ];
 
-export const GLYPHS: readonly { id: CampaignGlyph; label: string; emoji: string }[] = [
-  { id: 'snowflake', label: 'Snowflake', emoji: '❄️' },
-  { id: 'gift', label: 'Gift', emoji: '🎁' },
-  { id: 'year', label: 'Year', emoji: '🔢' },
-  { id: 'sun', label: 'Sun', emoji: '☀️' },
-  { id: 'moon', label: 'Moon', emoji: '🌙' },
-  { id: 'flame', label: 'Flame', emoji: '🔥' },
-  { id: 'leaf', label: 'Leaf', emoji: '🍃' },
-  { id: 'heart', label: 'Heart', emoji: '💜' },
-  { id: 'star', label: 'Star', emoji: '⭐' },
-  { id: 'bolt', label: 'Bolt', emoji: '⚡' },
+/** Art glyphs. `emoji` is the admin picker's legacy preview; `icon` is the key apps render. */
+export const GLYPHS: readonly { id: CampaignGlyph; label: string; emoji: string; icon: IconKey }[] = [
+  { id: 'snowflake', label: 'Snowflake', emoji: '❄️', icon: 'snowflake' },
+  { id: 'gift', label: 'Gift', emoji: '🎁', icon: 'gift' },
+  { id: 'year', label: 'Year', emoji: '🔢', icon: 'calendar' },
+  { id: 'sun', label: 'Sun', emoji: '☀️', icon: 'sun' },
+  { id: 'moon', label: 'Moon', emoji: '🌙', icon: 'moon' },
+  { id: 'flame', label: 'Flame', emoji: '🔥', icon: 'flame' },
+  { id: 'leaf', label: 'Leaf', emoji: '🍃', icon: 'leaf' },
+  { id: 'heart', label: 'Heart', emoji: '💜', icon: 'heart' },
+  { id: 'star', label: 'Star', emoji: '⭐', icon: 'star' },
+  { id: 'bolt', label: 'Bolt', emoji: '⚡', icon: 'bolt' },
 ];
+
+export const GLYPH_ICON: Record<CampaignGlyph, IconKey> = Object.fromEntries(GLYPHS.map((g) => [g.id, g.icon])) as Record<CampaignGlyph, IconKey>;
 
 export function matchPreset(palette: readonly string[]): PalettePreset | null {
   const p = palette.map((c) => c.toLowerCase()).join(',');
@@ -173,6 +178,7 @@ export function buildPreviewView(
         date: addDays(c.startsAt, day - 1),
         state,
         emoji: visible ? d?.emoji ?? null : null,
+        icon: visible && d ? resolveIconKey(d.icon, d.emoji) : null,
         title: visible ? d?.title ?? null : null,
         task: visible ? d?.task ?? null : null,
       });
@@ -204,6 +210,7 @@ export function buildPreviewView(
     template: c.template,
     title: c.title,
     emoji: c.emoji,
+    icon: resolveIconKey(c.icon, c.emoji, GLYPH_ICON[c.glyph]),
     tagline: c.tagline,
     description: c.description,
     accent: c.accent,
@@ -228,7 +235,7 @@ export function buildPreviewView(
     },
     heroAspect: art.inAppHero?.width && art.inAppHero?.height ? Math.round((art.inAppHero.width / art.inAppHero.height) * 1000) / 1000 : null,
     circle: c.circle,
-    marks: c.marks,
+    marks: (c.marks ?? []).map((m) => ({ ...m, icon: resolveIconKey(m.icon, m.emoji, 'calendar') })),
     participant: { joined: opts.joined ?? false, reminders: opts.reminders ?? false },
     calendar,
     howItWorks: howItWorksFor(c),
@@ -330,7 +337,7 @@ export function publishChecklist(c: AdminCampaign | (CampaignInput & { art?: Adm
     label: 'In-app hero art',
     ok: Boolean(art.inAppHero),
     blocking: false,
-    hint: 'Without it the apps show a gradient + emoji fallback',
+    hint: 'Without it the apps show a gradient + icon fallback',
     section: 'creative',
   });
   const rules = appStoreRules(c);
@@ -364,7 +371,7 @@ export const PLACEHOLDERS: readonly { token: string; help: string; dailyOnly?: b
   { token: '{{days_left}}', help: 'Days until the end' },
   { token: '{{day}}', help: 'Door / day number', dailyOnly: true },
   { token: '{{door_title}}', help: "Today's door title", dailyOnly: true },
-  { token: '{{door_emoji}}', help: "Today's door emoji", dailyOnly: true },
+  { token: '{{door_emoji}}', help: "Today's door emoji (in-app only: push copy is sent without emoji)", dailyOnly: true },
 ];
 
 export function renderPlaceholders(text: string, ctx: Record<string, string | number | null | undefined>): string {
@@ -397,46 +404,46 @@ export function uniqueKey(prefix: string, existing: readonly { key: string }[]):
 // ---------------------------------------------------------------------------
 
 export const DOOR_IDEAS: readonly Omit<CalendarDoorContent, 'day'>[] = [
-  { emoji: '🚶', title: 'First steps', task: 'A 10-minute walk, any pace.' },
-  { emoji: '💧', title: 'Water first', task: 'A glass of water before your first coffee or tea.' },
-  { emoji: '🧘', title: 'Unclench', task: '5 minutes of stretching: neck, shoulders, hips.' },
-  { emoji: '🥦', title: 'Add a colour', task: 'Add one vegetable or fruit to a meal.' },
-  { emoji: '📵', title: 'Screen-free bite', task: 'Eat one meal without your phone.' },
-  { emoji: '👟', title: 'Step it up', task: '6,000 steps today.' },
-  { emoji: '😴', title: 'Wind down', task: 'Lights out 20 minutes earlier tonight.' },
-  { emoji: '🙌', title: 'Cheer someone', task: "React to a friend's post in your circle." },
-  { emoji: '🪜', title: 'Take the stairs', task: 'Pick stairs over the lift or escalator today.' },
-  { emoji: '🍲', title: 'Cook it', task: 'Make one meal at home.' },
-  { emoji: '🌬️', title: 'Breathe', task: '2 minutes of slow breathing (4 in, 6 out).' },
-  { emoji: '🏃', title: 'Move 20', task: '20 minutes of any movement you enjoy.' },
-  { emoji: '🍎', title: 'Smart snack', task: 'Swap one snack for fruit or nuts.' },
-  { emoji: '🧊', title: 'Hydrate', task: '8 glasses of water today.' },
-  { emoji: '📝', title: 'Log it all', task: 'Log every meal today.' },
-  { emoji: '☀️', title: 'Daylight', task: '10 minutes outside in daylight.' },
-  { emoji: '💪', title: 'Mini workout', task: '10 squats, 10 push-ups (any version), 20-second plank.' },
-  { emoji: '🫶', title: 'Bring a friend', task: 'Invite one friend to join your circle.' },
-  { emoji: '🍵', title: 'Slow sip', task: 'Swap one sugary drink for water or tea.' },
-  { emoji: '🎶', title: 'Dance break', task: 'One song, full volume, dance it out.' },
-  { emoji: '🌙', title: 'Evening stroll', task: 'A short walk after dinner.' },
-  { emoji: '🥗', title: 'Plate check', task: 'Half your plate vegetables at one meal.' },
-  { emoji: '🤝', title: 'Walk and talk', task: 'Walk with someone you love.' },
-  { emoji: '🏆', title: 'Share a win', task: 'Check in and share one win from this month.' },
-  { emoji: '🧘‍♀️', title: 'Stretch it out', task: '10 minutes of yoga or mobility.' },
-  { emoji: '🥚', title: 'Protein first', task: 'Start one meal with a protein.' },
-  { emoji: '🫐', title: 'Berry good', task: 'Add a handful of berries to your day.' },
-  { emoji: '📖', title: 'Read, not scroll', task: '10 minutes with a book before bed.' },
-  { emoji: '🚲', title: 'Wheels', task: 'Bike, scoot or skate somewhere instead of driving.' },
-  { emoji: '🧺', title: 'Prep ahead', task: "Prep tomorrow's lunch tonight." },
-  { emoji: '🌳', title: 'Green time', task: 'Spend 15 minutes in a park or garden.' },
-  { emoji: '🍽️', title: 'Slow down', task: 'Put your fork down between bites at one meal.' },
-  { emoji: '⏱️', title: 'Desk break', task: 'Stand up and move for 2 minutes every hour.' },
-  { emoji: '🏊', title: 'Try something new', task: 'Try a workout you have never done before.' },
-  { emoji: '🧡', title: 'Kind words', task: 'Send a friend an encouraging message.' },
-  { emoji: '🌅', title: 'Early light', task: 'Get outside within an hour of waking.' },
-  { emoji: '🥜', title: 'Fuel up', task: 'Have a balanced breakfast.' },
-  { emoji: '🎯', title: 'Set a goal', task: 'Write down one small goal for this week.' },
-  { emoji: '🙏', title: 'Gratitude', task: 'Note three things you are grateful for.' },
-  { emoji: '🎉', title: 'Celebrate', task: 'Check in and celebrate how far you have come.' },
+  { emoji: '🚶', icon: 'walk', title: 'First steps', task: 'A 10-minute walk, any pace.' },
+  { emoji: '💧', icon: 'water', title: 'Water first', task: 'A glass of water before your first coffee or tea.' },
+  { emoji: '🧘', icon: 'mindful', title: 'Unclench', task: '5 minutes of stretching: neck, shoulders, hips.' },
+  { emoji: '🥦', icon: 'produce', title: 'Add a colour', task: 'Add one vegetable or fruit to a meal.' },
+  { emoji: '📵', icon: 'no_phone', title: 'Screen-free bite', task: 'Eat one meal without your phone.' },
+  { emoji: '👟', icon: 'steps', title: 'Step it up', task: '6,000 steps today.' },
+  { emoji: '😴', icon: 'sleep', title: 'Wind down', task: 'Lights out 20 minutes earlier tonight.' },
+  { emoji: '🙌', icon: 'chat', title: 'Cheer someone', task: "React to a friend's post in your circle." },
+  { emoji: '🪜', icon: 'stairs', title: 'Take the stairs', task: 'Pick stairs over the lift or escalator today.' },
+  { emoji: '🍲', icon: 'cook', title: 'Cook it', task: 'Make one meal at home.' },
+  { emoji: '🌬️', icon: 'breathe', title: 'Breathe', task: '2 minutes of slow breathing (4 in, 6 out).' },
+  { emoji: '🏃', icon: 'run', title: 'Move 20', task: '20 minutes of any movement you enjoy.' },
+  { emoji: '🍎', icon: 'produce', title: 'Smart snack', task: 'Swap one snack for fruit or nuts.' },
+  { emoji: '🧊', icon: 'water', title: 'Hydrate', task: '8 glasses of water today.' },
+  { emoji: '📝', icon: 'note', title: 'Log it all', task: 'Log every meal today.' },
+  { emoji: '☀️', icon: 'sun', title: 'Daylight', task: '10 minutes outside in daylight.' },
+  { emoji: '💪', icon: 'strength', title: 'Mini workout', task: '10 squats, 10 push-ups (any version), 20-second plank.' },
+  { emoji: '🫶', icon: 'person_add', title: 'Bring a friend', task: 'Invite one friend to join your circle.' },
+  { emoji: '🍵', icon: 'beverage', title: 'Slow sip', task: 'Swap one sugary drink for water or tea.' },
+  { emoji: '🎶', icon: 'music', title: 'Dance break', task: 'One song, full volume, dance it out.' },
+  { emoji: '🌙', icon: 'moon', title: 'Evening stroll', task: 'A short walk after dinner.' },
+  { emoji: '🥗', icon: 'produce', title: 'Plate check', task: 'Half your plate vegetables at one meal.' },
+  { emoji: '🤝', icon: 'community', title: 'Walk and talk', task: 'Walk with someone you love.' },
+  { emoji: '🏆', icon: 'trophy', title: 'Share a win', task: 'Check in and share one win from this month.' },
+  { emoji: '🧘‍♀️', icon: 'mindful', title: 'Stretch it out', task: '10 minutes of yoga or mobility.' },
+  { emoji: '🥚', icon: 'meal', title: 'Protein first', task: 'Start one meal with a protein.' },
+  { emoji: '🫐', icon: 'produce', title: 'Berry good', task: 'Add a handful of berries to your day.' },
+  { emoji: '📖', icon: 'book', title: 'Read, not scroll', task: '10 minutes with a book before bed.' },
+  { emoji: '🚲', icon: 'cycle', title: 'Wheels', task: 'Bike, scoot or skate somewhere instead of driving.' },
+  { emoji: '🧺', icon: 'basket', title: 'Prep ahead', task: "Prep tomorrow's lunch tonight." },
+  { emoji: '🌳', icon: 'tree', title: 'Green time', task: 'Spend 15 minutes in a park or garden.' },
+  { emoji: '🍽️', icon: 'meal', title: 'Slow down', task: 'Put your fork down between bites at one meal.' },
+  { emoji: '⏱️', icon: 'stopwatch', title: 'Desk break', task: 'Stand up and move for 2 minutes every hour.' },
+  { emoji: '🏊', icon: 'swim', title: 'Try something new', task: 'Try a workout you have never done before.' },
+  { emoji: '🧡', icon: 'chat', title: 'Kind words', task: 'Send a friend an encouraging message.' },
+  { emoji: '🌅', icon: 'sunrise', title: 'Early light', task: 'Get outside within an hour of waking.' },
+  { emoji: '🥜', icon: 'meal', title: 'Fuel up', task: 'Have a balanced breakfast.' },
+  { emoji: '🎯', icon: 'target', title: 'Set a goal', task: 'Write down one small goal for this week.' },
+  { emoji: '🙏', icon: 'heart', title: 'Gratitude', task: 'Note three things you are grateful for.' },
+  { emoji: '🎉', icon: 'celebration', title: 'Celebrate', task: 'Check in and celebrate how far you have come.' },
 ];
 
 /**
@@ -501,6 +508,7 @@ export function newCampaignInput(template: CampaignTemplate, today: string = tod
     template,
     title: '',
     emoji: template === 'daily_calendar' ? '🎁' : '✨',
+    icon: template === 'daily_calendar' ? 'gift' : 'sparkles',
     tagline: '',
     description: '',
     ctaLabel: null,
@@ -534,6 +542,7 @@ export function toInput(c: AdminCampaign | CampaignInput): CampaignInput {
     template: c.template,
     title: c.title,
     emoji: c.emoji,
+    icon: c.icon ?? null,
     tagline: c.tagline,
     description: c.description,
     ctaLabel: c.ctaLabel ?? null,
@@ -572,17 +581,17 @@ export function howItWorksFor(c: { template: CampaignTemplate; startsAt: string;
   switch (c.template) {
     case 'seasonal_circle':
       return [
-        { emoji: '👥', title: 'Fill 5 seats', body: `Invite 4 friends before ${shortDate(c.startsAt)}.` },
-        { emoji: '✅', title: 'Check in daily', body: `${range}. A meal, a walk, water: it all counts.` },
-        { emoji: '🔥', title: 'Keep the streak', body: 'Show up together. Friends can save a missed day.' },
+        { emoji: '👥', icon: 'community', title: 'Fill 5 seats', body: `Invite 4 friends before ${shortDate(c.startsAt)}.` },
+        { emoji: '✅', icon: 'check', title: 'Check in daily', body: `${range}. A meal, a walk, water: it all counts.` },
+        { emoji: '🔥', icon: 'flame', title: 'Keep the streak', body: 'Show up together. Friends can save a missed day.' },
       ];
     case 'daily_calendar':
       return [
-        { emoji: '🗓️', title: 'A door a day', body: `${range}. A new mini challenge each morning.` },
-        { emoji: '✅', title: 'Do the tiny task', body: 'A few minutes, then tap done.' },
-        { emoji: '👯', title: 'Cheer friends on', body: 'See who opened today.' },
+        { emoji: '🗓️', icon: 'calendar', title: 'A door a day', body: `${range}. A new mini challenge each morning.` },
+        { emoji: '✅', icon: 'check', title: 'Do the tiny task', body: 'A few minutes, then tap done.' },
+        { emoji: '👯', icon: 'community', title: 'Cheer friends on', body: 'See who opened today.' },
       ];
     default:
-      return [{ emoji: '✨', title: 'Jump in', body: `Running ${range}.` }];
+      return [{ emoji: '✨', icon: 'sparkles', title: 'Jump in', body: `Running ${range}.` }];
   }
 }

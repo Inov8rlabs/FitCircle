@@ -34,6 +34,21 @@ Events (each `event: <name>\ndata: <json>\n\n`):
 - `done` `{ messageId, answer, suggestions: string[≤3], actions: Action[≤2], disclaimer, remaining }`
 - `error` `{ code, message, paywall? }` — `UPGRADE_REQUIRED` carries `paywall` (§6), `RATE_LIMITED`, `UNAUTHORIZED`, `INTERNAL`.
 Keep a heartbeat comment `: ping` every 10 s. `Cache-Control: no-store`, `X-Accel-Buffering: no`. `export const maxDuration = 60`.
+
+**Reliability (2026-10-28, `FitzyService.runModelStream`):**
+- **Stall watchdog.** A stream that sends no first chunk in 12 s, goes quiet for 8 s, or runs past 25 s is aborted and retried once on the other model (`lib/fitzy/models.ts`).
+  - The AI SDK `timeout` option does not end a stream that simply stops sending: checked with plain Node, `timeout: 2000` had not rejected after 3 s.
+  - Without the watchdog, a real gateway stall would hold the user's spinner until `maxDuration`.
+- **Empty reply.** A stream that ends with no visible text is also retried on the other model.
+- **Failure after text is on screen.** The guard-approved sentences already shown stay. The client gets no `replace` and no second model's text, and the chips fall back to the static topic suggestions.
+- **Nothing from either model.** The answer is deterministic and plain text:
+  - onboarding: a short answer per suggestion chip (`lib/fitzy/fallback-answers.ts`);
+  - normal chat: "Sorry, I couldn't put an answer together just now…".
+  - Neither case is `SAFE_FALLBACK`: an outage isn't a safety event.
+- **META recovery.** A reply that ends without a parseable META block (about 1 in 30 live replies) gets one non-streaming, META-only call (`lib/fitzy/meta-recovery.ts`). It is framed as an app instruction: a plain user request was refused as prompt extraction on safety topics, and the model doesn't support assistant prefill. Two tries within 6 s; otherwise static chips.
+- **Emoji (owner decision, 2026-10-28).** Chat reply text may use one or two emoji where natural. Chips and action labels are always stripped server-side, and onboarding answers are emoji-free (StreamGuard `noEmoji`).
+- **Onboarding length.** The visible answer is capped at 100 words (prompt target 70), cut at the last sentence or bullet that fits. The META block is still read.
+- **Eval caveat.** The "empty completions" seen in the live eval on 2026-10-28 were the eval Mac going into maintenance sleep mid-run: `pmset -g log` wake times match each stalled run's end to the second. Run the eval under `caffeinate -i`.
 ### 3.2 `POST /api/mobile/fitzy/chat` (existing, non-stream) — unchanged request shape still works; response adds `conversationId`, `messageId`, `suggestions`, `actions`, `remaining`, `tier`. Old clients keep working.
 ### 3.3 Conversations
 `GET /api/mobile/fitzy/conversations` → `{ conversations: [{id,title,updatedAt,preview}] }` (Pro: all; Free: only the latest, plus `historyLocked: true`) · `GET /api/mobile/fitzy/conversations/{id}` → `{ id, title, messages: [...] }` · `DELETE /api/mobile/fitzy/conversations/{id}`. Title = first user message trimmed to 48 chars.

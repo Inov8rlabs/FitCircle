@@ -102,12 +102,12 @@ export const DEFAULT_ENGINE_CONFIG: EngineConfig = {
 // 4. COPY — friendly "update" voice, never a journal log (USER REQUIREMENT)
 // ----------------------------------------------------------------------------
 // Tone rules (enforced by template design + the eval's copy assertions):
-//   * Reads like a friend's nudge, not a database row. "Mike just crushed a workout 💪"
+//   * Reads like a friend's nudge, not a database row. "Mike just crushed a workout"
 //     NOT "Workout logged: Mike, 2026-06-01T09:00Z".
 //   * Body- & food-NEUTRAL: never ranks by restriction, never shames, never labels food
 //     good/bad, never shows calories/weight. (Build Spec §7, healthy-engagement gate.)
-//   * Present-tense, active, a little warm. Light emoji ok (≤1), never required.
-//   * Bundles read naturally: "Mike, Sarah & Priya all got moving tonight 🔥".
+//   * Present-tense, active, a little warm. No emoji (DESIGN_LANGUAGE §6); apps render icons.
+//   * Bundles read naturally: "Mike, Sarah & Priya all got moving tonight".
 //   * Always set a plain-text `body` even for card renders (forward-compat fallback).
 //
 // Templates are pure functions of a typed input → string, so the eval can assert exact copy.
@@ -124,18 +124,18 @@ export interface CopyContext {
 // The engine calls renderCopy(ctx) -> body string. Implementations live in the engine file;
 // the eval imports the engine's renderer and asserts output for fixed inputs.
 // Example expected outputs (the eval pins these — keep them friendly):
-//   workout_done (1):   "Mike just logged a workout 💪"
-//   workout_done (3):   "Mike, Sarah & Priya all got moving today 🔥"
-//   streak_milestone:   "Priya's on a 14-day streak — nice 🔥"
-//   quest_done:         "Sarah finished the Hydration Quest 🎉"
+//   workout_done (1):   "Mike just logged a workout"
+//   workout_done (3):   "Mike, Sarah & Priya all got moving today"
+//   streak_milestone:   "Priya's on a 14-day streak — nice"
+//   quest_done:         "Sarah finished the Hydration Quest"
 //   challenge_milestone:"Halfway through the Spring Cut — here's how everyone's doing"
-//   challenge_resolved: "That's a wrap on the Spring Cut! Tap to see how it went 🏆"
-//   member_joined (1):  "Mike just joined — say hi 👋"
-//   member_joined (2):  "Mike & Sarah just joined — say hi 👋"
+//   challenge_resolved: "That's a wrap on the Spring Cut! Tap to see how it went"
+//   member_joined (1):  "Mike just joined — say hi"
+//   member_joined (2):  "Mike & Sarah just joined — say hi"
 //   new_challenge:      "New challenge just dropped: 30-Day Clean Eating. Who's in?"
-//   daily_summary:      "Today's circle: 4 of 5 checked in. Nice momentum 👏"
-//   notable_meal:       "Priya logged a high-protein lunch 🍽️"   (NEVER a number)
-//   circle_streak:      "The circle's kept it going 9 days strong 🔥"
+//   daily_summary:      "Today's circle: 4 of 5 checked in. Nice momentum"
+//   notable_meal:       "Priya logged a high-protein lunch"   (NEVER a number)
+//   circle_streak:      "The circle's kept it going 9 days strong"
 
 // ============================================================================
 // 5. ENGINE API (FROZEN signatures)

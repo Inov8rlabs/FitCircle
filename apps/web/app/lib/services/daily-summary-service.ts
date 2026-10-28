@@ -26,7 +26,7 @@
 // one post per circle, but the PUSH is bundled — after the batch, every
 // recipient gets ONE `circle_daily_summary` covering all their circles that
 // were summarized this tick ("Your circles today" / "Ani's Crew: you checked
-// in ✅ · Step-Up Circle: 2 of 6 checked in"), deduped per local date. It used
+// in · Step-Up Circle: 2 of 6 checked in"), deduped per local date. It used
 // to be one chat_message push per circle per night.
 
 import { createAdminSupabase } from '../supabase-admin';
@@ -66,7 +66,7 @@ export interface SummarizedCircle {
   localDate: string;
   total: number;
   checkedInIds: Set<string>;
-  /** The in-app post body ("2 of 6 checked in today 👏"). */
+  /** The in-app post body ("2 of 6 checked in today"). */
   body: string;
 }
 
@@ -123,9 +123,9 @@ export class DailySummaryService {
   static summaryLine(circle: SummarizedCircle, recipientId: string): string {
     const status =
       circle.total === 1 && circle.checkedInIds.has(recipientId)
-        ? 'you checked in ✅'
+        ? 'you checked in'
         : circle.checkedInIds.size >= circle.total
-          ? 'everyone checked in 🎉'
+          ? 'everyone checked in'
           : `${circle.checkedInIds.size} of ${circle.total} checked in`;
     return `${circle.circleName}: ${status}`;
   }

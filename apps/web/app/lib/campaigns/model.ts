@@ -2,6 +2,7 @@
  * Campaign row ⇄ wire mapping and the pure date rules (phase, status, day
  * numbers). docs/CAMPAIGNS_SPEC.md §1–§3.
  */
+import { isIconKey } from '@/lib/design/icons';
 import { addDays, daysBetween } from '@/lib/streaks/streak-calculator';
 
 import type {
@@ -32,6 +33,8 @@ export interface CampaignRow {
   archived_at: string | null;
   title: string;
   emoji: string;
+  /** Icon key (migration 114). Absent before the migration; then derived from `emoji`. */
+  icon?: string | null;
   tagline: string;
   description: string;
   cta_label: string | null;
@@ -105,6 +108,8 @@ export function rowToAdmin(row: CampaignRow, today: string): AdminCampaign {
     template: row.template,
     title: row.title,
     emoji: row.emoji,
+    // The stored key only (null before migration 114 / when unset); views derive one from `emoji`.
+    icon: isIconKey(row.icon) ? row.icon : null,
     tagline: row.tagline,
     description: row.description,
     ctaLabel: row.cta_label,
@@ -151,6 +156,9 @@ export function inputToColumns(input: CampaignInput, existingAppStore: Record<st
     template: input.template,
     title: input.title,
     emoji: input.emoji,
+    // Only written when the editor sends one, so saves keep working before
+    // migration 114 adds the column. Readers derive it from `emoji` otherwise.
+    ...(input.icon ? { icon: input.icon } : {}),
     tagline: input.tagline,
     description: input.description,
     cta_label: input.ctaLabel ? input.ctaLabel : null,
@@ -179,6 +187,7 @@ export function adminToInput(a: AdminCampaign): CampaignInput {
     template: a.template,
     title: a.title,
     emoji: a.emoji,
+    icon: a.icon ?? null,
     tagline: a.tagline,
     description: a.description,
     ctaLabel: a.ctaLabel ?? null,

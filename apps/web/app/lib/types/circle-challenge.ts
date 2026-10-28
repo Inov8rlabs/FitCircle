@@ -1,3 +1,4 @@
+import type { IconKey } from '../design/icons';
 // ============================================================================
 // Circle Challenges Type Definitions
 // ============================================================================
@@ -97,7 +98,10 @@ export interface ChallengeTemplate {
   recommended_duration_days: number;
   difficulty: ChallengeDifficulty;
   logging_prompt: string;
+  /** Legacy emoji, rendered by shipped apps (≤ 1.1.x). 1.2.0+ receive the key here instead (applyIconCompat). */
   icon: string;
+  /** Icon key (design/icons.json), sent to every client. */
+  icon_key: IconKey;
 }
 
 // ============================================================================

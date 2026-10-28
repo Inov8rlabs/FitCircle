@@ -3,11 +3,13 @@
  * CampaignService; this file turns a row + the viewer's context into the wire
  * shape, so every phase/door rule is unit-testable without a database.
  */
+import { resolveIconKey } from '@/lib/design/icons';
 import { addDays, daysBetween } from '@/lib/streaks/streak-calculator';
 
-import { howItWorksFor } from './campaign-utils';
+import { GLYPH_ICON, howItWorksFor } from './campaign-utils';
 import { PHASE_RANK, dateOfDay, totalDaysOf, type CampaignRow } from './model';
 import {
+  type CampaignMark,
   DEFAULT_CTA_LABEL,
   type CalendarDoorView,
   type CalendarFriend,
@@ -53,7 +55,7 @@ export function buildCalendar(row: CampaignRow, ctx: ViewContext): CalendarView 
     const c = revealed ? content.get(day) : undefined;
     doors.push(
       revealed
-        ? { day, date, state, emoji: c?.emoji ?? null, title: c?.title ?? null, task: c?.task ?? null }
+        ? { day, date, state, emoji: c?.emoji ?? null, icon: c ? resolveIconKey(c.icon, c.emoji) : null, title: c?.title ?? null, task: c?.task ?? null }
         : { day, date, state }
     );
   }
@@ -89,6 +91,15 @@ export function buildCalendar(row: CampaignRow, ctx: ViewContext): CalendarView 
   };
 }
 
+/** The campaign's icon: the stored key, else the key for its emoji, else its glyph. */
+export function campaignIcon(row: Pick<CampaignRow, 'icon' | 'emoji' | 'glyph'>) {
+  return resolveIconKey(row.icon, row.emoji, resolveIconKey(GLYPH_ICON[row.glyph]));
+}
+
+export function marksWithIcons(marks: CampaignMark[] | null | undefined): CampaignMark[] {
+  return (marks ?? []).map((m) => ({ ...m, icon: resolveIconKey(m.icon, m.emoji, 'calendar') }));
+}
+
 export function buildCampaignView(row: CampaignRow, ctx: ViewContext): CampaignView {
   const { today, phase } = ctx;
   const art = row.art ?? {};
@@ -99,6 +110,7 @@ export function buildCampaignView(row: CampaignRow, ctx: ViewContext): CampaignV
     template: row.template,
     title: row.title,
     emoji: row.emoji,
+    icon: campaignIcon(row),
     tagline: row.tagline,
     description: row.description,
     accent: row.accent,
@@ -123,7 +135,7 @@ export function buildCampaignView(row: CampaignRow, ctx: ViewContext): CampaignV
     },
     heroAspect: aspectOf(art.inAppHero),
     circle: row.circle_template ?? null,
-    marks: row.marks ?? [],
+    marks: marksWithIcons(row.marks),
     participant: { joined: !!ctx.participant?.joined, reminders: !!ctx.participant?.reminders },
     calendar: row.template === 'daily_calendar' ? buildCalendar(row, ctx) : null,
     howItWorks: howItWorksFor({ template: row.template, startsAt: row.starts_at, endsAt: row.ends_at, marks: row.marks }),

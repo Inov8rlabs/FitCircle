@@ -772,6 +772,44 @@ Notes:
 9. **Generic arm keys (2026-10-28):** `control | variantA | variantB | …` in every experiment, with a human `name` per arm; analytics user property `exp_<key>` carries the key. Clients route by payload.
 10. **Mutual exclusion groups (2026-10-28):** optional layers with disjoint bucket slices (§6.3). `onboarding_v2` stays non-layered.
 
+11. **1.2.0 replaces the tour test with a paywall-layout test (2026-10-28, RELEASE_1.2.0_PLAN W4).** Onboarding v3 ships to everyone, so the `flow` dimension and the hard paywall are gone. All arms are skippable and carry the 3-day trial. The test is set up in Admin Tools only: no backend deploy, no migration, no prod data change from the backend.
+
+### 11.1 Admin Tools steps: `onboarding_paywall`
+
+**Recommendation: a new key, `onboarding_paywall`, not a rename of `onboarding_v2`.**
+- A key can't be renamed. It is the primary key of `experiments` and of every assignment, override and audit row.
+- The key is the analytics contract: the server and clients set the Amplitude user property `exp_<key>` (§6.7). `exp_onboarding_v2` would label a paywall-layout test as "onboarding v2" in every chart.
+- The hard-gate code path (`OnboardingFlowService.reachPaywall`) is keyed to `onboarding_v2` and only fires for a running/concluded arm with `paywall: "hard"`. If `onboarding_v2` stays a draft with its old arms, that path can never lock anyone. Reusing the key means editing payloads that this code reads.
+- `onboarding_v2` was never started (draft, no assignments), so leaving it as a draft costs nothing. Shipped v2 test builds that ask for it keep getting the fallback.
+
+If the owner still prefers to reuse `onboarding_v2`, the same arm edits work in place (steps 2–4 on the existing experiment). The 1.2.0 apps then request `onboarding_v2`, and the Amplitude property stays `exp_onboarding_v2`.
+
+**Steps (Admin Tools → Experiments):**
+1. **New experiment:** key `onboarding_paywall`, name "Onboarding paywall layout (1.2.0)", description "Skippable onboarding paywall: plans vs plan recap vs annual savings. All arms have the 3-day trial." It is created as `draft` with a random salt (`POST /api/admin/experiments`).
+2. **Arms** (keys are fixed by position; set name, weight and payload):
+
+   | Key | Name | Weight | Payload |
+   |---|---|---|---|
+   | `control` | Plans (annual default) | 34 | `{"paywall":"soft","layout":"plans"}` |
+   | `variantA` | Your plan recap | 33 | `{"paywall":"soft","layout":"plan_recap"}` |
+   | `variantB` | Annual savings | 33 | `{"paywall":"soft","layout":"annual_savings"}` |
+
+   - `control` (prototype 11): annual and monthly cards, annual pre-selected, with the Today / Day 2 / Day 3 timeline.
+   - `variantA`: the same plans, headed by the user's own targets and goal date.
+   - `variantB` (prototype 11B): annual only, priced against monthly ("Save N%", the monthly × 12 price struck through, "You save $X a year"), with the free trial as the headline. Monthly sits behind "Other plans".
+   - Savings are computed in the app from the store prices for the user's locale, never hard-coded.
+3. **Fallback arm:** `control`. **Audience:** `{"platforms":["ios","android"],"minAppVersion":"1.2.0","newUsersOnly":true}`. Add `countries` only if paid UA is geo-limited. **Traffic:** 20%. **Layer:** none.
+4. **QA overrides:** add the team's test accounts by email, one per arm. Check each layout on both platforms while the experiment is still a draft (overrides apply in draft).
+5. **Leave `onboarding_v2` as a draft.** Don't start it, and don't delete it: its audit history stays.
+6. **When the owner approves (W6):** set `onboarding_paywall` to `running` at 20%. After 48 h with healthy guardrails, raise it to 100%. Point paid UA at it.
+
+**Client contract:**
+- The 1.2.0 apps call `POST /api/mobile/experiments/assign {"keys":["onboarding_paywall"]}` and route by `payload.layout`.
+- An unknown or missing `layout` (fallback, not enrolled, error) renders `plans`.
+- `paywall` is always `"soft"`. Treat any other value as `"soft"`: 1.2.0 never shows a hard paywall.
+- Exposure is `POST /api/mobile/experiments/exposure {"key":"onboarding_paywall","arm":…,"surface":"onboarding_paywall"}` when the paywall renders.
+- Amplitude segments on `exp_onboarding_paywall`.
+
 ## 12. Out of scope (v1 of this experiment)
 
 - Price or trial-length tests: later, via RevenueCat Experiments on the winning arm.

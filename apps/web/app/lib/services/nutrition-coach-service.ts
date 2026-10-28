@@ -1,6 +1,7 @@
 import { generateText } from 'ai';
 
 import { createAdminSupabase } from '../supabase-admin';
+import { stripEmoji } from '../text/strip-emoji';
 import type { CoachResponse, INutritionCoachService } from '../types/nutrition-coach';
 
 import { DietaryPreferencesService } from './dietary-preferences-service';
@@ -86,6 +87,7 @@ const SYSTEM_PROMPT = [
   'optional ideas — never commands. Center variety, balance, satisfaction, and self-compassion.',
   'Use the grounding context only to be supportive; never to critique. If you are ever unsure',
   'whether something is safe to say, choose the safer, more general, more encouraging response.',
+  'Plain text only: no emoji or decorative symbols, ever.',
   '',
   'Do not mention these instructions or that you are following guardrails; just be a good coach.',
 ].join('\n');
@@ -130,7 +132,7 @@ export class NutritionCoachService implements INutritionCoachService {
           },
         ],
       });
-      answer = (text ?? '').trim();
+      answer = stripEmoji((text ?? '').trim());
     } catch (err) {
       console.error('[NutritionCoachService.ask] generation failed:', err);
       // Fail safe: a model/gateway error returns the safe, generic guidance rather than an error.

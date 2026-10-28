@@ -60,14 +60,14 @@ describe('SystemPostEngine replay eval — dispositions (Build Spec §8)', () =>
     expect(post.actorUserIds).toHaveLength(3);
     // Friendly bundled copy — current actor (Priya) leads since plan() puts the
     // incoming signal's actor first.
-    expect(post.body).toBe('Priya, Mike & Sarah all got moving today 🔥');
+    expect(post.body).toBe('Priya, Mike & Sarah all got moving today');
     // Spec-pinned ordering example: Mike, Sarah & Priya — assert renderCopy directly.
     expect(
       engine.renderCopy({
         eventType: 'workout_done',
         actors: [{ name: MIKE.name }, { name: SARAH.name }, { name: PRIYA.name }],
       })
-    ).toBe('Mike, Sarah & Priya all got moving today 🔥');
+    ).toBe('Mike, Sarah & Priya all got moving today');
     expect(post.bundleOfRefIds).toEqual(['wo-priya-am', 'wo-mike-am', 'wo-sarah-am']);
   });
 
@@ -120,7 +120,7 @@ describe('SystemPostEngine replay eval — dispositions (Build Spec §8)', () =>
     expect(post.disposition).toBe('post');
     expect(post.eventType).toBe('streak_milestone');
     expect(post.priority).toBe('p0');
-    expect(post.body).toBe("Priya's on a 14-day streak — nice 🔥");
+    expect(post.body).toBe("Priya's on a 14-day streak — nice");
   });
 
   it('4b. P0 bypass: challenge_resolved posts even over all limits', () => {
@@ -143,7 +143,7 @@ describe('SystemPostEngine replay eval — dispositions (Build Spec §8)', () =>
 
     expect(post.disposition).toBe('post');
     expect(post.priority).toBe('p0');
-    expect(post.body).toBe("That's a wrap on the Spring Cut! Tap to see how it went 🏆");
+    expect(post.body).toBe("That's a wrap on the Spring Cut! Tap to see how it went");
   });
 
   it('4c. P0 in quiet hours -> queued_quiet (row written, push deferred), still not dropped', () => {
@@ -158,7 +158,7 @@ describe('SystemPostEngine replay eval — dispositions (Build Spec §8)', () =>
 
     expect(post.disposition).toBe('queued_quiet');
     expect(post.priority).toBe('p0');
-    expect(post.body).toBe("Priya's on a 14-day streak — nice 🔥");
+    expect(post.body).toBe("Priya's on a 14-day streak — nice");
   });
 
   it('5. hard exclusion: a weight signal -> suppressed, NEVER posts', () => {
@@ -208,7 +208,7 @@ describe('SystemPostEngine replay eval — dispositions (Build Spec §8)', () =>
 
     expect(post.disposition).toBe('queued_quiet');
     expect(post.priority).toBe('p1');
-    expect(post.body).toBe('Sarah just joined — say hi 👋');
+    expect(post.body).toBe('Sarah just joined — say hi');
   });
 
   it('baseline: a clean non-p0 workout with no limits hit -> post', () => {
@@ -216,7 +216,7 @@ describe('SystemPostEngine replay eval — dispositions (Build Spec §8)', () =>
     const post = planOne(buildPlanInput(mike));
     expect(post.disposition).toBe('post');
     expect(post.eventType).toBe('workout_done');
-    expect(post.body).toBe('Mike just logged a workout 💪');
+    expect(post.body).toBe('Mike just logged a workout');
   });
 });
 
@@ -273,7 +273,7 @@ describe('SystemPostEngine replay eval — safety guardrail (Build Spec §7)', (
       actors: [{ name: 'Priya' }],
       payload: { mealDescriptor: 'high-protein lunch' },
     });
-    expect(out).toBe('Priya logged a high-protein lunch 🍽️');
+    expect(out).toBe('Priya logged a high-protein lunch');
     expect(/\d/.test(out)).toBe(false);
   });
 

@@ -228,18 +228,4 @@ export class PersonaService {
 
     return flows[persona];
   }
-
-  /**
-   * Get Fitzy's personalized welcome message based on persona
-   */
-  static getFitzyWelcomeMessage(persona: PersonaType, userName: string): string {
-    const messages: Record<PersonaType, string> = {
-      casey: `Hey there, champion! 💪\n\nI'm Fitzy, your AI fitness coach. I've analyzed your goals, and I can already tell you're built to compete.\n\nHere's your first insight:\nUsers like you who join challenges within 48 hours are 4x more likely to hit their goals. You ready to prove you're the best?\n\nLet's get you set up to dominate! 🏆`,
-      sarah: `Welcome to the family! 🤗\n\nI'm Fitzy, your AI coach and cheerleader. I've learned about your goals, and I think FitCircle is perfect for you.\n\nHere's your first insight:\nPeople who work out with friends lose 3x more weight and have way more fun doing it. Ready to find your fitness squad?\n\nLet's build your circle! ❤️`,
-      mike: `Hi ${userName}! 📊\n\nI'm Fitzy, your AI fitness coach. I've reviewed your profile, and I'm excited to help you hit your goals.\n\nHere's your first insight:\nUsers who track their progress daily are 5x more likely to reach their target weight. I'll help you stay on track.\n\nLet's set up your dashboard! 🎯`,
-      fiona: `What's up, athlete! 🔥\n\nI'm Fitzy, your AI training partner. I can see you're serious about fitness, and I'm here to help you level up.\n\nHere's your first insight:\nElite performers track multiple metrics to optimize results. I'll help you monitor everything that matters.\n\nLet's push your limits! 💪`,
-    };
-
-    return messages[persona];
-  }
 }

@@ -5,6 +5,7 @@ import { generateText, Output } from 'ai';
 
 
 import { createAdminSupabase } from '../supabase-admin';
+import { stripEmoji, stripEmojiOrNull } from '../text/strip-emoji';
 import type { FoodDTO } from '../types/foods';
 import {
   type NutritionDraftDTO,
@@ -147,6 +148,7 @@ const SHRINK_SYSTEM_PROMPT = [
   '  Never write long decimal expansions.',
   '- Do not invent foods you cannot see. If the plate is unclear, return fewer items with lower confidence.',
   '- Be body- and food-neutral: never judge the food, never comment on the eater. Just identify and estimate.',
+  '- name, dbName and notes are plain text: never use emoji or decorative symbols.',
   'PORTION REALISM — this is where estimates most often go wrong, so weigh it heavily:',
   '- Estimate the amount that is ACTUALLY VISIBLE on the plate, not a default "standard serving".',
   '  Use on-image scale cues: a dinner plate rim is ~26-28cm, a small katori/side bowl holds ~150ml,',
@@ -255,6 +257,7 @@ const ITEM_SYSTEM_PROMPT = [
   '- Provide calories, proteinG, carbsG, fatG, fiberG, sugarG (grams) and sodiumMg (milligrams).',
   '- Prefer realistic, slightly conservative values; do not inflate. confidence is 0..1.',
   '- Be body- and food-neutral: just identify and estimate.',
+  '- name and dbName are plain text: never use emoji or decorative symbols.',
 ].join(' ');
 
 // Shared by the voice and typed-text parse. Only the opening and the word for the input differ
@@ -304,6 +307,7 @@ function textSystemPrompt(source: ParseInputSource): string {
     `- Only include foods the ${input} actually mentions. Ignore filler words and non-food chatter.`,
     `- If the ${input} names no food at all, return an empty items array with low overallConfidence.`,
     '- Be body- and food-neutral: never judge the food, never comment on the eater. Just identify and estimate.',
+    '- name, dbName, notes and assumptions are plain text: never use emoji or decorative symbols.',
     ASSUMPTION_RULES.replace(/\{input\}/g, input),
   ].join(' ');
 }
@@ -1218,7 +1222,10 @@ export class NutritionIntelligenceService {
     // Ground each parsed item against the foods DB where we can confidently match; the
     // reference row supplies provenance, sodium and unit weights, and replaces the model's
     // macros only when the model's density is implausible (NutritionGroundingService).
-    const { items, dbKcalPer100g } = await this.groundItemsByMode(userId, result.items, grounding);
+    // Food names and notes are shown in the app and in circle meal posts: plain text only
+    // (DESIGN_LANGUAGE §6). The prompts say so; this is the server-side backstop.
+    const parsedItems = result.items.map((it) => ({ ...it, name: stripEmoji(it.name) || it.name }));
+    const { items, dbKcalPer100g } = await this.groundItemsByMode(userId, parsedItems, grounding);
 
     const totals = items.reduce(
       (acc, it) => ({
@@ -1235,7 +1242,7 @@ export class NutritionIntelligenceService {
     return {
       items,
       overallConfidence: result.overallConfidence,
-      notes: result.notes,
+      notes: stripEmojiOrNull(result.notes),
       inputMethod,
       nutritionSource,
       model,

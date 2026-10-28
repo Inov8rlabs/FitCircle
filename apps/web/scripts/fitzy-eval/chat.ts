@@ -1,18 +1,20 @@
 /**
- * Chat suite: each case streams through the production pieces — chatSystemMessages (cached
- * SYSTEM_PROMPT + grounding), streamFrom (exact AI SDK options), StreamGuard with
- * FitzyService.guard + SAFE_FALLBACK, splitMeta/parseMeta and FitzyService.resolveMeta (chips +
- * guarded actions). Only the primary chat model runs: a production fallback is a failure here.
+ * Chat suite: each case runs the production streaming turn — chatSystemMessages (cached
+ * SYSTEM_PROMPT + grounding) and FitzyService.runModelStream (streamFrom with the stall watchdog,
+ * StreamGuard + word cap, one retry on the other model, deterministic fallback answer), then
+ * splitMeta/parseMeta and FitzyService.resolveMeta (chips + guarded actions). What is scored is
+ * what the user would see. Retries are reported per reply (`attempts`); a reply that needed the
+ * deterministic fallback (`source: canned`) counts as a model failure.
  */
 import { META_MARKER, growthNudgeAllowed, parseMeta, splitMeta } from '../../app/lib/fitzy/meta';
-import { chatModel, streamFrom } from '../../app/lib/fitzy/models';
-import { StreamGuard } from '../../app/lib/fitzy/stream-guard';
-import { FitzyService, SAFE_FALLBACK, chatMaxOutputTokens, chatSystemMessages, chatThinking, withUserFirst } from '../../app/lib/services/fitzy-service';
+import { chatModel } from '../../app/lib/fitzy/models';
+import { FitzyService, SAFE_FALLBACK, chatMaxOutputTokens, chatSystemMessages, chatThinking, withUserFirst, type StreamAttempt } from '../../app/lib/services/fitzy-service';
 import type { FitzyAction } from '../../app/lib/types/fitzy';
 
 import { runChecks } from './checks';
 import { groundingFor, type ChatCase, type Fixtures } from './fixtures';
 import { classifyError, errorText, telemetry, withRetries, words, type ErrorClass, type Telemetry } from './util';
+import { hostSuspendedDuring } from './util';
 
 export const DEFAULT_MAX_WORDS = 200; // spec: "under ~170 words" (+ slack)
 export const LIST_MAX_WORDS = 350; // spec: longer allowed when a plan/list was asked for
@@ -44,6 +46,19 @@ export interface ChatResult {
   maxWords: number;
   checks: Array<{ id: string; fail: string | null }>;
   telemetry: Telemetry | null;
+  /** model | partial (kept sentences after a mid-stream failure) | canned (no model text). */
+  source: 'model' | 'partial' | 'canned' | null;
+  /** Every model attempt (a retry follows a stall / error / empty reply). */
+  attempts: Array<{ model: string; ok: boolean; ms: number; error: string | null }>;
+  /** The word cap trimmed the visible answer. */
+  capped: boolean;
+  /** Words the model wrote before any cap (info). */
+  rawWords: number;
+  /** The reply had no usable META; the chips came from the META-only recovery call. */
+  metaRecovered: boolean;
+  /** Emoji (grapheme clusters) in the answer the user sees, and in chips + action labels. */
+  answerEmoji: number;
+  chipEmoji: number;
   judge?: any;
 }
 
@@ -79,6 +94,10 @@ function metaSchema(metaRaw: string | null): { parsed: boolean; valid: boolean; 
   return { parsed: true, valid, issues };
 }
 
+const SEGMENTER = new Intl.Segmenter('en', { granularity: 'grapheme' });
+/** Emoji as the user sees them (one per grapheme cluster, so 🧘‍♀️ counts once). */
+export const emojiCount = (s: string) => [...SEGMENTER.segment(s)].filter((g) => /\p{Extended_Pictographic}/u.test(g.segment)).length;
+
 async function runOnce(k: ChatCase, f: Fixtures, rep: number) {
   const persona = f.personas[k.persona];
   const growthAllowed = growthNudgeAllowed(k.message, null);
@@ -86,42 +105,43 @@ async function runOnce(k: ChatCase, f: Fixtures, rep: number) {
   // withUserFirst: production prepends a synthetic user turn when the history starts with a Fitzy push tip.
   const turns = withUserFirst([...(k.history ?? []), { role: 'user' as const, content: k.message }]);
   const model = chatModel();
-  const guard = new StreamGuard(FitzyService.guard, SAFE_FALLBACK);
+  const context = k.context ?? null;
   const t0 = Date.now();
   let ttft: number | null = null;
   let firstEmit: number | null = null;
-  let raw = '';
   let error: unknown = null;
   let tele: Telemetry | null = null;
+  const attempts: StreamAttempt[] = [];
+  let run: Awaited<ReturnType<typeof FitzyService.runModelStream>> | null = null;
   try {
-    const context = k.context ?? null;
-    const stream = streamFrom({ model, system: chatSystemMessages(grounding, context), messages: turns, maxOutputTokens: chatMaxOutputTokens(context), thinking: chatThinking(context) });
-    for await (const chunk of stream.textStream) {
-      if (chunk && ttft == null) ttft = Date.now() - t0;
-      raw += chunk;
-      // Production stops reading on a trip; we keep reading so the report can show what tripped.
-      if (!guard.isTripped) {
-        const ev = guard.push(chunk);
-        if (firstEmit == null && ev.length) firstEmit = Date.now() - t0;
+    run = await FitzyService.runModelStream(
+      { system: chatSystemMessages(grounding, context), turns, maxOutputTokens: chatMaxOutputTokens(context), thinking: chatThinking(context), context, userMessage: k.message },
+      (events) => {
+        if (events.length && firstEmit == null) firstEmit = Date.now() - t0;
+      },
+      undefined,
+      (a) => {
+        attempts.push(a);
       }
+    );
+    const okAttempt = attempts.find((a) => a.ok);
+    if (okAttempt?.details) {
+      const d = await okAttempt.details();
+      tele = telemetry(d.finishReason, d.usage, d.providerMetadata);
     }
-    const ev = guard.finish();
-    if (firstEmit == null && ev.length) firstEmit = Date.now() - t0;
-    const d = await stream.details();
-    tele = telemetry(d.finishReason, d.usage, d.providerMetadata);
   } catch (err) {
     error = err;
   }
   const totalMs = Date.now() - t0;
+  ttft = firstEmit; // production streams through the guard: first released sentence
+  if (!error && run?.source === 'canned') error = new Error(`no model text after ${attempts.length} attempt(s): ${attempts.map((a) => errorText(a.error)).join(' | ')}`);
   const errClass = error ? classifyError(error) : null;
-  if (!error && !guard.emittedText && !guard.isTripped) {
-    error = new Error('empty completion');
-  }
 
-  const tripped = guard.isTripped;
+  const raw = run?.rawText ?? '';
+  const tripped = !!run?.tripped;
   const visible = splitMeta(raw).answer;
-  const answer = error ? SAFE_FALLBACK : tripped ? SAFE_FALLBACK : guard.emittedText.trim();
-  const metaRaw = splitMeta(raw).metaRaw;
+  const answer = run?.answer ?? SAFE_FALLBACK;
+  const metaRaw = run?.metaRaw ?? null;
   const schema = metaSchema(metaRaw);
   const resolved = FitzyService.resolveMeta(
     { userMessage: k.message, growthAllowed, circleId: persona.circle?.id },
@@ -148,22 +168,34 @@ async function runOnce(k: ChatCase, f: Fixtures, rep: number) {
     answer,
     guardTripped: tripped,
     guardTripText: tripped ? visible : null,
-    metaPresent: raw.includes(META_MARKER),
+    metaPresent: !!metaRaw || (run?.source === 'model' && raw.includes(META_MARKER)),
     metaParsed: schema.parsed,
     metaSchemaValid: schema.valid,
     metaIssues: schema.issues,
     suggestions: resolved.suggestions,
     actions: resolved.actions,
-    words: words(visible),
+    words: words(tripped ? visible : answer),
+    rawWords: words(visible),
     maxWords,
     checks: checked,
     telemetry: tele,
+    source: run?.source ?? null,
+    attempts: attempts.map((a) => ({ model: a.model, ok: a.ok, ms: a.ms, error: a.error ? errorText(a.error) : null })),
+    capped: !!run?.capped,
+    metaRecovered: !!run?.metaRecovered,
+    answerEmoji: emojiCount(answer),
+    chipEmoji: emojiCount([...resolved.suggestions, ...resolved.actions.map((a) => a.label)].join(' ')),
   };
   return { ...result, retryClass: errClass === 'transient' || errClass === 'timeout' || errClass === 'auth' ? errClass : null };
 }
 
-export async function runChatCase(k: ChatCase, f: Fixtures, rep: number): Promise<ChatResult> {
-  const r = await withRetries(() => runOnce(k, f, rep));
-  const { retryClass: _drop, ...rest } = r;
-  return rest;
+export async function runChatCase(k: ChatCase, f: Fixtures, rep: number): Promise<ChatResult & { hostSuspended: number }> {
+  for (let hostSuspended = 0; ; hostSuspended++) {
+    const t0 = Date.now();
+    const r = await withRetries(() => runOnce(k, f, rep));
+    // The eval host slept during this reply: not a model result, run it again (at most 3 times).
+    if (hostSuspendedDuring(t0, Date.now()) && hostSuspended < 3) continue;
+    const { retryClass: _drop, ...rest } = r;
+    return { ...rest, hostSuspended };
+  }
 }

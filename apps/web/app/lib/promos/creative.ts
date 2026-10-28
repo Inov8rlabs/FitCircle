@@ -5,6 +5,8 @@
  */
 import { z } from 'zod';
 
+import { ICON_KEYS } from '@/lib/design/icons';
+
 import { resolveAction } from './actions';
 import { PROMO_LAYOUTS, type PromoCreative, type PromoProps, type PromoTheme, type WireAction } from './types';
 
@@ -38,6 +40,7 @@ export const promoPropsSchema = z
     creativeId: z.string().regex(/^[a-z0-9_]{1,60}$/),
     layout: z.enum(PROMO_LAYOUTS),
     theme: themeSchema,
+    icon: z.enum(ICON_KEYS).optional(),
     emoji: z.string().min(1).max(8).optional(),
     image: z
       .object({
@@ -137,6 +140,7 @@ export function buildPromoProps(promoKey: string, creative: PromoCreative, actio
     creativeId: creative.id,
     layout: creative.layout,
     theme: creative.theme,
+    ...(creative.icon ? { icon: creative.icon } : {}),
     ...(creative.emoji ? { emoji: creative.emoji } : {}),
     ...(creative.image ? { image: creative.image } : {}),
     ...(creative.eyebrow ? { eyebrow: creative.eyebrow } : {}),

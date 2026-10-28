@@ -16,6 +16,7 @@ vi.mock('@/lib/middleware/mobile-auth', () => ({
   },
 }));
 const ai = vi.hoisted(() => ({ generate: [] as string[], stream: [] as string[][], calls: [] as any[] }));
+vi.mock('@/lib/fitzy/meta-recovery', () => ({ recoverMeta: async () => null }));
 vi.mock('ai', () => ({
   generateText: async (o: any) => {
     ai.calls.push(o);

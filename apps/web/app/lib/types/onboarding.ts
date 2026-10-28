@@ -216,6 +216,8 @@ export interface OnboardingCompletionResult {
     id: string;
     name: string;
     description: string;
+    /** Icon key (design/icons.json). */
+    icon: string;
     xpAwarded: number;
   };
   goals: UserGoal[];

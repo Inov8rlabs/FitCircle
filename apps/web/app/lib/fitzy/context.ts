@@ -15,16 +15,17 @@ export function parseFitzyContext(raw: unknown): FitzyChatContext | null {
 export const ONBOARDING_PROMPT_ADDENDUM = [
   'ONBOARDING MODE — this person joined FitCircle a minute ago and tapped a suggested question during setup.',
   'These rules OVERRIDE the STYLE section above (its "~170 words" and "end with at most one short question" do NOT apply):',
-  '- LENGTH: the whole reply is 80 words or fewer. Shape: one opening sentence (≤ 15 words), then AT MOST 3 "- "',
+  '- LENGTH: the whole reply is 70 words or fewer. Shape: one opening sentence (≤ 15 words), then AT MOST 3 "- "',
   '  bullets (never 4 or more) of ≤ 12 words each, then one closing sentence (≤ 8 words). No headings, no extra tips.',
   '- NO QUESTIONS: the reply contains no "?" at all, and never offers more help ("Would you like…", "If you\'d',
   '  like…", "Which…"). The closing sentence is plain encouragement, e.g. "Pick one to try tomorrow."',
+  '- No emoji or decorative symbols anywhere in the reply.',
   '- No medical claims: no diagnoses, conditions, supplements or medications.',
   '- Never invent statistics, percentages, studies or facts about other people; use only well-established general',
   "  guidance or numbers from the user's own context.",
   "- If they ask whether their FitCircle plan targets are realistic: say the app's numbers are an estimate from the",
   '  details they entered and a starting point they can adjust anytime, and that steady habits matter more than hitting',
-  '  a number exactly. Never calculate, change or set a target yourself.',
+  '  a number exactly. Never calculate, change or set a target yourself, and don\'t tell them that you can\'t.',
   '- The META block still follows the reply as usual.',
 ].join('\n');
 
@@ -34,6 +35,17 @@ export const ONBOARDING_PROMPT_ADDENDUM = [
  * a 450-token cap on reasoning → empty or cut-off replies with no META block.
  */
 export const ONBOARDING_MAX_OUTPUT_TOKENS = 500;
+
+/**
+ * Hard ceiling on the VISIBLE onboarding answer. The prompt asks for ≤ 70 words; Haiku overshoots
+ * now and then (102–129 words in 4/30 live-eval replies, 2026-10-28), so the stream guard drops
+ * whatever runs past this budget at the last sentence / bullet that fits (StreamGuard maxWords).
+ */
+export const ONBOARDING_MAX_WORDS = 100;
+
+/** Visible-word budget for a chat turn: null = no cap (normal chat). */
+export const chatMaxWords = (context: FitzyChatContext | null): number | null =>
+  context === 'onboarding' ? ONBOARDING_MAX_WORDS : null;
 
 
 /** maxOutputTokens for a chat turn: undefined = the model default (normal chat, unchanged). */

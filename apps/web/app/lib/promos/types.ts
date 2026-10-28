@@ -3,6 +3,8 @@
  * shared types. Everything in lib/promos is pure; I/O lives in
  * services/promo-service.ts and the home-feed context loaders.
  */
+import type { IconKey } from '@/lib/design/icons';
+
 import type { MealReminderPrefs, MealSlot } from '../journey/meal-slots';
 
 export const PROMO_LAYOUTS = ['hero', 'banner', 'compact'] as const;
@@ -59,7 +61,9 @@ export interface PromoCreative {
   weight: number;
   layout: PromoLayout;
   theme: PromoTheme;
-  /** Shown when there is no image (gradient + emoji). */
+  /** Icon key (design/icons.json) shown when there is no image (gradient + icon). */
+  icon?: IconKey;
+  /** Legacy glyph for shipped apps (≤ 1.1.x); nulled for 1.2.0+ (applyIconCompat). */
   emoji?: string;
   image?: PromoImage;
   eyebrow?: string;
@@ -78,7 +82,9 @@ export interface PromoProps {
   creativeId: string;
   layout: PromoLayout;
   theme: PromoTheme;
-  emoji?: string;
+  icon?: IconKey;
+  /** Legacy glyph: `null` for 1.2.0+ clients. */
+  emoji?: string | null;
   image?: PromoImage;
   eyebrow?: string;
   title: string;

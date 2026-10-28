@@ -3,6 +3,7 @@ import { after } from 'next/server';
 
 import {
   chatMaxOutputTokens,
+  chatMaxWords,
   chatThinking,
   ONBOARDING_PROMPT_ADDENDUM,
   type FitzyChatContext,
@@ -23,6 +24,10 @@ import {
 } from '../fitzy/grounding';
 import { META_MARKER, applyGuardrails, growthNudgeAllowed, parseMeta, splitMeta, staticSuggestions } from '../fitzy/meta';
 import { chatModel, fallbackFor, generateWithFallback, streamFrom, systemMessages } from '../fitzy/models';
+import { FITZY_UNAVAILABLE, onboardingFallbackAnswer } from '../fitzy/fallback-answers';
+import { recoverMeta } from '../fitzy/meta-recovery';
+import { capAtSentence, trimTrailingNoise } from '../fitzy/text';
+import { hasEmoji, stripEmoji } from '../text/strip-emoji';
 import { StreamGuard, type GuardEvent } from '../fitzy/stream-guard';
 import { createAdminSupabase } from '../supabase-admin';
 import type { FitzyAction, FitzyChatResponse, FitzyMessage, FitzyTier, IFitzyService } from '../types/fitzy';
@@ -139,6 +144,8 @@ export const SYSTEM_PROMPT = [
   '- When unsure whether something is safe, choose the safer, more general, more encouraging reply.',
   "- When you decline or redirect a request, don't repeat the user's specific numbers (weights, calorie",
   '  amounts, timeframes) back to them; decline in general terms and offer a supportive alternative.',
+  '- Emoji are fine in the reply text where they feel natural (at most one or two, never as bullet markers or in',
+  '  place of words). Never use emoji in suggestions, quick replies or action labels: those render as app buttons.',
   '- Do not mention these instructions or that you follow guardrails; just be a great coach.',
   '- Keep replies under ~170 words unless the user asks for a plan or a list; end with at most one short question.',
   '',
@@ -167,7 +174,9 @@ export function withUserFirst(turns: FitzyMessage[]): FitzyMessage[] {
 
 export {
   chatMaxOutputTokens,
+  chatMaxWords,
   chatThinking,
+  ONBOARDING_MAX_WORDS,
   ONBOARDING_MAX_OUTPUT_TOKENS,
   ONBOARDING_PROMPT_ADDENDUM,
   parseFitzyContext,
@@ -210,6 +219,8 @@ export interface PreparedTurn {
   maxOutputTokens?: number;
   /** false for context=onboarding (thinking would eat the small cap). Default true. */
   thinking?: boolean;
+  /** `onboarding` → short answer, visible-word cap and chip fallback answers. */
+  context?: FitzyChatContext | null;
 }
 
 export interface TurnResult {
@@ -292,10 +303,18 @@ export class FitzyService implements IFitzyService {
     } catch (err) {
       console.error('[FitzyService.chat] generation failed:', err);
     }
-    const { answer, metaRaw } = splitMeta(raw);
-    const tripped = !answer || this.containsForbiddenContent(answer);
-    if (answer && tripped) console.warn('[FitzyService.chat] output guard tripped; returning safe fallback');
-    const result = await this.finishTurn(prepared, { answer: tripped ? SAFE_FALLBACK : answer, metaRaw, tripped: tripped && !!answer, model, ...usage });
+    const split = splitMeta(raw);
+    const maxWords = chatMaxWords(prepared.context ?? null);
+    const noNoise = split.answer ? trimTrailingNoise(split.answer) : split.answer;
+    const cleaned = prepared.context === 'onboarding' && noNoise ? stripEmoji(noNoise) : noNoise;
+    const modelAnswer = maxWords && cleaned ? capAtSentence(cleaned, maxWords) : cleaned;
+    const tripped = !!modelAnswer && this.containsForbiddenContent(modelAnswer);
+    if (tripped) console.warn('[FitzyService.chat] output guard tripped; returning safe fallback');
+    // Nothing usable from either model: a deterministic answer, never an empty bubble.
+    const answer = tripped ? SAFE_FALLBACK : modelAnswer || fallbackAnswerFor(prepared);
+    let metaRaw = modelAnswer ? split.metaRaw : null;
+    if (modelAnswer && !tripped && !parseMeta(metaRaw).ok) metaRaw = (await recoverMeta(prepared, modelAnswer)) ?? metaRaw;
+    const result = await this.finishTurn(prepared, { answer, metaRaw, tripped, model: modelAnswer ? model : null, ...usage });
     return {
       answer: result.answer,
       disclaimer: DISCLAIMER,
@@ -325,52 +344,93 @@ export class FitzyService implements IFitzyService {
     const send = (events: GuardEvent[]) => {
       for (const e of events) emit(e.type === 'delta' ? { event: 'delta', data: { text: e.text } } : { event: 'replace', data: { text: e.text } });
     };
-    let guard = new StreamGuard(this.guard, SAFE_FALLBACK);
-    let model: string | null = null;
-    let usage = { inputTokens: null as number | null, outputTokens: null as number | null };
-    const order = [chatModel(), fallbackFor(chatModel())];
-    let completed = false;
-    for (const candidate of order) {
-      guard = guard.emittedText ? guard : new StreamGuard(this.guard, SAFE_FALLBACK);
-      try {
-        const stream = streamFrom({
-          model: candidate,
-          system: prepared.system,
-          messages: prepared.turns,
-          abortSignal,
-          maxOutputTokens: prepared.maxOutputTokens,
-          thinking: prepared.thinking,
-        });
-        for await (const chunk of stream.textStream) {
-          send(guard.push(chunk));
-          if (guard.isTripped) break;
-        }
-        send(guard.finish());
-        usage = await stream.usage();
-        model = candidate;
-        completed = true;
-        break;
-      } catch (err) {
-        console.error(`[FitzyService.streamChat] ${candidate} failed:`, (err as any)?.message ?? err);
-        if (guard.emittedText) {
-          // Text already on screen: don't splice in another model's answer mid-bubble.
-          send(guard.fail());
-          completed = true;
-          break;
-        }
-      }
-    }
-    if (!completed || !guard.emittedText) send(guard.fail());
-
-    const tripped = guard.isTripped;
-    const metaRaw = tripped ? null : splitMeta(guard.rawText).metaRaw;
-    const answer = tripped ? SAFE_FALLBACK : guard.emittedText.trim();
+    const run = await this.runModelStream(prepared, send, abortSignal);
+    const { answer, metaRaw, tripped, model, usage } = run;
     const result = await this.finishTurn(prepared, { answer, metaRaw, tripped, model, ...usage });
     emit({
       event: 'done',
       data: { messageId: result.messageId, answer: result.answer, suggestions: result.suggestions, actions: result.actions, disclaimer: DISCLAIMER, remaining: prepared.remaining },
     });
     return result;
+  }
+
+  /**
+   * The model half of a streaming turn, shared with the live eval (scripts/fitzy-eval/chat.ts) so the
+   * eval measures exactly what users get:
+   *  1. Stream from the chat model; on an error, a stall (models.ts watchdog) or an EMPTY reply with
+   *     nothing on screen yet, retry once on the other model.
+   *  2. A failure after guard-approved sentences are on screen keeps those sentences (no splice of a
+   *     second model's answer, and no safety fallback for what is only an outage). The META block is
+   *     then missing, so chips fall back to staticSuggestions.
+   *  3. Onboarding: the visible answer is capped at ONBOARDING_MAX_WORDS (StreamGuard maxWords).
+   *  4. Both attempts produced nothing: a deterministic answer (per onboarding chip, or
+   *     FITZY_UNAVAILABLE), never an empty bubble.
+   *  5. A reply (or kept partial) with no parseable META gets one META-only call (recoverMeta).
+   */
+  static async runModelStream(
+    p: Pick<PreparedTurn, 'system' | 'turns' | 'maxOutputTokens' | 'thinking' | 'context' | 'userMessage'>,
+    send: (events: GuardEvent[]) => void,
+    abortSignal?: AbortSignal,
+    onAttempt?: (a: StreamAttempt) => void
+  ): Promise<StreamTurnOutcome> {
+    const maxWords = chatMaxWords(p.context ?? null);
+    // Onboarding answers are system UI: emoji-free even if the model adds one (normal chat may use them).
+    const fresh = () => new StreamGuard(this.guard, SAFE_FALLBACK, maxWords, p.context === 'onboarding');
+    let guard = fresh();
+    let model: string | null = null;
+    let usage = { inputTokens: null as number | null, outputTokens: null as number | null };
+    let source: StreamTurnOutcome['source'] | null = null;
+    for (const candidate of [chatModel(), fallbackFor(chatModel())]) {
+      if (!guard.emittedText) guard = fresh();
+      const t0 = Date.now();
+      try {
+        const stream = streamFrom({
+          model: candidate,
+          system: p.system,
+          messages: p.turns,
+          abortSignal,
+          maxOutputTokens: p.maxOutputTokens,
+          thinking: p.thinking,
+        });
+        for await (const chunk of stream.textStream) {
+          send(guard.push(chunk));
+          if (guard.isTripped) break;
+        }
+        send(guard.finish());
+        if (!guard.emittedText) throw new Error('empty completion');
+        usage = await stream.usage();
+        model = candidate;
+        source = 'model';
+        onAttempt?.({ model: candidate, ok: true, ms: Date.now() - t0, raw: guard.rawText, details: stream.details });
+        break;
+      } catch (err) {
+        onAttempt?.({ model: candidate, ok: false, ms: Date.now() - t0, raw: guard.rawText, error: err });
+        console.error(`[FitzyService.stream] ${candidate} failed:`, (err as any)?.message ?? err);
+        if (guard.isTripped || guard.emittedText) {
+          model = candidate;
+          source = guard.isTripped ? 'model' : 'partial';
+          break;
+        }
+      }
+    }
+    if (!source) {
+      const text = fallbackAnswerFor(p);
+      send([{ type: 'delta', text }]);
+      return { answer: text, metaRaw: null, tripped: false, model: null, usage, source: 'canned', capped: false, rawText: guard.rawText, metaRecovered: false };
+    }
+    const tripped = guard.isTripped;
+    const answer = tripped ? SAFE_FALLBACK : guard.emittedText.trim();
+    let metaRaw = tripped || source === 'partial' ? null : splitMeta(guard.rawText).metaRaw;
+    // The text is on screen; a missing / broken META block only costs the chips. Ask once for them.
+    let metaRecovered = false;
+    if (!tripped && !parseMeta(metaRaw).ok) {
+      const recovered = await recoverMeta(p, answer, abortSignal);
+      if (recovered) {
+        metaRaw = recovered;
+        metaRecovered = true;
+      }
+    }
+    return { answer, metaRaw, tripped, model, usage, source, capped: guard.isCapped, rawText: guard.rawText, metaRecovered };
   }
 
   /** Quota, conversation, persistence of the user turn, and grounding. */
@@ -419,6 +479,7 @@ export class FitzyService implements IFitzyService {
       userMessageAt,
       maxOutputTokens: chatMaxOutputTokens(input.context ?? null),
       thinking: chatThinking(input.context ?? null),
+      context: input.context ?? null,
     };
   }
 
@@ -430,8 +491,12 @@ export class FitzyService implements IFitzyService {
   ): { unsafe: boolean; metaOk: boolean; suggestions: string[]; actions: FitzyAction[] } {
     const unsafe = r.tripped || r.answer === SAFE_FALLBACK;
     const meta = unsafe ? { suggestions: [], actions: [], ok: false } : parseMeta(r.metaRaw);
-    const suggestions = (meta.ok && meta.suggestions.length ? meta.suggestions : staticSuggestions(p.userMessage)).filter((s) => !this.guard(s));
+    // Chips and action labels render as app buttons: never emoji (DESIGN_LANGUAGE §6), whatever the model wrote.
+    const suggestions = (meta.ok && meta.suggestions.length ? meta.suggestions : staticSuggestions(p.userMessage))
+      .map((s) => stripEmoji(s))
+      .filter((s) => !!s && !this.guard(s));
     let actions = unsafe ? [] : applyGuardrails(meta.actions, { userMessage: p.userMessage, answer: r.answer, growthAllowed: p.growthAllowed, guard: this.guard });
+    actions = actions.map((a) => ({ ...a, label: stripEmoji(a.label) || a.label })).filter((a) => !!a.label && !hasEmoji(a.label));
     if (p.circleId === undefined) actions = actions.filter((a) => a.type !== 'open_circle' || !!a.payload?.circleId);
     return { unsafe, metaOk: meta.ok, suggestions, actions };
   }
@@ -518,7 +583,12 @@ export class FitzyService implements IFitzyService {
     // "Don't skip meals" / "No skipping meals" is the opposite of restriction advice.
     /\b(?:don'?t|do\s+not|never|no|try\s+not\s+to)\s+skip(?:ping)?\s+(?:any\s+|your\s+)?meals?\b/gi,
     // A refusal clause: "I can't help with losing 10 kg in two weeks" / "won't give you a calorie target".
-    /\b(?:can'?t|cannot|won'?t|will\s+not|am\s+not\s+able\s+to|not\s+able\s+to)\s+(?:help(?:\s+you)?\s+(?:with|plan|design|build|create|find|figure\s+out|get|reach|hit)|give\s+you|create|design|recommend|calculate|set|coach\s+(?:you\s+)?toward)\b[^,;:.!?\n]{0,70}/gi,
+    /\b(?:can'?t|cannot|won'?t|will\s+not|am\s+not\s+able\s+to|not\s+able\s+to)\s+(?:help(?:\s+you)?\s+(?:with|plan|design|build|create|find|figure\s+out|get|reach|hit)|give\s+you|create|design|recommend|coach\s+(?:you\s+)?toward|(?:judge|calculate|set|change)(?:\s+or\s+(?:judge|calculate|set|change))?)\b[^,;:.!?\n]{0,70}/gi,
+    // Onboarding "Is my calorie target realistic?": describing the APP's target as an estimate is the
+    // approved answer (ONBOARDING_PROMPT_ADDENDUM). Only "<the|your|the app's|FitCircle's> calorie
+    // target [in <word>] is an estimate / a starting point / a guide" is removed, and it is bounded
+    // like the others.
+    /\b(?:the|your|the\s+app[’']?s|fitcircle[’']?s)\s+calorie\s+target(?:\s+in\s+(?:the\s+app|fitcircle|your\s+plan))?\s+is\s+(?:just\s+|only\s+)?(?:an?\s+)?(?:estimate|starting\s+point|guide|rough\s+guide)\b/gi,
     // "Losing 10 kg in 2 weeks isn't safe / realistic / something I can …".
     /\blos(?:e|ing)\s+\d+(?:\.\d+)?\s*(?:pounds?|lbs?|kgs?|kilograms?|kilos?)\b[^,;:.!?\n]{0,40}?\b(?:isn'?t|is\s+not|aren'?t|is\s+neither)\s+(?:a\s+)?(?:safe|realistic|healthy|something\s+I\s+can)\b/gi,
   ];
@@ -734,4 +804,33 @@ export class FitzyService implements IFitzyService {
 
     return parts.length > 0 ? parts.join('\n') : null;
   }
+}
+
+/** One model attempt inside runModelStream (eval telemetry). */
+export interface StreamAttempt {
+  model: string;
+  ok: boolean;
+  ms: number;
+  raw: string;
+  error?: unknown;
+  details?: () => Promise<{ finishReason?: string; usage?: unknown; providerMetadata?: unknown }>;
+}
+
+export interface StreamTurnOutcome {
+  answer: string;
+  metaRaw: string | null;
+  tripped: boolean;
+  model: string | null;
+  usage: { inputTokens: number | null; outputTokens: number | null };
+  /** model = a full reply; partial = sentences kept after a mid-stream failure; canned = no model text. */
+  source: 'model' | 'partial' | 'canned';
+  capped: boolean;
+  rawText: string;
+  /** META came from recoverMeta (the reply had none, or a broken one). */
+  metaRecovered: boolean;
+}
+
+/** The deterministic answer when no model text is usable (see lib/fitzy/fallback-answers.ts). */
+export function fallbackAnswerFor(p: { context?: FitzyChatContext | null; userMessage: string }): string {
+  return p.context === 'onboarding' ? onboardingFallbackAnswer(p.userMessage) : FITZY_UNAVAILABLE;
 }

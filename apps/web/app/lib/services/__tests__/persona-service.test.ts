@@ -158,44 +158,4 @@ describe('PersonaService', () => {
       expect(flow.suggestedChallenges).toContain('intense');
     });
   });
-
-  describe('getFitzyWelcomeMessage', () => {
-    it('should return personalized message for Casey', () => {
-      const message = PersonaService.getFitzyWelcomeMessage('casey', 'John');
-
-      expect(message).toContain('champion');
-      expect(message).toContain('compete');
-      expect(message).toContain('💪');
-    });
-
-    it('should return personalized message for Sarah', () => {
-      const message = PersonaService.getFitzyWelcomeMessage('sarah', 'Jane');
-
-      expect(message).toContain('family');
-      expect(message).toContain('friends');
-      expect(message).toContain('🤗');
-    });
-
-    it('should return personalized message for Mike', () => {
-      const message = PersonaService.getFitzyWelcomeMessage('mike', 'Mike');
-
-      expect(message).toContain('Mike');
-      expect(message).toContain('track');
-      expect(message).toContain('📊');
-    });
-
-    it('should return personalized message for Fiona', () => {
-      const message = PersonaService.getFitzyWelcomeMessage('fiona', 'Fiona');
-
-      expect(message).toContain('athlete');
-      expect(message).toContain('metrics');
-      expect(message).toContain('🔥');
-    });
-
-    it('should include user name in message', () => {
-      const message = PersonaService.getFitzyWelcomeMessage('mike', 'TestUser');
-
-      expect(message).toContain('TestUser');
-    });
-  });
 });

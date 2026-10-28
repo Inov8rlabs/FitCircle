@@ -62,7 +62,7 @@ export async function sendWelcomeEmail({
       from: FROM_EMAIL,
       to,
       replyTo: REPLY_TO,
-      subject: `Welcome to FitCircle, ${userName}! 🎉`,
+      subject: `Welcome to FitCircle, ${userName}!`,
       html,
     });
 
