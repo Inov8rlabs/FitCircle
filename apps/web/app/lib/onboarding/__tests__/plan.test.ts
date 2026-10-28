@@ -30,6 +30,19 @@ describe('computePlan (§5.3 step 4)', () => {
     expect(computePlan({ goal: 'lose_weight', heightCm: 160 }).basis).toBe('default');
   });
 
+  it('activityLevel picks the multiplier; missing or unknown keeps the 1.35 default', () => {
+    // male 180 / 90 / 35: BMR 1855
+    const base = { goal: 'eat_healthier', heightCm: 180, weightKg: 90, sex: 'male' as const, age: 35 };
+    expect(computePlan({ ...base, activityLevel: 'sedentary' }).calories).toBe(2230); // ×1.2 = 2226
+    expect(computePlan({ ...base, activityLevel: 'light' }).calories).toBe(2550); // ×1.375 = 2550.6
+    expect(computePlan({ ...base, activityLevel: 'active' }).calories).toBe(2880); // ×1.55 = 2875.25
+    expect(computePlan({ ...base, activityLevel: 'very_active' }).calories).toBe(3200); // ×1.725 = 3199.9
+    expect(computePlan(base).calories).toBe(2500); // ×1.35 = 2504.25
+    expect(computePlan({ ...base, activityLevel: 'athlete' }).calories).toBe(2500);
+    expect(computePlan({ ...base, activityLevel: 'toString' }).calories).toBe(2500);
+    expect(planRequestSchema.parse({ ...base, activityLevel: 'active' }).activityLevel).toBe('active');
+  });
+
   it('never below 1 200 kcal', () => {
     const p = computePlan({ goal: 'lose_weight', heightCm: 150, weightKg: 42, targetWeightKg: 42, sex: 'female', age: 70 });
     expect(p.calories).toBe(1200);

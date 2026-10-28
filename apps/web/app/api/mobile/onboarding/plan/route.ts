@@ -8,7 +8,7 @@ import { OnboardingFlowService } from '@/lib/services/onboarding-flow-service';
 export const dynamic = 'force-dynamic';
 
 /**
- * POST /api/mobile/onboarding/plan { goal, heightCm?, weightKg?, targetWeightKg?, sex?, age?, unitsSystem? }
+ * POST /api/mobile/onboarding/plan { goal, heightCm?, weightKg?, targetWeightKg?, sex?, age?, unitsSystem?, activityLevel? }
  * → data: { calories, proteinG, waterMl, steps, basis: 'personal'|'default', assumptions: [...] }
  *
  * v2 "Your plan" targets (docs/ONBOARDING_V2_EXPERIMENT_SPEC.md §5.3 step 4;
