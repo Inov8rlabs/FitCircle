@@ -27,14 +27,15 @@ const experiment = (over: Partial<Experiment> = {}): Experiment => ({
   status: 'running',
   salt: 'test-salt',
   arms: [
-    { key: 'control', weight: 20, payload: { flow: 'v1' } },
-    { key: 'tour_hard', weight: 40, payload: { flow: 'v2', paywall: 'hard' } },
-    { key: 'tour_soft', weight: 40, payload: { flow: 'v2', paywall: 'soft' } },
+    { key: 'control', name: 'Current onboarding', weight: 20, payload: { flow: 'v1' } },
+    { key: 'variantA', name: 'Tour + hard paywall', weight: 40, payload: { flow: 'v2', paywall: 'hard' } },
+    { key: 'variantB', name: 'Tour + skippable paywall', weight: 40, payload: { flow: 'v2', paywall: 'soft' } },
   ],
   trafficPct: 100,
   audience: { platforms: ['ios', 'android'], minAppVersion: '1.2.0', newUsersOnly: true, excludeUserIds: ['47476150-a984-4431-a89a-7cc8085adfe6'] },
   fallbackArm: 'control',
   winnerArm: null,
+  layer: null,
   startedAt: null,
   endedAt: null,
   createdBy: null,
@@ -91,19 +92,19 @@ describe('decideAssignment order', () => {
   });
 
   it('override beats everything (even ineligibility) and persists once', () => {
-    const d = decideAssignment(experiment({ status: 'draft' }), ctx({ platform: 'web' }), { override: { arm: 'tour_hard' }, existing: null });
-    expect(d).toMatchObject({ arm: 'tour_hard', reason: 'override', enrolled: false, persist: true, payload: { flow: 'v2', paywall: 'hard' } });
-    const again = decideAssignment(experiment(), ctx(), { override: { arm: 'tour_hard' }, existing: { arm: 'tour_hard', reason: 'override' } });
+    const d = decideAssignment(experiment({ status: 'draft' }), ctx({ platform: 'web' }), { override: { arm: 'variantA' }, existing: null });
+    expect(d).toMatchObject({ arm: 'variantA', reason: 'override', enrolled: false, persist: true, payload: { flow: 'v2', paywall: 'hard' } });
+    const again = decideAssignment(experiment(), ctx(), { override: { arm: 'variantA' }, existing: { arm: 'variantA', reason: 'override' } });
     expect(again.persist).toBe(false);
-    const changed = decideAssignment(experiment(), ctx(), { override: { arm: 'tour_soft' }, existing: { arm: 'tour_hard', reason: 'override' } });
-    expect(changed).toMatchObject({ arm: 'tour_soft', persist: true });
+    const changed = decideAssignment(experiment(), ctx(), { override: { arm: 'variantB' }, existing: { arm: 'variantA', reason: 'override' } });
+    expect(changed).toMatchObject({ arm: 'variantB', persist: true });
   });
 
   it('sticky: an existing assignment is returned even when no longer eligible, paused or reweighted', () => {
-    const existing = { arm: 'tour_soft', reason: 'bucket' as const };
+    const existing = { arm: 'variantB', reason: 'bucket' as const };
     const later = ctx({ profileCreatedAt: '2026-01-01T00:00:00Z', onboardingCompleted: true });
-    const reweighted = experiment({ status: 'paused', arms: [{ key: 'control', weight: 100, payload: {} }, { key: 'tour_hard', weight: 0, payload: {} }, { key: 'tour_soft', weight: 0, payload: {} }] });
-    expect(decideAssignment(reweighted, later, { override: null, existing })).toMatchObject({ arm: 'tour_soft', reason: 'bucket', enrolled: true, persist: false });
+    const reweighted = experiment({ status: 'paused', arms: [{ key: 'control', name: 'Current onboarding', weight: 100, payload: {} }, { key: 'variantA', name: 'Tour + hard paywall', weight: 0, payload: {} }, { key: 'variantB', name: 'Tour + skippable paywall', weight: 0, payload: {} }] });
+    expect(decideAssignment(reweighted, later, { override: null, existing })).toMatchObject({ arm: 'variantB', reason: 'bucket', enrolled: true, persist: false });
   });
 
   it('draft / paused → fallback, persisted (sticky through a later start)', () => {
@@ -113,9 +114,9 @@ describe('decideAssignment order', () => {
   });
 
   it('concluded → winner for new users, persisted; existing keep their arm', () => {
-    const e = experiment({ status: 'concluded', winnerArm: 'tour_soft' });
-    expect(decideAssignment(e, ctx(), none)).toMatchObject({ arm: 'tour_soft', reason: 'winner', enrolled: false, persist: true });
-    expect(decideAssignment(e, ctx(), { override: null, existing: { arm: 'tour_hard', reason: 'bucket' } }).arm).toBe('tour_hard');
+    const e = experiment({ status: 'concluded', winnerArm: 'variantB' });
+    expect(decideAssignment(e, ctx(), none)).toMatchObject({ arm: 'variantB', reason: 'winner', enrolled: false, persist: true });
+    expect(decideAssignment(e, ctx(), { override: null, existing: { arm: 'variantA', reason: 'bucket' } }).arm).toBe('variantA');
   });
 
   it('running: bucket → weighted arm, enrolled, persisted; deterministic', () => {
@@ -128,13 +129,13 @@ describe('decideAssignment order', () => {
   });
 
   it('20/40/40 split is honoured', () => {
-    const counts: Record<string, number> = { control: 0, tour_hard: 0, tour_soft: 0 };
+    const counts: Record<string, number> = { control: 0, variantA: 0, variantB: 0 };
     const N = 6000;
     for (let i = 0; i < N; i++) counts[decideAssignment(experiment(), ctx({ userId: uuid(i) }), none).arm]++;
     expect(counts.control / N).toBeGreaterThan(0.17);
     expect(counts.control / N).toBeLessThan(0.23);
-    expect(counts.tour_hard / N).toBeGreaterThan(0.37);
-    expect(counts.tour_soft / N).toBeGreaterThan(0.37);
+    expect(counts.variantA / N).toBeGreaterThan(0.37);
+    expect(counts.variantB / N).toBeGreaterThan(0.37);
   });
 
   it('traffic_pct gates enrolment independently of the arm hash; raising it never moves anyone between arms', () => {
@@ -163,22 +164,38 @@ describe('decideAssignment order', () => {
 });
 
 describe('model validation', () => {
+  const arm = (key: string, weight: number) => ({ key, name: key, weight });
+
   it('weights must sum to 100 and arm keys be unique', () => {
-    expect(armsSchema.safeParse([{ key: 'a', weight: 50 }, { key: 'b', weight: 40 }]).success).toBe(false);
-    expect(armsSchema.safeParse([{ key: 'a', weight: 50 }, { key: 'a', weight: 50 }]).success).toBe(false);
-    expect(armsSchema.safeParse([{ key: 'a', weight: 50 }, { key: 'b', weight: 50 }]).success).toBe(true);
+    expect(armsSchema.safeParse([arm('control', 50), arm('variantA', 40)]).success).toBe(false);
+    expect(armsSchema.safeParse([arm('control', 50), arm('control', 50)]).success).toBe(false);
+    expect(armsSchema.safeParse([arm('control', 50), arm('variantA', 50)]).success).toBe(true);
   });
 
-  it('fallbackArm must be an arm', () => {
-    const base = { key: 'x', name: 'X', arms: [{ key: 'a', weight: 100 }] };
-    expect(createExperimentSchema.safeParse({ ...base, fallbackArm: 'b' }).success).toBe(false);
-    expect(createExperimentSchema.safeParse({ ...base, fallbackArm: 'a' }).success).toBe(true);
+  it('arm keys: exactly one control, variants consecutive from variantA, generic names only', () => {
+    expect(armsSchema.safeParse([arm('variantA', 50), arm('variantB', 50)]).error?.issues[0].message).toMatch(/exactly one arm must be "control"/);
+    expect(armsSchema.safeParse([arm('control', 50), arm('variantB', 50)]).error?.issues[0].message).toMatch(/consecutive/);
+    expect(armsSchema.safeParse([arm('control', 34), arm('variantA', 33), arm('variantC', 33)]).success).toBe(false);
+    expect(armsSchema.safeParse([arm('control', 34), arm('variantB', 33), arm('variantA', 33)]).success).toBe(true);
+    expect(armsSchema.safeParse([arm('control', 50), arm('tour_hard', 50)]).success).toBe(false);
+    expect(armsSchema.safeParse([arm('control', 50), arm('variantJ', 50)]).success).toBe(false);
+    expect(armsSchema.safeParse([{ key: 'control', weight: 100 }]).success).toBe(false); // name required
+    expect(armsSchema.safeParse([{ key: 'control', name: 'x'.repeat(61), weight: 100 }]).success).toBe(false);
+    const ten = [arm('control', 10), ...'ABCDEFGHI'.split('').map((l) => arm(`variant${l}`, 10))];
+    expect(armsSchema.safeParse(ten).success).toBe(true);
+  });
+
+  it('fallbackArm defaults to control and must be an arm', () => {
+    const base = { key: 'x', name: 'X', arms: [arm('control', 50), arm('variantA', 50)] };
+    expect(createExperimentSchema.parse(base).fallbackArm).toBe('control');
+    expect(createExperimentSchema.safeParse({ ...base, fallbackArm: 'variantB' }).success).toBe(false);
+    expect(createExperimentSchema.safeParse({ ...base, fallbackArm: 'variantA' }).success).toBe(true);
   });
 
   it('override input needs exactly one of email / userId', () => {
-    expect(overrideInputSchema.safeParse({ arm: 'a' }).success).toBe(false);
-    expect(overrideInputSchema.safeParse({ arm: 'a', email: 'x@y.co', userId: uuid(1) }).success).toBe(false);
-    expect(overrideInputSchema.safeParse({ arm: 'a', email: 'x@y.co' }).success).toBe(true);
+    expect(overrideInputSchema.safeParse({ arm: 'variantA' }).success).toBe(false);
+    expect(overrideInputSchema.safeParse({ arm: 'variantA', email: 'x@y.co', userId: uuid(1) }).success).toBe(false);
+    expect(overrideInputSchema.safeParse({ arm: 'variantA', email: 'x@y.co' }).success).toBe(true);
   });
 
   it('lifecycle transitions', () => {
@@ -195,18 +212,18 @@ describe('model validation', () => {
     expect(started.startedAt).toBe(NOW.toISOString());
     expect(() => applyPatch(experiment(), { status: 'concluded' }, { now: NOW, hasAssignments: true })).toThrow(ExperimentValidationError);
     expect(() => applyPatch(experiment(), { status: 'concluded', winnerArm: 'nope' }, { now: NOW, hasAssignments: true })).toThrow(/winnerArm/);
-    const done = applyPatch(experiment(), { status: 'concluded', winnerArm: 'tour_soft' }, { now: NOW, hasAssignments: true });
-    expect(done).toMatchObject({ status: 'concluded', winnerArm: 'tour_soft', endedAt: NOW.toISOString() });
+    const done = applyPatch(experiment(), { status: 'concluded', winnerArm: 'variantB' }, { now: NOW, hasAssignments: true });
+    expect(done).toMatchObject({ status: 'concluded', winnerArm: 'variantB', endedAt: NOW.toISOString() });
   });
 
   it('applyPatch: arms in use cannot be removed; fallback must stay valid', () => {
     expect(() =>
-      applyPatch(experiment(), { arms: [{ key: 'control', weight: 50, payload: {} }, { key: 'tour_soft', weight: 50, payload: {} }] }, { now: NOW, hasAssignments: true })
+      applyPatch(experiment(), { arms: [{ key: 'control', name: 'Current onboarding', weight: 50, payload: {} }, { key: 'variantB', name: 'Tour + skippable paywall', weight: 50, payload: {} }] }, { now: NOW, hasAssignments: true })
     ).toThrow(/cannot be removed/);
     expect(() => applyPatch(experiment(), { fallbackArm: 'ghost' }, { now: NOW, hasAssignments: false })).toThrow(/fallbackArm/);
     const reweighted = applyPatch(
       experiment(),
-      { arms: [{ key: 'control', weight: 10, payload: {} }, { key: 'tour_hard', weight: 45, payload: {} }, { key: 'tour_soft', weight: 45, payload: {} }] },
+      { arms: [{ key: 'control', name: 'Current onboarding', weight: 10, payload: {} }, { key: 'variantA', name: 'Tour + hard paywall', weight: 45, payload: {} }, { key: 'variantB', name: 'Tour + skippable paywall', weight: 45, payload: {} }] },
       { now: NOW, hasAssignments: true }
     );
     expect(reweighted.arms.map((a) => a.weight)).toEqual([10, 45, 45]);

@@ -35,9 +35,9 @@ const DEMO = '47476150-a984-4431-a89a-7cc8085adfe6';
 const API = 'https://api.test';
 
 const ARMS = [
-  { key: 'control', weight: 20, payload: { flow: 'v1', paywall: 'none' } },
-  { key: 'tour_hard', weight: 40, payload: { flow: 'v2', paywall: 'hard' } },
-  { key: 'tour_soft', weight: 40, payload: { flow: 'v2', paywall: 'soft' } },
+  { key: 'control', name: 'Current onboarding', weight: 20, payload: { flow: 'v1', paywall: 'none' } },
+  { key: 'variantA', name: 'Tour + hard paywall', weight: 40, payload: { flow: 'v2', paywall: 'hard' } },
+  { key: 'variantB', name: 'Tour + skippable paywall', weight: 40, payload: { flow: 'v2', paywall: 'soft' } },
 ];
 const EXPERIMENT = {
   key: 'onboarding_v2',
@@ -116,7 +116,7 @@ describe('POST /api/mobile/experiments/assign', () => {
     expect(res.headers.get('cache-control')).toBe('no-store');
     expect(body.success).toBe(true);
     const a = body.data.assignments.onboarding_v2;
-    expect(['control', 'tour_hard', 'tour_soft']).toContain(a.arm);
+    expect(['control', 'variantA', 'variantB']).toContain(a.arm);
     expect(a.enrolled).toBe(true);
     expect(a.payload).toEqual(ARMS.find((x) => x.key === a.arm)!.payload);
     expect(assignments()).toHaveLength(1);
@@ -124,7 +124,7 @@ describe('POST /api/mobile/experiments/assign', () => {
     expect(assignments()[0].first_exposed_at ?? null).toBeNull();
 
     // Idempotent + sticky even after weights change and the account ages.
-    db.getRows('experiments')[0].arms = [{ key: 'control', weight: 100, payload: {} }, { key: 'tour_hard', weight: 0, payload: {} }, { key: 'tour_soft', weight: 0, payload: {} }];
+    db.getRows('experiments')[0].arms = [{ key: 'control', name: 'Current onboarding', weight: 100, payload: {} }, { key: 'variantA', name: 'Tour + hard paywall', weight: 0, payload: {} }, { key: 'variantB', name: 'Tour + skippable paywall', weight: 0, payload: {} }];
     authedUser = profile({ created_at: '2026-01-01T00:00:00Z' });
     const again = await assign();
     expect(again.body.data.assignments.onboarding_v2.arm).toBe(a.arm);
@@ -164,9 +164,9 @@ describe('POST /api/mobile/experiments/assign', () => {
   });
 
   it('override wins and is persisted with reason override (enrolled false)', async () => {
-    db.seed('experiment_overrides', [{ experiment_key: 'onboarding_v2', user_id: USER, arm: 'tour_soft' }]);
-    expect((await assign({ 'x-app-platform': 'web' })).body.data.assignments.onboarding_v2).toMatchObject({ arm: 'tour_soft', enrolled: false });
-    expect(assignments()[0]).toMatchObject({ reason: 'override', arm: 'tour_soft' });
+    db.seed('experiment_overrides', [{ experiment_key: 'onboarding_v2', user_id: USER, arm: 'variantB' }]);
+    expect((await assign({ 'x-app-platform': 'web' })).body.data.assignments.onboarding_v2).toMatchObject({ arm: 'variantB', enrolled: false });
+    expect(assignments()[0]).toMatchObject({ reason: 'override', arm: 'variantB' });
   });
 
   it('unknown keys are omitted; bad bodies are 400; anonymous is 401', async () => {
@@ -185,7 +185,7 @@ describe('POST /api/mobile/experiments/assign', () => {
 describe('POST /api/mobile/experiments/exposure', () => {
   it('sets first_exposed_at once, only for the persisted arm', async () => {
     const arm = (await assign()).body.data.assignments.onboarding_v2.arm as string;
-    const other = arm === 'control' ? 'tour_soft' : 'control';
+    const other = arm === 'control' ? 'variantB' : 'control';
     const send = (a: string) => POST_EXPOSURE(req('/api/mobile/experiments/exposure', { body: { key: 'onboarding_v2', arm: a, surface: 'v2_welcome' } }));
 
     const wrong = await send(other);
@@ -288,8 +288,8 @@ describe('POST /api/mobile/onboarding/gate + entitlements gate', () => {
   const gate = async () => (await (await POST_GATE(req('/api/mobile/onboarding/gate', { body: { reached: true } }))).json()).data;
   const entitlements = async () => (await (await GET_ENTITLEMENTS(req('/api/mobile/entitlements', { method: 'GET' }))).json()).data;
 
-  it('tour_hard → subscription_required; entitlements report gate + locked until Pro', async () => {
-    setArm('tour_hard');
+  it('variantA → subscription_required; entitlements report gate + locked until Pro', async () => {
+    setArm('variantA');
     expect(await gate()).toEqual({ gate: 'subscription_required' });
     expect(db.getRows('profiles')[0]).toMatchObject({ onboarding_gate: 'subscription_required', onboarding_paywall_at: NOW.toISOString() });
     expect(await entitlements()).toMatchObject({ gate: 'subscription_required', locked: true });
@@ -303,15 +303,27 @@ describe('POST /api/mobile/onboarding/gate + entitlements gate', () => {
     expect((await entitlements()).locked).toBe(false);
   });
 
-  it('tour_soft / control / unassigned → gate stays none (paywall view still recorded)', async () => {
-    setArm('tour_soft');
+  it('variantB / control / unassigned → gate stays none (paywall view still recorded)', async () => {
+    setArm('variantB');
     expect(await gate()).toEqual({ gate: 'none' });
     expect(db.getRows('profiles')[0]).toMatchObject({ onboarding_gate: 'none', onboarding_paywall_at: NOW.toISOString() });
     expect(await entitlements()).toMatchObject({ gate: 'none', locked: false });
   });
 
+  it('the gate follows the arm payload (paywall "hard"), never the arm key', async () => {
+    db.getRows('experiments')[0].arms = [
+      { key: 'control', name: 'C', weight: 20, payload: { flow: 'v1' } },
+      { key: 'variantA', name: 'Soft now', weight: 40, payload: { flow: 'v2', paywall: 'soft' } },
+      { key: 'variantB', name: 'Hard now', weight: 40, payload: { flow: 'v2', paywall: 'hard' } },
+    ];
+    setArm('variantA');
+    expect(await gate()).toEqual({ gate: 'none' });
+    db.getRows('experiment_assignments')[0].arm = 'variantB';
+    expect(await gate()).toEqual({ gate: 'subscription_required' });
+  });
+
   it('a paused (released) experiment never sets the gate', async () => {
-    setArm('tour_hard');
+    setArm('variantA');
     db.getRows('experiments')[0].status = 'paused';
     expect(await gate()).toEqual({ gate: 'none' });
   });

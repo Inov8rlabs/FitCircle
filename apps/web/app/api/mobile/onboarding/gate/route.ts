@@ -11,8 +11,8 @@ export const dynamic = 'force-dynamic';
  *
  * The onboarding paywall was shown (docs/ONBOARDING_V2_EXPERIMENT_SPEC.md §5.5).
  * Any user may call it (records profiles.onboarding_paywall_at for the
- * "paywall viewed" metric); the gate is set only for onboarding_v2 tour_hard
- * users while the experiment is running/concluded. Idempotent. Clients then
+ * "paywall viewed" metric); the gate is set only for onboarding_v2 users
+ * whose arm payload has paywall "hard" (variantA) while the experiment is running/concluded. Idempotent. Clients then
  * re-read GET /api/mobile/entitlements (gate / locked).
  */
 export async function POST(request: NextRequest) {

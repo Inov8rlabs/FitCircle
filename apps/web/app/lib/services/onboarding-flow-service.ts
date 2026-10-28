@@ -1,6 +1,6 @@
 /**
  * Onboarding v1/v2 server state (docs/ONBOARDING_V2_EXPERIMENT_SPEC.md R2, R3,
- * §5.3, §5.5): resumable progress, the v2 plan targets and the tour_hard gate.
+ * §5.3, §5.5): resumable progress, the v2 plan targets and the hard-paywall gate.
  *
  *  PATCH /api/mobile/onboarding/progress → saveProgress
  *  GET   /api/mobile/onboarding/status   → getResume (merged into the legacy status)
@@ -14,8 +14,14 @@ import { ageFrom, computePlan, type PlanRequest, type PlanTargets } from '../onb
 import { createAdminSupabase } from '../supabase-admin';
 
 export const ONBOARDING_EXPERIMENT_KEY = 'onboarding_v2';
-/** The only arm whose paywall locks the app (§5.5). */
-export const HARD_GATE_ARM = 'tour_hard';
+/**
+ * The gate keys off the user's arm PAYLOAD, never the arm key: an arm whose
+ * payload has `paywall: "hard"` locks the app (§5.5). For onboarding_v2 that is
+ * variantA ("Tour + hard paywall").
+ */
+export function isHardPaywallPayload(payload: Record<string, unknown> | null | undefined): boolean {
+  return payload?.paywall === 'hard';
+}
 /** Accounts at least this old are never pushed back into onboarding (R2). */
 export const RESUME_MAX_ACCOUNT_AGE_MS = 30 * 86_400_000;
 /** Saved answers are small; refuse anything that looks like abuse. */
@@ -140,7 +146,8 @@ export class OnboardingFlowService {
   /**
    * POST /api/mobile/onboarding/gate {reached:true}: the user saw the onboarding
    * paywall. Recorded for every arm (onboarding_paywall_at, first time only);
-   * the gate is set ONLY for onboarding_v2 `tour_hard` users while the
+   * the gate is set ONLY for onboarding_v2 users whose arm payload says
+   * `paywall: "hard"` (variantA) while the
    * experiment is running or concluded — a paused (e.g. released) experiment
    * never locks anyone. Once set, the gate stays (re-lock on lapse, §11.3);
    * only the admin release-gate clears it.
@@ -161,7 +168,8 @@ export class OnboardingFlowService {
         ExperimentService.get(ONBOARDING_EXPERIMENT_KEY),
       ]);
       const live = experiment?.status === 'running' || experiment?.status === 'concluded';
-      if (assignment?.arm === HARD_GATE_ARM && live) {
+      const arm = assignment ? experiment?.arms.find((a) => a.key === assignment.arm) : undefined;
+      if (live && isHardPaywallPayload(arm?.payload)) {
         update.onboarding_gate = 'subscription_required';
         gate = 'subscription_required';
       }

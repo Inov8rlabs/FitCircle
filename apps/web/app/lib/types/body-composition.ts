@@ -92,7 +92,7 @@ export interface EntitlementsResponse {
   subscriptionsEnabled?: boolean;
   /**
    * Onboarding v2 hard gate (ONBOARDING_V2 §5.5): 'subscription_required' once a
-   * tour_hard user reached the paywall; stays set (re-lock on lapse) until an
+   * hard-paywall (payload paywall "hard") user reached the paywall; stays set (re-lock on lapse) until an
    * admin release. Unknown → 'none' (fail open).
    */
   gate?: 'none' | 'subscription_required';

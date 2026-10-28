@@ -9,6 +9,8 @@
 -- policies, so clients can never read allowlists, salts or assignments
 -- (fixes the feature_flags mistake). updated_at is set by the application.
 --
+-- Amended 2026-10-28 before first apply: generic arm keys (control/variantA/variantB) + arm names.
+--
 -- Apply ALONE (db query + schema_migrations insert), like 106-111:
 -- 104 is still unapplied, so never `db push --include-all`.
 -- Idempotent.
@@ -153,14 +155,15 @@ insert into public.experiments (key, name, description, status, salt, arms, traf
 values (
   'onboarding_v2',
   'Onboarding v2: tour + paywall',
-  'v1 onboarding vs the v2 tour with a hard (no close) or soft ("I''ll do it later") paywall. docs/ONBOARDING_V2_EXPERIMENT_SPEC.md',
+  'v1 onboarding (control) vs the v2 tour with a hard (variantA) or skippable (variantB) paywall. docs/ONBOARDING_V2_EXPERIMENT_SPEC.md',
   'draft',
   -- 128 random bits (gen_random_uuid is core Postgres; no pgcrypto schema needed).
   replace(gen_random_uuid()::text, '-', ''),
+  -- Generic arm keys (control | variantA | variantB); clients act on payload.
   '[
-     {"key": "control",   "weight": 20, "payload": {"flow": "v1", "paywall": "none"}},
-     {"key": "tour_hard", "weight": 40, "payload": {"flow": "v2", "paywall": "hard"}},
-     {"key": "tour_soft", "weight": 40, "payload": {"flow": "v2", "paywall": "soft"}}
+     {"key": "control",  "name": "Current onboarding",       "weight": 20, "payload": {"flow": "v1"}},
+     {"key": "variantA", "name": "Tour + hard paywall",      "weight": 40, "payload": {"flow": "v2", "paywall": "hard"}},
+     {"key": "variantB", "name": "Tour + skippable paywall", "weight": 40, "payload": {"flow": "v2", "paywall": "soft"}}
    ]'::jsonb,
   20,
   '{

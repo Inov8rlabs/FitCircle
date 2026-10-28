@@ -8,7 +8,8 @@
     "identity": "user_id = FitCircle profile UUID on every platform, set on sign-up/login/session restore, cleared on logout. Never email, name or username.",
     "privacy": "Never send health VALUES (calories, macros, weight, body fat, steps, water volume, workout minutes), free text, emails, names or photos. Send coarse bands or booleans instead (has_weight, duration_band).",
     "providers": "Clients send every event to all enabled providers (Amplitude, PostHog, Sentry breadcrumbs, debug console). A provider is enabled by its key in build config.",
-    "bands": "duration_band: lt_15 <15 min, 15_30 [15,30), 30_60 [30,60), 60_plus >=60."
+    "bands": "duration_band: lt_15 <15 min, 15_30 [15,30), 30_60 [30,60), 60_plus >=60.",
+    "experiments": "Experiment arms are generic: control | variantA | variantB | … (the human label lives in Admin Tools). User property exp_<experiment_key> = arm key, set ONLY for randomised (enrolled) users and QA overrides — never for fallback, not-enrolled, layer, layer_conflict or winner assignments. exp_<key>_name = the arm's human label (readable charts). exp_<key>_override = true marks QA overrides; filter them out of readouts. exp_<key>_exposed_at (setOnce) = first exposure. The server sets these on assignment (Amplitude Identify API) and exposure; clients set exp_<key> on exposure and send Experiment Exposed {experiment_key, arm, surface}. Clients route by the arm payload, never by the arm key. exp_onboarding_v2 is the documented example."
   },
   "enums": {
     "auth_method": [
@@ -211,7 +212,7 @@
     {
       "name": "exp_onboarding_v2",
       "type": "string",
-      "description": "Arm of the onboarding_v2 experiment: control | tour_hard | tour_soft. Set on exposure."
+      "description": "Arm of the onboarding_v2 experiment: control | variantA | variantB (labels in Admin Tools: Current onboarding / Tour + hard paywall / Tour + skippable paywall). Enrolled users and QA overrides only; set by the server on assignment and by clients on exposure. Example of the exp_<experiment_key> convention."
     },
     {
       "name": "onboarding_flow",
@@ -1764,7 +1765,7 @@
           "name": "is_hard",
           "type": "bool",
           "required": false,
-          "description": "Paywall has no close/skip path (onboarding_v2 tour_hard arm, locked screen)."
+          "description": "Paywall has no close/skip path (onboarding_v2 hard-paywall arm (variantA), locked screen)."
         },
         {
           "name": "trial_eligible",
@@ -1806,7 +1807,7 @@
           "name": "is_hard",
           "type": "bool",
           "required": false,
-          "description": "Paywall has no close/skip path (onboarding_v2 tour_hard arm, locked screen)."
+          "description": "Paywall has no close/skip path (onboarding_v2 hard-paywall arm (variantA), locked screen)."
         },
         {
           "name": "trial_eligible",
@@ -1836,7 +1837,7 @@
           "name": "is_hard",
           "type": "bool",
           "required": false,
-          "description": "Paywall has no close/skip path (onboarding_v2 tour_hard arm, locked screen)."
+          "description": "Paywall has no close/skip path (onboarding_v2 hard-paywall arm (variantA), locked screen)."
         },
         {
           "name": "trial_eligible",
@@ -1884,7 +1885,7 @@
           "name": "is_hard",
           "type": "bool",
           "required": false,
-          "description": "Paywall has no close/skip path (onboarding_v2 tour_hard arm, locked screen)."
+          "description": "Paywall has no close/skip path (onboarding_v2 hard-paywall arm (variantA), locked screen)."
         },
         {
           "name": "trial_eligible",
@@ -1948,7 +1949,7 @@
           "name": "is_hard",
           "type": "bool",
           "required": false,
-          "description": "Paywall has no close/skip path (onboarding_v2 tour_hard arm, locked screen)."
+          "description": "Paywall has no close/skip path (onboarding_v2 hard-paywall arm (variantA), locked screen)."
         },
         {
           "name": "trial_eligible",
@@ -2002,7 +2003,7 @@
           "name": "is_hard",
           "type": "bool",
           "required": false,
-          "description": "Paywall has no close/skip path (onboarding_v2 tour_hard arm, locked screen)."
+          "description": "Paywall has no close/skip path (onboarding_v2 hard-paywall arm (variantA), locked screen)."
         },
         {
           "name": "trial_eligible",
@@ -2056,7 +2057,7 @@
           "name": "is_hard",
           "type": "bool",
           "required": false,
-          "description": "Paywall has no close/skip path (onboarding_v2 tour_hard arm, locked screen)."
+          "description": "Paywall has no close/skip path (onboarding_v2 hard-paywall arm (variantA), locked screen)."
         },
         {
           "name": "trial_eligible",

@@ -29,9 +29,9 @@ const NOW = new Date('2026-12-31T00:00:00Z');
 const DAY = 86_400_000;
 
 const ARMS = [
-  { key: 'control', weight: 20, payload: { flow: 'v1' } },
-  { key: 'tour_hard', weight: 40, payload: { flow: 'v2', paywall: 'hard' } },
-  { key: 'tour_soft', weight: 40, payload: { flow: 'v2', paywall: 'soft' } },
+  { key: 'control', name: 'Current onboarding', weight: 20, payload: { flow: 'v1' } },
+  { key: 'variantA', name: 'Tour + hard paywall', weight: 40, payload: { flow: 'v2', paywall: 'hard' } },
+  { key: 'variantB', name: 'Tour + skippable paywall', weight: 40, payload: { flow: 'v2', paywall: 'soft' } },
 ];
 
 let db: FakeSupabase;
@@ -114,7 +114,7 @@ describe('auth', () => {
 describe('list / detail / create', () => {
   it('lists without the salt, with per-arm counts', async () => {
     db.seed('experiment_assignments', [
-      { experiment_key: 'onboarding_v2', user_id: USER, arm: 'tour_hard', reason: 'bucket', first_exposed_at: NOW.toISOString(), assigned_at: NOW.toISOString() },
+      { experiment_key: 'onboarding_v2', user_id: USER, arm: 'variantA', reason: 'bucket', first_exposed_at: NOW.toISOString(), assigned_at: NOW.toISOString() },
       { experiment_key: 'onboarding_v2', user_id: QA, arm: 'control', reason: 'override', assigned_at: NOW.toISOString() },
     ]);
     const { status, body } = await json(await LIST(req('/api/admin/experiments')));
@@ -124,23 +124,25 @@ describe('list / detail / create', () => {
     expect(e).toMatchObject({ key: 'onboarding_v2', status: 'draft', trafficPct: 20, fallbackArm: 'control' });
     expect(e.counts).toEqual({
       control: { assigned: 0, exposed: 0, overrides: 1, other: 0 },
-      tour_hard: { assigned: 1, exposed: 1, overrides: 0, other: 0 },
-      tour_soft: { assigned: 0, exposed: 0, overrides: 0, other: 0 },
+      variantA: { assigned: 1, exposed: 1, overrides: 0, other: 0 },
+      variantB: { assigned: 0, exposed: 0, overrides: 0, other: 0 },
     });
   });
 
   it('creates a draft with a random salt; validates weights and fallback; 409 on duplicates', async () => {
-    const body = { key: 'paywall_copy', name: 'Paywall copy', arms: [{ key: 'a', weight: 50 }, { key: 'b', weight: 50 }], fallbackArm: 'a' };
+    const body = { key: 'paywall_copy', name: 'Paywall copy', arms: [{ key: 'control', name: 'Current', weight: 50 }, { key: 'variantA', name: 'New copy', weight: 50 }] };
     const created = await json(await CREATE(req('/api/admin/experiments', { method: 'POST', body })));
     expect(created.status).toBe(201);
-    expect(created.body.data.experiment).toMatchObject({ key: 'paywall_copy', status: 'draft', trafficPct: 100, audience: {} });
+    expect(created.body.data.experiment).toMatchObject({ key: 'paywall_copy', status: 'draft', trafficPct: 100, audience: {}, fallbackArm: 'control', layer: null });
     expect(db.getRows('experiments').find((r) => r.key === 'paywall_copy')!.salt).toMatch(/^[0-9a-f]{32}$/);
     expect(audit()[0]).toMatchObject({ experiment_key: 'paywall_copy', action: 'create', actor: 'ani@inov8rlabs.com' });
     expect((await CREATE(req('/api/admin/experiments', { method: 'POST', body }))).status).toBe(409);
-    const badWeights = await json(await CREATE(req('/api/admin/experiments', { method: 'POST', body: { ...body, key: 'x', arms: [{ key: 'a', weight: 60 }, { key: 'b', weight: 50 }] } })));
+    const badWeights = await json(await CREATE(req('/api/admin/experiments', { method: 'POST', body: { ...body, key: 'x', arms: [{ key: 'control', name: 'C', weight: 60 }, { key: 'variantA', name: 'A', weight: 50 }] } })));
     expect(badWeights.status).toBe(400);
     expect(JSON.stringify(badWeights.body.error)).toContain('VALIDATION_ERROR');
-    expect((await CREATE(req('/api/admin/experiments', { method: 'POST', body: { ...body, key: 'y', fallbackArm: 'zzz' } }))).status).toBe(400);
+    expect((await CREATE(req('/api/admin/experiments', { method: 'POST', body: { ...body, key: 'y', fallbackArm: 'variantB' } }))).status).toBe(400);
+    // Non-generic arm keys are rejected.
+    expect((await CREATE(req('/api/admin/experiments', { method: 'POST', body: { ...body, key: 'z', arms: [{ key: 'control', name: 'C', weight: 50 }, { key: 'tour', name: 'T', weight: 50 }] } }))).status).toBe(400);
   });
 
   it('detail: experiment, counts, overrides, audit; 404 for unknown', async () => {
@@ -165,12 +167,12 @@ describe('PATCH (lifecycle, weights, traffic)', () => {
   });
 
   it('weights change only the definition; existing assignments are untouched', async () => {
-    db.seed('experiment_assignments', [{ experiment_key: 'onboarding_v2', user_id: USER, arm: 'tour_hard', reason: 'bucket', assigned_at: NOW.toISOString() }]);
-    const arms = [{ key: 'control', weight: 10, payload: {} }, { key: 'tour_hard', weight: 45, payload: {} }, { key: 'tour_soft', weight: 45, payload: {} }];
+    db.seed('experiment_assignments', [{ experiment_key: 'onboarding_v2', user_id: USER, arm: 'variantA', reason: 'bucket', assigned_at: NOW.toISOString() }]);
+    const arms = [{ key: 'control', name: 'Current onboarding', weight: 10, payload: {} }, { key: 'variantA', name: 'Tour + hard paywall', weight: 45, payload: {} }, { key: 'variantB', name: 'Tour + skippable paywall', weight: 45, payload: {} }];
     expect((await PATCH_ONE(req('/api/admin/experiments/onboarding_v2', { method: 'PATCH', body: { arms } }), params('onboarding_v2'))).status).toBe(200);
-    expect(db.getRows('experiment_assignments')[0].arm).toBe('tour_hard');
+    expect(db.getRows('experiment_assignments')[0].arm).toBe('variantA');
     // Removing an arm with assignments is a 409.
-    const res = await PATCH_ONE(req('/api/admin/experiments/onboarding_v2', { method: 'PATCH', body: { arms: [{ key: 'control', weight: 100, payload: {} }] } }), params('onboarding_v2'));
+    const res = await PATCH_ONE(req('/api/admin/experiments/onboarding_v2', { method: 'PATCH', body: { arms: [{ key: 'control', name: 'Current onboarding', weight: 100, payload: {} }] } }), params('onboarding_v2'));
     expect(res.status).toBe(409);
     expect((await res.json()).error.code).toBe('ARM_IN_USE');
   });
@@ -181,8 +183,8 @@ describe('PATCH (lifecycle, weights, traffic)', () => {
     const noWinner = await PATCH_ONE(req('/api/admin/experiments/onboarding_v2', { method: 'PATCH', body: { status: 'concluded' } }), params('onboarding_v2'));
     expect(noWinner.status).toBe(400);
     expect((await noWinner.json()).error.code).toBe('WINNER_REQUIRED');
-    const done = await json(await PATCH_ONE(req('/api/admin/experiments/onboarding_v2', { method: 'PATCH', body: { status: 'concluded', winnerArm: 'tour_soft' } }), params('onboarding_v2')));
-    expect(done.body.data.experiment).toMatchObject({ status: 'concluded', winnerArm: 'tour_soft', endedAt: NOW.toISOString() });
+    const done = await json(await PATCH_ONE(req('/api/admin/experiments/onboarding_v2', { method: 'PATCH', body: { status: 'concluded', winnerArm: 'variantB' } }), params('onboarding_v2')));
+    expect(done.body.data.experiment).toMatchObject({ status: 'concluded', winnerArm: 'variantB', endedAt: NOW.toISOString() });
   });
 
   it('rejects unknown fields (salt is immutable)', async () => {
@@ -192,15 +194,15 @@ describe('PATCH (lifecycle, weights, traffic)', () => {
 
 describe('overrides', () => {
   it('set by email (case-insensitive) or userId, list with emails, remove (also drops the override assignment)', async () => {
-    const set = await json(await POST_OVERRIDE(req('/api/admin/experiments/onboarding_v2/overrides', { method: 'POST', body: { email: 'qa@example.com', arm: 'tour_hard', note: 'QA' } }), params('onboarding_v2')));
+    const set = await json(await POST_OVERRIDE(req('/api/admin/experiments/onboarding_v2/overrides', { method: 'POST', body: { email: 'qa@example.com', arm: 'variantA', note: 'QA' } }), params('onboarding_v2')));
     expect(set.status).toBe(200);
-    expect(set.body.data.overrides).toEqual([expect.objectContaining({ userId: QA, email: 'QA@Example.com', arm: 'tour_hard', note: 'QA', createdBy: 'ani@inov8rlabs.com' })]);
+    expect(set.body.data.overrides).toEqual([expect.objectContaining({ userId: QA, email: 'QA@Example.com', arm: 'variantA', note: 'QA', createdBy: 'ani@inov8rlabs.com' })]);
     expect(audit().at(-1)).toMatchObject({ action: 'override_set' });
 
     const list = await json(await GET_OVERRIDES(req('/api/admin/experiments/onboarding_v2/overrides'), params('onboarding_v2')));
     expect(list.body.data.overrides).toHaveLength(1);
 
-    db.seed('experiment_assignments', [{ experiment_key: 'onboarding_v2', user_id: QA, arm: 'tour_hard', reason: 'override', assigned_at: NOW.toISOString() }]);
+    db.seed('experiment_assignments', [{ experiment_key: 'onboarding_v2', user_id: QA, arm: 'variantA', reason: 'override', assigned_at: NOW.toISOString() }]);
     const removed = await json(await DELETE_OVERRIDE(req(`/api/admin/experiments/onboarding_v2/overrides?userId=${QA}`, { method: 'DELETE' }), params('onboarding_v2')));
     expect(removed.body.data.overrides).toEqual([]);
     expect(db.getRows('experiment_assignments')).toHaveLength(0);
@@ -236,13 +238,13 @@ describe('results', () => {
       const id = `00000000-0000-4000-8000-${String(i).padStart(12, '0')}`;
       const arm = ARMS[i % 3].key;
       rows.push({ experiment_key: 'onboarding_v2', user_id: id, arm, reason: 'bucket', assigned_at: t0, first_exposed_at: t0, platform: i % 2 ? 'ios' : 'android', country: 'US' });
-      const trial = arm === 'tour_hard' && i < 15;
+      const trial = arm === 'variantA' && i < 15;
       profiles.push({ id, trial_started_at: trial ? t0 : null, trial_ends_at: trial ? new Date(Date.parse(t0) + 3 * DAY).toISOString() : null, trial_converted_at: trial && i < 9 ? new Date(Date.parse(t0) + 3 * DAY).toISOString() : null });
       if (trial && i < 9) events.push({ id: `e${i}`, user_id: id, type: 'RENEWAL', environment: 'PRODUCTION', event_timestamp: new Date(Date.parse(t0) + 3 * DAY).toISOString(), raw: { price: 29.99, period_type: 'NORMAL' } });
     }
     // Excluded rows: unexposed, override, fallback, sandbox revenue.
-    rows.push({ experiment_key: 'onboarding_v2', user_id: USER, arm: 'tour_hard', reason: 'bucket', assigned_at: t0, first_exposed_at: null });
-    rows.push({ experiment_key: 'onboarding_v2', user_id: QA, arm: 'tour_hard', reason: 'override', assigned_at: t0, first_exposed_at: t0 });
+    rows.push({ experiment_key: 'onboarding_v2', user_id: USER, arm: 'variantA', reason: 'bucket', assigned_at: t0, first_exposed_at: null });
+    rows.push({ experiment_key: 'onboarding_v2', user_id: QA, arm: 'variantA', reason: 'override', assigned_at: t0, first_exposed_at: t0 });
     rows.push({ experiment_key: 'onboarding_v2', user_id: ADMIN, arm: 'control', reason: 'fallback', assigned_at: t0 });
     events.push({ id: 'sbx', user_id: rows[0].user_id, type: 'INITIAL_PURCHASE', environment: 'SANDBOX', event_timestamp: t0, raw: { price: 99 } });
     db.seed('experiment_assignments', rows);
@@ -255,16 +257,17 @@ describe('results', () => {
     const { status, body } = await json(await RESULTS(req('/api/admin/experiments/onboarding_v2/results'), params('onboarding_v2')));
     expect(status).toBe(200);
     const r = body.data;
-    expect(r).toMatchObject({ experimentKey: 'onboarding_v2', arms: ['control', 'tour_hard', 'tour_soft'], control: 'control', cached: false, segment: null, segments: null });
-    expect(r.excluded).toEqual({ unexposed: 1, overrides: 1, fallback: 1, winner: 0 });
-    expect(r.population.exposed).toEqual({ control: 10, tour_hard: 10, tour_soft: 10 });
+    expect(r).toMatchObject({ experimentKey: 'onboarding_v2', arms: ['control', 'variantA', 'variantB'], control: 'control', cached: false, segment: null, segments: null });
+    expect(r.excluded).toEqual({ unexposed: 1, overrides: 1, fallback: 1, winner: 0, layer: 0, layerConflict: 0 });
+    expect(r.layer).toBeNull();
+    expect(r.population.exposed).toEqual({ control: 10, variantA: 10, variantB: 10 });
     const paid = r.metrics.find((m: any) => m.key === 'paid_conversion_d10');
     expect(paid.primary).toBe(true);
-    expect(paid.arms.tour_hard).toMatchObject({ n: 10, x: 3 });
+    expect(paid.arms.variantA).toMatchObject({ n: 10, x: 3 });
     expect(paid.arms.control).toMatchObject({ n: 10, x: 0 });
     const revenue = r.metrics.find((m: any) => m.key === 'revenue_per_user_d30');
     expect(revenue.arms.control.value).toBe(0); // sandbox purchase ignored
-    expect(revenue.arms.tour_hard.value).toBeCloseTo(8.997, 2);
+    expect(revenue.arms.variantA.value).toBeCloseTo(8.997, 2);
     expect(r.decision).toHaveProperty('candidate');
 
     const cached = await json(await RESULTS(req('/api/admin/experiments/onboarding_v2/results'), params('onboarding_v2')));

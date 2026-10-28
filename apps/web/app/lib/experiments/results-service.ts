@@ -11,8 +11,10 @@
  * Cached per (experiment, segment) for 15 minutes in the function instance;
  * `fresh` bypasses it.
  */
+import { isProductionDeployment } from '../analytics/amplitude-server';
 import { createAdminSupabase } from '../supabase-admin';
 
+import { amplitudeReadout } from './analytics';
 import { computeResults, segmentValue, type ResultsBlock, type SegmentDimension, type UserFacts } from './results';
 import { ExperimentService, notFoundExperiment, selectAllPages, type AssignmentRow } from './service';
 
@@ -26,10 +28,14 @@ export interface ExperimentResults extends ResultsBlock {
   control: string;
   computedAt: string;
   cached: boolean;
+  /** Mutual-exclusion layer (null = non-layered). */
+  layer: { key: string; name: string | null; start: number; end: number } | null;
   /** Assignment rows left out of the analysis. */
-  excluded: { unexposed: number; overrides: number; fallback: number; winner: number };
+  excluded: { unexposed: number; overrides: number; fallback: number; winner: number; layer: number; layerConflict: number };
   segment: SegmentDimension | null;
   segments: Array<{ value: string } & ResultsBlock> | null;
+  /** Link-only Amplitude readout (user property exp_<key>). */
+  amplitude: ReturnType<typeof amplitudeReadout>;
 }
 
 const cache = new Map<string, { at: number; value: ExperimentResults }>();
@@ -188,15 +194,20 @@ export class ExperimentResultsService {
     const control = arms.includes('control') ? 'control' : experiment.fallbackArm;
 
     const rows = await ExperimentService.listAssignments(key);
-    const excluded = { unexposed: 0, overrides: 0, fallback: 0, winner: 0 };
+    const excluded = { unexposed: 0, overrides: 0, fallback: 0, winner: 0, layer: 0, layerConflict: 0 };
     const analysed: AssignmentRow[] = [];
     for (const r of rows) {
       if (r.reason === 'override') excluded.overrides++;
       else if (r.reason === 'fallback') excluded.fallback++;
       else if (r.reason === 'winner') excluded.winner++;
+      else if (r.reason === 'layer') excluded.layer++;
+      else if (r.reason === 'layer_conflict') excluded.layerConflict++;
       else if (!r.first_exposed_at) excluded.unexposed++;
       else analysed.push(r);
     }
+
+    const layerRow = experiment.layer ? await ExperimentService.getLayer(experiment.layer.key) : null;
+    const layer = experiment.layer ? { key: experiment.layer.key, name: layerRow?.name ?? null, start: experiment.layer.start, end: experiment.layer.end } : null;
 
     const facts = await loadUserFacts(analysed);
     const seed = `${key}|${experiment.salt}`;
@@ -223,10 +234,12 @@ export class ExperimentResultsService {
       control,
       computedAt: new Date(nowMs).toISOString(),
       cached: false,
+      layer,
       excluded,
       segment,
       ...overall,
       segments,
+      amplitude: amplitudeReadout(key, isProductionDeployment()),
     };
     cache.set(cacheKey, { at: nowMs, value });
     return value;

@@ -6,22 +6,36 @@
  * pure (assign.ts, model.ts); this class only does I/O. Every admin change
  * writes an experiment_audit_log row.
  */
+import { identifyInBackground, type AmplitudeIdentification } from '../analytics/amplitude-server';
 import { CampaignError } from '../campaigns/http';
 import { ComplimentaryGrantService } from '../services/complimentary-grant-service';
 import { createAdminSupabase } from '../supabase-admin';
 
+import { assignmentIdentify, exposureIdentify } from './analytics';
 import { decideAssignment, type AssignmentContext, type AssignmentDecision } from './assign';
 import {
   applyPatch,
+  CONFLICT_STATUSES,
   experimentFromRow,
   experimentToRow,
+  freeRanges,
+  layerChanged,
+  layerFromRow,
   newSalt,
+  overlappingExperiments,
   publicExperiment,
+  publicLayer,
+  SLICE_HOLDING_STATUSES,
   type AssignmentReason,
   type CreateExperimentInput,
+  type CreateLayerInput,
   type Experiment,
+  type ExperimentLayer,
+  type ExperimentStatus,
+  type LayerRef,
   type OverrideInput,
   type PatchExperimentInput,
+  type PatchLayerInput,
 } from './model';
 import type { ExperimentRequestInfo } from './request-info';
 
@@ -59,6 +73,14 @@ export interface AssignmentRow {
 }
 
 export const notFoundExperiment = (key: string) => new CampaignError(404, 'NOT_FOUND', `Experiment "${key}" not found`);
+export const notFoundLayer = (key: string) => new CampaignError(404, 'NOT_FOUND', `Layer "${key}" not found`);
+
+/** Shown on a PATCH that moves a started experiment's layer / slice. */
+export const STICKY_LAYER_WARNING =
+  'Existing assignments are sticky: users already assigned keep their arm. The new layer/slice only affects users assigned from now on (randomised users of sibling experiments are still protected by the layer_conflict check).';
+
+/** Audit rows for layers share experiment_audit_log, keyed `layer:<key>`. */
+export const layerAuditKey = (key: string) => `layer:${key}`;
 
 /** Run a paged select until a short page. `build` must return a fresh query each call. */
 export async function selectAllPages<T>(build: () => any): Promise<T[]> {
@@ -211,22 +233,78 @@ export class ExperimentService {
       now,
     };
 
-    const out: Record<string, MobileAssignment> = {};
+    const experiments: Experiment[] = [];
     for (const row of (expRows ?? []) as Record<string, any>[]) {
-      let experiment: Experiment;
       try {
-        experiment = experimentFromRow(row);
+        experiments.push(experimentFromRow(row));
       } catch (err: any) {
         console.error(`[ExperimentService.assign] experiment ${row.key} is malformed:`, err?.message);
-        continue;
       }
+    }
+    const layers = await this.layerFacts(profile.id, experiments);
+
+    const out: Record<string, MobileAssignment> = {};
+    const identifies: AmplitudeIdentification[] = [];
+    for (const experiment of experiments) {
       const override = ((overrideRows ?? []) as { experiment_key: string; arm: string }[]).find((o) => o.experiment_key === experiment.key) ?? null;
       const existing = ((assignmentRows ?? []) as { experiment_key: string; arm: string; reason: AssignmentReason }[]).find((a) => a.experiment_key === experiment.key) ?? null;
-      const decision = decideAssignment(experiment, ctx, { override, existing });
+      const layer = experiment.layer
+        ? {
+            salt: layers.salts.get(experiment.layer.key) ?? null,
+            conflict: [...(layers.enrolled.get(experiment.layer.key) ?? [])].some((k) => k !== experiment.key),
+          }
+        : null;
+      const decision = decideAssignment(experiment, ctx, { override, existing, layer });
       if (decision.persist) await this.persist(experiment.key, ctx, decision, now);
+      // Enrolling here blocks a sibling later in this same call.
+      if (decision.persist && decision.reason === 'bucket' && experiment.layer) {
+        const set = layers.enrolled.get(experiment.layer.key) ?? new Set<string>();
+        set.add(experiment.key);
+        layers.enrolled.set(experiment.layer.key, set);
+      }
       out[experiment.key] = { arm: decision.arm, payload: decision.payload, enrolled: decision.enrolled };
+      // exp_<key> = arm for randomised users and QA overrides only (re-sent on sticky calls: idempotent $set).
+      const armDef = experiment.arms.find((a) => a.key === decision.arm);
+      const identify = assignmentIdentify(profile.id, experiment.key, { key: decision.arm, name: armDef?.name }, decision.reason);
+      if (identify) identifies.push(identify);
     }
+    identifyInBackground(identifies, 'experiment assignment');
     return out;
+  }
+
+  /**
+   * For the layered experiments being assigned: each layer's salt, and the
+   * experiments of each layer the user is already randomised into (reason
+   * bucket) whose status is running or paused.
+   */
+  private static async layerFacts(
+    userId: string,
+    experiments: readonly Experiment[]
+  ): Promise<{ salts: Map<string, string>; enrolled: Map<string, Set<string>> }> {
+    const salts = new Map<string, string>();
+    const enrolled = new Map<string, Set<string>>();
+    const layerKeys = [...new Set(experiments.map((e) => e.layer?.key).filter((k): k is string => !!k))];
+    if (!layerKeys.length) return { salts, enrolled };
+    const supabase = createAdminSupabase();
+    const [{ data: layerRows, error: layerErr }, { data: mine, error: mineErr }] = await Promise.all([
+      supabase.from('experiment_layers').select('key, salt').in('key', layerKeys),
+      supabase.from('experiment_assignments').select('experiment_key').eq('user_id', userId).eq('reason', 'bucket'),
+    ]);
+    if (layerErr) throw new Error(`experiment_layers read failed: ${layerErr.message}`);
+    if (mineErr) throw new Error(`experiment_assignments read failed: ${mineErr.message}`);
+    for (const l of (layerRows ?? []) as { key: string; salt: string }[]) salts.set(l.key, l.salt);
+    const keys = ((mine ?? []) as { experiment_key: string }[]).map((r) => r.experiment_key);
+    if (keys.length) {
+      const { data: siblings, error } = await supabase.from('experiments').select('key, status, layer_key').in('key', keys);
+      if (error) throw new Error(`experiments read failed: ${error.message}`);
+      for (const e of (siblings ?? []) as { key: string; status: ExperimentStatus; layer_key: string | null }[]) {
+        if (!e.layer_key || !layerKeys.includes(e.layer_key) || !CONFLICT_STATUSES.includes(e.status)) continue;
+        const set = enrolled.get(e.layer_key) ?? new Set<string>();
+        set.add(e.key);
+        enrolled.set(e.layer_key, set);
+      }
+    }
+    return { salts, enrolled };
   }
 
   private static async persist(key: string, ctx: AssignmentContext, d: AssignmentDecision, now: Date): Promise<void> {
@@ -267,6 +345,7 @@ export class ExperimentService {
       .eq('user_id', userId)
       .is('first_exposed_at', null);
     if (error) throw new Error(`experiment_assignments exposure failed: ${error.message}`);
+    identifyInBackground([exposureIdentify(userId, key, now)], 'experiment exposure');
     return { recorded: true };
   }
 
@@ -283,6 +362,7 @@ export class ExperimentService {
 
   static async create(input: CreateExperimentInput, actor: string | null) {
     if (await this.get(input.key)) throw new CampaignError(409, 'DUPLICATE', `Experiment "${input.key}" already exists`);
+    if (input.layer) await this.assertSliceFree({ key: input.key, layer: input.layer });
     const experiment: Omit<Experiment, 'createdAt' | 'updatedAt'> = {
       key: input.key,
       name: input.name,
@@ -294,6 +374,7 @@ export class ExperimentService {
       audience: input.audience,
       fallbackArm: input.fallbackArm,
       winnerArm: null,
+      layer: input.layer ?? null,
       startedAt: null,
       endedAt: null,
       createdBy: actor,
@@ -319,14 +400,104 @@ export class ExperimentService {
       .select('user_id', { count: 'exact', head: true })
       .eq('experiment_key', key);
     const next = applyPatch(current, patch, { now, hasAssignments: (count ?? 0) > 0 });
+    const movedLayer = layerChanged(current.layer, next.layer);
+    // A concluded experiment releases its slice, so it is never checked.
+    if (next.layer && next.status !== 'concluded' && (movedLayer || patch.status !== undefined)) {
+      await this.assertSliceFree({ key, layer: next.layer });
+    }
+    const warnings = movedLayer && current.status !== 'draft' ? [STICKY_LAYER_WARNING] : [];
     const { error } = await createAdminSupabase()
       .from('experiments')
       .update({ ...experimentToRow(next), updated_at: now.toISOString() })
       .eq('key', key);
     if (error) throw new Error(`experiments update failed: ${error.message}`);
-    const action = patch.status !== undefined && patch.status !== current.status ? 'status' : 'update';
+    const action = patch.status !== undefined && patch.status !== current.status ? 'status' : movedLayer ? 'layer' : 'update';
     await this.audit(key, actor, action, publicExperiment(current), publicExperiment(next));
-    return this.detail(key);
+    return { ...(await this.detail(key)), warnings };
+  }
+
+  /** 400 UNKNOWN_LAYER / 409 LAYER_OVERLAP unless the slice is free in its layer. */
+  private static async assertSliceFree(candidate: { key: string; layer: LayerRef }): Promise<void> {
+    const supabase = createAdminSupabase();
+    const { data: layer } = await supabase.from('experiment_layers').select('key').eq('key', candidate.layer.key).maybeSingle();
+    if (!layer) throw new CampaignError(400, 'UNKNOWN_LAYER', `Layer "${candidate.layer.key}" does not exist`);
+    const siblings = await this.experimentsInLayer(candidate.layer.key);
+    const overlaps = overlappingExperiments(candidate, siblings);
+    if (overlaps.length) {
+      throw new CampaignError(
+        409,
+        'LAYER_OVERLAP',
+        `Slice [${candidate.layer.start}, ${candidate.layer.end}) overlaps ${overlaps.map((o) => `${o.key} [${o.start}, ${o.end})`).join(', ')} in layer "${candidate.layer.key}"`,
+        { overlaps }
+      );
+    }
+  }
+
+  private static async experimentsInLayer(layerKey: string): Promise<Experiment[]> {
+    const { data, error } = await createAdminSupabase().from('experiments').select('*').eq('layer_key', layerKey);
+    if (error) throw new Error(`experiments read failed: ${error.message}`);
+    return ((data ?? []) as Record<string, any>[]).map(experimentFromRow);
+  }
+
+  // -------------------------------------------------------------------------
+  // Layers (mutual exclusion groups)
+  // -------------------------------------------------------------------------
+
+  static async getLayer(key: string): Promise<ExperimentLayer | null> {
+    const { data, error } = await createAdminSupabase().from('experiment_layers').select('*').eq('key', key).maybeSingle();
+    if (error) throw new Error(`experiment_layers read failed: ${error.message}`);
+    return data ? layerFromRow(data) : null;
+  }
+
+  /** Layer (no salt), its experiments with slices, and the unreserved ranges. */
+  static async layerDetail(key: string) {
+    const layer = await this.getLayer(key);
+    if (!layer) throw notFoundLayer(key);
+    const experiments = await this.experimentsInLayer(key);
+    const rows = experiments
+      .map((e) => ({
+        key: e.key,
+        name: e.name,
+        status: e.status,
+        start: e.layer!.start,
+        end: e.layer!.end,
+        trafficPct: e.trafficPct,
+        holdsSlice: SLICE_HOLDING_STATUSES.includes(e.status),
+      }))
+      .sort((a, b) => a.start - b.start || a.key.localeCompare(b.key));
+    return { layer: publicLayer(layer), experiments: rows, freeRanges: freeRanges(rows.filter((r) => r.holdsSlice)) };
+  }
+
+  static async listLayers() {
+    const { data, error } = await createAdminSupabase().from('experiment_layers').select('*').order('created_at', { ascending: true });
+    if (error) throw new Error(`experiment_layers read failed: ${error.message}`);
+    return Promise.all(((data ?? []) as Record<string, any>[]).map((r) => this.layerDetail(r.key)));
+  }
+
+  static async createLayer(input: CreateLayerInput, actor: string | null) {
+    if (await this.getLayer(input.key)) throw new CampaignError(409, 'DUPLICATE', `Layer "${input.key}" already exists`);
+    const row = { key: input.key, name: input.name, description: input.description ?? null, salt: newSalt() };
+    const { error } = await createAdminSupabase().from('experiment_layers').insert(row);
+    if (error) {
+      if (error.code === '23505') throw new CampaignError(409, 'DUPLICATE', `Layer "${input.key}" already exists`);
+      throw new Error(`experiment_layers insert failed: ${error.message}`);
+    }
+    const { salt: _salt, ...audited } = row;
+    await this.audit(layerAuditKey(input.key), actor, 'layer_create', null, audited);
+    return this.layerDetail(input.key);
+  }
+
+  /** Name / description only — the salt is immutable. */
+  static async updateLayer(key: string, patch: PatchLayerInput, actor: string | null, now: Date = new Date()) {
+    const current = await this.getLayer(key);
+    if (!current) throw notFoundLayer(key);
+    const update: Record<string, unknown> = { updated_at: now.toISOString() };
+    if (patch.name !== undefined) update.name = patch.name;
+    if (patch.description !== undefined) update.description = patch.description;
+    const { error } = await createAdminSupabase().from('experiment_layers').update(update).eq('key', key);
+    if (error) throw new Error(`experiment_layers update failed: ${error.message}`);
+    await this.audit(layerAuditKey(key), actor, 'layer_update', publicLayer(current), { ...publicLayer(current), ...patch });
+    return this.layerDetail(key);
   }
 
   private static async resolveUser(input: { email?: string; userId?: string }): Promise<{ id: string; email: string | null }> {

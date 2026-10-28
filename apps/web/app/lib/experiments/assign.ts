@@ -5,10 +5,20 @@
  *   1. override                 → override arm        (persisted, reason=override)
  *   2. existing assignment      → that arm, always    (sticky, even if weights changed)
  *   3. not eligible (audience)  → fallback_arm        (NOT persisted: may become eligible later)
- *   4. concluded                → winner_arm          (persisted, reason=winner)
- *   5. draft / paused           → fallback_arm        (persisted, reason=fallback)
- *   6. outside traffic_pct      → fallback_arm        (persisted, reason=fallback)
- *   7. arm bucket               → weighted arm        (persisted, reason=bucket)
+ *   4. layered + outside slice  → fallback_arm        (persisted, reason=layer)
+ *   5. concluded                → winner_arm          (persisted, reason=winner)
+ *   6. draft / paused           → fallback_arm        (persisted, reason=fallback)
+ *   7. outside traffic_pct      → fallback_arm        (persisted, reason=fallback)
+ *   8. layered + already randomised into a running/paused sibling
+ *                               → fallback_arm        (persisted, reason=layer_conflict)
+ *   9. arm bucket               → weighted arm        (persisted, reason=bucket)
+ *
+ * Layers (mutual exclusion): each layer has its own salt; a user's layer
+ * bucket experimentBucket(userId, layer.salt) falls in at most one of the
+ * disjoint slices, so they can be randomised into at most one experiment of
+ * the layer. traffic_pct applies within the slice (independent hash), so the
+ * enrolled share of all eligible users is (end − start)/10 000 × traffic_pct.
+ * Step 8 is the backstop for slices edited after users were enrolled.
  *
  * Persisting 4–6 keeps a user on one arm for the whole onboarding even if the
  * admin starts the experiment or raises traffic while they are mid-flow (the
@@ -90,10 +100,25 @@ export function inTraffic(experiment: Pick<Experiment, 'salt' | 'trafficPct'>, u
   return experimentBucket(userId, `${experiment.salt}:traffic`) < experiment.trafficPct * (EXPERIMENT_BUCKETS / 100);
 }
 
+export interface LayerState {
+  /** The layer's salt; null when the experiment's layer row is missing (fail safe: outside). */
+  salt: string | null;
+  /** The user is already reason=bucket in another running/paused experiment of this layer. */
+  conflict: boolean;
+}
+
+/** User's bucket within a layer, and whether it falls in the experiment's slice. */
+export function inLayerSlice(experiment: Pick<Experiment, 'layer'>, layerSalt: string | null, userId: string): boolean {
+  if (!experiment.layer) return true;
+  if (!layerSalt) return false;
+  const b = experimentBucket(userId, layerSalt);
+  return b >= experiment.layer.start && b < experiment.layer.end;
+}
+
 export function decideAssignment(
   experiment: Experiment,
   ctx: AssignmentContext,
-  state: { override: { arm: string } | null; existing: ExistingAssignment | null }
+  state: { override: { arm: string } | null; existing: ExistingAssignment | null; layer?: LayerState | null }
 ): AssignmentDecision {
   const armByKey = (key: string | null | undefined) => experiment.arms.find((a) => a.key === key) ?? null;
   const fallback = armByKey(experiment.fallbackArm) ?? experiment.arms[0];
@@ -123,14 +148,22 @@ export function decideAssignment(
   const why = ineligibilityReason(experiment.audience, ctx);
   if (why) return make(fallback, 'fallback', false, why);
 
-  // 4–5. Lifecycle.
+  // 4. Layer slice (mutual exclusion). A missing layer row is never "inside".
+  if (experiment.layer && !inLayerSlice(experiment, state.layer?.salt ?? null, ctx.userId)) {
+    return make(fallback, 'layer', !!state.layer?.salt);
+  }
+
+  // 5–6. Lifecycle.
   if (experiment.status === 'concluded') return make(armByKey(experiment.winnerArm) ?? fallback, 'winner', true);
   if (experiment.status !== 'running') return make(fallback, 'fallback', true);
 
-  // 6. Traffic.
+  // 7. Traffic (within the slice for layered experiments).
   if (!inTraffic(experiment, ctx.userId)) return make(fallback, 'fallback', true);
 
-  // 7. Arm.
+  // 8. Exclusivity backstop.
+  if (experiment.layer && state.layer?.conflict) return make(fallback, 'layer_conflict', true);
+
+  // 9. Arm.
   const arm = armForBucket(experiment.arms, experimentBucket(ctx.userId, experiment.salt));
   return arm ? make(arm, 'bucket', true) : make(fallback, 'fallback', true);
 }

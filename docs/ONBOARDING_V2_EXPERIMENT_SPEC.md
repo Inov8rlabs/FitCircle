@@ -12,11 +12,13 @@
 2. **A new onboarding, "v2: tour",** that shows people what FitCircle does by having them *do* it. They pick a goal, get a personal plan, log a real meal with AI, ask Fitzy a question, start their streak and set reminders. It ends on a plan summary and a paywall framed by a transparent trial timeline.
 3. **Three-arm experiment, `onboarding_v2`:**
 
-| Arm | Onboarding | Paywall at the end | After the paywall without subscribing |
-|---|---|---|---|
-| `control` | today's v1 | none (existing in-app paywall moments, now with trial) | app as today |
-| `tour_hard` | v2 tour | **required**: no close button | locked "Start your trial" screen until subscribed |
-| `tour_soft` | v2 tour | same paywall + **"I'll do it later"** | free app; re-offered later on a schedule |
+| Arm (name) | Payload | Onboarding | Paywall at the end | After the paywall without subscribing |
+|---|---|---|---|---|
+| `control` (Current onboarding) | `{flow:"v1"}` | today's v1 | none (existing in-app paywall moments, now with trial) | app as today |
+| `variantA` (Tour + hard paywall) | `{flow:"v2", paywall:"hard"}` | v2 tour | **required**: no close button | locked "Start your trial" screen until subscribed |
+| `variantB` (Tour + skippable paywall) | `{flow:"v2", paywall:"soft"}` | v2 tour | same paywall + **"I'll do it later"** | free app; re-offered later on a schedule |
+
+Arm keys are generic in every experiment (`control`, `variantA`, `variantB`, …) so analytics values read the same everywhere; the human label is the arm's `name`. **Clients act on the arm `payload`, never on the arm key** (§6.8).
 
 4. **Internal experimentation system,** not Amplitude Experiment:
    - Assignment happens on the backend: sticky, salted, persisted, and decided right after sign-up.
@@ -79,14 +81,14 @@ The v2 tour fixes both. It puts the "aha" (photo → nutrition in seconds) insid
 
 **Decision rule.** Bayesian; computed in Admin Tools (§6.6).
 - Ship the arm with the highest D30 revenue per assigned user, but only if P(best) ≥ 90% **and** no guardrail is worse than control with P ≥ 90% by more than its tolerance (retention −15% relative, deletions +3 pp).
-- If `tour_hard` wins revenue but fails retention, ship `tour_soft`.
+- If `variantA` wins revenue but fails retention, ship `variantB`.
 
 **Sample size, stated honestly.** We get about **60 new sign-ups a month** across both platforms (~2/day).
 - Assumptions: control converts ≈ 1–2%, and the tour arms plausibly reach 5–15% trial starts with 30–50% of trials converting.
 - To separate *control vs tour* at 80% power, we need ~150–250 users per arm. At organic volume that is **7–12 months**. Too slow.
 
 Recommendations:
-1. **Weights: `control` 20 / `tour_hard` 40 / `tour_soft` 40.** Control's conversion is already near zero and known. The real open question is hard vs soft. *This needs your decision.*
+1. **Weights: `control` 20 / `variantA` 40 / `variantB` 40.** Control's conversion is already near zero and known. The real open question is hard vs soft. *This needs your decision.*
 2. **Point paid UA at it.** The US Apple Ads campaign brings in ~25 installs per $100; Google is at $40/day. A few weeks of spend reaches ~300 assigned users. Segment the results by `channel`, which is recorded in `user_attribution`.
 3. **Read the leading indicator early.** Trial-start rate separates arms in ~2–3 weeks. Paid conversion confirms it later.
 4. **Run for at least 2 full weeks**, even if one arm looks like it's winning early, to cover weekday/weekend mix and novelty effects.
@@ -167,7 +169,7 @@ These change control's behavior, so they ship and bake for at least one week **b
 ```
 Sign up ─► [experiment assignment] ─► arm?
    control   ─► v1 onboarding (with R1–R5 fixes)
-   tour_*    ─► V2:
+   variantA / variantB ─► V2:
      1 Welcome (Fitzy)                       required (tap)
      2 Your goal                              required (1 tap)
      3 About you  (height/weight/target)      optional, skippable
@@ -178,8 +180,8 @@ Sign up ─► [experiment assignment] ─► arm?
      8 Reminders: when should I nudge you?    skippable → notification permission in context
      9 Friends make it stick (circles)        skippable (invite / join code / later)
     10 Your plan summary                      ─► Paywall (onboarding placement)
-          tour_hard: Start free trial | Restore | (⋯ Sign out / Delete account)
-          tour_soft: Start free trial | Restore | "I'll do it later"
+          variantA (paywall "hard"): Start free trial | Restore | (⋯ Sign out / Delete account)
+          variantB (paywall "soft"): Start free trial | Restore | "I'll do it later"
     11 Welcome to Pro / Welcome to FitCircle ─► Home (dashboard tour)
 ```
 
@@ -286,16 +288,16 @@ The same paywall component, extended:
 - **CTA:** **Start my free trial** (eligible) / **Subscribe**.
 - **Under the CTA:** "3 days free, then $29.99/year. Cancel anytime in Settings." Exact store-localised price.
 - **Footer:** Restore purchases · Terms · Privacy, required by App Review 3.1.2 and Play's subscriptions policy.
-- **`tour_hard`:**
+- **Hard paywall (`variantA`, payload `paywall: "hard"`):**
   - No close button.
   - A small **⋯** menu (top right) with **Restore purchases**, **Sign out** and **Delete account**. Account deletion must stay reachable (App Review 5.1.1(v)).
   - Android back → the `moveTaskToBack` app exits to home but stays on the paywall. iOS: no swipe dismissal (`interactiveDismissDisabled`).
-- **`tour_soft`:** a secondary text button, **"I'll do it later"**, below the CTA. Plain, not hidden or greyed; dark-pattern-free.
+- **Skippable paywall (`variantB`, payload `paywall: "soft"`):** a secondary text button, **"I'll do it later"**, below the CTA. Plain, not hidden or greyed; dark-pattern-free.
 - **Purchase success:**
   - A "Welcome to Pro 🎉" celebration with confetti, showing the trial end date and "We'll remind you on {date}".
   - Then Home, then the dashboard tour.
 
-### 5.5 `tour_hard`: locked state semantics
+### 5.5 Hard paywall (`variantA`): locked state semantics
 
 - **Gate:** an account with `onboarding_gate = 'subscription_required'` and no active `fitcircle_pro` entitlement sees the **Locked** screen instead of the tabs, on every launch.
 - **Locked screen:**
@@ -308,13 +310,13 @@ The same paywall component, extended:
   - **Needs your confirmation.** The alternative is to lock only until the first purchase and degrade to free on lapse. That is softer but reduces the arm's meaning.
 - **Server is the source of truth:**
   - `profiles.onboarding_gate` (`none` | `subscription_required`).
-  - Set when a `tour_hard` user reaches the paywall.
+  - Set when a user whose arm payload has `paywall: "hard"` (`variantA`) reaches the paywall. The server keys off the payload, never the arm key.
   - Returned by `GET /api/mobile/entitlements` as `gate`.
   - Clients cache it per user, so offline still respects the last known gate. **Fail open** if the gate is unknown and there's no cache. Never lock someone out because of a network error.
 - **Emergency release:** the Admin Tools "Release hard gate" button sets every `subscription_required` to `none` and pauses the arm (§6.5).
 - **Web:** the web app reads the same gate and shows the web paywall (Stripe, with trial) on sign-in. Web is not enrolled in the experiment, but must respect the gate.
 
-### 5.6 `tour_soft`: after "I'll do it later"
+### 5.6 Skippable paywall (`variantB`): after "I'll do it later"
 
 - Lands on Home with a one-time, dismissable **Pro trial card** at the top of the feed: the `pro_value` promo with an onboarding-specific creative, "Your 3-day free trial is waiting".
 - **Counts as an automatic paywall** for the journey rules: sets `paywall_auto_last_at`. The post-aha paywall (`first_meal_aha`) is therefore suppressed for 72 h, and only shown once ever.
@@ -355,7 +357,7 @@ The same paywall component, extended:
 | **PostHog flags/experiments** | SDKs are already in both apps (flags disabled) and the free tier is generous. But it's a second analytics source of truth, and person identity has to be merged. A credible fallback if the internal system slips. |
 | **Internal (recommended)** | We already have salted sha256 bucketing, an arms schema and an audience matcher in the home-feed engine (`lib/home-feed/rules.ts`). Outcomes (`subscription_events`, activity) live in our database. Assignment happens post-sign-up when we have `user_id`, so there's no device-id stitching problem. Admin Tools already has the module pattern. One small system then serves onboarding, home-feed, promos and future flags. |
 
-### 6.2 Data model (migration `112_trials_experiments.sql`)
+### 6.2 Data model (migrations `112_trials_experiments.sql`, `113_experiment_layers.sql`)
 
 ```sql
 create table experiments (
@@ -392,6 +394,9 @@ create table experiment_overrides (               -- QA / reviewer / employees
 );
 ```
 - **As built (migration 112):** `experiment_assignments.user_id` and `experiment_overrides.user_id` have **no FK** to `profiles` (instead of `on delete cascade`): a cascade would erase deleted users and make the "account deletions D7" guardrail unmeasurable. `AccountDeletionService` stamps `experiment_assignments.user_deleted_at` before deleting the profile. Assignments also store `exposure_surface`; `reason` additionally allows `winner`. An `experiment_audit_log` table records every admin change, and `profiles` gains `trial_reminder_sent_at` and `onboarding_paywall_at`.
+- **112 amended before first apply (2026-10-28):** the `onboarding_v2` seed now uses generic arm keys with names — `control` "Current onboarding" `{flow:"v1"}` (20), `variantA` "Tour + hard paywall" `{flow:"v2",paywall:"hard"}` (40), `variantB` "Tour + skippable paywall" `{flow:"v2",paywall:"soft"}` (40). 112 had not been applied anywhere, so it was edited in place.
+- **Arms** are `[{key, name, description?, weight, payload}]`. Keys must match `^(control|variant[A-I])$`: exactly one `control`, then `variantA`, `variantB`, … with no gaps (10 arms max). `name` (≤ 60 chars) is the human label; `payload` is what clients act on. `fallback_arm` defaults to `control`.
+- **Layers (mutual exclusion, migration 113):** `experiment_layers (key PK, name, description, salt — random and immutable, created_at, updated_at)`, service-role only. `experiments` gains `layer_key → experiment_layers(key)`, `layer_start`, `layer_end` (a bucket slice `[start, end)` within 0–10 000), with a check that all three are null or all set with `0 ≤ start < end ≤ 10 000`. Assignment `reason` gains `layer` and `layer_conflict`. 113 is a separate migration so the already-pushed 112 stays stable; apply it alone, after 112.
 - RLS: **no client access** to any of these tables, only via the API using the service role. This fixes the `feature_flags` mistake, where anyone can read the allowlists.
 - Profile columns from §3.2 and §5.5 are added in the same migration:
   - `onboarding_flow text` (`v1|v2`)
@@ -407,8 +412,22 @@ create table experiment_overrides (               -- QA / reviewer / employees
   - `newUsersOnly: true`: profile created < 24 h ago and onboarding not completed
   - `excludeUserIds`: the reviewer demo account and complimentary-Pro users (`complimentary_grants`)
   - optional `countries`
-- **Order:** override → not eligible ⇒ `fallback_arm` (not persisted) → status ≠ running ⇒ `fallback_arm` → traffic bucket → arm bucket ⇒ persist with `reason='bucket'`.
+- **Order (as built):**
+  1. override ⇒ override arm (persisted, `reason=override`)
+  2. existing assignment ⇒ that arm, always (sticky)
+  3. not eligible (audience) ⇒ `fallback_arm` (not persisted)
+  4. **layered and outside the slice** ⇒ `fallback_arm` (persisted, `reason=layer`)
+  5. `concluded` ⇒ `winner_arm` (persisted, `reason=winner`); `draft`/`paused` ⇒ `fallback_arm` (persisted, `reason=fallback`)
+  6. outside `traffic_pct` ⇒ `fallback_arm` (persisted, `reason=fallback`)
+  7. **layered and already `reason=bucket` in another running/paused experiment of the same layer** ⇒ `fallback_arm` (persisted, `reason=layer_conflict`)
+  8. arm bucket ⇒ weighted arm (persisted, `reason=bucket`)
 - **Concluded** experiments return `winner_arm` to new users. Existing assignments keep theirs.
+- **Layers (mutual exclusion groups).** For tests that must not overlap (e.g. two paywall tests), put them in one layer with disjoint slices.
+  - A user's layer bucket is `sha256(layer.salt + ':' + user_id)` mod 10 000; they are eligible for a layered experiment only if `start ≤ bucket < end`. Disjoint slices ⇒ at most one experiment per layer per user.
+  - `traffic_pct` applies **within** the slice (independent traffic hash), so the enrolled share of eligible users is `(end − start)/10 000 × traffic_pct`. Arm choice is unchanged.
+  - Step 7 is the backstop: if slices are edited after users were enrolled, nobody is randomised into a second experiment of the same layer. Overrides still win; sticky assignments stay sticky.
+  - Slices of `draft`/`running`/`paused` experiments in a layer must not overlap (409 `LAYER_OVERLAP`); `concluded` experiments release their slice.
+  - Non-layered experiments (`layer: null`, including `onboarding_v2`) behave exactly as before.
 
 ### 6.4 API
 - `POST /api/mobile/experiments/assign`
@@ -424,7 +443,7 @@ create table experiment_overrides (               -- QA / reviewer / employees
   - Exposure = the **first onboarding screen of the arm rendered**. Analysis is per *exposed* user (intent-to-treat among exposed).
 - `GET /api/mobile/entitlements` adds `gate` and `isTrial`/`trialEndsAt`.
 - `GET /api/mobile/onboarding/status` adds `shouldResume` and `resume: {flow, step, data, updatedAt} | null` for resume (R2).
-- **Hard-gate trigger (decided in build):** a separate `POST /api/mobile/onboarding/gate {reached: true}`, called when the onboarding paywall is shown — not a flag on `/onboarding/complete`, because `Onboarding Completed` fires *before* the paywall (§5.3 step 10). Any user may call it: it records `profiles.onboarding_paywall_at` (the "paywall viewed" metric) for every arm, but sets `onboarding_gate='subscription_required'` **only** for `onboarding_v2` users assigned `tour_hard` while the experiment is `running` or `concluded`. A paused experiment (e.g. after an emergency release) never sets the gate.
+- **Hard-gate trigger (decided in build):** a separate `POST /api/mobile/onboarding/gate {reached: true}`, called when the onboarding paywall is shown — not a flag on `/onboarding/complete`, because `Onboarding Completed` fires *before* the paywall (§5.3 step 10). Any user may call it: it records `profiles.onboarding_paywall_at` (the "paywall viewed" metric) for every arm, but sets `onboarding_gate='subscription_required'` **only** for `onboarding_v2` users whose assigned arm's payload has `paywall: "hard"` (`variantA`) while the experiment is `running` or `concluded`. A paused experiment (e.g. after an emergency release) never sets the gate.
 - Full request/response contracts: §6.8.
 - Admin (Bearer `ADMIN_API_SECRET` via the Admin Tools proxy):
   - `GET/POST/PATCH /api/admin/experiments`
@@ -439,9 +458,16 @@ create table experiment_overrides (               -- QA / reviewer / employees
 **Detail view:**
 - **Edit:** draft → running → paused → concluded (pick winner). Weights and traffic % (with a confirm dialog warning that it only affects new users). Audience JSON form.
 - **QA overrides:** add a user by email → force arm. Used for the team and testers.
-- **Emergency:** **Release hard gate** sets every `tour_hard` user's `onboarding_gate` to `none`, pauses the experiment and writes an audit row. Double confirm.
+- **Emergency:** **Release hard gate** sets every hard-paywall (`variantA`) user's `onboarding_gate` to `none`, pauses the experiment and writes an audit row. Double confirm.
 - **Results:** see §6.6.
 - **Audit log** of every change (actor email from `X-Admin-Actor`).
+- **Arms editor:** keys are fixed by position (`control`, `variantA`, `variantB`, …); the editor edits `name`, `description`, weight and payload JSON. Show the arm `name` everywhere, with the key as a small tag.
+
+**Layers view (mutual exclusion):**
+- Layer list → each layer as a 0–10 000 bar showing every experiment's slice (colour by status; concluded slices hatched as released) and the `freeRanges`.
+- "Add to layer" on an experiment: pick a layer and a free range; the API rejects overlaps (409 `LAYER_OVERLAP`, with the conflicting experiments).
+- Moving a started experiment or resizing its slice shows the returned `warnings` ("existing assignments are sticky") in a confirm dialog.
+- Layer name/description are editable; the salt is never shown or editable.
 
 ### 6.6 Results computation (`/results`)
 - Computed from the database, not from Amplitude: `experiment_assignments` ⨝ `profiles` (onboarding, trial, gate) ⨝ `subscription_events` ⨝ `payments` ⨝ activity (meals, check-ins).
@@ -469,7 +495,7 @@ create table experiment_overrides (               -- QA / reviewer / employees
 ### 6.7 Amplitude
 - Tracking plan v15 (`analytics/tracking-plan.json` → codegen to all three repos):
   - **`Experiment Exposed`** `{experiment_key*, arm*, surface*}`
-  - User property **`exp_onboarding_v2`** = arm. Set when exposed.
+  - User property **`exp_onboarding_v2`** = arm key (`control|variantA|variantB`), the documented example of the `exp_<experiment_key>` convention (`conventions.experiments`): set **only** for randomised users and QA overrides, never for fallback / not-enrolled / layer / winner. The server sets it at assignment through the Amplitude Identify API (with `exp_<key>_name` = arm label, `exp_<key>_override = true` for QA), and `$setOnce exp_<key>_exposed_at` at first exposure; clients set it on exposure. Codegen output is unchanged, so the plan stays v15.
   - All `Onboarding *` events gain **`flow`** (`v1|v2`).
   - New `step_name` values `v2_*`.
   - `Paywall Viewed/Dismissed/Plan Selected`, `Purchase *` gain **`placement`** (`onboarding|locked|…`), **`is_hard`** (bool), **`trial_eligible`** (bool).
@@ -493,15 +519,16 @@ All mobile responses use the standard envelope `{ success, data, error, meta }` 
 // request
 { "keys": ["onboarding_v2"] }
 // data
-{ "assignments": { "onboarding_v2": { "arm": "tour_hard", "payload": { "flow": "v2", "paywall": "hard" }, "enrolled": true } } }
+{ "assignments": { "onboarding_v2": { "arm": "variantA", "payload": { "flow": "v2", "paywall": "hard" }, "enrolled": true } } }
 ```
-- Unknown keys are absent from `assignments`. `enrolled` is true only for randomised (`reason=bucket`) users; overrides, fallback and winner assignments return `enrolled:false`.
+- Unknown keys are absent from `assignments`. `enrolled` is true only for randomised (`reason=bucket`) users; overrides, fallback, winner, layer and layer_conflict assignments return `enrolled:false`.
+- **Clients route by `payload`, never by `arm`.** Treat any unknown payload value (or an unknown/missing key) as control: for onboarding_v2, `flow != "v2"` ⇒ v1; `paywall` other than `"hard"`/`"soft"` ⇒ no onboarding paywall.
 - Assignment order: override → existing assignment (sticky) → audience (ineligible ⇒ `fallback_arm`, not persisted) → `concluded` ⇒ `winner_arm` (persisted, `reason=winner`) → `draft`/`paused` ⇒ `fallback_arm` (persisted, `reason=fallback`) → outside `traffic_pct` ⇒ `fallback_arm` (persisted, `reason=fallback`) → weighted arm (persisted, `reason=bucket`). Persisting the fallback cases keeps a user on one arm through the whole onboarding even if the experiment starts or traffic rises mid-flow.
 - Bucketing: traffic uses `sha256(salt + ':traffic' + ':' + user_id)`, the arm uses `sha256(salt + ':' + user_id)`, both first 4 bytes mod 10 000, so raising traffic never moves anyone between arms.
 
 `POST /api/mobile/experiments/exposure`
 ```json
-{ "key": "onboarding_v2", "arm": "tour_hard", "surface": "v2_welcome" }   // → data: { "ok": true }
+{ "key": "onboarding_v2", "arm": "variantA", "surface": "v2_welcome" }   // → data: { "ok": true }
 ```
 Sets `first_exposed_at` once, only when `arm` equals the persisted arm. Always `ok:true`.
 
@@ -555,51 +582,77 @@ Sets `first_exposed_at` once, only when `arm` equals the persisted arm. Always `
 
 #### Admin (Bearer `ADMIN_API_SECRET` + `X-Admin-Actor: <email>` on every write, or an `is_admin` session)
 
-Experiment object (no salt is ever returned):
+Experiment object (no salt is ever returned). `layer` is `{ "key", "start", "end" }` or `null`:
 ```json
 { "key": "onboarding_v2", "name": "Onboarding v2: tour + paywall", "description": "…", "status": "running",
-  "arms": [ { "key": "control", "weight": 20, "payload": { "flow": "v1", "paywall": "none" } },
-            { "key": "tour_hard", "weight": 40, "payload": { "flow": "v2", "paywall": "hard" } },
-            { "key": "tour_soft", "weight": 40, "payload": { "flow": "v2", "paywall": "soft" } } ],
+  "arms": [ { "key": "control", "name": "Current onboarding", "description": null, "weight": 20, "payload": { "flow": "v1" } },
+            { "key": "variantA", "name": "Tour + hard paywall", "description": null, "weight": 40, "payload": { "flow": "v2", "paywall": "hard" } },
+            { "key": "variantB", "name": "Tour + skippable paywall", "description": null, "weight": 40, "payload": { "flow": "v2", "paywall": "soft" } } ],
   "trafficPct": 20,
   "audience": { "platforms": ["ios","android"], "minAppVersion": "1.2.0", "newUsersOnly": true, "excludeUserIds": ["47476150-…"], "countries": ["US"] },
-  "fallbackArm": "control", "winnerArm": null, "startedAt": "…", "endedAt": null, "createdBy": "migration:112", "createdAt": "…", "updatedAt": "…" }
+  "fallbackArm": "control", "winnerArm": null, "layer": null, "startedAt": "…", "endedAt": null, "createdBy": "migration:112", "createdAt": "…", "updatedAt": "…" }
 ```
 Counts per arm: `{ "assigned": 120, "exposed": 110, "overrides": 3, "other": 40 }` (`assigned`/`exposed` = randomised rows; `other` = fallback + winner).
 
 | Route | Request | Response `data` |
 |---|---|---|
 | `GET /api/admin/experiments` | — | `{ experiments: [Experiment & { counts: {arm: Counts} }] }` |
-| `POST /api/admin/experiments` | `{ key, name, description?, arms, trafficPct? (100), audience? ({}), fallbackArm }` | 201 `ExperimentDetail`; always `draft`, random salt. 409 `DUPLICATE` |
+| `POST /api/admin/experiments` | `{ key, name, description?, arms, trafficPct? (100), audience? ({}), fallbackArm? ("control"), layer? ({key,start,end} \| null) }` | 201 `ExperimentDetail`; always `draft`, random salt. 409 `DUPLICATE` |
 | `PATCH /api/admin/experiments` | `{ key, …patch }` | `ExperimentDetail` (same as below) |
 | `GET /api/admin/experiments/{key}` | — | `ExperimentDetail = { experiment, counts, overrides: [Override], audit: [Audit] }` (latest 100 audit rows) |
-| `PATCH /api/admin/experiments/{key}` | any of `{ name, description, status, arms, trafficPct, audience, fallbackArm, winnerArm }` | `ExperimentDetail` |
+| `PATCH /api/admin/experiments/{key}` | any of `{ name, description, status, arms, trafficPct, audience, fallbackArm, winnerArm, layer }` | `ExperimentDetail & { warnings: string[] }` |
+| `GET /api/admin/experiment-layers` | — | `{ layers: [LayerDetail] }` |
+| `POST /api/admin/experiment-layers` | `{ key, name, description? }` | 201 `LayerDetail` (random, immutable salt); 409 `DUPLICATE` |
+| `GET /api/admin/experiment-layers/{key}` | — | `LayerDetail`; 404 |
+| `PATCH /api/admin/experiment-layers/{key}` | `{ name?, description? }` (anything else, incl. `salt`, → 400) | `LayerDetail` |
 | `GET /api/admin/experiments/{key}/overrides` | — | `{ overrides: [Override] }` |
 | `POST /api/admin/experiments/{key}/overrides` | `{ email \| userId, arm, note? }` | `{ overrides }`; 404 `USER_NOT_FOUND`, 400 `INVALID_ARM` |
 | `DELETE /api/admin/experiments/{key}/overrides` | `{ email \| userId }` (body or `?email=` / `?userId=`) | `{ overrides }`; also deletes that user's `reason=override` assignment so they re-run the normal rules |
 | `POST /api/admin/experiments/{key}/release-gate` | — | `{ released: <profiles unlocked>, status: "paused" }` |
 | `GET /api/admin/experiments/{key}/results` | `?segment=platform\|channel\|country&fresh=1` | `ExperimentResults` (below) |
 
-`Override = { userId, email, arm, note, createdBy, createdAt }`. `Audit = { id, actor, action: create|update|status|override_set|override_removed|release_gate, before, after, at }`.
+`Override = { userId, email, arm, note, createdBy, createdAt }`. `Audit = { id, actor, action: create|update|status|layer|override_set|override_removed|release_gate, before, after, at }` (layer changes audit under `experiment_key = "layer:<key>"` with `layer_create|layer_update`).
 
-Validation: weights are integers summing to 100; arm keys unique (`[a-z0-9_]`, ≤ 40); `fallbackArm`/`winnerArm` must be arms; unknown fields are rejected (the salt is immutable). Lifecycle: `draft→running`, `running→paused|concluded`, `paused→running|concluded`; `concluded` is terminal and needs `winnerArm`. Illegal transition → 409 `INVALID_TRANSITION`; removing an arm once the experiment has started or has assignments → 409 `ARM_IN_USE`; conclude without winner → 400 `WINNER_REQUIRED`. Weight, traffic and audience edits only affect users who have no assignment yet.
+`LayerDetail`:
+```json
+{ "layer": { "key": "paywall", "name": "Paywall tests", "description": null, "createdAt": "…", "updatedAt": "…" },
+  "experiments": [ { "key": "paywall_copy", "name": "Paywall copy", "status": "running", "start": 0, "end": 5000, "trafficPct": 100, "holdsSlice": true },
+                   { "key": "paywall_price", "name": "Price", "status": "concluded", "start": 5000, "end": 8000, "trafficPct": 50, "holdsSlice": false } ],
+  "freeRanges": [ { "start": 5000, "end": 10000 } ] }
+```
+- Layer errors on experiment create/PATCH: 400 `UNKNOWN_LAYER`; 409 `LAYER_OVERLAP` with `data.overlaps = [{ key, status, start, end }]`.
+- `warnings` on PATCH: non-empty when a started (non-draft) experiment's layer or slice changes — "Existing assignments are sticky: users already assigned keep their arm. The new layer/slice only affects users assigned from now on (randomised users of sibling experiments are still protected by the layer_conflict check)." The change is audited with `action: "layer"`.
+
+Validation: weights are integers summing to 100; arm keys `control` + `variantA…` consecutive (exactly one control), each with a `name` ≤ 60; `fallbackArm`/`winnerArm` must be arms; unknown fields are rejected (the salt is immutable). Lifecycle: `draft→running`, `running→paused|concluded`, `paused→running|concluded`; `concluded` is terminal and needs `winnerArm`. Illegal transition → 409 `INVALID_TRANSITION`; removing an arm once the experiment has started or has assignments → 409 `ARM_IN_USE`; conclude without winner → 400 `WINNER_REQUIRED`. Weight, traffic and audience edits only affect users who have no assignment yet.
 
 `ExperimentResults`:
 ```json
-{ "experimentKey": "onboarding_v2", "status": "running", "arms": ["control","tour_hard","tour_soft"], "control": "control",
+{ "experimentKey": "onboarding_v2", "status": "running", "arms": ["control","variantA","variantB"], "control": "control",
   "computedAt": "…", "cached": false,
-  "excluded": { "unexposed": 12, "overrides": 3, "fallback": 40, "winner": 0 },
-  "population": { "exposed": { "control": 60, "tour_hard": 118, "tour_soft": 121 } },
+  "layer": null,
+  "excluded": { "unexposed": 12, "overrides": 3, "fallback": 40, "winner": 0, "layer": 0, "layerConflict": 0 },
+  "population": { "exposed": { "control": 60, "variantA": 118, "variantB": 121 } },
   "metrics": [
     { "key": "paid_conversion_d10", "label": "Paid conversion (D10)", "kind": "rate", "window": "D10",
       "higherIsBetter": true, "primary": true, "guardrail": null,
-      "arms": { "tour_hard": { "n": 90, "x": 7, "value": 0.0778, "ci90": [0.04, 0.13], "pBest": 0.81,
+      "arms": { "variantA": { "n": 90, "x": 7, "value": 0.0778, "ci90": [0.04, 0.13], "pBest": 0.81,
                                "pBeatsControl": 0.97, "liftVsControl": 3.1, "pGuardrailBreach": null } } }
   ],
-  "decision": { "candidate": null, "leader": "tour_hard", "leaderPBest": 0.81, "guardrailBreaches": {}, "reason": "…" },
+  "decision": { "candidate": null, "leader": "variantA", "leaderPBest": 0.81, "guardrailBreaches": {}, "reason": "…" },
   "segment": "platform",
-  "segments": [ { "value": "ios", "population": { }, "metrics": [ ], "decision": { } } ] }
+  "segments": [ { "value": "ios", "population": { }, "metrics": [ ], "decision": { } } ],
+  "amplitude": { "project": { "id": 746168, "name": "FitCircle" },
+                 "userProperty": "exp_onboarding_v2", "nameProperty": "exp_onboarding_v2_name",
+                 "overrideProperty": "exp_onboarding_v2_override", "exposedAtProperty": "exp_onboarding_v2_exposed_at",
+                 "events": ["Experiment Exposed", "Onboarding Completed", "Purchase Completed"],
+                 "chartUrl": "https://app.amplitude.com/analytics/inov8rlabs-545043/chart/new",
+                 "chartDefinition": { "type": "eventsSegmentation", "events": [ … ], "groupBy": [ { "type": "user", "property": "exp_onboarding_v2" } ],
+                                      "segments": [ { "filters": [ { "type": "user", "property": "exp_onboarding_v2_override", "op": "is not", "values": ["true"] } ] } ],
+                                      "metric": "uniques" },
+                 "note": "…" } }
 ```
+- `layer` = `{ key, name, start, end }` for a layered experiment, else null.
+- `amplitude` is link-only (no Amplitude API calls). Amplitude has no documented URL that pre-fills a chart, so `chartUrl` opens a new chart in the right org and `chartDefinition` is what to apply: the three events grouped by `exp_<key>`, excluding QA overrides. The project is FitCircle 746168 on production deployments, FitCircle Dev 875589 elsewhere.
 - Population: `reason=bucket` AND exposed only. `n` is the **mature** n (the window has elapsed since assignment). Arms with `n=0` have null value/CI/probabilities.
 - Metric keys: `onboarding_completed` (D3), `paywall_viewed` (D3; earliest of `onboarding_paywall_at`, `paywall_aha_shown_at`, `paywall_auto_last_at`), `trial_started_d1`, `trial_to_paid` (trial starters, converted within 7 days of the trial start), `paid_conversion_d10` (primary: trial converted or direct purchase within 10 days), `retention_d1`, `retention_d7` (guardrails, −15 % relative), `meal_loggers_d7` (guardrail, −15 % relative), `trial_cancellation` (guardrail, +3 pp), `refunds_d30` (guardrail, +3 pp), `account_deletions_d7` (guardrail, +3 pp), `revenue_per_user_d30` (`kind:"mean"`, USD).
 - Rates: Beta(1+x, 1+n−x), 10 000 seeded Monte Carlo draws → `pBest`, `pBeatsControl`, 90 % CI, `pGuardrailBreach` = P(worse than control by more than the tolerance). Revenue/user: 2 000 seeded bootstrap resamples. Seeds derive from the experiment, so a refresh shows the same numbers for the same data.
@@ -704,13 +757,15 @@ Notes:
 ## 11. Decisions (approved 2026-10-27)
 
 1. **Experiment platform: internal.** Arm weights, traffic %, pause, QA overrides, winner and emergency gate release are all controlled from **Admin Tools → Experiments**. Changes take effect for new assignments immediately, with **no app or backend deploy** (§6.5). Existing assignments are sticky.
-2. **Arm weights at launch: 20 `control` / 40 `tour_hard` / 40 `tour_soft`.** Start at `traffic_pct` 20% for 48 h, then 100%.
-3. **`tour_hard` lapse: re-lock on lapse.** Data is kept.
+2. **Arm weights at launch: 20 `control` (Current onboarding) / 40 `variantA` (Tour + hard paywall) / 40 `variantB` (Tour + skippable paywall).** Start at `traffic_pct` 20% for 48 h, then 100%.
+3. **Hard paywall (`variantA`) lapse: re-lock on lapse.** Data is kept.
 4. **Onboarding paywall:** Annual pre-selected, Lifetime hidden.
 5. **Health permission moved out of v2 onboarding:** a contextual ask from the D1 steps card.
 6. **Paid UA:** ~$50/day for 3–4 weeks via the existing Apple Ads + Google campaigns once 1.2.0 is live. Results are segmented by channel.
 7. **Web:** not enrolled; honors the hard gate.
 8. **3-day trial for all users,** not experimented.
+9. **Generic arm keys (2026-10-28):** `control | variantA | variantB | …` in every experiment, with a human `name` per arm; analytics user property `exp_<key>` carries the key. Clients route by payload.
+10. **Mutual exclusion groups (2026-10-28):** optional layers with disjoint bucket slices (§6.3). `onboarding_v2` stays non-layered.
 
 ## 12. Out of scope (v1 of this experiment)
 

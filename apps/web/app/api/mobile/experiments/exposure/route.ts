@@ -2,6 +2,7 @@ import { type NextRequest } from 'next/server';
 import { z } from 'zod';
 
 import { mobileFailFrom, ok, readJson } from '@/lib/experiments/http';
+import { ARM_KEY_PATTERN } from '@/lib/experiments/model';
 import { ExperimentService } from '@/lib/experiments/service';
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 
@@ -10,7 +11,7 @@ export const dynamic = 'force-dynamic';
 const bodySchema = z
   .object({
     key: z.string().regex(/^[a-z0-9][a-z0-9_]{0,63}$/),
-    arm: z.string().regex(/^[a-z0-9][a-z0-9_]{0,39}$/),
+    arm: z.string().regex(ARM_KEY_PATTERN),
     surface: z.string().trim().min(1).max(64),
   })
   .strip();
