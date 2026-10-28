@@ -1,4 +1,4 @@
-# FitCircle 1.2.0: onboarding v3, design language, Pro surfaces
+# FitCircle 1.1.0: onboarding v3, design language, Pro surfaces
 
 **Status:** plan, 2026-10-28. Covers iOS, Android, the backend and Admin Tools.
 
@@ -7,6 +7,8 @@
 - `docs/DESIGN_LANGUAGE.md`
 - `docs/ONBOARDING_V2_EXPERIMENT_SPEC.md` (experiment infrastructure, already live)
 - Audits in `/private/tmp/claude-501/design-audit/{ios,android,backend}.md`
+
+**Version (owner, 2026-10-28):** ships as **1.1.0**, folding in the unsubmitted 1.1.0 activation journey. Branches are still named `release/1.2.0`. Icon keys are gated by `X-Client-Features: icon_keys`, not by version, because early 1.1.0 test builds render emoji.
 
 **Ship rule:** nothing is submitted to App Review or Play production until the product owner says so. Internal builds (TestFlight, Firebase, Play internal) are fine.
 

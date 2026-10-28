@@ -4,7 +4,7 @@
 -- then insert '114' into supabase_migrations.schema_migrations). Never `db push --include-all`:
 -- 104 is still unapplied on purpose.
 --
--- FitCircle 1.2.0 W4 (docs/RELEASE_1.2.0_PLAN.md, docs/DESIGN_LANGUAGE.md §1, §6): icon keys
+-- FitCircle 1.2.0 W4 (docs/RELEASE_1.1.0_PLAN.md, docs/DESIGN_LANGUAGE.md §1, §6): icon keys
 -- next to the legacy emoji, and emoji-free push copy. Data + ADDITIVE columns only:
 --   * no column is dropped or renamed, and every emoji value shipped apps (<= 1.1.x) render is
 --     kept: campaigns.emoji, marks[].emoji, doors[].emoji, challenge_templates.icon_name;

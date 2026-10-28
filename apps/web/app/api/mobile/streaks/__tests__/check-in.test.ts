@@ -233,12 +233,12 @@ describe('POST /api/mobile/streaks/check-in', () => {
   });
 });
 
-describe('icon keys (1.2.0+)', () => {
-  it('X-App-Version 1.2.0 gets badge: null + icon; the message has no emoji', async () => {
+describe('icon keys (X-Client-Features: icon_keys)', () => {
+  it('icon-key clients get badge: null + icon; the message has no emoji', async () => {
     seedUser(['2026-09-26', '2026-09-27']);
     const req = new NextRequest('http://localhost/api/mobile/streaks/check-in', {
       method: 'POST',
-      headers: { 'content-type': 'application/json', 'X-App-Version': '1.2.0' },
+      headers: { 'content-type': 'application/json', 'X-App-Version': '1.1.0', 'X-Client-Features': 'icon_keys' },
       body: JSON.stringify({ mood: 4, energy: 4 }),
     });
     const body = await (await checkIn(req)).json();

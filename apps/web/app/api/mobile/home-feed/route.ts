@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server';
 
-import { applyIconCompat, clientRendersIconKeys } from '@/lib/design/icon-compat';
+import { applyIconCompat, requestRendersIconKeys } from '@/lib/design/icon-compat';
 import { parseClientCards } from '@/lib/home-feed/candidates';
 import { readRequestInfo } from '@/lib/home-feed/context';
 import { fail, feedFailFrom } from '@/lib/home-feed/http';
@@ -59,8 +59,8 @@ export async function GET(request: NextRequest) {
     });
     const feed = await HomeFeedService.getFeed(user, info, support, { timing, promoClient });
     timing.totalMs = Math.round(performance.now() - started);
-    // promo@1 props carry `icon` for every client; ≤ 1.1.x also keep `emoji`.
-    const response = NextResponse.json(applyIconCompat(feed, clientRendersIconKeys(info.appVersion)), {
+    // promo@1 props carry `icon` for every client; clients without X-Client-Features: icon_keys also keep `emoji`.
+    const response = NextResponse.json(applyIconCompat(feed, requestRendersIconKeys(request)), {
       headers: {
         'Cache-Control': 'private, no-store',
         'Server-Timing': `auth;dur=${timing.authMs}, ctx;dur=${timing.contextMs ?? 0}, total;dur=${timing.totalMs}`,

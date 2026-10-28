@@ -109,8 +109,8 @@ vi.mock('../push-service', async (importOriginal) => {
 // the engine reads back.
 vi.mock('../circle-chat-service', () => ({
   CircleChatService: {
-    emitSystemPost: async (p: { fitcircleId: string; body: string; eventType: string }) => {
-      const row = { id: `msg-${++db.seq}`, fitcircle_id: p.fitcircleId, kind: 'system_event', system_event_type: p.eventType, body: p.body, created_at: new Date().toISOString() };
+    emitSystemPost: async (p: { fitcircleId: string; body: string; eventType: string; refId?: string | null }) => {
+      const row = { id: `msg-${++db.seq}`, fitcircle_id: p.fitcircleId, kind: 'system_event', system_event_type: p.eventType, system_event_ref: p.refId ?? null, body: p.body, created_at: new Date().toISOString() };
       (db.tables.circle_messages ??= []).push(row);
       return row;
     },
@@ -529,6 +529,10 @@ describe('circle-level posts that already have a dedicated push', () => {
     await settle();
     expect(db.tables.circle_messages.map((m) => m.system_event_type).sort()).toEqual(['circle_kickoff', 'circle_streak']);
     expect(sendPush).not.toHaveBeenCalled();
+    // system_event_ref is a uuid column: refs must be ids (or null), never 'kickoff-…' / 'streak-7'.
+    const refOf = (t: string) => db.tables.circle_messages.find((m) => m.system_event_type === t)?.system_event_ref;
+    expect(refOf('circle_kickoff')).toBe('c-oak');
+    expect(refOf('circle_streak')).toBeNull();
   });
 
   it('a streak save pushes the circle but not the saver or the covered friend', async () => {

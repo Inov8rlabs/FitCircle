@@ -2,21 +2,17 @@ import { describe, expect, it } from 'vitest';
 
 import { applyIconCompat, clientRendersIconKeys, iconCompatFor } from '../icon-compat';
 
-const req = (version?: string) => ({ headers: { get: (n: string) => (n.toLowerCase() === 'x-app-version' ? version ?? null : null) } });
+const req = (features?: string) => ({ headers: { get: (n: string) => (n.toLowerCase() === 'x-client-features' ? features ?? null : null) } });
 
 describe('clientRendersIconKeys', () => {
   it.each([
     [null, false],
     ['', false],
     ['garbage', false],
-    ['1.0.9', false],
-    ['1.1.0', false],
-    ['1.1.9 (88)', false],
-    ['1.2.0', true],
-    ['1.2', true],
-    ['1.2.0-dev', true],
-    ['1.2.1 (90)', true],
-    ['2.0.0', true],
+    ['icon_keys_v2', false],
+    ['icon_keys', true],
+    [' ICON_KEYS ', true],
+    ['promo@1, icon_keys', true],
   ])('%j → %s', (v, want) => expect(clientRendersIconKeys(v as string | null)).toBe(want));
 });
 
@@ -35,12 +31,12 @@ describe('applyIconCompat', () => {
 
   it('returns the same object for shipped clients', () => {
     expect(applyIconCompat(payload, false)).toBe(payload);
-    expect(iconCompatFor(req('1.1.0'), payload)).toBe(payload);
+    expect(iconCompatFor(req('promo@1'), payload)).toBe(payload);
     expect(iconCompatFor(req(), payload)).toBe(payload);
   });
 
-  it('nulls legacy emoji next to an icon key for 1.2.0+ and promotes icon_key', () => {
-    const out = iconCompatFor(req('1.2.0'), payload);
+  it('nulls legacy emoji next to an icon key for icon-key clients and promotes icon_key', () => {
+    const out = iconCompatFor(req('icon_keys'), payload);
     expect(out.milestone).toEqual({ days: 7, badge: null, badge_emoji: null, icon: 'flame' });
     expect(out.template).toEqual({ id: 'x', icon: 'strength', icon_key: 'strength' });
     expect(out.db).toEqual({ icon_name: null, icon_key: 'strength' });

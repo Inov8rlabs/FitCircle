@@ -1,37 +1,39 @@
 /**
- * Icon keys with backward compatibility (docs/RELEASE_1.2.0_PLAN.md W4).
+ * Icon keys with backward compatibility (docs/RELEASE_1.1.0_PLAN.md W4).
  *
- * Shipped apps (≤ 1.1.x) render emoji fields: `emoji`, `badge`, `badge_emoji`,
+ * Shipped apps render emoji fields: `emoji`, `badge`, `badge_emoji`,
  * `icon_name`, and the challenge template's `icon`. Services always build both
  * the legacy emoji and the new key (`icon`, or `icon_key` where `icon` is
  * already the emoji on the wire), so every client gets the key. For clients
- * that render keys (X-App-Version ≥ 1.2.0) applyIconCompat() then nulls the
- * legacy emoji fields and promotes `icon_key` into `icon`.
+ * that render keys applyIconCompat() then nulls the legacy emoji fields and
+ * promotes `icon_key` into `icon`.
  *
- * A missing or unparseable X-App-Version is treated as a shipped client
- * (emoji kept). iOS ≤ 1.1.x sends the header only on a few endpoints and
- * Android on all of them, so "no header" must mean "old".
+ * A client opts in by capability, not version: it sends
+ * `X-Client-Features: icon_keys` (comma-separated list). Early 1.1.0 test
+ * builds predate icon keys but share the version number, so "no header" must
+ * mean "render emoji".
  */
-import { readExperimentRequestInfo } from '@/lib/experiments/request-info';
-import { compareVersions, parseVersion } from '@/lib/home-feed/rules';
-
 import { isIconKey } from './icons';
 
-/** First app version that renders icon keys instead of emoji. */
-export const ICON_KEYS_MIN_APP_VERSION = '1.2.0';
+/** Request header listing client capabilities, comma-separated. */
+export const CLIENT_FEATURES_HEADER = 'x-client-features';
+/** Capability a client sends when it renders icon keys instead of emoji. */
+export const ICON_KEYS_FEATURE = 'icon_keys';
 
 /** Fields that hold an emoji for shipped clients. Only string values are touched. */
 export const LEGACY_EMOJI_FIELDS = ['emoji', 'badge', 'badge_emoji', 'badgeEmoji', 'icon_name'] as const;
 
 type HeaderSource = { headers: { get(name: string): string | null } };
 
-export function clientRendersIconKeys(appVersion: string | null | undefined): boolean {
-  const v = parseVersion(appVersion ?? null);
-  return !!v && compareVersions(v, parseVersion(ICON_KEYS_MIN_APP_VERSION)!) >= 0;
+/** True when the X-Client-Features value lists `icon_keys`. */
+export function clientRendersIconKeys(features: string | null | undefined): boolean {
+  return (features ?? '')
+    .split(',')
+    .some((f) => f.trim().toLowerCase() === ICON_KEYS_FEATURE);
 }
 
 export function requestRendersIconKeys(request: HeaderSource): boolean {
-  return clientRendersIconKeys(readExperimentRequestInfo(request).appVersion);
+  return clientRendersIconKeys(request.headers.get(CLIENT_FEATURES_HEADER));
 }
 
 const isPlainObject = (v: unknown): v is Record<string, unknown> =>
@@ -51,14 +53,14 @@ function modernize(value: unknown): unknown {
 
 /**
  * The payload as this client should see it. Shipped clients get it unchanged
- * (same reference); 1.2.0+ get a copy with legacy emoji fields nulled on every
+ * (same reference); icon-key clients get a copy with legacy emoji fields nulled on every
  * object that carries an icon key.
  */
 export function applyIconCompat<T>(payload: T, rendersIconKeys: boolean): T {
   return rendersIconKeys ? (modernize(payload) as T) : payload;
 }
 
-/** applyIconCompat keyed off the request's X-App-Version. */
+/** applyIconCompat keyed off the request's X-Client-Features. */
 export function iconCompatFor<T>(request: HeaderSource, payload: T): T {
   return applyIconCompat(payload, requestRendersIconKeys(request));
 }

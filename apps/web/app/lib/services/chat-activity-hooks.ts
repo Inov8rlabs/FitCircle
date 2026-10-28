@@ -158,7 +158,8 @@ export class ChatActivityHooks {
   static async onCircleStreakMilestone(fitcircleId: string, streakDays: number): Promise<void> {
     try {
       await this.ingest(
-        this.signal(fitcircleId, fitcircleId, 'circle', 'circle_streak', `streak-${streakDays}`, {
+        // No refId (system_event_ref is a uuid); the event key falls back to d<streakDays>.
+        this.signal(fitcircleId, fitcircleId, 'circle', 'circle_streak', null, {
           streakDays,
           loggedAtCount: streakDays,
         })
@@ -193,7 +194,8 @@ export class ChatActivityHooks {
   ): Promise<void> {
     try {
       await this.ingest(
-        this.signal(fitcircleId, fitcircleId, circleName, 'circle_kickoff', `kickoff-${fitcircleId}`, {
+        // refId lands in circle_messages.system_event_ref (uuid): the circle id keys one kickoff per circle.
+        this.signal(fitcircleId, fitcircleId, circleName, 'circle_kickoff', fitcircleId, {
           circleName,
           memberCount,
           kickoffReason: reason,

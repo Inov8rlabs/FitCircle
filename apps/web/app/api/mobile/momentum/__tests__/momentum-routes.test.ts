@@ -262,14 +262,14 @@ describe('GET /api/mobile/momentum/milestones', () => {
   });
 });
 
-describe('icon keys (1.2.0+)', () => {
-  it('shipped clients keep badge / badge_emoji; X-App-Version 1.2.0 gets null emoji and the icon key', async () => {
+describe('icon keys (X-Client-Features: icon_keys)', () => {
+  it('shipped clients keep badge / badge_emoji; icon-key clients get null emoji and the icon key', async () => {
     seedMomentum({ current: 8, best: 8, claims: 8 });
     const legacy = await (await getMilestones(get('/api/mobile/momentum/milestones'))).json();
     expect(legacy.data.milestones[0]).toMatchObject({ badge: '🔥', badge_emoji: '🔥', icon: 'flame' });
 
     const modern = await (
-      await getMilestones(new NextRequest('http://localhost/api/mobile/momentum/milestones', { headers: { 'X-App-Version': '1.2.0' } }))
+      await getMilestones(new NextRequest('http://localhost/api/mobile/momentum/milestones', { headers: { 'X-App-Version': '1.1.0', 'X-Client-Features': 'icon_keys' } }))
     ).json();
     expect(modern.data.milestones[0]).toMatchObject({ badge: null, badge_emoji: null, icon: 'flame', day_threshold: 3 });
   });

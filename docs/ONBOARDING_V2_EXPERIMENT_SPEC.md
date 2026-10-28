@@ -772,7 +772,7 @@ Notes:
 9. **Generic arm keys (2026-10-28):** `control | variantA | variantB | …` in every experiment, with a human `name` per arm; analytics user property `exp_<key>` carries the key. Clients route by payload.
 10. **Mutual exclusion groups (2026-10-28):** optional layers with disjoint bucket slices (§6.3). `onboarding_v2` stays non-layered.
 
-11. **1.2.0 replaces the tour test with a paywall-layout test (2026-10-28, RELEASE_1.2.0_PLAN W4).** Onboarding v3 ships to everyone, so the `flow` dimension and the hard paywall are gone. All arms are skippable and carry the 3-day trial. The test is set up in Admin Tools only: no backend deploy, no migration, no prod data change from the backend.
+11. **1.2.0 replaces the tour test with a paywall-layout test (2026-10-28, RELEASE_1.1.0_PLAN W4).** Onboarding v3 ships to everyone, so the `flow` dimension and the hard paywall are gone. All arms are skippable and carry the 3-day trial. The test is set up in Admin Tools only: no backend deploy, no migration, no prod data change from the backend.
 
 ### 11.1 Admin Tools steps: `onboarding_paywall`
 

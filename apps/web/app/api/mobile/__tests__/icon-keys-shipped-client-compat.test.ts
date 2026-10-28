@@ -1,11 +1,12 @@
 /**
- * Icon keys with backward compatibility (RELEASE_1.2.0_PLAN W4).
+ * Icon keys with backward compatibility (RELEASE_1.1.0_PLAN W4).
  *
- * Shipped apps (≤ 1.1.x, or no X-App-Version, which is what iOS ≤ 1.1.x sends on
- * most endpoints) must see the emoji fields EXACTLY as before; the only change
- * is an added `icon` / `icon_key`, which their decoders ignore (iOS Codable
- * ignores unknown keys; Android kotlinx uses ignoreUnknownKeys). 1.2.0+ get the
- * same objects with the emoji fields null and a registered icon key.
+ * Clients that don't send `X-Client-Features: icon_keys` (every shipped app, and
+ * early 1.1.0 test builds, whatever X-App-Version says) must see the emoji fields
+ * EXACTLY as before; the only change is an added `icon` / `icon_key`, which their
+ * decoders ignore (iOS Codable ignores unknown keys; Android kotlinx uses
+ * ignoreUnknownKeys). Icon-key clients get the same objects with the emoji
+ * fields null and a registered icon key.
  *
  * Covers: challenge templates (code route + DB route, pre- and post-migration
  * rows), campaigns list (doors, marks, steps, campaign emoji), seasonal
@@ -44,9 +45,18 @@ import { GET as GET_DB_TEMPLATES } from '../challenges/templates/route';
 import { GET as GET_SEASONAL } from '../seasonal/route';
 
 const ME = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
-const OLD = [undefined, '1.0.9', '1.1.0', '1.1.9'];
+// Version alone never opts in: even a 1.2.0 without the capability header gets emoji.
+const OLD = [undefined, '1.0.9', '1.1.0', '1.2.0'];
+const NEW = 'icon_keys';
 const req = (path: string, version?: string) =>
-  new NextRequest(`http://localhost${path}`, { headers: version ? { 'X-App-Version': version, 'X-App-Platform': 'ios' } : {} });
+  new NextRequest(`http://localhost${path}`, {
+    headers:
+      version === NEW
+        ? { 'X-App-Version': '1.1.0', 'X-App-Platform': 'ios', 'X-Client-Features': 'icon_keys' }
+        : version
+          ? { 'X-App-Version': version, 'X-App-Platform': 'ios' }
+          : {},
+  });
 const EMOJI = /\p{Extended_Pictographic}/u;
 
 let db: ReferralFakeDb;
@@ -69,8 +79,8 @@ describe('challenge templates (code): GET /api/fitcircles/[id]/challenges/templa
     for (const x of body.data.templates) expect(x.icon).toMatch(EMOJI);
   });
 
-  it('1.2.0: `icon` is the key', async () => {
-    const body = await (await GET_CIRCLE_TEMPLATES(req('/api/fitcircles/x/challenges/templates', '1.2.0'))).json();
+  it('icon-key client: `icon` is the key', async () => {
+    const body = await (await GET_CIRCLE_TEMPLATES(req('/api/fitcircles/x/challenges/templates', NEW))).json();
     for (const x of body.data.templates) {
       expect(isIconKey(x.icon)).toBe(true);
       expect(x.icon).toBe(x.icon_key);
@@ -91,8 +101,8 @@ describe('challenge templates (DB): GET /api/mobile/challenges/templates', () =>
     expect(body.data.map((t: any) => [t.icon_name, t.icon_key])).toEqual([['🦵', 'strength'], ['🏔️', 'mountain']]);
   });
 
-  it('1.2.0: icon_name null, icon_key kept', async () => {
-    const body = await (await GET_DB_TEMPLATES(req('/api/mobile/challenges/templates', '1.2.0'))).json();
+  it('icon-key client: icon_name null, icon_key kept', async () => {
+    const body = await (await GET_DB_TEMPLATES(req('/api/mobile/challenges/templates', NEW))).json();
     expect(body.data.map((t: any) => [t.icon_name, t.icon_key])).toEqual([[null, 'strength'], [null, 'mountain']]);
   });
 });
@@ -115,8 +125,8 @@ describe('campaigns: GET /api/mobile/campaigns', () => {
     for (const s of a.howItWorks) expect(s.emoji).toMatch(EMOJI);
   });
 
-  it('1.2.0: emoji null everywhere an icon key is present', async () => {
-    const body = await (await GET_CAMPAIGNS(req('/api/mobile/campaigns', '1.2.0'))).json();
+  it('icon-key client: emoji null everywhere an icon key is present', async () => {
+    const body = await (await GET_CAMPAIGNS(req('/api/mobile/campaigns', NEW))).json();
     for (const c of body.data.campaigns) {
       expect(c.emoji).toBeNull();
       expect(isIconKey(c.icon)).toBe(true);
@@ -134,11 +144,11 @@ describe('seasonal: GET /api/mobile/seasonal', () => {
     expect(body.data.current).toMatchObject({ key: 'hold_the_line', emoji: '❄️', icon: 'snowflake' });
   });
 
-  it('1.2.0: emoji null (campaign-backed and built-in fallback)', async () => {
-    let body = await (await GET_SEASONAL(req('/api/mobile/seasonal', '1.2.0'))).json();
+  it('icon-key client: emoji null (campaign-backed and built-in fallback)', async () => {
+    let body = await (await GET_SEASONAL(req('/api/mobile/seasonal', NEW))).json();
     expect(body.data.current).toMatchObject({ emoji: null, icon: 'snowflake' });
     const spy = vi.spyOn(CampaignService, 'seasonalFor').mockRejectedValueOnce(new Error('db down'));
-    body = await (await GET_SEASONAL(req('/api/mobile/seasonal', '1.2.0'))).json();
+    body = await (await GET_SEASONAL(req('/api/mobile/seasonal', NEW))).json();
     expect(body.data.current).toMatchObject({ key: 'hold_the_line', emoji: null, icon: 'snowflake' });
     spy.mockRestore();
     expect(SEASONS.map((s) => s.emoji)).toEqual(['❄️', '🌅', '🌙']); // built-in values for old clients unchanged
@@ -147,7 +157,7 @@ describe('seasonal: GET /api/mobile/seasonal', () => {
 
 describe('promo@1 props', () => {
   const props = buildPromoProps('first_meal', firstMeal.creatives({} as any)[0], parseClientActions('open_screen@1'))!;
-  it('shipped clients keep the emoji; 1.2.0 gets the key only', () => {
+  it('shipped clients keep the emoji; icon-key clients get the key only', () => {
     expect(props).toMatchObject({ emoji: '📸', icon: 'camera' });
     expect(applyIconCompat(props, false)).toBe(props);
     expect(applyIconCompat(props, true)).toMatchObject({ emoji: null, icon: 'camera' });
