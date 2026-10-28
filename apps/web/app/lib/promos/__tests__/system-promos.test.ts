@@ -103,14 +103,16 @@ describe('log_meal_now (time-aware)', () => {
       expect(c.primary.action.params).toEqual({ screen: 'log_meal', meal: slot });
     }
   });
-  it('hidden when the slot is logged, outside every window, before the first meal, or the slot toggle is off', () => {
+  it('hidden when the slot is logged, outside every window, or before the first meal', () => {
     expect(logMealNow.audience(input({ loggedSlotsToday: ['lunch'] }))).toBe('slot_logged');
     expect(logMealNow.audience(input({ localMinutes: 23 * 60 }))).toBe('outside_slots');
     expect(logMealNow.audience(input({ hasLoggedMeal: false }))).toBe('no_meal_yet');
     expect(logMealNow.audience(input({ loggedSlotsToday: null }))).toBe('slots_unknown');
-    // snack defaults off (§4)
-    expect(logMealNow.audience(input({ localMinutes: 16 * 60 }))).toBe('slot_off');
-    expect(logMealNow.audience(input({ localMinutes: 16 * 60, mealReminderPrefs: { ...DEFAULT_MEAL_REMINDER_PREFS, snack: true } }))).toBeNull();
+    // The push toggles don't gate the card: snack (push off by default) still shows 15:00–16:59,
+    // and turning off the lunch push keeps the lunch card.
+    expect(logMealNow.audience(input({ localMinutes: 16 * 60 }))).toBeNull();
+    expect(logMealNow.creatives(input({ localMinutes: 16 * 60 }))[0].id).toBe('log_meal_now_snack');
+    expect(logMealNow.audience(input({ localMinutes: 13 * 60, mealReminderPrefs: { ...DEFAULT_MEAL_REMINDER_PREFS, lunch: false } }))).toBeNull();
   });
   it('a lunch logged as "snack" at 12:40 counts as lunch (entry time in window)', () => {
     const j = buildJourneyContext(

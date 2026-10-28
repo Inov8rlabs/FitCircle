@@ -56,8 +56,15 @@ export type PlateScoreBreakdown = {
     usedChallengeTarget: boolean;
     /** Daily calorie budget used for goal-fit (and the food-log budget widget). */
     calorieTarget: number;
+    /**
+     * Where calorieTarget came from (additive; absent on rows scored before it existed):
+     * an active calorie challenge, the user's own daily target, or the persona default.
+     */
+    targetSource?: PlateScoreTargetSource;
   };
 };
+
+export type PlateScoreTargetSource = 'challenge' | 'user' | 'default';
 
 /** The DTO returned by every PlateScoreService method and the mobile routes. */
 export type PlateScoreDTO = {
@@ -67,7 +74,7 @@ export type PlateScoreDTO = {
   date: string;
   components: PlateScoreComponents;
   breakdown: PlateScoreBreakdown;
-  /** Daily calorie budget for this user/day (challenge target or persona default). */
+  /** Daily calorie budget for this user/day (challenge target, the user's own target, or persona default). */
   calorieTarget: number;
 };
 

@@ -31,6 +31,7 @@ import {
   feedFlagsCache,
   readRequestInfo,
   softly,
+  PROMO_LOADER_TIMEOUT_MS,
   type ContextLoaders,
   type FeedProfile,
   type FeedRequestInfo,
@@ -266,16 +267,19 @@ export class HomeFeedService {
 
   /**
    * The promo reads (journey facts, promo_user_state, live Pro gates) — in the
-   * SAME parallel round as the feed context, each capped at the 250 ms budget.
+   * SAME parallel round as the feed context (facts + state capped at PROMO_LOADER_TIMEOUT_MS,
+   * the rest at the 250 ms budget).
    * Skipped entirely (zero cost) unless PROMOS_ENABLED and the client declared promo@1.
    */
   static async promoRound(profile: FeedProfile, info: FeedRequestInfo, client: PromoClientSupport, now: Date, loaders: PromoLoaders = defaultPromoLoaders): Promise<PromoRoundData | null> {
     if (!promosConfig().enabled || !client.promoCard) return null;
     const timezone = resolveTimezone(info, profile);
     const localDate = localParts(now, timezone).date;
+    // Journey facts + promo state get a longer budget than the feed context: when either times out
+    // the time-of-day meal card can't be placed, which read as the card flickering in and out.
     const [facts, state, liveProFeatures] = await Promise.all([
-      softly(() => loaders.journeyFacts(profile.id, localDate)),
-      softly(() => loaders.promoState(profile.id)),
+      softly(() => loaders.journeyFacts(profile.id, localDate), PROMO_LOADER_TIMEOUT_MS),
+      softly(() => loaders.promoState(profile.id), PROMO_LOADER_TIMEOUT_MS),
       softly(() => loaders.liveProFeatures()),
     ]);
     return { facts, state, liveProFeatures, timezone, localDate };

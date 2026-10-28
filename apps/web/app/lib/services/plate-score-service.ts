@@ -1,4 +1,5 @@
 import { createAdminSupabase } from '../supabase-admin';
+import { DEFAULT_CALORIE_TARGET, userCalorieTarget } from '../targets/user-targets';
 import {
   type PlateScoreBreakdown,
   type PlateScoreDTO,
@@ -47,10 +48,11 @@ import {
  *     starvation day cannot earn balance points just by being small. If no macros
  *     were logged, balance is 0 (nothing to evaluate).
  *
- *   goalFit (0–100): if an active challenge / target informs a calorie (and/or
- *     protein) target, score how close the day is to that target as a two-sided
- *     band — undershooting is penalized exactly like overshooting. With no target,
- *     goalFit is a neutral 70 (we don't punish the absence of a goal).
+ *   goalFit (0–100): score how close the day is to the calorie target as a
+ *     two-sided band — undershooting is penalized exactly like overshooting.
+ *     Target, first match wins: an active calorie challenge, the user's own
+ *     daily target (preferences.nutrition, PUT /api/mobile/targets), then the
+ *     persona default.
  */
 export class PlateScoreService {
   // Reference macro energy split used for the balance component (PRD §6.8).
@@ -58,8 +60,9 @@ export class PlateScoreService {
   private static readonly REF_SPLIT = { protein: 0.25, carbs: 0.45, fat: 0.30 };
 
   // Persona/fitness-level derived "reasonable" daily calorie target used ONLY when
-  // the user has no active challenge target. Two-sided band, never "less is better".
-  static readonly DEFAULT_CAL_TARGET = 2000;
+  // the user has neither an active challenge target nor their own daily target.
+  // Two-sided band, never "less is better".
+  static readonly DEFAULT_CAL_TARGET = DEFAULT_CALORIE_TARGET;
 
   /** Compute (and upsert) the score for a given user + ISO date. */
   static async computeForDay(userId: string, date: string): Promise<PlateScoreDTO> {
@@ -86,7 +89,7 @@ export class PlateScoreService {
     // 2. Persona / fitness level (drives weights + default target). Best-effort.
     const { data: profile } = await supabase
       .from('profiles')
-      .select('persona, fitness_level')
+      .select('persona, fitness_level, preferences')
       .eq('id', userId)
       .maybeSingle();
     const persona = (profile?.persona ?? null) as string | null;
@@ -94,7 +97,7 @@ export class PlateScoreService {
     const isAthlete = fitnessLevel === 'athlete' || persona === 'mike';
 
     // 3. Goal target: from an active challenge if one carries a calorie/protein goal.
-    const target = await this.resolveGoalTarget(userId, date, isAthlete);
+    const target = await this.resolveGoalTarget(userId, date, isAthlete, userCalorieTarget(profile));
 
     // 4. Components (each 0–100).
     const distinctMeals = new Set(rows.map((r) => (r.meal_type ?? '').trim()).filter(Boolean)).size;
@@ -118,12 +121,13 @@ export class PlateScoreService {
     const breakdown: PlateScoreBreakdown = {
       weights,
       totals,
-      notes: this.buildNotes(mealCount, balance, goalFit, target.usedChallengeTarget),
+      notes: this.buildNotes(mealCount, balance, goalFit, target.source),
       basis: {
         persona,
         fitnessLevel,
         usedChallengeTarget: target.usedChallengeTarget,
         calorieTarget: target.calorieTarget ?? this.DEFAULT_CAL_TARGET,
+        targetSource: target.source,
       },
     };
 
@@ -273,14 +277,15 @@ export class PlateScoreService {
 
   /**
    * Resolve a calorie target for goal-fit. Prefers an active challenge that carries
-   * a nutrition/calorie goal; otherwise falls back to a sensible persona default.
-   * NOTE: challenge goals here are two-sided targets, never deficits.
+   * a nutrition/calorie goal, then the user's own daily target, then a sensible
+   * persona default. NOTE: every target here is a two-sided band, never a deficit.
    */
   private static async resolveGoalTarget(
     userId: string,
     date: string,
-    isAthlete: boolean
-  ): Promise<{ calorieTarget: number | null; usedChallengeTarget: boolean }> {
+    isAthlete: boolean,
+    userTarget: number | null = null
+  ): Promise<{ calorieTarget: number | null; usedChallengeTarget: boolean; source: PlateScoreTargetSource }> {
     const supabase = createAdminSupabase();
 
     // Active challenge participation with a calorie-style nutrition goal.
@@ -299,14 +304,18 @@ export class PlateScoreService {
       // Only honor calorie/kcal-denominated goals for goal-fit (other challenge
       // types — steps, workouts — don't define a nutrition target).
       if ((unit.includes('cal') || unit.includes('kcal')) && Number(ch.goal_amount) > 0) {
-        return { calorieTarget: Number(ch.goal_amount), usedChallengeTarget: true };
+        return { calorieTarget: Number(ch.goal_amount), usedChallengeTarget: true, source: 'challenge' };
       }
     }
 
-    // No nutrition challenge: use a neutral persona-based default (two-sided band).
+    // No nutrition challenge: the user's own daily target (they chose it, so no
+    // persona adjustment), else a neutral persona-based default (two-sided band).
+    if (userTarget !== null && userTarget > 0) {
+      return { calorieTarget: userTarget, usedChallengeTarget: false, source: 'user' };
+    }
     // Athletes get a slightly higher default fueling target.
     const fallback = isAthlete ? Math.round(this.DEFAULT_CAL_TARGET * 1.25) : this.DEFAULT_CAL_TARGET;
-    return { calorieTarget: fallback, usedChallengeTarget: false };
+    return { calorieTarget: fallback, usedChallengeTarget: false, source: 'default' };
   }
 
   /** Friendly, non-shaming notes (§6.7). Only positive/neutral framing. */
@@ -314,7 +323,7 @@ export class PlateScoreService {
     mealCount: number,
     balance: number,
     goalFit: number,
-    usedChallengeTarget: boolean
+    source: PlateScoreTargetSource
   ): string[] {
     const notes: string[] = [];
     if (mealCount >= 3) notes.push('Nice consistent logging across the day.');
@@ -325,7 +334,8 @@ export class PlateScoreService {
     if (balance >= 75) notes.push('Great macro balance — protein, carbs, and fat all showing up.');
     else if (balance > 0) notes.push('A bit more variety across macros can boost your balance.');
 
-    if (usedChallengeTarget && goalFit >= 75) notes.push("You're right in line with your challenge target.");
+    if (source === 'challenge' && goalFit >= 75) notes.push("You're right in line with your challenge target.");
+    else if (source === 'user' && goalFit >= 75) notes.push("You're right in line with your daily target.");
     else if (goalFit >= 75) notes.push('Your intake is well-aligned with a healthy daily range.');
 
     return notes;
@@ -353,7 +363,7 @@ export class PlateScoreService {
 
 // Compile-time guarantee that the static methods conform to the FROZEN signatures
 // (IPlateScoreService) even though the service uses static methods (FoodsService style).
-import { type IPlateScoreService } from '../types/plate-score';
+import { type IPlateScoreService, type PlateScoreTargetSource } from '../types/plate-score';
 const _signatureCheck: IPlateScoreService = PlateScoreService;
 void _signatureCheck;
 

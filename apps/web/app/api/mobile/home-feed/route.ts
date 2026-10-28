@@ -9,6 +9,8 @@ import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { addAutoRefreshHeaders } from '@/lib/middleware/mobile-auto-refresh';
 import { PROMO_CARD_TYPE, PROMO_CARD_VERSION, parsePromoClient } from '@/lib/promos';
 import { HomeFeedService, SLOW_FEED_MS, type FeedTiming } from '@/lib/services/home-feed-service';
+import { ProfileTimezoneService } from '@/lib/services/profile-timezone-service';
+import { runAfterResponse } from '@/lib/utils/after-response';
 
 export const dynamic = 'force-dynamic';
 
@@ -58,6 +60,12 @@ export async function GET(request: NextRequest) {
       promoLayouts: request.nextUrl.searchParams.get('promoLayouts'),
     });
     const feed = await HomeFeedService.getFeed(user, info, support, { timing, promoClient });
+    if (ProfileTimezoneService.pendingUpdate((user as { timezone?: string | null }).timezone, info.clientTimezone)) {
+      runAfterResponse(
+        () => ProfileTimezoneService.syncFromClient(user.id, (user as { timezone?: string | null }).timezone, info.clientTimezone),
+        'profile timezone'
+      );
+    }
     timing.totalMs = Math.round(performance.now() - started);
     // promo@1 props carry `icon` for every client; clients without X-Client-Features: icon_keys also keep `emoji`.
     const response = NextResponse.json(applyIconCompat(feed, requestRendersIconKeys(request)), {

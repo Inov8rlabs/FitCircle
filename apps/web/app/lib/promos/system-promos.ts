@@ -91,11 +91,15 @@ export const LOG_MEAL_COPY: Record<MealSlot, { title: string; body: string; icon
   dinner: { title: 'Log your dinner', body: 'Snap dinner to round out your day.', icon: 'meal', emoji: '🍽️', label: 'Log dinner' },
 };
 
-/** The open slot right now (local window, not logged, reminder pref on), or null. */
+/**
+ * The open slot right now (the user's local meal window, not yet logged), or null.
+ * Independent of the meal-reminder PUSH toggles: those only control notifications,
+ * so the card covers all four meals (snack's push is off by default).
+ */
 export function openSlot({ journey }: PromoMatchInput): MealSlot | null {
   const slot = slotForMinutes(journey.localMinutes);
   if (!slot || !journey.loggedSlotsToday || journey.loggedSlotsToday.includes(slot)) return null;
-  return journey.mealReminderPrefs[slot] ? slot : null;
+  return slot;
 }
 
 export const logMealNow: PromoDefinition = {
@@ -111,7 +115,6 @@ export const logMealNow: PromoDefinition = {
     const slot = slotForMinutes(journey.localMinutes);
     if (!slot) return 'outside_slots';
     if (journey.loggedSlotsToday.includes(slot)) return 'slot_logged';
-    if (!journey.mealReminderPrefs[slot]) return 'slot_off';
     return null;
   },
   creatives: (input) => {

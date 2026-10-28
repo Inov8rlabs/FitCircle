@@ -10,7 +10,8 @@
 import { z } from 'zod';
 
 import { ExperimentService } from '../experiments/service';
-import { ageFrom, computePlan, type PlanRequest, type PlanTargets } from '../onboarding/plan';
+import { birthDateFields, birthDateUpdate, parseBirthDate, refineBirthDate, type BirthDateInput } from '../onboarding/birth-date';
+import { ageFrom, computePlan, planRequestSchema, type PlanRequest, type PlanTargets } from '../onboarding/plan';
 import { createAdminSupabase } from '../supabase-admin';
 
 export const ONBOARDING_EXPERIMENT_KEY = 'onboarding_v2';
@@ -31,21 +32,34 @@ export type OnboardingGate = 'none' | 'subscription_required';
 
 export const progressSchema = z
   .object({
-    flow: z.enum(['v1', 'v2']),
+    flow: z.enum(['v1', 'v2', 'v3']),
     step: z.string().trim().min(1).max(64).regex(/^[A-Za-z0-9_.:-]+$/, 'step ids are letters, digits, _ . : -'),
     data: z.record(z.unknown()).optional(),
+    // Onboarding v3 About-you (docs/USER_TARGETS_CONTRACT.md §3): saved to profiles.date_of_birth.
+    ...birthDateFields,
   })
   .strict()
   .refine((v) => v.data === undefined || JSON.stringify(v.data).length <= PROGRESS_DATA_MAX_BYTES, {
     message: `data must be ≤ ${PROGRESS_DATA_MAX_BYTES} bytes of JSON`,
     path: ['data'],
-  });
+  })
+  .superRefine((v, ctx) => refineBirthDate(v, ctx));
 export type ProgressInput = z.infer<typeof progressSchema>;
+
+/** POST /onboarding/plan body: the plan fields plus the optional birth date to save. */
+export const planWithBirthDateSchema = planRequestSchema.extend(birthDateFields).superRefine((v, ctx) => refineBirthDate(v, ctx));
+export type PlanWithBirthDate = z.infer<typeof planWithBirthDateSchema>;
+
+/** POST /onboarding/complete optional body. Unknown keys ignored (shipped clients send none or {}). */
+export const completeBodySchema = z
+  .object(birthDateFields)
+  .strip()
+  .superRefine((v, ctx) => refineBirthDate(v, ctx));
 
 export const gateSchema = z.object({ reached: z.literal(true) }).strip();
 
 export interface ResumeState {
-  flow: 'v1' | 'v2';
+  flow: 'v1' | 'v2' | 'v3';
   step: string;
   data: Record<string, unknown>;
   updatedAt: string | null;
@@ -90,6 +104,7 @@ export class OnboardingFlowService {
     if (error) throw new Error(`onboarding_progress upsert failed: ${error.message}`);
     const { error: profileError } = await supabase.from('profiles').update({ onboarding_flow: input.flow }).eq('id', userId);
     if (profileError) console.warn('[OnboardingFlowService.saveProgress] profiles.onboarding_flow:', profileError.message);
+    await this.saveBirthDate(userId, input);
     return {
       flow: (data?.flow ?? input.flow) as ResumeState['flow'],
       step: (data?.step ?? input.step) as string,
@@ -111,7 +126,7 @@ export class OnboardingFlowService {
         supabase.from('onboarding_progress').select('flow, step, data, updated_at, is_complete').eq('user_id', userId).maybeSingle(),
       ]);
       if (pErr || !profile) return { shouldResume: false, resume: null };
-      if (gErr || !progress || progress.is_complete === true || !progress.step || (progress.flow !== 'v1' && progress.flow !== 'v2')) {
+      if (gErr || !progress || progress.is_complete === true || !progress.step || !['v1', 'v2', 'v3'].includes(progress.flow as string)) {
         return { shouldResume: false, resume: null };
       }
       const shouldResume = shouldResumeOnboarding(profile as any, true, now);
@@ -131,16 +146,49 @@ export class OnboardingFlowService {
     }
   }
 
-  /** Plan targets; body values win, the profile (saved by R3) fills gaps. */
-  static plan(profile: Record<string, any>, input: PlanRequest, now: Date = new Date()): PlanTargets {
+  /**
+   * Plan targets; body values win, the profile (saved by R3) fills gaps. A
+   * birthYear / dateOfBirth in the body stands in for `age` when age is absent.
+   */
+  static plan(profile: Record<string, any>, input: PlanRequest & BirthDateInput, now: Date = new Date()): PlanTargets {
     const num = (v: unknown) => (v === null || v === undefined || v === '' ? null : Number(v));
     const ok = (v: number | null, min: number, max: number) => (v !== null && Number.isFinite(v) && v >= min && v <= max ? v : null);
+    const { birthYear: _birthYear, dateOfBirth: _dateOfBirth, ...planInput } = input;
+    const sent = parseBirthDate(input);
     return computePlan({
-      ...input,
+      ...planInput,
       heightCm: input.heightCm ?? ok(num(profile.height_cm), 100, 250),
       weightKg: input.weightKg ?? ok(num(profile.weight_kg), 30, 300),
-      age: input.age ?? ageFrom(profile.date_of_birth, now),
+      age: input.age ?? (sent ? ageFrom(sent.date, now) : null) ?? ageFrom(profile.date_of_birth, now),
     });
+  }
+
+  /**
+   * Save an onboarding birth year / date of birth (lib/onboarding/birth-date.ts
+   * rules: a year never overwrites a full date). Returns whether anything was
+   * written. Never throws and never logs the value — a failure here must not
+   * fail the onboarding call it rides on.
+   */
+  static async saveBirthDate(userId: string, input: BirthDateInput): Promise<boolean> {
+    const parsed = parseBirthDate(input);
+    if (!parsed) return false;
+    try {
+      const supabase = createAdminSupabase();
+      const { data: profile, error } = await supabase.from('profiles').select('date_of_birth, preferences').eq('id', userId).maybeSingle();
+      if (error) throw error;
+      const update = birthDateUpdate(profile, parsed);
+      if (!update) return false;
+      const { error: upErr } = await supabase
+        .from('profiles')
+        .update({ ...update, updated_at: new Date().toISOString() })
+        .eq('id', userId);
+      if (upErr) throw upErr;
+      return true;
+    } catch (err: any) {
+      // Code only: a Postgres message can echo the value.
+      console.warn('[OnboardingFlowService.saveBirthDate] not saved:', err?.code ?? 'error');
+      return false;
+    }
   }
 
   /**

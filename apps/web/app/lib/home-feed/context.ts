@@ -23,6 +23,8 @@ import type { AppPlatform, FeedContext } from './types';
  * feed is the apps' first screen and must keep a tight P95.
  */
 export const CONTEXT_LOADER_TIMEOUT_MS = 250;
+/** Budget for the promo journey-facts / promo-state reads (they decide the time-of-day meal card). */
+export const PROMO_LOADER_TIMEOUT_MS = 600;
 
 /**
  * User-independent tables, cached per instance (fresh 30 s, served stale up

@@ -148,6 +148,8 @@ describe('POST /api/mobile/me/journey/events', () => {
     expect(db.rows('profiles')[0].fitzy_intro_seen_at).toBe(NOW.toISOString());
     await send('POST', '/api/mobile/me/journey/events', { event: 'paywall_shown', placement: 'feed_pro_value', automatic: false }, postEvent);
     expect(db.rows('profiles')[0].paywall_auto_last_at).toBeNull();
+    // Every open (tap included) clears the Home crown marker (migration 115).
+    expect(db.rows('profiles')[0].paywall_last_opened_at).toBe(NOW.toISOString());
     const res = await send('POST', '/api/mobile/me/journey/events', { event: 'paywall_shown', placement: 'first_meal_aha' }, postEvent);
     expect((await res.json()).data).toMatchObject({ event: 'paywall_shown', paywallAutoLastAt: NOW.toISOString(), paywallAhaShownAt: NOW.toISOString() });
     const { data } = await (await get()).json();

@@ -122,6 +122,18 @@ export class JourneyService {
     }
   }
 
+  /** profiles.paywall_last_opened_at = at (migration 115). Never throws. */
+  static async markPaywallOpened(userId: string, at: string): Promise<boolean> {
+    try {
+      const { error } = await createAdminSupabase().from('profiles').update({ paywall_last_opened_at: at }).eq('id', userId);
+      if (error) throw error;
+      return true;
+    } catch (err: any) {
+      console.warn('[journey] paywall_last_opened_at not written (migration 115 applied?):', err?.message ?? err);
+      return false;
+    }
+  }
+
   /** POST /me/journey/events. Returns the stored timestamp(s). */
   static async recordEvent(
     userId: string,
@@ -140,7 +152,11 @@ export class JourneyService {
       if (error) throw error;
       return { fitzyIntroSeenAt: at };
     }
-    // paywall_shown: only automatic presentations feed the 72 h spacing.
+    // paywall_shown: every open (automatic or a user tap) clears the Home crown
+    // marker for the current offer (USER_TARGETS_CONTRACT §4). Migration 115
+    // column, written on its own so a missing column never fails the event.
+    await this.markPaywallOpened(userId, at);
+    // Only automatic presentations feed the 72 h spacing.
     const update: Record<string, string> = {};
     if (opts.automatic !== false) update.paywall_auto_last_at = at;
     if (opts.placement === 'first_meal_aha') update.paywall_aha_shown_at = at;

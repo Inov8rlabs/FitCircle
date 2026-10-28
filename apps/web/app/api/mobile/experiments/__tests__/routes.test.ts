@@ -249,7 +249,7 @@ describe('onboarding progress + status resume (R2)', () => {
   });
 
   it('rejects bad flow / oversized data', async () => {
-    expect((await PATCH_PROGRESS(req('/api/mobile/onboarding/progress', { method: 'PATCH', body: { flow: 'v3', step: 'x' } }))).status).toBe(400);
+    expect((await PATCH_PROGRESS(req('/api/mobile/onboarding/progress', { method: 'PATCH', body: { flow: 'v4', step: 'x' } }))).status).toBe(400);
     const big = { blob: 'x'.repeat(20_000) };
     expect((await PATCH_PROGRESS(req('/api/mobile/onboarding/progress', { method: 'PATCH', body: { flow: 'v1', step: 'x', data: big } }))).status).toBe(400);
   });

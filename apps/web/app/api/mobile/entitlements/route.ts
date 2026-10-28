@@ -2,6 +2,7 @@ import { type NextRequest, NextResponse } from 'next/server';
 
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { EntitlementService } from '@/lib/services/entitlement-service';
+import { resolveClientTimezone } from '@/lib/streaks/client-timezone';
 
 /** Never cacheable: per-user (account-switch cache leak, 2026-09-15). */
 const NO_STORE = { 'Cache-Control': 'no-store' };
@@ -12,12 +13,13 @@ const NO_STORE = { 'Cache-Control': 'no-store' };
  * enforce server-side (403 PREMIUM_REQUIRED). BODY_COMP_BUILD_CONTRACT §2.
  * Additive (ONBOARDING_V2 §3.2/§5.5): subscription.isTrial / trialEndsAt, top-level
  * gate ('none'|'subscription_required') and locked (gate && !pro && subscriptionsEnabled).
+ * Additive (1.1.0, USER_TARGETS_CONTRACT §4): proBadge { marker, offerId } and memberSince.
  */
 export async function GET(request: NextRequest) {
   const startTime = Date.now();
   try {
     const user = await requireMobileAuth(request);
-    const entitlements = await EntitlementService.getEntitlements(user.id);
+    const entitlements = await EntitlementService.getEntitlements(user.id, { timezone: resolveClientTimezone(request) });
     return NextResponse.json(
       { success: true, data: entitlements, meta: { requestTime: Date.now() - startTime }, error: null },
       { headers: NO_STORE }

@@ -1,6 +1,9 @@
-import { createAdminSupabase } from '../supabase-admin';
+import type { CampaignRow } from '../campaigns/model';
 import { TIER_LIMITS, LEGACY_LIMITS } from '../config/tier-limits';
-import { FeatureFlagService } from './feature-flag-service';
+import { activeOffer, memberSinceFrom, MEMBER_EVENT_TYPES, proBadgeFor, type SubscriptionEventRow } from '../entitlements/pro-badge';
+import { swrCache } from '../home-feed/cache';
+import { isValidTimezone } from '../streaks/streak-calculator';
+import { createAdminSupabase } from '../supabase-admin';
 import {
   type EntitlementLimits,
   type EntitlementsResponse,
@@ -8,6 +11,9 @@ import {
   type SubscriptionTier,
   ALL_FEATURE_KEYS,
 } from '../types/body-composition';
+
+import { CampaignService } from './campaign-service';
+import { FeatureFlagService } from './feature-flag-service';
 
 /**
  * EntitlementService — server-driven feature gating (BODY_COMP_BUILD_CONTRACT §2).
@@ -22,11 +28,28 @@ import {
  * Fail-open by design: a missing gate row (unseeded environment) is treated as free —
  * gating must stay invisible until Ani explicitly flips a gate.
  */
+/**
+ * Campaign rows for the Pro-badge offer (user-independent): per instance,
+ * fresh 30 s, served stale up to 10 min while refreshing — same policy as the
+ * home feed's campaign cache, so Admin Tools edits show within ~30 s.
+ */
+export const proOfferCampaignsCache = swrCache<CampaignRow[]>(() => CampaignService.fetchActiveRows(), {
+  ttlMs: 30_000,
+  maxStaleMs: 600_000,
+  label: 'pro-badge campaigns',
+});
+
 export class EntitlementService {
-  /** Full entitlement map for a user — the payload of GET /api/mobile/entitlements. */
-  static async getEntitlements(userId: string): Promise<EntitlementsResponse> {
+  /**
+   * Full entitlement map for a user — the payload of GET /api/mobile/entitlements.
+   * `timezone` (x-client-timezone) only decides which local day a campaign offer
+   * is live on; absent → UTC.
+   */
+  static async getEntitlements(userId: string, opts: { timezone?: string | null; now?: Date } = {}): Promise<EntitlementsResponse> {
     const supabase = createAdminSupabase();
-    const [{ data: profile }, { data: gates }, flag, trialGate] = await Promise.all([
+    const now = opts.now ?? new Date();
+    const timezone = isValidTimezone(opts.timezone) ? opts.timezone : 'UTC';
+    const [{ data: profile }, { data: gates }, flag, trialGate, extras] = await Promise.all([
       supabase
         .from('profiles')
         .select(
@@ -43,6 +66,8 @@ export class EntitlementService {
       // error) can never break the core entitlement read: unknown → no trial
       // date, gate 'none' (fail open, ONBOARDING_V2 §5.5).
       readTrialAndGate(supabase, userId),
+      // Pro badge + member since (USER_TARGETS_CONTRACT §4). Never throws.
+      readBadgeInputs(supabase, userId, now, timezone),
     ]);
 
     const tier = normalizeTier(profile?.subscription_tier);
@@ -66,6 +91,15 @@ export class EntitlementService {
       tier,
       features,
       limits: computeLimits(tier, features),
+      // Additive (1.1.0): the Home crown marker + "member since" for Pro status.
+      proBadge: proBadgeFor({
+        offer: extras.offer,
+        isPro: tier === 'premium',
+        isTrial: trial.isTrial || profile?.subscription_status === 'trialing',
+        subscriptionsEnabled,
+        paywallLastOpenedAt: extras.paywallLastOpenedAt,
+      }),
+      memberSince: memberSinceFrom(extras.events, trialGate.trialStartedAt),
       subscription: {
         status: profile?.subscription_status ?? null,
         platform: profile?.subscription_platform ?? null,
@@ -137,21 +171,67 @@ type OnboardingGate = 'none' | 'subscription_required';
 async function readTrialAndGate(
   supabase: ReturnType<typeof createAdminSupabase>,
   userId: string
-): Promise<{ trialEndsAt: string | null; gate: OnboardingGate }> {
+): Promise<{ trialEndsAt: string | null; trialStartedAt: string | null; gate: OnboardingGate }> {
   try {
     const { data, error } = await supabase
       .from('profiles')
-      .select('trial_ends_at, onboarding_gate')
+      .select('trial_ends_at, trial_started_at, onboarding_gate')
       .eq('id', userId)
       .maybeSingle();
-    if (error || !data) return { trialEndsAt: null, gate: 'none' };
+    if (error || !data) return { trialEndsAt: null, trialStartedAt: null, gate: 'none' };
     return {
       trialEndsAt: typeof data.trial_ends_at === 'string' ? data.trial_ends_at : null,
+      trialStartedAt: typeof data.trial_started_at === 'string' ? data.trial_started_at : null,
       gate: data.onboarding_gate === 'subscription_required' ? 'subscription_required' : 'none',
     };
   } catch {
-    return { trialEndsAt: null, gate: 'none' };
+    return { trialEndsAt: null, trialStartedAt: null, gate: 'none' };
   }
+}
+
+/**
+ * Inputs for proBadge + memberSince, each read fail-soft (a missing column or
+ * table, or any error, yields "unknown" — never a failed entitlement read):
+ *  - the active offer (Admin Tools campaign, else env),
+ *  - profiles.paywall_last_opened_at (migration 115),
+ *  - the user's purchase events (subscription_events).
+ */
+async function readBadgeInputs(
+  supabase: ReturnType<typeof createAdminSupabase>,
+  userId: string,
+  now: Date,
+  timezone: string
+): Promise<{ offer: ReturnType<typeof activeOffer>; paywallLastOpenedAt: string | null; events: SubscriptionEventRow[] }> {
+  const [offer, paywallLastOpenedAt, events] = await Promise.all([
+    proOfferCampaignsCache
+      .get()
+      .catch(() => [] as CampaignRow[])
+      .then((rows) => activeOffer(rows ?? [], now, timezone))
+      .catch(() => null),
+    (async () => {
+      try {
+        const { data, error } = await supabase.from('profiles').select('paywall_last_opened_at').eq('id', userId).maybeSingle();
+        return !error && typeof data?.paywall_last_opened_at === 'string' ? (data.paywall_last_opened_at) : null;
+      } catch {
+        return null;
+      }
+    })(),
+    (async () => {
+      try {
+        const { data, error } = await supabase
+          .from('subscription_events')
+          .select('type, store, environment, event_timestamp, raw')
+          .eq('user_id', userId)
+          .in('type', [...MEMBER_EVENT_TYPES])
+          .order('event_timestamp', { ascending: true })
+          .limit(50);
+        return error ? [] : ((data ?? []) as SubscriptionEventRow[]);
+      } catch {
+        return [];
+      }
+    })(),
+  ]);
+  return { offer, paywallLastOpenedAt, events };
 }
 
 /**

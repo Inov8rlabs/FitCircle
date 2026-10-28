@@ -98,6 +98,13 @@ export interface EntitlementsResponse {
   gate?: 'none' | 'subscription_required';
   /** gate === 'subscription_required' && tier !== 'premium' && subscriptionsEnabled. */
   locked?: boolean;
+  /**
+   * Home crown marker (1.1.0, USER_TARGETS_CONTRACT §4). marker: re-arm the dot for
+   * the active offer; offerId: that offer (null = none, the client keeps its own schedule).
+   */
+  proBadge?: { marker: boolean; offerId: string | null };
+  /** Earliest paid or trial start on record (ISO 8601), or null. */
+  memberSince?: string | null;
 }
 
 // ============================================================================
