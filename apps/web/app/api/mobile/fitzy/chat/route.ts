@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { paywallFor } from '@/lib/fitzy/paywall';
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { FitzyNotFoundError } from '@/lib/services/fitzy-conversation-service';
+import { parseFitzyContext } from '@/lib/fitzy/context';
 import { FitzyService } from '@/lib/services/fitzy-service';
 import { JourneyService } from '@/lib/services/journey-service';
 import { UpgradeRequiredError } from '@/lib/services/usage-service';
@@ -16,7 +17,7 @@ import { safeParseLenient } from '@/lib/validation/lenient-parse';
  * Fitzy — the FitCircle AI coach (full fitness + nutrition). Multi-turn; history is held by the
  * client and sent as `messages` (oldest→newest, last turn = the new user message).
  *
- * Body: { messages: [{ role: 'user'|'assistant', content: string }], circleId?: string, conversationId?: uuid }
+ * Body: { messages: [{ role: 'user'|'assistant', content: string }], circleId?: string, conversationId?: uuid, context?: 'onboarding' }
  *   → FitzyChatResponse { answer, disclaimer, conversationId, messageId, suggestions, actions, remaining, tier }
  *   (answer is Markdown). Old clients send only `messages` and read answer/disclaimer — unchanged.
  *   With `conversationId`, server-held history wins and only the last user message is used.
@@ -35,6 +36,8 @@ const requestSchema = z.object({
   messages: z.array(messageSchema).min(1, 'At least one message is required').max(50),
   circleId: z.string().trim().min(1).max(100).optional(),
   conversationId: z.string().uuid().optional(),
+  /** 'onboarding' → short onboarding answer (v2 tour). Any other value is ignored (normal chat). */
+  context: z.string().max(40).optional(),
 });
 
 export async function POST(request: NextRequest) {
@@ -70,11 +73,13 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { messages, circleId, conversationId } = parsed.data;
+    const { messages, circleId, conversationId, context } = parsed.data;
 
     const result: FitzyChatResponse = await FitzyService.chat(user.id, messages, circleId, {
       conversationId: conversationId ?? null,
       timezone: request.headers.get('x-client-timezone'),
+      // Only when set, so normal chat calls the service exactly as before.
+      ...(parseFitzyContext(context) ? { context: parseFitzyContext(context) } : {}),
     });
 
     return NextResponse.json({

@@ -15,10 +15,14 @@ vi.mock('@/lib/middleware/mobile-auth', () => ({
     return { ...profile };
   },
 }));
-const ai = vi.hoisted(() => ({ generate: [] as string[], stream: [] as string[][] }));
+const ai = vi.hoisted(() => ({ generate: [] as string[], stream: [] as string[][], calls: [] as any[] }));
 vi.mock('ai', () => ({
-  generateText: async () => ({ text: ai.generate.shift() ?? 'ok.', usage: { inputTokens: 10, outputTokens: 5 } }),
-  streamText: () => {
+  generateText: async (o: any) => {
+    ai.calls.push(o);
+    return { text: ai.generate.shift() ?? 'ok.', usage: { inputTokens: 10, outputTokens: 5 } };
+  },
+  streamText: (o: any) => {
+    ai.calls.push(o);
     const chunks = ai.stream.shift() ?? ['ok.'];
     async function* gen() {
       for (const c of chunks) yield c;
@@ -65,6 +69,7 @@ beforeEach(() => {
   setReferralDb(db);
   ai.generate.length = 0;
   ai.stream.length = 0;
+  ai.calls.length = 0;
   db.addProfile({ id: FREE, display_name: 'Sam', subscription_tier: 'free' });
   db.addProfile({ id: PRO, display_name: 'Ani', subscription_tier: 'premium' });
   db.rows('feature_gates').push({ feature_key: 'fitzy_unlimited', required_tier: 'premium' });
@@ -155,5 +160,44 @@ describe('locked Pro surfaces for free users', () => {
 
     const focus = await (await today(req('/api/mobile/fitzy/today', { as: FREE }))).json();
     expect(focus.data).toMatchObject({ kind: 'welcome', tier: 'free', cta: { label: 'Make this my plan', action: { type: 'start_plan' } } });
+  });
+});
+
+describe('context: "onboarding" (ONBOARDING_V2 §5.3 step 6)', () => {
+  const systemText = (call: any) => call.messages.filter((m: any) => m.role === 'system').map((m: any) => m.content).join('\n');
+
+  it('stream: adds the onboarding addendum and the lower token cap', async () => {
+    ai.stream.push(['Try Greek yogurt with berries.', '\n<<<FITZY_META>>>{"suggestions":[],"actions":[]}']);
+    const res = await streamChat(req('/api/mobile/fitzy/chat/stream', { as: FREE, method: 'POST', body: { message: 'High-protein breakfast ideas?', context: 'onboarding' } }));
+    const { events } = await sse(res);
+    expect(events.at(-1)?.event).toBe('done');
+    expect(ai.calls).toHaveLength(1);
+    expect(ai.calls[0].maxOutputTokens).toBe(500);
+    // Thinking off: in the live eval adaptive thinking ate the whole 450-token cap.
+    expect(ai.calls[0].providerOptions).toEqual({ anthropic: { thinking: { type: 'disabled' } } });
+    expect(systemText(ai.calls[0])).toContain('ONBOARDING MODE');
+    // The cached base prompt stays the first system message (prompt caching unchanged).
+    expect(ai.calls[0].messages[0].content).toMatch(/^You are Fitzy/);
+  });
+
+  it('absent or unknown context → normal chat (no addendum, model default cap)', async () => {
+    for (const context of [undefined, 'settings', 'ONBOARDINGX']) {
+      ai.calls.length = 0;
+      const res = await streamChat(req('/api/mobile/fitzy/chat/stream', { as: PRO, method: 'POST', body: { message: 'Breakfast?', ...(context ? { context } : {}) } }));
+      expect(res.status).toBe(200);
+      await sse(res);
+      expect(ai.calls[0].maxOutputTokens).toBeUndefined();
+      expect(ai.calls[0].providerOptions).toBeUndefined();
+      expect(systemText(ai.calls[0])).not.toContain('ONBOARDING MODE');
+    }
+  });
+
+  it('old /chat route honours it too', async () => {
+    ai.generate.push('Oats with berries.\n<<<FITZY_META>>>{"suggestions":[],"actions":[]}');
+    const res = await legacyChat(req('/api/mobile/fitzy/chat', { as: FREE, method: 'POST', body: { messages: [{ role: 'user', content: 'Breakfast?' }], context: 'onboarding' } }));
+    expect(res.status).toBe(200);
+    expect(ai.calls[0].maxOutputTokens).toBe(500);
+    expect(ai.calls[0].providerOptions).toEqual({ anthropic: { thinking: { type: 'disabled' } } });
+    expect(systemText(ai.calls[0])).toContain('ONBOARDING MODE');
   });
 });

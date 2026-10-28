@@ -119,6 +119,9 @@ describe('POST /api/mobile/experiments/assign', () => {
     expect(['control', 'variantA', 'variantB']).toContain(a.arm);
     expect(a.enrolled).toBe(true);
     expect(a.payload).toEqual(ARMS.find((x) => x.key === a.arm)!.payload);
+    expect(a.name).toBe(ARMS.find((x) => x.key === a.arm)!.name);
+    expect(a.reason).toBe('bucket');
+    expect(Object.keys(a).sort()).toEqual(['arm', 'enrolled', 'name', 'payload', 'reason']);
     expect(assignments()).toHaveLength(1);
     expect(assignments()[0]).toMatchObject({ user_id: USER, arm: a.arm, reason: 'bucket', platform: 'ios', app_version: '1.2.0' });
     expect(assignments()[0].first_exposed_at ?? null).toBeNull();
@@ -132,7 +135,13 @@ describe('POST /api/mobile/experiments/assign', () => {
   });
 
   it('ineligible (old app / web / old account / demo / complimentary) → control, enrolled false, nothing persisted', async () => {
-    expect((await assign({ 'x-app-version': '1.1.9' })).body.data.assignments.onboarding_v2).toEqual({ arm: 'control', payload: ARMS[0].payload, enrolled: false });
+    expect((await assign({ 'x-app-version': '1.1.9' })).body.data.assignments.onboarding_v2).toEqual({
+      arm: 'control',
+      payload: ARMS[0].payload,
+      enrolled: false,
+      name: ARMS[0].name,
+      reason: 'fallback',
+    });
     expect((await assign({ 'x-app-platform': 'web' })).body.data.assignments.onboarding_v2.enrolled).toBe(false);
     authedUser = profile({ created_at: '2026-01-01T00:00:00Z' });
     expect((await assign()).body.data.assignments.onboarding_v2.arm).toBe('control');
@@ -157,7 +166,7 @@ describe('POST /api/mobile/experiments/assign', () => {
 
   it('draft experiment → fallback persisted; a later start does not move the user', async () => {
     db.getRows('experiments')[0].status = 'draft';
-    expect((await assign()).body.data.assignments.onboarding_v2).toMatchObject({ arm: 'control', enrolled: false });
+    expect((await assign()).body.data.assignments.onboarding_v2).toMatchObject({ arm: 'control', enrolled: false, reason: 'fallback' });
     expect(assignments()[0]).toMatchObject({ reason: 'fallback', arm: 'control' });
     db.getRows('experiments')[0].status = 'running';
     expect((await assign()).body.data.assignments.onboarding_v2).toMatchObject({ arm: 'control', enrolled: false });
@@ -165,7 +174,7 @@ describe('POST /api/mobile/experiments/assign', () => {
 
   it('override wins and is persisted with reason override (enrolled false)', async () => {
     db.seed('experiment_overrides', [{ experiment_key: 'onboarding_v2', user_id: USER, arm: 'variantB' }]);
-    expect((await assign({ 'x-app-platform': 'web' })).body.data.assignments.onboarding_v2).toMatchObject({ arm: 'variantB', enrolled: false });
+    expect((await assign({ 'x-app-platform': 'web' })).body.data.assignments.onboarding_v2).toMatchObject({ arm: 'variantB', enrolled: false, reason: 'override' });
     expect(assignments()[0]).toMatchObject({ reason: 'override', arm: 'variantB' });
   });
 
@@ -179,6 +188,26 @@ describe('POST /api/mobile/experiments/assign', () => {
     const anon = await POST_ASSIGN(req('/api/mobile/experiments/assign', { body: { keys: ['onboarding_v2'] } }));
     expect(anon.status).toBe(401);
     expect(anon.headers.get('cache-control')).toBe('no-store');
+  });
+});
+
+describe('assign response vs the 1.2.0 client decoders (FitCircle-iOS-onboarding ExperimentAssignmentDTO, Fitcircle-Android-onboarding ExperimentAssignmentDto)', () => {
+  /** Both: arm String, payload object?, enrolled Bool, name String?, reason String? (unknown keys ignored). */
+  const decodes = (a: any) =>
+    typeof a.arm === 'string' &&
+    (a.payload == null || (typeof a.payload === 'object' && !Array.isArray(a.payload))) &&
+    typeof a.enrolled === 'boolean' &&
+    (a.name == null || typeof a.name === 'string') &&
+    (a.reason == null || typeof a.reason === 'string');
+
+  it('every reason path decodes', async () => {
+    expect(decodes((await assign()).body.data.assignments.onboarding_v2)).toBe(true); // bucket
+    authedUser = profile({ id: 'a1b2c3d4-0000-4000-8000-000000000002', created_at: '2026-01-01T00:00:00Z' });
+    expect(decodes((await assign()).body.data.assignments.onboarding_v2)).toBe(true); // fallback (ineligible)
+    db.seed('experiment_overrides', [{ experiment_key: 'onboarding_v2', user_id: 'a1b2c3d4-0000-4000-8000-000000000002', arm: 'variantA' }]);
+    const o = (await assign()).body.data.assignments.onboarding_v2;
+    expect(decodes(o)).toBe(true);
+    expect(o).toMatchObject({ arm: 'variantA', name: 'Tour + hard paywall', reason: 'override', enrolled: false });
   });
 });
 

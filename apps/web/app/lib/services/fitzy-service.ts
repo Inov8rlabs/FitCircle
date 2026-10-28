@@ -1,6 +1,12 @@
 import type { ModelMessage } from 'ai';
 import { after } from 'next/server';
 
+import {
+  chatMaxOutputTokens,
+  chatThinking,
+  ONBOARDING_PROMPT_ADDENDUM,
+  type FitzyChatContext,
+} from '../fitzy/context';
 import { todayFor } from '../fitzy/dates';
 import {
   assembleGrounding,
@@ -159,8 +165,22 @@ export function withUserFirst(turns: FitzyMessage[]): FitzyMessage[] {
   return turns.length && turns[0].role === 'assistant' ? [{ role: 'user', content: PUSH_OPEN_TURN }, ...turns] : turns;
 }
 
-/** System messages for a chat turn: cached SYSTEM_PROMPT + the user's grounding. */
-export const chatSystemMessages = (grounding: string): ModelMessage[] => systemMessages(SYSTEM_PROMPT, grounding);
+export {
+  chatMaxOutputTokens,
+  chatThinking,
+  ONBOARDING_MAX_OUTPUT_TOKENS,
+  ONBOARDING_PROMPT_ADDENDUM,
+  parseFitzyContext,
+  type FitzyChatContext,
+} from '../fitzy/context';
+
+/** System messages for a chat turn: cached SYSTEM_PROMPT + the user's grounding (+ the onboarding addendum). */
+export const chatSystemMessages = (grounding: string, context: FitzyChatContext | null = null): ModelMessage[] => {
+  const base = systemMessages(SYSTEM_PROMPT, grounding);
+  return context === 'onboarding' ? [...base, { role: 'system', content: ONBOARDING_PROMPT_ADDENDUM }] : base;
+};
+
+
 
 export interface TurnInput {
   message: string;
@@ -171,6 +191,8 @@ export interface TurnInput {
   /** Old /chat route: client-held history (oldest→newest, excluding `message`). */
   legacyHistory?: FitzyMessage[];
   timezone?: string | null;
+  /** `onboarding` → short onboarding answer (addendum + lower token cap). */
+  context?: FitzyChatContext | null;
 }
 
 export interface PreparedTurn {
@@ -184,6 +206,10 @@ export interface PreparedTurn {
   growthAllowed: boolean;
   circleId?: string;
   userMessageAt?: string;
+  /** Lower cap for context=onboarding; undefined = model default. */
+  maxOutputTokens?: number;
+  /** false for context=onboarding (thinking would eat the small cap). Default true. */
+  thinking?: boolean;
 }
 
 export interface TurnResult {
@@ -229,7 +255,7 @@ export class FitzyService implements IFitzyService {
     userId: string,
     messages: FitzyMessage[],
     circleId?: string,
-    opts: { conversationId?: string | null; timezone?: string | null } = {}
+    opts: { conversationId?: string | null; timezone?: string | null; context?: FitzyChatContext | null } = {}
   ): Promise<FitzyChatResponse> {
     const turns = (messages ?? [])
       .filter((m) => m && typeof m.content === 'string' && m.content.trim().length > 0)
@@ -246,13 +272,20 @@ export class FitzyService implements IFitzyService {
       conversationId: opts.conversationId ?? null,
       legacyHistory: opts.conversationId ? undefined : turns.slice(0, -1),
       timezone: opts.timezone,
+      context: opts.context ?? null,
     });
 
     let raw = '';
     let model: string | null = null;
     let usage = { inputTokens: null as number | null, outputTokens: null as number | null };
     try {
-      const res = await generateWithFallback({ primary: chatModel(), system: prepared.system, messages: prepared.turns });
+      const res = await generateWithFallback({
+        primary: chatModel(),
+        system: prepared.system,
+        messages: prepared.turns,
+        maxOutputTokens: prepared.maxOutputTokens,
+        thinking: prepared.thinking,
+      });
       raw = res.text;
       model = res.model;
       usage = { inputTokens: res.inputTokens, outputTokens: res.outputTokens };
@@ -300,7 +333,14 @@ export class FitzyService implements IFitzyService {
     for (const candidate of order) {
       guard = guard.emittedText ? guard : new StreamGuard(this.guard, SAFE_FALLBACK);
       try {
-        const stream = streamFrom({ model: candidate, system: prepared.system, messages: prepared.turns, abortSignal });
+        const stream = streamFrom({
+          model: candidate,
+          system: prepared.system,
+          messages: prepared.turns,
+          abortSignal,
+          maxOutputTokens: prepared.maxOutputTokens,
+          thinking: prepared.thinking,
+        });
         for await (const chunk of stream.textStream) {
           send(guard.push(chunk));
           if (guard.isTripped) break;
@@ -371,12 +411,14 @@ export class FitzyService implements IFitzyService {
       conversationId,
       userMessage: message,
       turns: withUserFirst([...history, { role: 'user', content: message }]),
-      system: chatSystemMessages(grounding),
+      system: chatSystemMessages(grounding, input.context ?? null),
       tier: allowance.tier,
       remaining: allowance.remaining,
       growthAllowed,
       circleId: input.circleId,
       userMessageAt,
+      maxOutputTokens: chatMaxOutputTokens(input.context ?? null),
+      thinking: chatThinking(input.context ?? null),
     };
   }
 

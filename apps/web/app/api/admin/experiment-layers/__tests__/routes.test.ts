@@ -166,6 +166,7 @@ describe('mobile assign with layers', () => {
       authedUser = profile(USER_BASE(i));
       const a = await assign(['copy', 'price']);
       expect([a.copy.enrolled, a.price.enrolled].filter(Boolean)).toHaveLength(1);
+      expect([a.copy.reason, a.price.reason].sort()).toEqual(['bucket', 'layer']);
       expect(a.copy.enrolled).toBe(experimentBucket(USER_BASE(i), salt) < 5000);
     }
     const rows = db.getRows('experiment_assignments');
@@ -184,7 +185,7 @@ describe('mobile assign with layers', () => {
     await PATCH_EXPERIMENT(req('/x', 'PATCH', { layer: { key: 'paywall', start: 0, end: 1 } }), params('copy'));
     await PATCH_EXPERIMENT(req('/x', 'PATCH', { layer: { key: 'paywall', start: 1, end: 10000 } }), params('price'));
     const second = await assign(['price']);
-    expect(second.price).toMatchObject({ arm: 'control', enrolled: false });
+    expect(second.price).toMatchObject({ arm: 'control', enrolled: false, reason: 'layer_conflict', name: 'Control' });
     expect(db.getRows('experiment_assignments').find((r) => r.experiment_key === 'price')).toMatchObject({ reason: 'layer_conflict' });
   });
 

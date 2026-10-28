@@ -124,9 +124,23 @@ export async function generateWithFallback(opts: ModelCall & { primary: string; 
  * Stream text from `model`. Yields chunks; resolves usage at the end. Errors surface from the
  * iterator so the caller can decide whether a fallback is still possible (nothing emitted yet).
  */
-export function streamFrom(opts: { model: string; system: ModelMessage[]; messages: Turn[]; abortSignal?: AbortSignal }) {
+export function streamFrom(opts: {
+  model: string;
+  system: ModelMessage[];
+  messages: Turn[];
+  abortSignal?: AbortSignal;
+  maxOutputTokens?: number;
+  /** false disables model thinking (see thinkingOptions). Default true. */
+  thinking?: boolean;
+}) {
   const result = streamText({
-    ...callOptions(opts.model, { system: opts.system, messages: opts.messages, abortSignal: opts.abortSignal }),
+    ...callOptions(opts.model, {
+      system: opts.system,
+      messages: opts.messages,
+      abortSignal: opts.abortSignal,
+      maxOutputTokens: opts.maxOutputTokens,
+      thinking: opts.thinking,
+    }),
     onError: () => {
       /* surfaced through textStream */
     },

@@ -56,6 +56,10 @@ export interface MobileAssignment {
   arm: string;
   payload: Record<string, unknown>;
   enrolled: boolean;
+  /** The arm's human label (e.g. "Tour + hard paywall"); null if the arm has none. */
+  name: string | null;
+  /** Why this arm: bucket | override | fallback | winner | layer | layer_conflict (diagnostics; clients still route by payload). */
+  reason: AssignmentReason;
 }
 
 export interface AssignmentRow {
@@ -262,9 +266,15 @@ export class ExperimentService {
         set.add(experiment.key);
         layers.enrolled.set(experiment.layer.key, set);
       }
-      out[experiment.key] = { arm: decision.arm, payload: decision.payload, enrolled: decision.enrolled };
-      // exp_<key> = arm for randomised users and QA overrides only (re-sent on sticky calls: idempotent $set).
       const armDef = experiment.arms.find((a) => a.key === decision.arm);
+      out[experiment.key] = {
+        arm: decision.arm,
+        payload: decision.payload,
+        enrolled: decision.enrolled,
+        name: armDef?.name ?? null,
+        reason: decision.reason,
+      };
+      // exp_<key> = arm for randomised users and QA overrides only (re-sent on sticky calls: idempotent $set).
       const identify = assignmentIdentify(profile.id, experiment.key, { key: decision.arm, name: armDef?.name }, decision.reason);
       if (identify) identifies.push(identify);
     }

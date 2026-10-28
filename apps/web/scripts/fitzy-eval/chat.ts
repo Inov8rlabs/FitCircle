@@ -7,7 +7,7 @@
 import { META_MARKER, growthNudgeAllowed, parseMeta, splitMeta } from '../../app/lib/fitzy/meta';
 import { chatModel, streamFrom } from '../../app/lib/fitzy/models';
 import { StreamGuard } from '../../app/lib/fitzy/stream-guard';
-import { FitzyService, SAFE_FALLBACK, chatSystemMessages, withUserFirst } from '../../app/lib/services/fitzy-service';
+import { FitzyService, SAFE_FALLBACK, chatMaxOutputTokens, chatSystemMessages, chatThinking, withUserFirst } from '../../app/lib/services/fitzy-service';
 import type { FitzyAction } from '../../app/lib/types/fitzy';
 
 import { runChecks } from './checks';
@@ -94,7 +94,8 @@ async function runOnce(k: ChatCase, f: Fixtures, rep: number) {
   let error: unknown = null;
   let tele: Telemetry | null = null;
   try {
-    const stream = streamFrom({ model, system: chatSystemMessages(grounding), messages: turns });
+    const context = k.context ?? null;
+    const stream = streamFrom({ model, system: chatSystemMessages(grounding, context), messages: turns, maxOutputTokens: chatMaxOutputTokens(context), thinking: chatThinking(context) });
     for await (const chunk of stream.textStream) {
       if (chunk && ttft == null) ttft = Date.now() - t0;
       raw += chunk;

@@ -233,6 +233,7 @@ Each step lists its copy, interaction and data. `step_name` values are the analy
 - "Ask me anything about food or training." Three suggestion chips, personalised by goal (e.g. "High-protein breakfast ideas?", "How do I hit 8k steps?", "Is my calorie target realistic?"). There's also a text field.
 - Tapping streams a **real** Fitzy answer: Fitzy v2 `/api/mobile/fitzy/chat`, Haiku, max ~80 words, onboarding system prompt, persisted to their Fitzy history.
 - **Continue** appears once the stream starts. **Maybe later** skips.
+- **As built (2026-10-28):** the app sends `context: "onboarding"` on `POST /api/mobile/fitzy/chat/stream` (or the old `/fitzy/chat`). The server then appends an onboarding addendum after the cached base prompt: at most 80 words (one opener, at most 3 bullets, one encouraging close), no questions or offers of more help, no medical claims, no invented stats, and a fixed "your plan numbers are an estimate you can adjust" answer for target questions. It also caps output at 500 tokens and turns model thinking off. An unknown or absent `context` means normal chat. Live eval (`npm run fitzy:eval -- --suite=chat --tag=onboarding`, Haiku 5.5, 15 replies): 58–93 words, no questions, META parsed in 15/15, 0 guard trips. The first live run with thinking on lost the whole 450-token cap to reasoning, giving empty or cut-off replies.
 - This counts as "Fitzy opened" for the journey: `profiles.fitzy_opened_at` is set, so the 1.1.0 "Meet Fitzy" sheet doesn't repeat.
 
 **7. `v2_streak`**
@@ -519,9 +520,11 @@ All mobile responses use the standard envelope `{ success, data, error, meta }` 
 // request
 { "keys": ["onboarding_v2"] }
 // data
-{ "assignments": { "onboarding_v2": { "arm": "variantA", "payload": { "flow": "v2", "paywall": "hard" }, "enrolled": true } } }
+{ "assignments": { "onboarding_v2": { "arm": "variantA", "payload": { "flow": "v2", "paywall": "hard" }, "enrolled": true,
+                                     "name": "Tour + hard paywall", "reason": "bucket" } } }
 ```
 - Unknown keys are absent from `assignments`. `enrolled` is true only for randomised (`reason=bucket`) users; overrides, fallback, winner, layer and layer_conflict assignments return `enrolled:false`.
+- `name` (additive, 2026-10-28) = the arm's human label, or null. `reason` (additive) = `bucket | override | fallback | winner | layer | layer_conflict` — why the user got this arm (diagnostics, and lets clients flag QA overrides); unknown values must be tolerated. Both are optional strings in the 1.2.0 client models.
 - **Clients route by `payload`, never by `arm`.** Treat any unknown payload value (or an unknown/missing key) as control: for onboarding_v2, `flow != "v2"` ⇒ v1; `paywall` other than `"hard"`/`"soft"` ⇒ no onboarding paywall.
 - Assignment order: override → existing assignment (sticky) → audience (ineligible ⇒ `fallback_arm`, not persisted) → `concluded` ⇒ `winner_arm` (persisted, `reason=winner`) → `draft`/`paused` ⇒ `fallback_arm` (persisted, `reason=fallback`) → outside `traffic_pct` ⇒ `fallback_arm` (persisted, `reason=fallback`) → weighted arm (persisted, `reason=bucket`). Persisting the fallback cases keeps a user on one arm through the whole onboarding even if the experiment starts or traffic rises mid-flow.
 - Bucketing: traffic uses `sha256(salt + ':traffic' + ':' + user_id)`, the arm uses `sha256(salt + ':' + user_id)`, both first 4 bytes mod 10 000, so raising traffic never moves anyone between arms.
@@ -560,6 +563,8 @@ Sets `first_exposed_at` once, only when `arm` equals the persisted arm. Always `
 - Formula (`lib/onboarding/plan.ts`): Mifflin–St Jeor `10·kg + 6.25·cm − 5·age + s` with s = +5 male / −161 female / **−78 when sex is unknown (the midpoint)**; **age 30 when unknown**; × 1.35; −400 kcal for `lose_weight`; floor 1 200 kcal; rounded to 10. Protein 1.6 g/kg of target weight for `lose_weight` (current weight otherwise), with a target below BMI 18.5 raised to BMI 18.5. Water 30 ml/kg current weight, rounded to 50. Steps 8 000 (lose) / 7 000.
 - `basis:"default"` when height or weight is missing: same formula on a 170 cm / 70 kg reference body (1 670 kcal lose / 2 070 otherwise, 112 g protein, 2 100 ml).
 - `assumptions` ⊂ `reference_body | age_30 | sex_neutral | target_raised_to_min_bmi | calorie_floor`.
+
+`POST /api/mobile/fitzy/chat/stream` and `POST /api/mobile/fitzy/chat` accept optional `context: "onboarding"` (§5.3 step 6). Any other value is ignored. Request and response shapes are otherwise unchanged.
 
 `POST /api/mobile/onboarding/gate`
 ```json

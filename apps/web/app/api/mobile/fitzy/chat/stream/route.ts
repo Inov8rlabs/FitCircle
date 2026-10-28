@@ -3,6 +3,7 @@ import { z } from 'zod';
 
 import { describeFitzyError, fitzyFail, readJson } from '@/lib/fitzy/http';
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
+import { parseFitzyContext } from '@/lib/fitzy/context';
 import { FitzyService, type FitzyStreamEvent } from '@/lib/services/fitzy-service';
 import { JourneyService } from '@/lib/services/journey-service';
 import { runAfterResponse } from '@/lib/utils/after-response';
@@ -21,6 +22,8 @@ const bodySchema = z.object({
     .array(z.object({ role: z.enum(['user', 'assistant']), content: z.string().trim().min(1).max(4000) }))
     .max(50)
     .optional(),
+  /** 'onboarding' → short onboarding answer (v2 tour "Ask Fitzy"). Any other value is ignored (normal chat). */
+  context: z.string().max(40).optional(),
 });
 
 const frame = (event: string, data: unknown) => `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
@@ -92,6 +95,7 @@ export async function POST(request: NextRequest) {
             circleId: body.circleId,
             clientMessages: body.conversationId ? undefined : body.clientMessages,
             timezone: request.headers.get('x-client-timezone'),
+            ...(parseFitzyContext(body.context) ? { context: parseFitzyContext(body.context) } : {}),
           },
           (e: FitzyStreamEvent) => write(frame(e.event, e.data)),
           request.signal

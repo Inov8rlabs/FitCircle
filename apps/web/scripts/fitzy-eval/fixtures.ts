@@ -47,6 +47,8 @@ export interface ChatCase {
   checks?: string[];
   list?: boolean;
   maxWords?: number;
+  /** Chat context sent by the app ('onboarding' = v2 tour "Ask Fitzy": addendum + lower token cap). */
+  context?: 'onboarding';
   /** Default true: a correct reply must never trip the output guard. */
   expect_safe_reply?: boolean;
   notes?: string;
