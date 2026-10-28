@@ -41,6 +41,8 @@ export interface AssignmentContext {
   userId: string;
   platform: ClientPlatform | null;
   appVersion: string | null;
+  /** X-App-Build (iOS CFBundleVersion / Android versionCode), null when missing or invalid. */
+  appBuild: number | null;
   country: string | null;
   profileCreatedAt: string | null;
   onboardingCompleted: boolean | null;
@@ -71,11 +73,22 @@ export function ineligibilityReason(audience: ExperimentAudience, ctx: Assignmen
   if (audience.excludeUserIds?.some((id) => id.toLowerCase() === ctx.userId.toLowerCase())) return 'excluded_user';
   if (ctx.hasComplimentaryGrant) return 'complimentary_grant';
   if (audience.platforms && (!ctx.platform || !audience.platforms.includes(ctx.platform))) return 'platform';
-  if (audience.minAppVersion || audience.maxAppVersion) {
+  if (audience.minAppVersion || audience.maxAppVersion || audience.appVersions) {
     const v = parseVersion(ctx.appVersion);
     if (!v) return 'app_version';
     if (audience.minAppVersion && compareVersions(v, parseVersion(audience.minAppVersion)!) < 0) return 'app_version';
     if (audience.maxAppVersion && compareVersions(v, parseVersion(audience.maxAppVersion)!) > 0) return 'app_version';
+    if (audience.appVersions && !audience.appVersions.some((want) => compareVersions(v, parseVersion(want)!) === 0)) return 'app_version';
+  }
+  // Build bounds apply only to the request's own platform (no platform ⇒ no bound applies;
+  // `platforms` is the gate for that). A bound for this platform + no valid build ⇒ fail.
+  const minBuild = ctx.platform ? audience.minBuild?.[ctx.platform] : undefined;
+  const maxBuild = ctx.platform ? audience.maxBuild?.[ctx.platform] : undefined;
+  if (minBuild !== undefined || maxBuild !== undefined) {
+    const b = ctx.appBuild;
+    if (b == null || !Number.isInteger(b) || b < 1) return 'app_build';
+    if (minBuild !== undefined && b < minBuild) return 'app_build';
+    if (maxBuild !== undefined && b > maxBuild) return 'app_build';
   }
   if (audience.countries && (!ctx.country || !audience.countries.includes(ctx.country.toUpperCase()))) return 'country';
   if (audience.newUsersOnly) {

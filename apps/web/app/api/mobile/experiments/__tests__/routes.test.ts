@@ -191,6 +191,60 @@ describe('POST /api/mobile/experiments/assign', () => {
   });
 });
 
+describe('build targeting vs shipped clients (X-App-Build arrives with 1.1.0; older clients omit it)', () => {
+  const setAudience = (audience: Record<string, unknown>) => {
+    db.getRows('experiments')[0].audience = audience;
+  };
+  const LIVE = { platforms: ['ios', 'android'], minAppVersion: '1.1.0', newUsersOnly: true, excludeUserIds: [DEMO] };
+
+  it('no build bound (the live onboarding_paywall audience): identical result with or without X-App-Build', async () => {
+    setAudience(LIVE);
+    const without = (await assign({ 'x-app-version': '1.1.0' })).body.data.assignments.onboarding_v2;
+    expect(without.reason).toBe('bucket');
+    for (const build of ['72', '74', 'garbage', '']) {
+      assignments().length = 0; // fresh decision each time (not the sticky row)
+      const withBuild = (await assign({ 'x-app-version': '1.1.0', 'x-app-build': build })).body.data.assignments.onboarding_v2;
+      expect(withBuild).toEqual(without);
+    }
+  });
+
+  it('iOS bound set: iOS without X-App-Build is ineligible; Android without it is unaffected', async () => {
+    setAudience({ ...LIVE, minBuild: { ios: 74 } });
+    expect((await assign({ 'x-app-version': '1.1.0' })).body.data.assignments.onboarding_v2).toMatchObject({ arm: 'control', enrolled: false, reason: 'fallback' });
+    expect((await assign({ 'x-app-version': '1.1.0', 'x-app-build': '72' })).body.data.assignments.onboarding_v2.enrolled).toBe(false);
+    expect(assignments()).toHaveLength(0); // ineligible is never persisted → can enrol after updating
+    const ok = (await assign({ 'x-app-version': '1.1.0', 'x-app-build': '74' })).body.data.assignments.onboarding_v2;
+    expect(ok).toMatchObject({ enrolled: true, reason: 'bucket' });
+    expect(assignments()).toHaveLength(1);
+  });
+
+  it('iOS-only bound: an Android client with no X-App-Build still enrols', async () => {
+    setAudience({ ...LIVE, minBuild: { ios: 74 } });
+    const res = await POST_ASSIGN(
+      new NextRequest(`${API}/api/mobile/experiments/assign`, {
+        method: 'POST',
+        headers: { authorization: 'Bearer t', 'x-platform': 'android', 'x-app-version': '1.1.0' },
+        body: JSON.stringify({ keys: ['onboarding_v2'] }),
+      })
+    );
+    expect((await res.json()).data.assignments.onboarding_v2).toMatchObject({ enrolled: true, reason: 'bucket' });
+  });
+
+  it('adding a bound later never re-gates users who already have an assignment (sticky)', async () => {
+    setAudience(LIVE);
+    const first = (await assign({ 'x-app-version': '1.1.0' })).body.data.assignments.onboarding_v2;
+    expect(first.enrolled).toBe(true);
+    setAudience({ ...LIVE, minBuild: { ios: 74, android: 38 }, appVersions: ['1.1.1'] });
+    expect((await assign({ 'x-app-version': '1.1.0' })).body.data.assignments.onboarding_v2).toEqual(first);
+  });
+
+  it('appVersions allow-list gates on the plain version', async () => {
+    setAudience({ ...LIVE, appVersions: ['1.1.1'] });
+    expect((await assign({ 'x-app-version': '1.1.0' })).body.data.assignments.onboarding_v2.enrolled).toBe(false);
+    expect((await assign({ 'x-app-version': '1.1.1 (75)' })).body.data.assignments.onboarding_v2.enrolled).toBe(true);
+  });
+});
+
 describe('assign response vs the 1.2.0 client decoders (FitCircle-iOS-onboarding ExperimentAssignmentDTO, Fitcircle-Android-onboarding ExperimentAssignmentDto)', () => {
   /** Both: arm String, payload object?, enrolled Bool, name String?, reason String? (unknown keys ignored). */
   const decodes = (a: any) =>

@@ -76,17 +76,61 @@ export const armsSchema = z
     }
   });
 
+/** A store build number: iOS CFBundleVersion, Android versionCode (positive integer). */
+const buildNumber = z.number().int().min(1).max(999_999_999);
+/**
+ * Per-platform build bound. Only the request's own platform is checked; an
+ * empty object is stored as "no bound".
+ */
+const platformBuildsSchema = z
+  .object({ ios: buildNumber.optional(), android: buildNumber.optional(), web: buildNumber.optional() })
+  .strict()
+  .transform((b) => {
+    const out: Partial<Record<ClientPlatform, number>> = {};
+    for (const p of ['ios', 'android', 'web'] as const) if (b[p] !== undefined) out[p] = b[p];
+    return Object.keys(out).length ? out : undefined;
+  });
+export type PlatformBuilds = Partial<Record<ClientPlatform, number>>;
+
 export const audienceSchema = z
   .object({
     platforms: z.array(z.enum(['ios', 'android', 'web'])).min(1).optional(),
     minAppVersion: versionString.optional(),
     maxAppVersion: versionString.optional(),
+    /**
+     * Exact marketing versions ("1.1.0", "1.1.1"): the request's X-App-Version
+     * must equal one of them (numerically, so "1.1" = "1.1.0").
+     */
+    appVersions: z.array(versionString).min(1).max(20).optional(),
+    /**
+     * Inclusive build bounds per platform (X-App-Build). When the request's
+     * platform has a bound, a missing/invalid build fails the gate; bounds for
+     * other platforms are ignored.
+     */
+    minBuild: platformBuildsSchema.optional(),
+    maxBuild: platformBuildsSchema.optional(),
     /** Profile created < 24 h ago and onboarding not completed. */
     newUsersOnly: z.boolean().optional(),
     countries: z.array(countryCode).min(1).max(250).optional(),
     excludeUserIds: z.array(z.string().uuid()).max(1000).optional(),
   })
-  .strict();
+  .strict()
+  .superRefine((a, ctx) => {
+    for (const p of ['ios', 'android', 'web'] as const) {
+      const min = a.minBuild?.[p];
+      const max = a.maxBuild?.[p];
+      if (min !== undefined && max !== undefined && min > max) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['maxBuild', p], message: `maxBuild.${p} (${max}) is below minBuild.${p} (${min})` });
+      }
+    }
+  })
+  .transform((a) => {
+    // Drop keys an empty build object collapsed to undefined so the stored jsonb stays clean.
+    const out = { ...a };
+    if (out.minBuild === undefined) delete out.minBuild;
+    if (out.maxBuild === undefined) delete out.maxBuild;
+    return out;
+  });
 export type ExperimentAudience = z.infer<typeof audienceSchema>;
 
 /** A mutual-exclusion slice: the experiment only sees users whose layer bucket ∈ [start, end). */

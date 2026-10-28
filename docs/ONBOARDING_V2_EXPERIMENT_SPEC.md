@@ -413,6 +413,16 @@ create table experiment_overrides (               -- QA / reviewer / employees
   - `newUsersOnly: true`: profile created < 24 h ago and onboarding not completed
   - `excludeUserIds`: the reviewer demo account and complimentary-Pro users (`complimentary_grants`)
   - optional `countries`
+  - optional `appVersions: ['1.1.0','1.1.1']`: exact marketing versions (allow-list, ≤ 20)
+  - optional `minBuild` / `maxBuild: { ios?, android?, web? }`: inclusive store-build bounds per platform (see "Targeting builds")
+- **Targeting builds** (added 2026-10-28). Several builds share one marketing version (e.g. 1.1.0 TestFlight build 72 / Android versionCode 37 vs the 1.1.0 build we submit), so version strings alone can't say "only the submitted build and later". Use `minBuild` (and/or `maxBuild`) instead:
+  - The build is read from `X-App-Build` (iOS `CFBundleVersion`, Android `versionCode`): its leading integer is used (`"63 (debug)"` → 63); empty, non-numeric, `0`, a dotted value or > 9 digits → missing. The apps send it on every request from 1.1.0.
+  - Only the bound for the **request's platform** is checked. If that platform has a bound and the build is missing/invalid, the gate fails with `app_build` (like `app_version`). Bounds for other platforms are ignored, so `{ minBuild: { ios: 74 } }` leaves Android (and older clients on Android with no header) untouched.
+  - Without any build bound the header is ignored entirely: existing audiences (including the running `onboarding_paywall`) behave exactly as before.
+  - `appVersions` compares the plain version from `X-App-Version` numerically (`"1.1"` = `"1.1.0"`, `"1.1.0 (72)"` → `1.1.0`); a missing version fails (`app_version`). It combines (AND) with `minAppVersion`/`maxAppVersion` and the build bounds.
+  - Like every audience edit, build bounds only affect users **without** an assignment: step 2 (sticky) runs before the audience, so users already assigned — randomised, fallback, layer or winner — keep their arm even if they would now fail. Ineligible users are not persisted, so someone on an early build gets enrolled normally once they update.
+  - Example: submitting 1.1.0 as iOS build 74 / Android versionCode 38 → `{ "platforms": ["ios","android"], "minAppVersion": "1.1.0", "minBuild": { "ios": 74, "android": 38 } }`.
+  - The build is not stored on `experiment_assignments` (only `platform`, `app_version`, `country`); no migration was needed since `audience` is plain jsonb.
 - **Order (as built):**
   1. override ⇒ override arm (persisted, `reason=override`)
   2. existing assignment ⇒ that arm, always (sticky)
@@ -515,7 +525,7 @@ All mobile responses use the standard envelope `{ success, data, error, meta }` 
 
 #### Mobile
 
-`POST /api/mobile/experiments/assign` — headers `X-App-Platform` (or `X-Platform`), `X-App-Version` are used for the audience.
+`POST /api/mobile/experiments/assign` — headers `X-App-Platform` (or `X-Platform`), `X-App-Version` and `X-App-Build` (integer; 2026-10-28) are used for the audience. `X-App-Build` only matters when the audience sets `minBuild`/`maxBuild` for the request's platform.
 ```json
 // request
 { "keys": ["onboarding_v2"] }
@@ -594,7 +604,8 @@ Experiment object (no salt is ever returned). `layer` is `{ "key", "start", "end
             { "key": "variantA", "name": "Tour + hard paywall", "description": null, "weight": 40, "payload": { "flow": "v2", "paywall": "hard" } },
             { "key": "variantB", "name": "Tour + skippable paywall", "description": null, "weight": 40, "payload": { "flow": "v2", "paywall": "soft" } } ],
   "trafficPct": 20,
-  "audience": { "platforms": ["ios","android"], "minAppVersion": "1.2.0", "newUsersOnly": true, "excludeUserIds": ["47476150-…"], "countries": ["US"] },
+  "audience": { "platforms": ["ios","android"], "minAppVersion": "1.2.0", "newUsersOnly": true, "excludeUserIds": ["47476150-…"], "countries": ["US"],
+                "minBuild": { "ios": 74, "android": 38 }, "maxBuild": { "ios": 90 }, "appVersions": ["1.2.0"] },
   "fallbackArm": "control", "winnerArm": null, "layer": null, "startedAt": "…", "endedAt": null, "createdBy": "migration:112", "createdAt": "…", "updatedAt": "…" }
 ```
 Counts per arm: `{ "assigned": 120, "exposed": 110, "overrides": 3, "other": 40 }` (`assigned`/`exposed` = randomised rows; `other` = fallback + winner).
@@ -628,7 +639,7 @@ Counts per arm: `{ "assigned": 120, "exposed": 110, "overrides": 3, "other": 40 
 - Layer errors on experiment create/PATCH: 400 `UNKNOWN_LAYER`; 409 `LAYER_OVERLAP` with `data.overlaps = [{ key, status, start, end }]`.
 - `warnings` on PATCH: non-empty when a started (non-draft) experiment's layer or slice changes — "Existing assignments are sticky: users already assigned keep their arm. The new layer/slice only affects users assigned from now on (randomised users of sibling experiments are still protected by the layer_conflict check)." The change is audited with `action: "layer"`.
 
-Validation: weights are integers summing to 100; arm keys `control` + `variantA…` consecutive (exactly one control), each with a `name` ≤ 60; `fallbackArm`/`winnerArm` must be arms; unknown fields are rejected (the salt is immutable). Lifecycle: `draft→running`, `running→paused|concluded`, `paused→running|concluded`; `concluded` is terminal and needs `winnerArm`. Illegal transition → 409 `INVALID_TRANSITION`; removing an arm once the experiment has started or has assignments → 409 `ARM_IN_USE`; conclude without winner → 400 `WINNER_REQUIRED`. Weight, traffic and audience edits only affect users who have no assignment yet.
+Validation: weights are integers summing to 100; arm keys `control` + `variantA…` consecutive (exactly one control), each with a `name` ≤ 60; `fallbackArm`/`winnerArm` must be arms; unknown fields are rejected (the salt is immutable). Audience: `platforms` ⊂ `ios|android|web`; versions look like `1.2.0`; `appVersions` 1–20 such strings; `minBuild`/`maxBuild` are objects with optional `ios`/`android`/`web` integers 1…999 999 999 (other keys → 400), `minBuild.p ≤ maxBuild.p` per platform, and an empty object is stored as "no bound" (the key is dropped); `countries` ISO alpha-2 (upper-cased); `excludeUserIds` ≤ 1000 UUIDs. Audience changes are audited (`action: "update"`) with the full before/after audience, new fields included. Ineligibility reasons: `excluded_user | complimentary_grant | platform | app_version | app_build | country | onboarding_completed | not_new_user`. Lifecycle: `draft→running`, `running→paused|concluded`, `paused→running|concluded`; `concluded` is terminal and needs `winnerArm`. Illegal transition → 409 `INVALID_TRANSITION`; removing an arm once the experiment has started or has assignments → 409 `ARM_IN_USE`; conclude without winner → 400 `WINNER_REQUIRED`. Weight, traffic and audience edits only affect users who have no assignment yet.
 
 `ExperimentResults`:
 ```json

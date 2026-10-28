@@ -48,6 +48,7 @@ const ctx = (over: Partial<AssignmentContext> = {}): AssignmentContext => ({
   userId: uuid(1),
   platform: 'ios',
   appVersion: '1.2.0',
+  appBuild: null,
   country: 'US',
   profileCreatedAt: new Date(NOW.getTime() - 5 * 60_000).toISOString(),
   onboardingCompleted: false,

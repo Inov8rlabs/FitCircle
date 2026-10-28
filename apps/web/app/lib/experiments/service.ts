@@ -230,6 +230,7 @@ export class ExperimentService {
       userId: profile.id,
       platform: info.platform,
       appVersion: info.appVersion,
+      appBuild: info.appBuild,
       country: (typeof profile.country_code === 'string' && profile.country_code.trim() ? profile.country_code.trim().toUpperCase() : null) ?? info.ipCountry,
       profileCreatedAt: typeof profile.created_at === 'string' ? profile.created_at : null,
       onboardingCompleted: typeof profile.onboarding_completed === 'boolean' ? profile.onboarding_completed : profile.onboarding_completed == null ? false : null,

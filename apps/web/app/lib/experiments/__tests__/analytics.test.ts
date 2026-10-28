@@ -110,7 +110,7 @@ describe('ExperimentService → identify', async () => {
   const NOW = new Date('2026-11-10T12:00:00Z');
   let db: FakeSupabase;
   const profile = { id: USER, created_at: NOW.toISOString(), onboarding_completed: false };
-  const info = { platform: 'ios' as const, appVersion: '1.2.0', ipCountry: null };
+  const info = { platform: 'ios' as const, appVersion: '1.2.0', appBuild: null, ipCountry: null };
 
   beforeEach(() => {
     identified.length = 0;

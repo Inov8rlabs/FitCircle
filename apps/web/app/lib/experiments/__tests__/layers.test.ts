@@ -40,6 +40,7 @@ const ctx = (userId: string): AssignmentContext => ({
   userId,
   platform: 'ios',
   appVersion: '1.2.0',
+  appBuild: null,
   country: 'US',
   profileCreatedAt: NOW.toISOString(),
   onboardingCompleted: false,

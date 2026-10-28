@@ -192,6 +192,47 @@ describe('PATCH (lifecycle, weights, traffic)', () => {
   });
 });
 
+describe('audience: build targeting (minBuild / maxBuild / appVersions)', () => {
+  const path = '/api/admin/experiments/onboarding_v2';
+  it('PATCH round-trips the new fields, stores them as jsonb, and audits before/after', async () => {
+    const audience = { platforms: ['ios', 'android'], minAppVersion: '1.1.0', newUsersOnly: true, minBuild: { ios: 74, android: 38 }, maxBuild: { ios: 90 }, appVersions: ['1.1.0', '1.1.1'] };
+    const { status, body } = await json(await PATCH_ONE(req(path, { method: 'PATCH', body: { audience } }), params('onboarding_v2')));
+    expect(status).toBe(200);
+    expect(body.data.experiment.audience).toEqual(audience);
+    expect(db.getRows('experiments')[0].audience).toEqual(audience);
+    const row = audit().at(-1)!;
+    expect(row.before.audience).not.toHaveProperty('minBuild');
+    expect(row.after.audience).toMatchObject({ minBuild: { ios: 74, android: 38 }, maxBuild: { ios: 90 }, appVersions: ['1.1.0', '1.1.1'] });
+    // GET detail returns them too.
+    const detail = await json(await GET_ONE(req(path), params('onboarding_v2')));
+    expect(detail.body.data.experiment.audience).toEqual(audience);
+    // Empty bound objects clear the bound.
+    const cleared = await json(await PATCH_ONE(req(path, { method: 'PATCH', body: { audience: { platforms: ['ios'], minBuild: {}, maxBuild: {} } } }), params('onboarding_v2')));
+    expect(cleared.body.data.experiment.audience).toEqual({ platforms: ['ios'] });
+  });
+
+  it('create accepts them; invalid bounds / lists are 400 VALIDATION_ERROR', async () => {
+    const arms = [{ key: 'control', name: 'C', weight: 50 }, { key: 'variantA', name: 'A', weight: 50 }];
+    const created = await json(await CREATE(req('/api/admin/experiments', { method: 'POST', body: { key: 'build_test', name: 'Build test', arms, audience: { minBuild: { ios: 74 } } } })));
+    expect(created.status).toBe(201);
+    expect(created.body.data.experiment.audience).toEqual({ minBuild: { ios: 74 } });
+    expect(audit().at(-1)).toMatchObject({ action: 'create', after: expect.objectContaining({ audience: { minBuild: { ios: 74 } } }) });
+    for (const audience of [
+      { minBuild: { ios: 0 } },
+      { minBuild: { ios: '74' } },
+      { minBuild: { blackberry: 3 } },
+      { minBuild: { android: 40 }, maxBuild: { android: 39 } },
+      { appVersions: [] },
+      { appVersions: ['latest'] },
+      { appVersions: Array.from({ length: 21 }, (_, i) => `1.0.${i}`) },
+    ]) {
+      const res = await json(await PATCH_ONE(req(path, { method: 'PATCH', body: { audience } }), params('onboarding_v2')));
+      expect(res.status, JSON.stringify(audience)).toBe(400);
+      expect(res.body.error.code).toBe('VALIDATION_ERROR');
+    }
+  });
+});
+
 describe('overrides', () => {
   it('set by email (case-insensitive) or userId, list with emails, remove (also drops the override assignment)', async () => {
     const set = await json(await POST_OVERRIDE(req('/api/admin/experiments/onboarding_v2/overrides', { method: 'POST', body: { email: 'qa@example.com', arm: 'variantA', note: 'QA' } }), params('onboarding_v2')));
