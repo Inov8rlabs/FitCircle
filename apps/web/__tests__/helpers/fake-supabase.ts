@@ -51,10 +51,11 @@ export class FakeSupabase {
 
 class FakeQuery {
   private filters: Array<(row: Row) => boolean> = [];
-  private op: 'select' | 'insert' | 'update' | 'upsert' = 'select';
+  private op: 'select' | 'insert' | 'update' | 'upsert' | 'delete' = 'select';
   private payload: Row | Row[] | null = null;
   private orderBy: { column: string; ascending: boolean } | null = null;
   private limitN: number | null = null;
+  private rangeN: [number, number] | null = null;
   private returnRows = false;
   private countMode = false;
   private headOnly = false;
@@ -62,7 +63,7 @@ class FakeQuery {
   constructor(private table: TableDef) {}
 
   select(_cols?: string, opts?: { count?: string; head?: boolean }) {
-    if (this.op === 'insert' || this.op === 'update' || this.op === 'upsert') {
+    if (this.op === 'insert' || this.op === 'update' || this.op === 'upsert' || this.op === 'delete') {
       this.returnRows = true;
       return this;
     }
@@ -84,6 +85,11 @@ class FakeQuery {
     return this;
   }
 
+  delete() {
+    this.op = 'delete';
+    return this;
+  }
+
   upsert(payload: Row | Row[], _opts?: { onConflict?: string; ignoreDuplicates?: boolean }) {
     this.op = 'upsert';
     this.payload = payload;
@@ -99,6 +105,12 @@ class FakeQuery {
   /** PostgREST `.is(col, null)` — the only form the services use. */
   is(column: string, value: any) {
     this.filters.push(r => (value === null ? r[column] == null : r[column] === value));
+    return this;
+  }
+
+  /** Case-insensitive equality (no wildcard support — the services pass exact emails). */
+  ilike(column: string, value: string) {
+    this.filters.push(r => String(r[column] ?? '').toLowerCase() === String(value).toLowerCase());
     return this;
   }
 
@@ -154,6 +166,11 @@ class FakeQuery {
     return this;
   }
 
+  range(from: number, to: number) {
+    this.rangeN = [from, to];
+    return this;
+  }
+
   private matching(): Row[] {
     let rows = this.table.rows.filter(r => this.filters.every(f => f(r)));
     if (this.orderBy) {
@@ -162,6 +179,7 @@ class FakeQuery {
         a[column] < b[column] ? (ascending ? -1 : 1) : a[column] > b[column] ? (ascending ? 1 : -1) : 0
       );
     }
+    if (this.rangeN !== null) rows = rows.slice(this.rangeN[0], this.rangeN[1] + 1);
     if (this.limitN !== null) rows = rows.slice(0, this.limitN);
     return rows;
   }
@@ -198,6 +216,12 @@ class FakeQuery {
         const inserted = rows.map(r => ({ id: `id-${Math.random().toString(36).slice(2)}`, ...r }));
         this.table.rows.push(...inserted);
         return { data: inserted, error: null };
+      }
+
+      case 'delete': {
+        const doomed = new Set(this.table.rows.filter(r => this.filters.every(f => f(r))));
+        this.table.rows = this.table.rows.filter(r => !doomed.has(r));
+        return { data: [...doomed], error: null };
       }
 
       case 'update': {

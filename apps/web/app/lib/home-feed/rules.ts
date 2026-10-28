@@ -12,9 +12,9 @@
  *  - At most one experiment per response (schema 1 reports one): when several
  *    enrolled experiment rules match, only the highest-priority one applies.
  */
-import { createHash } from 'node:crypto';
-
 import { z } from 'zod';
+
+import { bucketOf } from '../experiments/bucket';
 
 import { CARD_REF_PATTERN } from './catalog';
 import type { AppPlatform, FeedContext, FeedExperiment } from './types';
@@ -170,11 +170,12 @@ export function parseRuleRow(row: {
 // Bucketing + matching
 // ---------------------------------------------------------------------------
 
-/** Deterministic 0–99 bucket: sha256(`${salt}:${userId}`) first 4 bytes mod 100. */
-export function bucketOf(userId: string, salt: string): number {
-  const digest = createHash('sha256').update(`${salt}:${userId}`).digest();
-  return digest.readUInt32BE(0) % 100;
-}
+/**
+ * Deterministic 0–99 bucket: sha256(`${salt}:${userId}`) first 4 bytes mod 100.
+ * Shared helper (lib/experiments/bucket.ts); re-exported so existing imports
+ * (promos, tests) keep working.
+ */
+export { bucketOf };
 
 /** "1.0.8" → [1,0,8]; tolerates suffixes ("1.0.8 (61)", "1.0.8-dev"); null when unparseable. */
 export function parseVersion(v: string | null | undefined): number[] | null {

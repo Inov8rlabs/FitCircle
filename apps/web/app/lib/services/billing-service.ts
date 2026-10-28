@@ -25,6 +25,14 @@ export function getStripe(): Stripe {
   return stripeClient;
 }
 
+/** Test hook: inject a Stripe stand-in (null restores the real client). */
+export function setStripeClientForTest(client: unknown): void {
+  stripeClient = client as Stripe | null;
+}
+
+/** Postgres "undefined column" — profiles.trial_started_at before migration 112. */
+const UNDEFINED_COLUMN = '42703';
+
 function priceIdFor(plan: WebPlan): string {
   const id = {
     monthly: process.env.STRIPE_PRICE_PRO_MONTHLY,
@@ -58,6 +66,44 @@ export class BillingService {
   }
 
   /**
+   * Web free trial eligibility: one trial per person, across every store
+   * (ONBOARDING_V2_EXPERIMENT_SPEC §3.1 — Apple and Google enforce this for
+   * their own stores; Stripe does not). Eligible only when the user has never
+   * trialed or subscribed anywhere:
+   *  - profiles.trial_started_at is null (a missing column before migration
+   *    112 is treated as "no data"; the next two checks still apply),
+   *  - no real subscription_events rows (RevenueCat's TEST events and SANDBOX
+   *    events are ignored — they are not a real trial or purchase),
+   *  - the existing Stripe customer, if any, has no subscriptions of any status.
+   * Fail-closed: any other read error means no trial (the plan's normal price
+   * is still offered).
+   */
+  static async isWebTrialEligible(userId: string, existingCustomerId: string | null): Promise<boolean> {
+    try {
+      const supabase = createAdminSupabase();
+      const [trial, events] = await Promise.all([
+        supabase.from('profiles').select('trial_started_at').eq('id', userId).maybeSingle(),
+        supabase.from('subscription_events').select('id, type, environment').eq('user_id', userId).limit(50),
+      ]);
+      if (trial.error && trial.error.code !== UNDEFINED_COLUMN) throw new Error(trial.error.message);
+      if (trial.data?.trial_started_at) return false;
+      if (events.error) throw new Error(events.error.message);
+      const real = ((events.data ?? []) as { type?: string; environment?: string | null }[]).filter(
+        (e) => e.type !== 'TEST' && e.environment !== 'SANDBOX'
+      );
+      if (real.length > 0) return false;
+      if (existingCustomerId) {
+        const subs = await getStripe().subscriptions.list({ customer: existingCustomerId, status: 'all', limit: 1 });
+        if ((subs.data ?? []).length > 0) return false;
+      }
+      return true;
+    } catch (err: any) {
+      console.warn('[BillingService] trial eligibility check failed; no trial offered:', err?.message);
+      return false;
+    }
+  }
+
+  /**
    * Create a Checkout Session for a plan. Annual carries an optional STRIPE_TRIAL_DAYS trial and,
    * while STRIPE_COUPON_LAUNCH is set, the launch first-period discount
    * (renewals bill at list price — coupons with duration 'once' only touch the
@@ -70,12 +116,22 @@ export class BillingService {
     origin: string;
   }): Promise<{ url: string }> {
     const { userId, email, plan, origin } = params;
-    const trialDays = Number(process.env.STRIPE_TRIAL_DAYS ?? 0) || 0;
+    const configuredTrialDays = Number(process.env.STRIPE_TRIAL_DAYS ?? 0) || 0;
     const stripe = getStripe();
+    const isSubscription = plan !== 'lifetime';
+    // The customer id that existed BEFORE this checkout (a fresh one has no history).
+    const { data: before } = await createAdminSupabase()
+      .from('profiles')
+      .select('stripe_customer_id')
+      .eq('id', userId)
+      .maybeSingle();
+    const trialDays =
+      configuredTrialDays > 0 && isSubscription && (await this.isWebTrialEligible(userId, before?.stripe_customer_id ?? null))
+        ? configuredTrialDays
+        : 0;
     const customerId = await this.findOrCreateCustomer(userId, email);
 
     const launchCoupon = process.env.STRIPE_COUPON_LAUNCH || undefined;
-    const isSubscription = plan !== 'lifetime';
 
     const session = await stripe.checkout.sessions.create({
       mode: isSubscription ? 'subscription' : 'payment',
@@ -86,8 +142,8 @@ export class BillingService {
       ...(isSubscription
         ? {
             subscription_data: {
-              // No trial at launch (decided 2026-09-14). Set STRIPE_TRIAL_DAYS to
-              // run a free-trial promo without a deploy; 0/unset means none.
+              // STRIPE_TRIAL_DAYS (3 from ONBOARDING_V2) — only for users who have
+              // never trialed or subscribed on any store (isWebTrialEligible).
               ...(trialDays > 0 ? { trial_period_days: trialDays } : {}),
               metadata: { app_user_id: userId, plan },
             },

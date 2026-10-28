@@ -111,6 +111,8 @@ Notes:
 
 ### 3.2 Backend trial support
 
+> **As built (2026-10-27):** `STRIPE_TRIAL_DAYS` drives the web trial on monthly and annual checkout (`BillingService.createCheckoutSession` → `subscription_data.trial_period_days`). Because Stripe has no "new customers only" rule, the trial is applied **only when the user has never trialed or subscribed on any store** (`BillingService.isWebTrialEligible`): `profiles.trial_started_at` is null, there are no real `subscription_events` rows (RevenueCat TEST and SANDBOX events ignored), and an existing Stripe customer has no past subscriptions of any status. Any lookup error → no trial; checkout still proceeds at the normal price. The reminder is sent at **10:00 local on the day before the trial ends** (the latest 10:00 at least 14 h before `trial_ends_at`), or straight away if that moment has passed and ≥ 1 h remains; quiet hours defer it to the next hourly run. Kill switch `TRIAL_REMINDERS_ENABLED=false`.
+
 **Entitlements:** `GET /api/mobile/entitlements` and `/subscriptions/sync` gain:
 ```json
 "subscription": { "status": "trialing", "isTrial": true, "trialEndsAt": "2026-11-02T14:05:00Z", "willRenew": true, ... }
@@ -139,6 +141,7 @@ Notes:
 |---|---|---|
 | R1 | Android | System back inside onboarding goes to the previous step. On the first step it shows a "Leave setup? You can finish later" dialog that moves the task to the background, never finishing the flow. |
 | R2 | both | **Server-persisted onboarding progress**:<br>• `PATCH /api/mobile/onboarding/progress {flow, step, data}` is called on every step change and is debounced. The `onboarding_progress` table already exists; add `flow` and `step` columns.<br>• On launch with a session, the app calls `GET /api/mobile/onboarding/status`. If `completed=false` and the account is under 30 days old, it **resumes onboarding at the saved step** with saved answers prefilled.<br>• Applies to v1 and v2.<br>• Older accounts (≥ 30 days) are never pushed back into onboarding. |
+| R2 detail | BE | **`shouldResume` is true only when all three hold** (built 2026-10-27): onboarding not completed, account < 30 days old, **and** an `onboarding_progress` row written by `PATCH /onboarding/progress` (`flow` and `step` non-null). Legacy accounts that never completed onboarding have no such row → `shouldResume=false`, `resume=null`. This protects ~40 existing Android users stuck at "not completed" by the old back-button bug, who already use the app. `POST /onboarding/complete` is idempotent: a second call returns `xpAwarded: 0` and changes nothing. |
 | R3 | both | Profile, weight and goals are saved **as each step completes**, not only at the end, so an exit loses nothing. |
 | R4 | Android | Add `Onboarding Step Viewed/Completed` to the assessment sub-flow (`assessment_questions`, `circle_recommendations`, `assessment_done`). Rename its "Get Started" button to "Continue" so it no longer looks like the end. |
 | R5 | both | `Onboarding Started` fires when the first real step is shown, not when the view model is created. |
@@ -388,6 +391,7 @@ create table experiment_overrides (               -- QA / reviewer / employees
   primary key (experiment_key, user_id)
 );
 ```
+- **As built (migration 112):** `experiment_assignments.user_id` and `experiment_overrides.user_id` have **no FK** to `profiles` (instead of `on delete cascade`): a cascade would erase deleted users and make the "account deletions D7" guardrail unmeasurable. `AccountDeletionService` stamps `experiment_assignments.user_deleted_at` before deleting the profile. Assignments also store `exposure_surface`; `reason` additionally allows `winner`. An `experiment_audit_log` table records every admin change, and `profiles` gains `trial_reminder_sent_at` and `onboarding_paywall_at`.
 - RLS: **no client access** to any of these tables, only via the API using the service role. This fixes the `feature_flags` mistake, where anyone can read the allowlists.
 - Profile columns from §3.2 and §5.5 are added in the same migration:
   - `onboarding_flow text` (`v1|v2`)
@@ -419,7 +423,9 @@ create table experiment_overrides (               -- QA / reviewer / employees
   - The client also sends the Amplitude event.
   - Exposure = the **first onboarding screen of the arm rendered**. Analysis is per *exposed* user (intent-to-treat among exposed).
 - `GET /api/mobile/entitlements` adds `gate` and `isTrial`/`trialEndsAt`.
-- `GET /api/mobile/onboarding/status` adds `flow`, `step`, `data` for resume (R2).
+- `GET /api/mobile/onboarding/status` adds `shouldResume` and `resume: {flow, step, data, updatedAt} | null` for resume (R2).
+- **Hard-gate trigger (decided in build):** a separate `POST /api/mobile/onboarding/gate {reached: true}`, called when the onboarding paywall is shown — not a flag on `/onboarding/complete`, because `Onboarding Completed` fires *before* the paywall (§5.3 step 10). Any user may call it: it records `profiles.onboarding_paywall_at` (the "paywall viewed" metric) for every arm, but sets `onboarding_gate='subscription_required'` **only** for `onboarding_v2` users assigned `tour_hard` while the experiment is `running` or `concluded`. A paused experiment (e.g. after an emergency release) never sets the gate.
+- Full request/response contracts: §6.8.
 - Admin (Bearer `ADMIN_API_SECRET` via the Admin Tools proxy):
   - `GET/POST/PATCH /api/admin/experiments`
   - `POST /api/admin/experiments/{key}/overrides`
@@ -475,6 +481,131 @@ create table experiment_overrides (               -- QA / reviewer / employees
   - step drop-off
   - time in onboarding
   - retention by `exp_onboarding_v2`
+
+### 6.8 API contract (as built, 2026-10-27)
+
+All mobile responses use the standard envelope `{ success, data, error, meta }` and carry `Cache-Control: no-store`. Errors: `{ success:false, data:null|{issues}, error:{ code, message, details, timestamp }, meta:null }`; codes `UNAUTHORIZED` (401), `VALIDATION_ERROR` (400, `data.issues=[{path,message}]`), `NOT_FOUND` (404), `INTERNAL_SERVER_ERROR` (500).
+
+#### Mobile
+
+`POST /api/mobile/experiments/assign` — headers `X-App-Platform` (or `X-Platform`), `X-App-Version` are used for the audience.
+```json
+// request
+{ "keys": ["onboarding_v2"] }
+// data
+{ "assignments": { "onboarding_v2": { "arm": "tour_hard", "payload": { "flow": "v2", "paywall": "hard" }, "enrolled": true } } }
+```
+- Unknown keys are absent from `assignments`. `enrolled` is true only for randomised (`reason=bucket`) users; overrides, fallback and winner assignments return `enrolled:false`.
+- Assignment order: override → existing assignment (sticky) → audience (ineligible ⇒ `fallback_arm`, not persisted) → `concluded` ⇒ `winner_arm` (persisted, `reason=winner`) → `draft`/`paused` ⇒ `fallback_arm` (persisted, `reason=fallback`) → outside `traffic_pct` ⇒ `fallback_arm` (persisted, `reason=fallback`) → weighted arm (persisted, `reason=bucket`). Persisting the fallback cases keeps a user on one arm through the whole onboarding even if the experiment starts or traffic rises mid-flow.
+- Bucketing: traffic uses `sha256(salt + ':traffic' + ':' + user_id)`, the arm uses `sha256(salt + ':' + user_id)`, both first 4 bytes mod 10 000, so raising traffic never moves anyone between arms.
+
+`POST /api/mobile/experiments/exposure`
+```json
+{ "key": "onboarding_v2", "arm": "tour_hard", "surface": "v2_welcome" }   // → data: { "ok": true }
+```
+Sets `first_exposed_at` once, only when `arm` equals the persisted arm. Always `ok:true`.
+
+`PATCH /api/mobile/onboarding/progress`
+```json
+{ "flow": "v2", "step": "v2_about_you", "data": { "goal": "lose_weight", "heightCm": 170 } }
+// data
+{ "flow": "v2", "step": "v2_about_you", "data": { "goal": "lose_weight", "heightCm": 170 }, "updatedAt": "2026-11-10T12:00:00.000Z" }
+```
+`step`: 1–64 chars `[A-Za-z0-9_.:-]`. `data` (≤ 16 KB JSON) replaces the saved answers when present and is kept when omitted. Also writes `profiles.onboarding_flow`.
+
+`GET /api/mobile/onboarding/status` — legacy fields unchanged, plus:
+```json
+{ "hasCompletedAssessment": false, "hasCompletedOnboarding": false, "currentStep": 0, "completedSteps": [], "nextStep": "profile_setup",
+  "fitnessLevel": null, "preferredWorkoutTypes": [],
+  "shouldResume": true,
+  "resume": { "flow": "v2", "step": "v2_about_you", "data": { "goal": "lose_weight" }, "updatedAt": "2026-11-10T12:00:00Z" } }
+```
+`shouldResume` = not completed AND account < 30 days AND a progress row with flow+step exists (R2 detail). `resume` is null whenever `shouldResume` is false.
+
+`POST /api/mobile/onboarding/plan`
+```json
+{ "goal": "lose_weight", "heightCm": 180, "weightKg": 90, "targetWeightKg": 80, "sex": "male", "age": 35, "unitsSystem": "metric" }
+// data
+{ "calories": 2100, "proteinG": 128, "waterMl": 2700, "steps": 8000, "basis": "personal", "assumptions": [] }
+```
+- `goal` is any id; only `lose_weight` changes the maths (ids used by v2: `lose_weight`, `eat_healthier`, `build_habits`, `fit_with_friends`). All other fields optional/nullable, metric units (`unitsSystem` is accepted for analytics only). `sex`: `male|female|other|prefer_not_to_say`.
+- Missing fields fall back to the saved profile (`height_cm`, `weight_kg`, `date_of_birth`).
+- Formula (`lib/onboarding/plan.ts`): Mifflin–St Jeor `10·kg + 6.25·cm − 5·age + s` with s = +5 male / −161 female / **−78 when sex is unknown (the midpoint)**; **age 30 when unknown**; × 1.35; −400 kcal for `lose_weight`; floor 1 200 kcal; rounded to 10. Protein 1.6 g/kg of target weight for `lose_weight` (current weight otherwise), with a target below BMI 18.5 raised to BMI 18.5. Water 30 ml/kg current weight, rounded to 50. Steps 8 000 (lose) / 7 000.
+- `basis:"default"` when height or weight is missing: same formula on a 170 cm / 70 kg reference body (1 670 kcal lose / 2 070 otherwise, 112 g protein, 2 100 ml).
+- `assumptions` ⊂ `reference_body | age_30 | sex_neutral | target_raised_to_min_bmi | calorie_floor`.
+
+`POST /api/mobile/onboarding/gate`
+```json
+{ "reached": true }   // → data: { "gate": "subscription_required" }  (or "none")
+```
+
+`POST /api/mobile/onboarding/complete` — unchanged and idempotent.
+
+`GET /api/mobile/entitlements` and `POST /api/mobile/subscriptions/sync` — additive:
+```json
+{ "tier": "premium", "features": { }, "limits": { }, "subscriptionsEnabled": true,
+  "subscription": { "status": "trialing", "platform": "app_store", "productId": "com.inov8rlabs.fitcircle.pro.annual",
+                    "expiresAt": "2026-11-13T14:05:00Z", "willRenew": true, "source": "store",
+                    "isTrial": true, "trialEndsAt": "2026-11-13T14:05:00Z" },
+  "gate": "subscription_required",
+  "locked": false }
+```
+- `isTrial` = Pro and status `trialing`; `trialEndsAt` = `profiles.trial_ends_at`, else the period end, else null; null when not trialing.
+- `gate` is `none` when unknown (fail open). `locked` = `gate == subscription_required && tier != premium && subscriptionsEnabled`; never locked while the subscriptions kill switch is off. Clients may use `locked` directly.
+
+#### Admin (Bearer `ADMIN_API_SECRET` + `X-Admin-Actor: <email>` on every write, or an `is_admin` session)
+
+Experiment object (no salt is ever returned):
+```json
+{ "key": "onboarding_v2", "name": "Onboarding v2: tour + paywall", "description": "…", "status": "running",
+  "arms": [ { "key": "control", "weight": 20, "payload": { "flow": "v1", "paywall": "none" } },
+            { "key": "tour_hard", "weight": 40, "payload": { "flow": "v2", "paywall": "hard" } },
+            { "key": "tour_soft", "weight": 40, "payload": { "flow": "v2", "paywall": "soft" } } ],
+  "trafficPct": 20,
+  "audience": { "platforms": ["ios","android"], "minAppVersion": "1.2.0", "newUsersOnly": true, "excludeUserIds": ["47476150-…"], "countries": ["US"] },
+  "fallbackArm": "control", "winnerArm": null, "startedAt": "…", "endedAt": null, "createdBy": "migration:112", "createdAt": "…", "updatedAt": "…" }
+```
+Counts per arm: `{ "assigned": 120, "exposed": 110, "overrides": 3, "other": 40 }` (`assigned`/`exposed` = randomised rows; `other` = fallback + winner).
+
+| Route | Request | Response `data` |
+|---|---|---|
+| `GET /api/admin/experiments` | — | `{ experiments: [Experiment & { counts: {arm: Counts} }] }` |
+| `POST /api/admin/experiments` | `{ key, name, description?, arms, trafficPct? (100), audience? ({}), fallbackArm }` | 201 `ExperimentDetail`; always `draft`, random salt. 409 `DUPLICATE` |
+| `PATCH /api/admin/experiments` | `{ key, …patch }` | `ExperimentDetail` (same as below) |
+| `GET /api/admin/experiments/{key}` | — | `ExperimentDetail = { experiment, counts, overrides: [Override], audit: [Audit] }` (latest 100 audit rows) |
+| `PATCH /api/admin/experiments/{key}` | any of `{ name, description, status, arms, trafficPct, audience, fallbackArm, winnerArm }` | `ExperimentDetail` |
+| `GET /api/admin/experiments/{key}/overrides` | — | `{ overrides: [Override] }` |
+| `POST /api/admin/experiments/{key}/overrides` | `{ email \| userId, arm, note? }` | `{ overrides }`; 404 `USER_NOT_FOUND`, 400 `INVALID_ARM` |
+| `DELETE /api/admin/experiments/{key}/overrides` | `{ email \| userId }` (body or `?email=` / `?userId=`) | `{ overrides }`; also deletes that user's `reason=override` assignment so they re-run the normal rules |
+| `POST /api/admin/experiments/{key}/release-gate` | — | `{ released: <profiles unlocked>, status: "paused" }` |
+| `GET /api/admin/experiments/{key}/results` | `?segment=platform\|channel\|country&fresh=1` | `ExperimentResults` (below) |
+
+`Override = { userId, email, arm, note, createdBy, createdAt }`. `Audit = { id, actor, action: create|update|status|override_set|override_removed|release_gate, before, after, at }`.
+
+Validation: weights are integers summing to 100; arm keys unique (`[a-z0-9_]`, ≤ 40); `fallbackArm`/`winnerArm` must be arms; unknown fields are rejected (the salt is immutable). Lifecycle: `draft→running`, `running→paused|concluded`, `paused→running|concluded`; `concluded` is terminal and needs `winnerArm`. Illegal transition → 409 `INVALID_TRANSITION`; removing an arm once the experiment has started or has assignments → 409 `ARM_IN_USE`; conclude without winner → 400 `WINNER_REQUIRED`. Weight, traffic and audience edits only affect users who have no assignment yet.
+
+`ExperimentResults`:
+```json
+{ "experimentKey": "onboarding_v2", "status": "running", "arms": ["control","tour_hard","tour_soft"], "control": "control",
+  "computedAt": "…", "cached": false,
+  "excluded": { "unexposed": 12, "overrides": 3, "fallback": 40, "winner": 0 },
+  "population": { "exposed": { "control": 60, "tour_hard": 118, "tour_soft": 121 } },
+  "metrics": [
+    { "key": "paid_conversion_d10", "label": "Paid conversion (D10)", "kind": "rate", "window": "D10",
+      "higherIsBetter": true, "primary": true, "guardrail": null,
+      "arms": { "tour_hard": { "n": 90, "x": 7, "value": 0.0778, "ci90": [0.04, 0.13], "pBest": 0.81,
+                               "pBeatsControl": 0.97, "liftVsControl": 3.1, "pGuardrailBreach": null } } }
+  ],
+  "decision": { "candidate": null, "leader": "tour_hard", "leaderPBest": 0.81, "guardrailBreaches": {}, "reason": "…" },
+  "segment": "platform",
+  "segments": [ { "value": "ios", "population": { }, "metrics": [ ], "decision": { } } ] }
+```
+- Population: `reason=bucket` AND exposed only. `n` is the **mature** n (the window has elapsed since assignment). Arms with `n=0` have null value/CI/probabilities.
+- Metric keys: `onboarding_completed` (D3), `paywall_viewed` (D3; earliest of `onboarding_paywall_at`, `paywall_aha_shown_at`, `paywall_auto_last_at`), `trial_started_d1`, `trial_to_paid` (trial starters, converted within 7 days of the trial start), `paid_conversion_d10` (primary: trial converted or direct purchase within 10 days), `retention_d1`, `retention_d7` (guardrails, −15 % relative), `meal_loggers_d7` (guardrail, −15 % relative), `trial_cancellation` (guardrail, +3 pp), `refunds_d30` (guardrail, +3 pp), `account_deletions_d7` (guardrail, +3 pp), `revenue_per_user_d30` (`kind:"mean"`, USD).
+- Rates: Beta(1+x, 1+n−x), 10 000 seeded Monte Carlo draws → `pBest`, `pBeatsControl`, 90 % CI, `pGuardrailBreach` = P(worse than control by more than the tolerance). Revenue/user: 2 000 seeded bootstrap resamples. Seeds derive from the experiment, so a refresh shows the same numbers for the same data.
+- `decision` applies §2: the revenue/user D30 leader with `pBest ≥ 0.9` and no guardrail with `pGuardrailBreach ≥ 0.9`.
+- "Active" for retention = a meal/water log or a claimed streak day (app opens aren't stored server-side). Revenue = RevenueCat `price` (USD, customer price before the store's commission) on purchases and renewals, minus refunds; SANDBOX events excluded.
+- Cached per (key, segment) for 15 minutes per function instance; `fresh=1` recomputes.
 
 ---
 

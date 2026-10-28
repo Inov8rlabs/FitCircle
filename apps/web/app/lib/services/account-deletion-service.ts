@@ -1,3 +1,4 @@
+import { ExperimentService } from '../experiments/service';
 import { createAdminSupabase } from '../supabase-admin';
 
 import { AppleTokenService } from './apple-token-service';
@@ -331,6 +332,10 @@ export class AccountDeletionService {
     if (consentError && !isMissingRelation(consentError)) {
       console.warn(`[AccountDeletionService] Could not clear user_consent: ${consentError.message}`);
     }
+
+    // Experiment rows outlive the profile (no FK) so the "deleted within 7 days"
+    // guardrail stays measurable (ONBOARDING_V2 §6.6). Best-effort.
+    await ExperimentService.markUserDeleted(userId);
 
     const { error: profileDeleteError } = await db.from('profiles').delete().eq('id', userId);
     if (profileDeleteError) {

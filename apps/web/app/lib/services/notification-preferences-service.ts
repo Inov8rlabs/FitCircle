@@ -100,7 +100,17 @@ const TYPE_CATEGORY_MAP: Record<string, NotificationCategory> = {
   fitzy_hydration_nudge: 'coach',
   fitzy_protein_nudge: 'coach',
   fitzy_intro: 'coach',
+
+  // Transactional (ONBOARDING_V2 §3.2): listed for reporting; never gated by a
+  // category toggle, see TRANSACTIONAL_TYPES.
+  trial_ending_reminder: 'journey',
 };
+
+/**
+ * Account/billing messages the user must get whatever their category toggles
+ * say (only the push master switch can silence them).
+ */
+export const TRANSACTIONAL_TYPES: ReadonlySet<string> = new Set(['trial_ending_reminder']);
 
 // ============================================================================
 // SERVICE
@@ -179,6 +189,7 @@ export class NotificationPreferencesService {
       this.isPushMasterEnabled(userId),
     ]);
     if (!masterEnabled) return false;
+    if (TRANSACTIONAL_TYPES.has(notificationType)) return true;
     const enabledKey = `${category}_enabled` as keyof NotificationPreferences;
     // coach_enabled arrives with migration 107 and is nullable: only an explicit false turns it off.
     if (category === 'coach') return prefs.coach_enabled !== false;

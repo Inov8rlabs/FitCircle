@@ -165,7 +165,9 @@ export type NotificationType =
   | 'fitzy_hydration_nudge'
   | 'fitzy_protein_nudge'
   // Day-2 "meet Fitzy" for activated users who never opened Fitzy (ACTIVATION_JOURNEY_SPEC §6)
-  | 'fitzy_intro';
+  | 'fitzy_intro'
+  // Transactional: the free trial renews tomorrow (ONBOARDING_V2_EXPERIMENT_SPEC §3.2; TrialReminderService)
+  | 'trial_ending_reminder';
 
 interface NotificationContent {
   title: string;
@@ -259,6 +261,8 @@ export const TYPE_SCREEN_MAP: Record<NotificationType, NotificationScreen> = {
   fitzy_protein_nudge: 'fitzy_chat',
   // Older builds without screen=fitzy_chat still route fitzy_* types to Fitzy (iOS) / fitzy_chat (Android).
   fitzy_intro: 'fitzy_chat',
+  // Shipped apps have no subscription screen in the allowlist; the dashboard is safe everywhere.
+  trial_ending_reminder: 'dashboard',
 };
 
 /** Coach pushes: Android "Coach" channel (FCM falls back to the default channel on older builds). */
@@ -611,6 +615,12 @@ export const NOTIFICATION_TEMPLATES: Record<
     body: String(data.body || 'Ask me anything about your meals: what is working, and one easy idea to try next.'),
     category: 'coach',
   }),
+  // Approved copy (ONBOARDING_V2_EXPERIMENT_SPEC §3.2) — the paywall timeline promises it.
+  trial_ending_reminder: () => ({
+    title: 'Your trial ends tomorrow',
+    body: 'Your FitCircle Pro trial ends tomorrow. Keep it, or cancel anytime in Settings → Subscriptions.',
+    category: 'journey',
+  }),
 };
 
 /** " and 2 other circles" for a cross-circle coalesced push; "" otherwise. */
@@ -788,6 +798,8 @@ export const CAP_EXEMPT_TYPES: ReadonlySet<NotificationType> = new Set<Notificat
   'circle_kickoff',
   // Replaces the per-circle chat_message summaries (which were chat, hence exempt).
   'circle_daily_summary',
+  // Transactional trust message about money (ONBOARDING_V2 §3.2): never capped.
+  'trial_ending_reminder',
 ]);
 
 export function isCapExempt(type: NotificationType): boolean {

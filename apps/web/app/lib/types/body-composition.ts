@@ -72,6 +72,10 @@ export interface EntitlementSubscription {
   willRenew: boolean;
   /** 'referral' = Pro time earned by inviting friends (docs/REFERRALS_SPEC.md). */
   source?: 'store' | 'referral' | 'complimentary' | null;
+  /** In a free trial right now (status 'trialing' with Pro access). ONBOARDING_V2 §3.2. */
+  isTrial?: boolean;
+  /** ISO-8601 end of the current free trial; null when not trialing. */
+  trialEndsAt?: string | null;
 }
 
 export interface EntitlementsResponse {
@@ -86,6 +90,14 @@ export interface EntitlementsResponse {
    * Fail-CLOSED: absent or errored → false.
    */
   subscriptionsEnabled?: boolean;
+  /**
+   * Onboarding v2 hard gate (ONBOARDING_V2 §5.5): 'subscription_required' once a
+   * tour_hard user reached the paywall; stays set (re-lock on lapse) until an
+   * admin release. Unknown → 'none' (fail open).
+   */
+  gate?: 'none' | 'subscription_required';
+  /** gate === 'subscription_required' && tier !== 'premium' && subscriptionsEnabled. */
+  locked?: boolean;
 }
 
 // ============================================================================

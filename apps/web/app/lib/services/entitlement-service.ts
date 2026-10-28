@@ -26,7 +26,7 @@ export class EntitlementService {
   /** Full entitlement map for a user — the payload of GET /api/mobile/entitlements. */
   static async getEntitlements(userId: string): Promise<EntitlementsResponse> {
     const supabase = createAdminSupabase();
-    const [{ data: profile }, { data: gates }, flag] = await Promise.all([
+    const [{ data: profile }, { data: gates }, flag, trialGate] = await Promise.all([
       supabase
         .from('profiles')
         .select(
@@ -39,6 +39,10 @@ export class EntitlementService {
       FeatureFlagService.isFeatureEnabled('subscriptions', userId, supabase).catch(() => ({
         enabled: false,
       })),
+      // Migration 112 columns, read separately so a missing column (or any
+      // error) can never break the core entitlement read: unknown → no trial
+      // date, gate 'none' (fail open, ONBOARDING_V2 §5.5).
+      readTrialAndGate(supabase, userId),
     ]);
 
     const tier = normalizeTier(profile?.subscription_tier);
@@ -56,6 +60,8 @@ export class EntitlementService {
       if (!features[key]) features[key] = { allowed: true, requiredTier: 'free' };
     }
 
+    const subscriptionsEnabled = flag.enabled === true;
+    const trial = trialState(tier, profile?.subscription_status, profile?.subscription_expires_at, trialGate.trialEndsAt);
     return {
       tier,
       features,
@@ -67,8 +73,12 @@ export class EntitlementService {
         expiresAt: profile?.subscription_expires_at ?? null,
         willRenew: profile?.subscription_will_renew ?? false,
         source: subscriptionSource(tier, profile?.subscription_platform, profile?.subscription_product_id),
+        isTrial: trial.isTrial,
+        trialEndsAt: trial.trialEndsAt,
       },
-      subscriptionsEnabled: flag.enabled === true,
+      subscriptionsEnabled,
+      gate: trialGate.gate,
+      locked: isLocked(trialGate.gate, tier, subscriptionsEnabled),
     };
   }
 
@@ -119,6 +129,53 @@ export class EntitlementService {
  */
 export function normalizeTier(raw: string | null | undefined): SubscriptionTier {
   return raw === 'premium' || raw === 'enterprise' ? 'premium' : 'free';
+}
+
+type OnboardingGate = 'none' | 'subscription_required';
+
+/** profiles.trial_ends_at + onboarding_gate (migration 112). Never throws. */
+async function readTrialAndGate(
+  supabase: ReturnType<typeof createAdminSupabase>,
+  userId: string
+): Promise<{ trialEndsAt: string | null; gate: OnboardingGate }> {
+  try {
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('trial_ends_at, onboarding_gate')
+      .eq('id', userId)
+      .maybeSingle();
+    if (error || !data) return { trialEndsAt: null, gate: 'none' };
+    return {
+      trialEndsAt: typeof data.trial_ends_at === 'string' ? data.trial_ends_at : null,
+      gate: data.onboarding_gate === 'subscription_required' ? 'subscription_required' : 'none',
+    };
+  } catch {
+    return { trialEndsAt: null, gate: 'none' };
+  }
+}
+
+/**
+ * In a free trial = status 'trialing' with Pro access. The end date is the
+ * recorded trial end, else the current period end (a trial's period ends when
+ * the trial does).
+ */
+export function trialState(
+  tier: SubscriptionTier,
+  status: string | null | undefined,
+  expiresAt: string | null | undefined,
+  trialEndsAt: string | null
+): { isTrial: boolean; trialEndsAt: string | null } {
+  const isTrial = tier === 'premium' && status === 'trialing';
+  return { isTrial, trialEndsAt: isTrial ? (trialEndsAt ?? expiresAt ?? null) : null };
+}
+
+/**
+ * Locked screen (ONBOARDING_V2 §5.5): the hard gate is set and the user has no
+ * Pro. Never locks while the subscription surface is switched off — there would
+ * be no way to subscribe.
+ */
+export function isLocked(gate: OnboardingGate, tier: SubscriptionTier, subscriptionsEnabled: boolean): boolean {
+  return gate === 'subscription_required' && tier !== 'premium' && subscriptionsEnabled;
 }
 
 /**

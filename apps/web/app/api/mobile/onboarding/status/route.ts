@@ -2,10 +2,18 @@ import { type NextRequest, NextResponse } from 'next/server';
 
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { AssessmentService } from '@/lib/services/assessment-service';
+import { OnboardingFlowService } from '@/lib/services/onboarding-flow-service';
+
+const NO_STORE = { 'Cache-Control': 'no-store' };
 
 /**
  * GET /api/mobile/onboarding/status
- * Get current onboarding progress and next steps
+ * Get current onboarding progress and next steps.
+ *
+ * Additive (docs/ONBOARDING_V2_EXPERIMENT_SPEC.md R2): `shouldResume`
+ * (not completed AND account < 30 days old) and `resume` ({flow, step, data,
+ * updatedAt} from PATCH /onboarding/progress, or null). Every legacy field is
+ * unchanged.
  */
 export async function GET(request: NextRequest) {
   const startTime = Date.now();
@@ -13,14 +21,20 @@ export async function GET(request: NextRequest) {
   try {
     const user = await requireMobileAuth(request);
 
-    const status = await AssessmentService.getOnboardingStatus(user.id);
+    const [status, resume] = await Promise.all([
+      AssessmentService.getOnboardingStatus(user.id),
+      OnboardingFlowService.getResume(user.id),
+    ]);
 
-    return NextResponse.json({
-      success: true,
-      data: status,
-      meta: { requestTime: Date.now() - startTime },
-      error: null,
-    });
+    return NextResponse.json(
+      {
+        success: true,
+        data: { ...status, shouldResume: resume.shouldResume, resume: resume.resume },
+        meta: { requestTime: Date.now() - startTime },
+        error: null,
+      },
+      { headers: NO_STORE }
+    );
   } catch (error: any) {
     if (error.message === 'Unauthorized') {
       return NextResponse.json(
@@ -35,7 +49,7 @@ export async function GET(request: NextRequest) {
           },
           meta: null,
         },
-        { status: 401 }
+        { status: 401, headers: NO_STORE }
       );
     }
 
@@ -53,7 +67,7 @@ export async function GET(request: NextRequest) {
         },
         meta: null,
       },
-      { status: 500 }
+      { status: 500, headers: NO_STORE }
     );
   }
 }

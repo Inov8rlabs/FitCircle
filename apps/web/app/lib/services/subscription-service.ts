@@ -41,6 +41,8 @@ export interface RevenueCatEvent {
   transaction_id?: string | null;
   transferred_from?: string[];
   transferred_to?: string[];
+  /** RENEWAL only: true when this renewal is a free trial converting to paid. */
+  is_trial_conversion?: boolean;
   /** RevenueCat customer attributes, e.g. `$mediaSource: { value, updated_at_ms }` (ads attribution fallback). */
   subscriber_attributes?: Record<string, { value?: string | null } | undefined>;
   country_code?: string | null;
@@ -98,6 +100,49 @@ interface PaymentInsert {
   status: 'succeeded' | 'refunded';
   type: 'subscription' | 'refund';
   description: string;
+}
+
+export interface PriorTrial {
+  trial_started_at: string | null;
+  trial_ends_at: string | null;
+  trial_converted_at: string | null;
+}
+
+/**
+ * A RENEWAL counts as the trial's conversion only this long after the trial
+ * ended (store billing retry). Later renewals belong to a subscription bought
+ * after the trial lapsed.
+ */
+export const TRIAL_CONVERSION_WINDOW_MS = 30 * 86_400_000;
+
+/**
+ * Pure trial bookkeeping for one RevenueCat event (ONBOARDING_V2 §3.2):
+ *  - INITIAL_PURCHASE + period_type TRIAL → a new trial: started/ends set,
+ *    converted + reminder cleared (a later trial on another store is a new trial).
+ *  - the first RENEWAL after a trial (RevenueCat's is_trial_conversion, or a
+ *    trial on record that hasn't converted) → trial_converted_at.
+ *  - INTRO / NORMAL purchases and everything else → no change.
+ */
+export function trialPatchFor(event: RevenueCatEvent, prior: PriorTrial | null): Record<string, string | null> | null {
+  const at = toIso(event.event_timestamp_ms) ?? toIso(event.purchased_at_ms) ?? new Date().toISOString();
+  if (event.type === 'INITIAL_PURCHASE' && event.period_type === 'TRIAL') {
+    return {
+      trial_started_at: toIso(event.purchased_at_ms) ?? at,
+      trial_ends_at: toIso(event.expiration_at_ms),
+      trial_converted_at: null,
+      trial_reminder_sent_at: null,
+    };
+  }
+  if (event.type === 'RENEWAL') {
+    if (prior?.trial_converted_at) return null;
+    // is_trial_conversion also covers a trial we never saw start (webhook gap).
+    if (event.is_trial_conversion === true) return { trial_converted_at: at };
+    if (prior?.trial_started_at) {
+      const endsMs = prior.trial_ends_at ? Date.parse(prior.trial_ends_at) : Date.parse(prior.trial_started_at);
+      if (Date.parse(at) <= endsMs + TRIAL_CONVERSION_WINDOW_MS) return { trial_converted_at: at };
+    }
+  }
+  return null;
 }
 
 export class SubscriptionService {
@@ -196,6 +241,9 @@ export class SubscriptionService {
       .eq('id', profile.id);
     if (updateError) throw new Error(`profiles update failed: ${updateError.message}`);
 
+    // Trial bookkeeping (migration 112): best-effort, never fails the event.
+    await this.applyTrialBookkeeping(profile.id, event);
+
     // Promo conversion hook (pro_value → Subscription Started). No-op while promos are off; never throws.
     if (event.type === 'INITIAL_PURCHASE') await PromoService.recordConversion(profile.id, 'subscription_started');
 
@@ -243,7 +291,12 @@ export class SubscriptionService {
 
     switch (event.type) {
       case 'INITIAL_PURCHASE': {
+        // period_type: TRIAL = free trial (3 days, ONBOARDING_V2 §3); INTRO = a
+        // PAID introductory price (pay-up-front / discounted first period) —
+        // recorded at its real price and treated as an active subscription,
+        // never as a trial; NORMAL / PROMOTIONAL = full price.
         const isTrial = event.period_type === 'TRIAL';
+        const isIntro = event.period_type === 'INTRO';
         return {
           patch: {
             ...common,
@@ -256,7 +309,11 @@ export class SubscriptionService {
             amount: isTrial ? 0 : price,
             status: 'succeeded',
             type: 'subscription',
-            description: isTrial ? 'Pro trial started' : 'Pro subscription started',
+            description: isTrial
+              ? 'Pro trial started'
+              : isIntro
+                ? 'Pro subscription started (intro offer)'
+                : 'Pro subscription started',
           },
         };
       }
@@ -364,6 +421,34 @@ export class SubscriptionService {
   }
 
   /**
+   * profiles.trial_* (migration 112) from one applied event. Reads the prior
+   * trial state and writes in their own queries so a missing column (migration
+   * not yet applied) or any error is logged, never thrown.
+   */
+  private static async applyTrialBookkeeping(userId: string, event: RevenueCatEvent): Promise<void> {
+    if (event.type !== 'INITIAL_PURCHASE' && event.type !== 'RENEWAL') return;
+    try {
+      const supabase = createAdminSupabase();
+      let prior: PriorTrial | null = null;
+      if (event.type === 'RENEWAL') {
+        const { data, error } = await supabase
+          .from('profiles')
+          .select('trial_started_at, trial_ends_at, trial_converted_at')
+          .eq('id', userId)
+          .maybeSingle();
+        if (error) throw new Error(error.message);
+        prior = (data as PriorTrial | null) ?? null;
+      }
+      const patch = trialPatchFor(event, prior);
+      if (!patch) return;
+      const { error } = await supabase.from('profiles').update(patch).eq('id', userId);
+      if (error) throw new Error(error.message);
+    } catch (err: any) {
+      console.error('[SubscriptionService] trial bookkeeping failed:', err?.message, event.id);
+    }
+  }
+
+  /**
    * TRANSFER: entitlements moved between RevenueCat app_user_ids (e.g. the same
    * store account restored purchases into a second FitCircle account). The losing
    * side downgrades; the gaining side is recomputed from RevenueCat's REST API so
@@ -435,6 +520,21 @@ export class SubscriptionService {
         subscription_synced_at: now,
       })
       .eq('id', userId);
+
+    // Webhook dropped during a trial: backfill the trial dates (best-effort, migration 112).
+    if (state.trialing && state.expiresAt) {
+      try {
+        const { data, error } = await supabase.from('profiles').select('trial_started_at, trial_ends_at').eq('id', userId).maybeSingle();
+        if (!error && data && (!data.trial_started_at || data.trial_ends_at !== state.expiresAt)) {
+          await supabase
+            .from('profiles')
+            .update({ trial_started_at: data.trial_started_at ?? now, trial_ends_at: state.expiresAt })
+            .eq('id', userId);
+        }
+      } catch (err: any) {
+        console.warn('[SubscriptionService] trial backfill failed:', err?.message);
+      }
+    }
   }
 
   /**
