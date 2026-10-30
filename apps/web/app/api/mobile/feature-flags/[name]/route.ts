@@ -22,7 +22,7 @@ import { createAdminSupabase } from '@/lib/supabase-admin';
  *   ATT "Allow" requirement (consent rules still apply). Off = ATT required.
  *   Turning it on is a compliance decision: revisit the App Store privacy label first.
  */
-export const MOBILE_FEATURE_FLAGS = new Set(['ga4_conversions_without_att']);
+const MOBILE_FEATURE_FLAGS = new Set(['ga4_conversions_without_att']);
 
 const NO_STORE = { 'Cache-Control': 'no-store' };
 
