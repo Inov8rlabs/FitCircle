@@ -6,6 +6,7 @@ Engage runs push, in-app messages, in-app cards, placements, email, journeys and
 
 | Doc | What's in it |
 |---|---|
+| [ENGAGE_IMPLEMENTATION_PLAN.md](ENGAGE_IMPLEMENTATION_PLAN.md) | **The execution plan:** every work item with files, DDL, interfaces, tests, done criteria, rollout runbook and human steps |
 | [ENGAGE_V2_SPEC.md](ENGAGE_V2_SPEC.md) | **The spec:** product, architecture, surfaces, targeting, content schema, send pipeline, consent and caps, APIs, data model, tool, analytics, open decisions (§17) |
 | [ENGAGE_FINISH_PLAN.md](ENGAGE_FINISH_PLAN.md) | **What it takes to finish:** v1 bugs and gaps, phases E0–E12 with effort, release coupling, test plan, human steps, risks |
 | [ENGAGE_MULTITENANCY.md](ENGAGE_MULTITENANCY.md) | How one Engage serves FitCircle, BFB and TripWiz: options, the recommended protocol + engine + SDKs + adapters, the monorepo layout, per-app adapters, onboarding a new app |
