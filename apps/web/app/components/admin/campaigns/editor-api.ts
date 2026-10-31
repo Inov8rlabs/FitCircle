@@ -21,4 +21,6 @@ export interface EditorApi {
   previewView: ReturnType<typeof buildPreviewView>;
   /** Art for mocks: uploaded URL or a generated SVG data URL. */
   artFor: (slot: ArtSlot) => { url: string; uploaded: boolean };
+  /** Instant local preview for an art slot while it uploads (object URL), null to clear. */
+  setLocalArt: (slot: ArtSlot, url: string | null) => void;
 }

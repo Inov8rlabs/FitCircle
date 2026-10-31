@@ -113,6 +113,8 @@ export interface CampaignInput {
   emails: CampaignEmail[];
   appStore: CampaignAppStore;
   play: { title?: string; description?: string; exportedAt?: string | null };
+  /** ios | android | web; empty/absent = all platforms (ENGAGE_SPEC §15). */
+  platforms?: Array<'ios' | 'android' | 'web'>;
 }
 
 export interface AdminCampaign extends CampaignInput {

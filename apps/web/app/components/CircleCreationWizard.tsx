@@ -45,6 +45,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { AnalyticsEvents, analytics, isUpgradeRequired, toErrorKind } from '@/lib/analytics';
 import { CHALLENGE_TEMPLATES } from '@/lib/data/challenge-templates';
+import { emitAppEvent } from '@/lib/engage/client/runtime';
 import { supabase } from '@/lib/supabase';
 import { type ChallengeCategory } from '@/lib/types/circle-challenge';
 import { useAuthStore } from '@/stores/auth-store';
@@ -423,6 +424,7 @@ export default function CircleCreationWizard({ isOpen, onClose, onSuccess, initi
 
       // Store circle ID, invite code and link for the invite step
       setCreatedCircleId(data.id);
+      emitAppEvent('circle_created');
       setInviteLink(inviteCode); // Store just the code, we'll format the URL in the UI
 
       // Best-effort: attach the chosen challenge to the new circle. If this

@@ -548,6 +548,7 @@ export function toInput(c: AdminCampaign | CampaignInput): CampaignInput {
     emails: c.emails ?? [],
     appStore: c.appStore ?? {},
     play: c.play ?? {},
+    platforms: c.platforms ?? [],
   };
 }
 

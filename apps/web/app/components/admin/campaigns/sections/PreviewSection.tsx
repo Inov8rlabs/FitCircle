@@ -86,7 +86,7 @@ export function PreviewSection({ api }: { api: EditorApi }) {
   const details = api.artFor('appStoreDetails');
 
   return (
-    <Section id="preview" index={7} title="Preview" description="Every surface, at any date. Calendar progress is simulated.">
+    <Section id="preview" index={8} title="Preview" description="Every surface, at any date. Calendar progress is simulated.">
       <DateScrubber api={api} />
       {!previewView.phaseOrHidden && <Callout tone="info">On this date the apps don&apos;t show the campaign at all. Mocks show the nearest phase.</Callout>}
 

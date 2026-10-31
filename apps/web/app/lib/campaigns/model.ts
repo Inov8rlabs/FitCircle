@@ -53,6 +53,8 @@ export interface CampaignRow {
   play: { title?: string; description?: string; exportedAt?: string | null } | null;
   legacy_season_key: string | null;
   preview_user_ids: string[] | null;
+  /** ios | android | web; empty = all (migration 104). */
+  platforms?: string[] | null;
   created_by: string | null;
   updated_by: string | null;
   created_at: string;
@@ -123,6 +125,7 @@ export function rowToAdmin(row: CampaignRow, today: string): AdminCampaign {
     emails: row.emails ?? [],
     appStore,
     play: row.play ?? {},
+    platforms: (row.platforms ?? []) as AdminCampaign['platforms'],
     status: computeStatus(row, today),
     published: !!row.published,
     publishedAt: row.published_at,
@@ -169,6 +172,7 @@ export function inputToColumns(input: CampaignInput, existingAppStore: Record<st
     emails: input.emails,
     app_store: appStore as CampaignRow['app_store'],
     play: input.play,
+    ...(input.platforms ? { platforms: [...new Set(input.platforms)] } : {}),
   };
 }
 
@@ -197,5 +201,6 @@ export function adminToInput(a: AdminCampaign): CampaignInput {
     emails: a.emails,
     appStore: a.appStore,
     play: a.play,
+    platforms: a.platforms ?? [],
   };
 }

@@ -32,7 +32,7 @@ export function ChannelsSection({ api }: { api: EditorApi }) {
   const emailOn = draft.emails.filter((n) => n.enabled).length;
 
   return (
-    <Section id="channels" index={6} title="Channels" description="Where the campaign shows up.">
+    <Section id="channels" index={7} title="Channels" description="Where the campaign shows up.">
       <div className="grid gap-2 sm:grid-cols-3">
         <ChannelChip icon={<Smartphone className="h-4 w-4" />} name="In-app" status="Always on" ok />
         <ChannelChip icon={<Bell className="h-4 w-4" />} name="Push" status={pushOn ? `${pushOn} scheduled` : 'None'} ok={pushOn > 0} href="#messages" />
@@ -66,6 +66,7 @@ export function ChannelsSection({ api }: { api: EditorApi }) {
             onChange={(priority) => setAs({ priority })}
           />
         </div>
+        {(draft.platforms ?? []).length > 0 && !(draft.platforms ?? []).includes('ios') && <Callout tone="warn">This campaign doesn&apos;t target iOS, so the App Store event isn&apos;t needed.</Callout>}
         <AppStoreStatusPanel api={api} />
       </div>
 
@@ -198,6 +199,7 @@ function PlayPanel({ api }: { api: EditorApi }) {
         </a>
       </div>
       <p className="text-xs text-slate-400">No public API: create it by hand in Play Console with this export pack.</p>
+      {(draft.platforms ?? []).length > 0 && !(draft.platforms ?? []).includes('android') && <Callout tone="warn">This campaign doesn&apos;t target Android, so a Play promo isn&apos;t needed.</Callout>}
       <TextField label="Title" value={play.title ?? ''} max={80} placeholder={draft.title} onChange={(title) => update({ play: { ...play, title } })} />
       <TextAreaField label="Description" value={play.description ?? ''} max={500} rows={3} placeholder={draft.description} onChange={(description) => update({ play: { ...play, description } })} />
       <ExportPack api={api} kind="play" />

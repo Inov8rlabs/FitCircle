@@ -145,6 +145,7 @@ export const campaignInputSchema = z
         exportedAt: z.string().nullish(),
       })
       .default({}),
+    platforms: z.array(z.enum(['ios', 'android', 'web'])).max(3).default([]),
   })
   .superRefine((c, ctx) => {
     if (!(c.featuredFrom <= c.startsAt)) ctx.addIssue({ code: 'custom', path: ['featuredFrom'], message: 'Featured from must be on or before the start' });

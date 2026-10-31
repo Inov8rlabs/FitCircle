@@ -72,7 +72,7 @@ export function GoLiveSection({ api }: { api: EditorApi }) {
   };
 
   return (
-    <Section id="golive" index={8} title="Go live" description="Publish when the checklist is green.">
+    <Section id="golive" index={9} title="Go live" description="Publish when the checklist is green.">
       <div className="flex flex-wrap items-center gap-3 rounded-xl border border-slate-800 bg-slate-950/40 p-4">
         <StatusPill status={status} />
         <p className="text-sm text-slate-300">

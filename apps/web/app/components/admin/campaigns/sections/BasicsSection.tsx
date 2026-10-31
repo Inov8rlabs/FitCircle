@@ -5,8 +5,9 @@ import { useRef } from 'react';
 import { COPY_LIMITS, CTA_ACTIONS, CTA_LABELS, SLUG_RE, resizeDoors, spanDays } from '@/lib/campaigns/campaign-utils';
 import { DEFAULT_CTA_LABEL, type CampaignInput, type CampaignTemplate } from '@/lib/campaigns/types';
 
+import { PlatformSelector } from '../../engage/ui';
 import type { EditorApi } from '../editor-api';
-import { Section, SelectField, TextAreaField, TextField } from '../fields';
+import { Field, Section, SelectField, TextAreaField, TextField } from '../fields';
 import { TemplateThumb } from '../TemplateThumb';
 
 const TEMPLATES: CampaignTemplate[] = ['seasonal_circle', 'daily_calendar', 'spotlight'];
@@ -81,6 +82,9 @@ export function BasicsSection({ api }: { api: EditorApi }) {
           onChange={(v) => update({ priority: Number.parseInt(v || '0', 10) || 0 })}
         />
       </div>
+      <Field label="Platforms" hint={(draft.platforms ?? []).length === 0 ? 'All platforms. App Store events are iOS-only; Play promos Android-only.' : `Only ${(draft.platforms ?? []).join(' · ')} see this campaign in the app.`}>
+        <PlatformSelector value={draft.platforms ?? []} onChange={(platforms) => update({ platforms })} />
+      </Field>
       <TextField label="Tagline" value={draft.tagline} max={COPY_LIMITS.tagline} placeholder="Maintain, don't gain, with your crew." onChange={(tagline) => update({ tagline })} />
       <TextAreaField label="Description" value={draft.description} max={COPY_LIMITS.description} onChange={(description) => update({ description })} />
 

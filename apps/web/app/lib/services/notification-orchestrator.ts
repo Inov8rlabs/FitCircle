@@ -123,7 +123,9 @@ export type NotificationType =
   | 'circle_streak_milestone'
   | 'circle_kickoff'
   // Admin-authored campaign pushes (docs/CAMPAIGNS_SPEC.md §5)
-  | 'campaign';
+  | 'campaign'
+  // Engage push messages (docs/ENGAGE_SPEC.md §9)
+  | 'engage';
 
 interface NotificationContent {
   title: string;
@@ -201,9 +203,16 @@ export const TYPE_SCREEN_MAP: Record<NotificationType, NotificationScreen> = {
   circle_kickoff: 'circle_detail',
   // Clients route by data.campaignSlug (calendar screen / home card / wizard).
   campaign: 'campaign',
+  // Engage pushes route by the message action (data.screen) — see screenFor().
+  engage: 'dashboard',
 };
 
 export function screenFor(type: NotificationType, data: NotificationData): NotificationScreen {
+  if (type === 'engage') {
+    const wanted = String(data.screen ?? '');
+    const allowed = new Set<string>(Object.values(TYPE_SCREEN_MAP));
+    return (allowed.has(wanted) ? wanted : 'dashboard') as NotificationScreen;
+  }
   const screen = TYPE_SCREEN_MAP[type] ?? 'dashboard';
   if ((screen === 'circle_detail' || screen === 'circle_chat') && !data.circleId) {
     return 'circles';
@@ -481,6 +490,11 @@ export const NOTIFICATION_TEMPLATES: Record<
     body: String(data.body || ''),
     category: 'challenge',
   }),
+  engage: (data) => ({
+    title: String(data.title || 'FitCircle'),
+    body: String(data.body || ''),
+    category: 'challenge',
+  }),
   referral_nudge: (data) => ({
     title: `${data.inviterName || 'Your friend'} is cheering you on 💪`,
     body: 'Check in today. 3 days of check-ins and you both get a free week of Pro.',
@@ -650,6 +664,11 @@ export class NotificationOrchestrator {
     if (data.messageId) pushData.messageId = String(data.messageId);
     if (data.deepLink) pushData.deepLink = data.deepLink;
     if (data.campaignSlug) pushData.campaignSlug = String(data.campaignSlug);
+    if (data.engageMessageId) pushData.engageMessageId = String(data.engageMessageId);
+    if (data.variantId) pushData.variantId = String(data.variantId);
+    if (data.actionType) pushData.actionType = String(data.actionType);
+    if (data.actionValue) pushData.actionValue = String(data.actionValue);
+    if (data.imageUrl) pushData.imageUrl = String(data.imageUrl);
 
     if (isChatType) {
       // Chat wire contract: circleName + preview always; senderName except rallies.
@@ -668,6 +687,7 @@ export class NotificationOrchestrator {
       ...(isChatType
         ? { chat: { threadId: data.circleId ? String(data.circleId) : '' } }
         : {}),
+      ...(Array.isArray(data.platforms) && data.platforms.length ? { platforms: data.platforms.map(String) } : {}),
     };
 
     const sentCount = await PushService.sendPush(userId, pushNotification);

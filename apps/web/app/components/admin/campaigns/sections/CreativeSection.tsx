@@ -1,6 +1,6 @@
 'use client';
 
-import { Check, Download, ImageUp, Plus, Trash2, Wand2 } from 'lucide-react';
+import { Check, Download, ImageUp, Library, Plus, Trash2, Wand2 } from 'lucide-react';
 import { useDeferredValue, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 
@@ -8,8 +8,11 @@ import { campaignsAdmin, CampaignApiError } from '@/lib/campaigns/admin-client';
 import { ART_SLOTS, renderSlotPng, svgDataUrl, svgFor } from '@/lib/campaigns/art/campaign-art';
 import { ART_SLOT_LABELS, GLYPHS, PALETTE_PRESETS, addDays, matchPreset, shortDate } from '@/lib/campaigns/campaign-utils';
 import { ART_SLOT_SIZES, type AdminCampaign, type ArtSlot } from '@/lib/campaigns/types';
+import { imageFilesFrom } from '@/lib/engage/client/asset-pipeline';
+import type { EngageAsset } from '@/lib/engage/types';
 import { cn } from '@/lib/utils';
 
+import { AssetPicker } from '../../engage/assets/AssetPicker';
 import type { EditorApi } from '../editor-api';
 import { Btn, Field, Section, downloadFile, inputCls } from '../fields';
 
@@ -77,6 +80,17 @@ export function CreativeSection({ api }: { api: EditorApi }) {
 
   const onFile = async (slot: ArtSlot, file: File | undefined) => {
     if (!file) return;
+    const local = URL.createObjectURL(file);
+    api.setLocalArt(slot, local);
+    try {
+      await onFileInner(slot, file);
+    } finally {
+      api.setLocalArt(slot, null);
+      URL.revokeObjectURL(local);
+    }
+  };
+
+  const onFileInner = async (slot: ArtSlot, file: File) => {
     if (!/^image\/(png|jpe?g)$/.test(file.type)) return void toast.error('PNG or JPG only');
     if (file.size > 8 * 1024 * 1024) return void toast.error('Max 8 MB');
     const want = ART_SLOT_SIZES[slot];
@@ -192,12 +206,35 @@ export function CreativeSection({ api }: { api: EditorApi }) {
 
 function SlotTile({ slot, api, busy, onFile }: { slot: ArtSlot; api: EditorApi; busy: boolean; onFile: (f: File | undefined) => void }) {
   const inputRef = useRef<HTMLInputElement>(null);
+  const [over, setOver] = useState(false);
+  const [picker, setPicker] = useState(false);
+  const exact = EXACT_SLOTS.includes(slot);
+  const fromLibrary = async (a: EngageAsset) => {
+    try {
+      const blob = await (await fetch(a.url)).blob();
+      onFile(new File([blob], `${a.name}.${a.mime.split('/')[1] ?? 'png'}`, { type: a.mime }));
+    } catch {
+      toast.error('Could not fetch that asset');
+    }
+  };
   const asset = api.campaign?.art?.[slot];
   const size = ART_SLOT_SIZES[slot];
   const { url } = api.artFor(slot);
   const portrait = size.height > size.width;
   return (
-    <div className="flex flex-col overflow-hidden rounded-xl border border-slate-800 bg-slate-950/40">
+    <div
+      className={cn('flex flex-col overflow-hidden rounded-xl border bg-slate-950/40 transition', over ? 'border-purple-400 ring-2 ring-purple-500/30' : 'border-slate-800')}
+      onDragOver={(e) => {
+        e.preventDefault();
+        setOver(true);
+      }}
+      onDragLeave={() => setOver(false)}
+      onDrop={(e) => {
+        e.preventDefault();
+        setOver(false);
+        onFile(imageFilesFrom(e.dataTransfer)[0]);
+      }}
+    >
       <div className={cn('relative flex items-center justify-center bg-slate-950', portrait ? 'h-44' : 'h-32')}>
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src={url} alt="" className={cn('max-h-full max-w-full object-contain', !asset && 'opacity-50')} />
@@ -224,6 +261,9 @@ function SlotTile({ slot, api, busy, onFile }: { slot: ArtSlot; api: EditorApi; 
           <Btn size="sm" className="flex-1" onClick={() => inputRef.current?.click()} disabled={busy}>
             <ImageUp className="h-3.5 w-3.5" /> {asset ? 'Replace' : 'Upload'}
           </Btn>
+          <Btn size="sm" variant="ghost" aria-label="Pick from library" onClick={() => setPicker(true)} disabled={busy}>
+            <Library className="h-3.5 w-3.5" />
+          </Btn>
           <Btn
             size="sm"
             variant="ghost"
@@ -237,7 +277,15 @@ function SlotTile({ slot, api, busy, onFile }: { slot: ArtSlot; api: EditorApi; 
             <Download className="h-3.5 w-3.5" />
           </Btn>
         </div>
+        <p className="text-[10px] text-slate-600">Drop a file here{exact ? ` · must be exactly ${size.width}×${size.height}` : ''}</p>
       </div>
+      <AssetPicker
+        open={picker}
+        onOpenChange={setPicker}
+        title={`${ART_SLOT_LABELS[slot]} from library`}
+        filter={(a) => (exact && (a.width !== size.width || a.height !== size.height) ? `${ART_SLOT_LABELS[slot]} needs exactly ${size.width}×${size.height} (that one is ${a.width}×${a.height})` : null)}
+        onPick={(a) => void fromLibrary(a)}
+      />
     </div>
   );
 }

@@ -6,6 +6,7 @@ import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 
 import { AnalyticsEvents, analytics, type ReferralContactsInvitedSource } from '@/lib/analytics';
+import { emitAppEvent } from '@/lib/engage/client/runtime';
 import { copyText } from '@/lib/referrals/clipboard';
 import {
   MAX_CONTACTS_PER_SEND,
@@ -101,6 +102,7 @@ export function InviteByContactForm({ smsBody, focusSignal, source, onSent }: Pr
       setResults(data.results);
       if (data.sentCount > 0) {
         analytics.track(AnalyticsEvents.referralContactsInvited({ channel: 'email', count: data.sentCount, source }));
+        emitAppEvent('invite_sent', { count: data.sentCount });
         toast.success(data.sentCount === 1 ? 'Invite sent 💌' : `${data.sentCount} invites sent 💌`);
         onSent();
       }
@@ -126,6 +128,7 @@ export function InviteByContactForm({ smsBody, focusSignal, source, onSent }: Pr
       if (res.ok && (status === 'sent' || status === 'already_invited')) {
         if (status === 'sent') {
           analytics.track(AnalyticsEvents.referralContactsInvited({ channel: 'sms', count: 1, source }));
+          emitAppEvent('invite_sent', { count: 1 });
         }
         setTexted((t) => ({ ...t, [chip.key]: 'done' }));
         setChips((prev) => prev.filter((c) => c.key !== chip.key));

@@ -27,6 +27,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { AnalyticsEvents, analytics, toErrorKind } from '@/lib/analytics';
+import { emitAppEvent } from '@/lib/engage/client/runtime';
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/stores/auth-store';
 
@@ -210,6 +211,7 @@ export function JoinCircleFlow({
       }
 
       analytics.track(AnalyticsEvents.fitCircleJoined({ source: 'invite_link' }));
+      emitAppEvent('circle_joined');
       toast.success('Successfully joined the FitCircle!');
       router.push(`/fitcircles/${circle.id}`);
     } catch (error: any) {

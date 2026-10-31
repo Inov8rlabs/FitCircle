@@ -85,6 +85,7 @@ const TYPE_CATEGORY_MAP: Record<string, NotificationCategory> = {
 
   // Campaigns (docs/CAMPAIGNS_SPEC.md §5) — the Challenges toggle silences them.
   campaign: 'challenge',
+  engage: 'challenge',
 };
 
 // ============================================================================

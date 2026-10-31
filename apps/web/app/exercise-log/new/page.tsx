@@ -9,6 +9,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { toast } from 'sonner';
+import { emitAppEvent } from '@/lib/engage/client/runtime';
 import { announceStreakAutoClaim } from '@/lib/streaks/auto-claim-events';
 
 import { Navbar } from '@/components/layout/navbar';
@@ -81,6 +82,7 @@ export default function NewExerciseEntry() {
       toast.success('Workout logged!');
       // Server-side streak auto-claim for this workout → refresh streak UI + toast.
       announceStreakAutoClaim(streak);
+      emitAppEvent('workout_logged');
       router.push('/exercise-log');
     } catch (e: any) {
       toast.error(e?.message ?? 'Could not save');

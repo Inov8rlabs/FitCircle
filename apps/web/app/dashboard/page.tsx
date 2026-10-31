@@ -38,6 +38,8 @@ import { BodyCompDashboardCard } from '@/components/body-composition/dashboard-c
 import { DashboardCampaignCard } from '@/components/campaigns/DashboardCampaignCard';
 import { CheckInCard, CheckInDetailModal, CheckInDetailSheet } from '@/components/check-ins';
 import { DailyProgressMeter } from '@/components/DailyProgressMeter';
+import { DashboardHero } from '@/components/engage/DashboardHero';
+import { EngagePlacement } from '@/components/engage/WebEngage';
 import { EngagementStreakCard } from '@/components/EngagementStreakCard';
 import { GoalProgressIndicator } from '@/components/GoalProgressIndicator';
 import { BathroomScale } from '@/components/icons/BathroomScale';
@@ -609,8 +611,8 @@ export default function DashboardPage() {
             </p>
           </motion.div>
 
-          {/* Campaign card (homeSlug campaign, CAMPAIGNS_SPEC §10) */}
-          <DashboardCampaignCard />
+          {/* home_hero: campaign card or an Engage hero card, whichever ranks higher (ENGAGE_SPEC §3) */}
+          <DashboardHero campaign={<DashboardCampaignCard />} />
 
           {/* Auto-Sync Submission Card - shown when HealthKit steps need confirmation */}
           <AnimatePresence>
@@ -698,6 +700,9 @@ export default function DashboardPage() {
               onOpenCheckIn={() => setShowBackfillDialog(true)}
             />
           </div>
+
+          {/* home_feed content cards (ENGAGE_SPEC §3) */}
+          <EngagePlacement placement="home_feed" className="mx-auto mb-6 max-w-3xl sm:mb-8" />
 
           {/* Daily Progress Meter - Hero Section */}
           <motion.div

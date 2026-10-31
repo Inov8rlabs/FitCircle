@@ -1,6 +1,6 @@
 {
   "$schema": "./tracking-plan.schema.json",
-  "version": 10,
+  "version": 12,
   "updated": "2026-10-16",
   "conventions": {
     "eventNames": "Title Case, '<Object> <Past-tense verb>' (e.g. 'Meal Logged'). Names are frozen once shipped: rename in the analytics tool, never in code.",
@@ -2180,7 +2180,8 @@
             "app_launch",
             "hub",
             "seasonal",
-            "campaign"
+            "campaign",
+            "engage"
           ],
           "required": true
         }
@@ -2339,7 +2340,8 @@
             "welcome",
             "peak_moment",
             "circle",
-            "campaign"
+            "campaign",
+            "engage"
           ],
           "required": true
         }
@@ -2380,7 +2382,8 @@
             "welcome",
             "peak_moment",
             "circle",
-            "campaign"
+            "campaign",
+            "engage"
           ],
           "required": true
         }
@@ -2769,6 +2772,125 @@
             "seasonal_circle",
             "daily_calendar",
             "spotlight"
+          ],
+          "required": true
+        }
+      ]
+    },
+    {
+      "name": "Engage Message Viewed",
+      "category": "engagement",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "description": "An Engage card or in-app message was shown (ENGAGE_SPEC §13).",
+      "properties": [
+        {
+          "name": "message_id",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "variant_id",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "channel",
+          "type": "enum",
+          "values": [
+            "content_card",
+            "in_app",
+            "push",
+            "email"
+          ],
+          "required": true
+        },
+        {
+          "name": "layout",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "placement",
+          "type": "string",
+          "required": false
+        }
+      ]
+    },
+    {
+      "name": "Engage Message Clicked",
+      "category": "engagement",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "description": "A button or the card itself was tapped.",
+      "properties": [
+        {
+          "name": "message_id",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "variant_id",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "channel",
+          "type": "enum",
+          "values": [
+            "content_card",
+            "in_app",
+            "push",
+            "email"
+          ],
+          "required": true
+        },
+        {
+          "name": "button_index",
+          "type": "int",
+          "required": false
+        },
+        {
+          "name": "action",
+          "type": "string",
+          "required": false
+        }
+      ]
+    },
+    {
+      "name": "Engage Message Dismissed",
+      "category": "engagement",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "description": "An Engage card or in-app message was dismissed.",
+      "properties": [
+        {
+          "name": "message_id",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "variant_id",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "channel",
+          "type": "enum",
+          "values": [
+            "content_card",
+            "in_app",
+            "push",
+            "email"
           ],
           "required": true
         }

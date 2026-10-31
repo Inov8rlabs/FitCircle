@@ -18,6 +18,8 @@ export interface PushNotification {
    * alert + apns-priority 10 + thread-id (= circleId, groups per circle) on iOS.
    */
   chat?: { threadId: string };
+  /** Only deliver to tokens on these platforms (Engage per-platform sends). */
+  platforms?: string[];
 }
 
 export interface PushToken {
@@ -214,7 +216,8 @@ export class PushService {
    * Returns the number of successfully sent messages.
    */
   static async sendPush(userId: string, notification: PushNotification): Promise<number> {
-    const tokens = await this.getActiveTokens(userId);
+    const all = await this.getActiveTokens(userId);
+    const tokens = notification.platforms?.length ? all.filter((t) => notification.platforms!.includes(t.platform)) : all;
 
     if (tokens.length === 0) {
       console.log(`[PushService.sendPush] No active tokens for user ${userId}`);

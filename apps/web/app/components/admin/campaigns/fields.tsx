@@ -250,6 +250,7 @@ export function StatusPill({ status }: { status: string }) {
     live: 'bg-emerald-500/15 text-emerald-300 ring-1 ring-emerald-500/30',
     ended: 'bg-amber-500/10 text-amber-300 ring-1 ring-amber-500/20',
     archived: 'bg-slate-800 text-slate-500',
+    paused: 'bg-orange-500/15 text-orange-300 ring-1 ring-orange-500/30',
     new: 'bg-purple-500/15 text-purple-200 ring-1 ring-purple-500/30',
   };
   return (

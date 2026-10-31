@@ -20,6 +20,7 @@ import { ChannelsSection } from './sections/ChannelsSection';
 import { ContentSection } from './sections/ContentSection';
 import { CreativeSection } from './sections/CreativeSection';
 import { DatesSection } from './sections/DatesSection';
+import { EngageMessagesSection } from './sections/EngageMessagesSection';
 import { GoLiveSection } from './sections/GoLiveSection';
 import { MessagesSection } from './sections/MessagesSection';
 import { DateScrubber, PreviewSection } from './sections/PreviewSection';
@@ -30,6 +31,7 @@ const SECTIONS = [
   { id: 'content', label: 'Content' },
   { id: 'creative', label: 'Creative' },
   { id: 'messages', label: 'Messages' },
+  { id: 'engage', label: 'Engage' },
   { id: 'channels', label: 'Channels' },
   { id: 'preview', label: 'Preview' },
   { id: 'golive', label: 'Go live' },
@@ -196,14 +198,27 @@ export function CampaignEditor({ id }: { id: string | null }) {
 
   // Preview state (deferred so typing never waits on mock rendering).
   const deferredDraft = useDeferredValue(draft);
+  const [localArt, setLocalArtState] = useState<Partial<Record<ArtSlot, string>>>({});
+  const setLocalArt = useCallback((slot: ArtSlot, url: string | null) => setLocalArtState((m) => {
+    const next = { ...m };
+    if (url) next[slot] = url;
+    else delete next[slot];
+    return next;
+  }), []);
+  const mergedArt = useMemo(() => {
+    const out = { ...(campaign?.art ?? {}) };
+    for (const [slot, url] of Object.entries(localArt) as [ArtSlot, string][]) out[slot] = { url, width: 0, height: 0, generated: false, updatedAt: new Date().toISOString() };
+    return out;
+  }, [campaign?.art, localArt]);
   const previewView = useMemo(
-    () => buildPreviewView({ ...deferredDraft, id: campaign?.id, art: campaign?.art ?? {} }, previewDate, { todayOpened }),
-    [deferredDraft, campaign?.id, campaign?.art, previewDate, todayOpened]
+    () => buildPreviewView({ ...deferredDraft, id: campaign?.id, art: mergedArt }, previewDate, { todayOpened }),
+    [deferredDraft, campaign?.id, mergedArt, previewDate, todayOpened]
   );
   const creativeKey = JSON.stringify([deferredDraft.template, deferredDraft.palette, deferredDraft.glyph, deferredDraft.startsAt, deferredDraft.endsAt, deferredDraft.marks, deferredDraft.slug]);
   const generatedCache = useRef<{ key: string; urls: Partial<Record<ArtSlot, string>> }>({ key: '', urls: {} });
   const artFor = useCallback(
     (slot: ArtSlot) => {
+      if (localArt[slot]) return { url: localArt[slot], uploaded: true };
       const asset = campaign?.art?.[slot];
       if (asset?.url) return { url: asset.url, uploaded: true };
       if (generatedCache.current.key !== creativeKey) generatedCache.current = { key: creativeKey, urls: {} };
@@ -214,7 +229,7 @@ export function CampaignEditor({ id }: { id: string | null }) {
       return { url, uploaded: false };
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [campaign?.art, creativeKey]
+    [campaign?.art, creativeKey, localArt]
   );
 
   const api: EditorApi = {
@@ -232,6 +247,7 @@ export function CampaignEditor({ id }: { id: string | null }) {
     setTodayOpened,
     previewView,
     artFor,
+    setLocalArt,
   };
 
   if (loadState === 'loading') {
@@ -258,7 +274,7 @@ export function CampaignEditor({ id }: { id: string | null }) {
   return (
     <div className="pb-24">
       {/* Top bar */}
-      <div className="sticky top-16 z-30 -mx-4 border-b border-slate-800 bg-slate-950/85 px-4 backdrop-blur-xl sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
+      <div className="sticky top-14 z-20 -mx-4 border-b border-slate-800 bg-[#070a17]/90 px-4 backdrop-blur-xl sm:-mx-6 sm:px-6">
         <div className="flex h-14 items-center gap-3">
           <Link href="/admin/campaigns" className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-800 hover:text-white" aria-label="All campaigns">
             <ArrowLeft className="h-5 w-5" />
@@ -321,13 +337,14 @@ export function CampaignEditor({ id }: { id: string | null }) {
           {(draft.template !== 'spotlight' || draft.cta.action === 'start_circle') && <ContentSection api={api} />}
           <CreativeSection api={api} />
           <MessagesSection api={api} />
+          <EngageMessagesSection api={api} />
           <ChannelsSection api={api} />
           <PreviewSection api={api} />
           <GoLiveSection api={api} />
         </div>
 
         <aside className="hidden xl:block">
-          <div className="sticky top-[10.5rem] space-y-4">
+          <div className="sticky top-[9.5rem] space-y-4">
             <LivePreview api={api} cardUrl={card.url} />
           </div>
         </aside>

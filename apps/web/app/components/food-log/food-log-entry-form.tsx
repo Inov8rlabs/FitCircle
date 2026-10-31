@@ -13,6 +13,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/components/ui/use-toast';
 import { AnalyticsEvents, analytics, type MealType } from '@/lib/analytics';
 import type { NutritionDraft } from '@/lib/api/nutrition-client';
+import { emitAppEvent } from '@/lib/engage/client/runtime';
 import { announceStreakAutoClaim, clientTimezone, extractStreakMeta } from '@/lib/streaks/auto-claim-events';
 import { supabase } from '@/lib/supabase';
 import type { BeverageCustomizations } from '@/lib/types/beverage-log';
@@ -362,6 +363,7 @@ export function FoodLogEntryForm() {
       // The server claimed the streak day for this log — tell the dashboard
       // and celebrate a milestone / earned shield.
       announceStreakAutoClaim(streakMeta);
+      emitAppEvent('meal_logged');
 
       if (typeof window !== 'undefined' && !streakMeta) {
         window.dispatchEvent(new CustomEvent('streak-auto-claimed', { detail: { source: 'food_log' } }));

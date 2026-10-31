@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from 'react';
 
 import { AnalyticsEvents, analytics, type MealMethod } from '@/lib/analytics';
 import { trackedPhotoParse } from '@/lib/analytics/meal';
+import { emitAppEvent } from '@/lib/engage/client/runtime';
 import { announceStreakAutoClaim } from '@/lib/streaks/auto-claim-events';
 
 import {
@@ -387,6 +388,7 @@ export function NutritionConfirm({
         entryId = created.id;
         // Server-side streak auto-claim for this meal → refresh streak UI + toast.
         announceStreakAutoClaim(created.streak);
+        emitAppEvent('meal_logged');
       }
 
       if (images.length > 0) {

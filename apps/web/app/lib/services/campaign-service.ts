@@ -10,7 +10,7 @@ import { adminToInput, computePhase, inputToColumns, rowToAdmin, type CampaignRo
 import { ART_SLOTS, isoDate, parseCampaignInput, publishIssues } from '../campaigns/schema';
 import { ART_SLOT_SIZES, type AdminCampaign, type ArtSlot, type CampaignView, type CampaignsResponse } from '../campaigns/types';
 import { buildCampaignView, compareViews } from '../campaigns/view';
-import { localToday } from '../streaks/streak-calculator';
+import { localDayOf, localToday } from '../streaks/streak-calculator';
 import { createAdminSupabase } from '../supabase-admin';
 
 import { CampaignActivityService } from './campaign-activity-service';
@@ -54,13 +54,16 @@ interface Visible {
 }
 
 /** Published + in a phase, or a campaign the viewer is previewing. */
-export function visibleFor(rows: CampaignRow[], userId: string | null, today: string): Visible[] {
+export function visibleFor(rows: CampaignRow[], userId: string | null, today: string, platform?: string | null): Visible[] {
   const out: Visible[] = [];
   for (const row of rows) {
     if (row.archived_at) continue;
     const natural = computePhase(row, today);
     const previewing = !!userId && (row.preview_user_ids ?? []).includes(userId);
-    if (row.published && natural) {
+    // Platform targeting (ENGAGE_SPEC §15): `platform` undefined = no filtering (legacy callers).
+    const targets = row.platforms ?? [];
+    const platformOk = platform === undefined || targets.length === 0 || (platform !== null && targets.includes(platform));
+    if (row.published && natural && platformOk) {
       out.push({ row, phase: natural, isPreview: false });
     } else if (previewing) {
       const phase = natural ?? (today < row.starts_at ? 'teaser' : 'ended');
@@ -142,20 +145,38 @@ export class CampaignService {
   }
 
   /** GET /api/mobile/campaigns */
-  static async listForViewer(profile: Profile, timezone: string | null): Promise<CampaignsResponse> {
+  static async listForViewer(profile: Profile, timezone: string | null, platform?: string | null): Promise<CampaignsResponse> {
     const today = viewerToday(profile, timezone);
     const rows = await this.fetchActiveRows();
-    const views = await this.buildViews(visibleFor(rows, profile.id, today), profile.id, today);
+    const views = await this.buildViews(visibleFor(rows, profile.id, today, platform), profile.id, today);
     return { campaigns: views, homeSlug: views[0]?.slug ?? null };
   }
 
+  /**
+   * The campaign experience that would take home_hero (= homeSlug), with its
+   * priority, for the Engage merge (ENGAGE_SPEC §3). Cheap: no view building.
+   */
+  static async heroCampaign(
+    profile: Profile,
+    timezone: string | null,
+    platform?: string | null,
+    now?: Date
+  ): Promise<{ slug: string; priority: number } | null> {
+    const today = now ? previewAsOf(profile) ?? localDayOf(now, timezone) : viewerToday(profile, timezone);
+    const visible = visibleFor(await this.fetchActiveRows(), profile.id, today, platform);
+    const first = visible
+      .map((v) => ({ slug: v.row.slug, phase: v.phase, priority: v.row.priority ?? 0, startsAt: v.row.starts_at }))
+      .sort(compareViews)[0];
+    return first ? { slug: first.slug, priority: first.priority } : null;
+  }
+
   /** GET /api/mobile/campaigns/{slug} (404 when not visible to the viewer). */
-  static async getForViewer(profile: Profile | null, timezone: string | null, slug: string): Promise<CampaignView> {
+  static async getForViewer(profile: Profile | null, timezone: string | null, slug: string, platform?: string | null): Promise<CampaignView> {
     const today = viewerToday(profile, timezone);
     const { data, error } = await createAdminSupabase().from('campaigns').select('*').eq('slug', slug).maybeSingle();
     if (error) throw error;
     const userId = profile?.id ?? null;
-    const visible = data ? visibleFor([data as CampaignRow], userId, today) : [];
+    const visible = data ? visibleFor([data as CampaignRow], userId, today, platform) : [];
     if (visible.length === 0) throw notFound();
     const [view] = await this.buildViews(visible, userId, today);
     return view;

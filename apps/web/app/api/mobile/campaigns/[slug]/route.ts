@@ -2,6 +2,7 @@ import { type NextRequest } from 'next/server';
 
 import { requireUser } from '@/lib/campaigns/admin-auth';
 import { campaignFailFrom, ok } from '@/lib/campaigns/http';
+import { resolvePlatform } from '@/lib/engage/platform';
 import { CampaignService } from '@/lib/services/campaign-service';
 
 export const dynamic = 'force-dynamic';
@@ -12,7 +13,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   try {
     const profile = await requireUser(request);
     const { slug } = await params;
-    return ok(await CampaignService.getForViewer(profile, request.headers.get('x-client-timezone'), slug), startTime);
+    return ok(await CampaignService.getForViewer(profile, request.headers.get('x-client-timezone'), slug, resolvePlatform(request)), startTime);
   } catch (error) {
     return campaignFailFrom(error, 'get');
   }

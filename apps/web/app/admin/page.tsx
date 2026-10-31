@@ -1,5 +1,9 @@
-import { redirect } from 'next/navigation';
+import type { Metadata } from 'next';
 
-export default function AdminIndex() {
-  redirect('/admin/campaigns');
+import { Overview } from '@/components/admin/engage/overview/Overview';
+
+export const metadata: Metadata = { title: 'Overview' };
+
+export default function AdminOverviewPage() {
+  return <Overview />;
 }

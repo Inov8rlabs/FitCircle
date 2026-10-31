@@ -26,6 +26,10 @@ const UNIQUE: Record<string, UniqueIndex[]> = {
   campaigns: [{ cols: ['slug'] }],
   campaign_participants: [{ cols: ['campaign_id', 'user_id'] }],
   campaign_deliveries: [{ cols: ['campaign_id', 'user_id', 'delivery_key'] }],
+  engage_assets: [{ cols: ['sha256'] }],
+  engage_exposures: [{ cols: ['message_id', 'user_id'] }],
+  engage_deliveries: [{ cols: ['message_id', 'user_id', 'platform'] }],
+  engage_dismissals: [{ cols: ['message_id', 'user_id'] }],
 };
 
 let seq = 0;
