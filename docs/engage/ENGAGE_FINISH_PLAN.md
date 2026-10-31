@@ -61,7 +61,7 @@ Each phase ships on its own and is gated by kill switches. Effort is in focused 
 - Reserve the migration number (next free: 118) and create branches `feat/engage-v2` from current main in the backend, iOS, Android and inov8r-admin.
 
 ### E0b: Shared platform scaffold (3–4 days), see `ENGAGE_MULTITENANCY.md`
-- Create the `inov8r-engage` monorepo:
+- Create the `engage` monorepo:
   - `protocol/` (JSON Schemas, OpenAPI, golden fixtures, TS types);
   - `packages/{server,adapters,web,preview}`;
   - `ios/EngageKit` (SPM, zero dependencies, iOS 17+);

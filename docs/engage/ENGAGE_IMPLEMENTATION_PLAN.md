@@ -21,7 +21,7 @@ Every item has an ID (`E1.04`), and every item lists:
 
 | Repo | Local path | Branch for this work | Notes |
 |---|---|---|---|
-| **inov8r-engage** (new) | `/Users/ani/Code/Engage` | `main` (new repo) | Private GitHub repo under the `Inov8rlabs` org. |
+| **engage** (new) | `/Users/ani/Code/Engage` | `main` (new repo) | Private GitHub repo under the `Inov8rlabs` org. |
 | FitCircleBE | worktree `/Users/ani/Code/FitCircle/FitCircleBE-engage2` | `feat/engage-v2` from `origin/main` | The parked v1 is on `feat/engage` (worktree `/Users/ani/Code/FitCircle/FitCircleBE-engage`). **Read only, never merge it.** |
 | FitCircle-iOS | worktree `/Users/ani/Code/FitCircle/FitCircle-iOS-engage2` | `feat/engage-v2` from `origin/main` | v1: `feat/engage` @ `6389971`. |
 | Fitcircle-Android | worktree `/Users/ani/Code/FitCircle/Fitcircle-Android-engage2` | `feat/engage-v2` from `origin/main` | v1: `feat/engage` @ `6611b10`. |
@@ -68,7 +68,7 @@ In FitCircleBE, link Supabase for the worktree before any `db query`: run `npx -
 
 | Decision | Value |
 |---|---|
-| Architecture | Shared **`inov8r-engage`** monorepo with the protocol, server engine, web, preview, EngageKit (Swift) and engage-android. Each app hosts the Engage tables in its own Supabase database and provides adapters. |
+| Architecture | Shared **`engage`** monorepo with the protocol, server engine, web, preview, EngageKit (Swift) and engage-android. Each app hosts the Engage tables in its own Supabase database and provides adapters. |
 | Tool | Built in the **inov8r-admin** code, served at **`engage.inov8rlabs.com`** with an app switcher. Linked from Admin Tools. |
 | Marketing push | **Off until the user opts in** ("Tips & offers" toggle; App Review 4.5.4). |
 | Build order | FitCircle first, **inside the library boundary from day one**. |
@@ -115,9 +115,9 @@ Week 10  Rollout per §18 (kill switches stepwise). E10 migration timed around H
 ### E0.02: Create the worktrees and branches (§0.2)
 - **Done when:** all four worktrees exist and `git status` is clean in each.
 
-### E0.03: Create the GitHub repo `Inov8rlabs/inov8r-engage` (private)
+### E0.03: Create the GitHub repo `Inov8rlabs/engage` (private)
 - **Do:**
-  1. **Human step:** the owner creates the repo, or approves `gh repo create Inov8rlabs/inov8r-engage --private`.
+  1. **Human step:** the owner creates the repo, or approves `gh repo create Inov8rlabs/engage --private`.
   2. Add the default branch protection: PRs into `main` require CI to pass.
 - **Done when:** `git clone` works locally at `/Users/ani/Code/Engage` (`~/Code/Engage`).
 
@@ -127,7 +127,7 @@ Week 10  Rollout per §18 (kill switches stepwise). E10 migration timed around H
 
 ### E0b.01: Repo skeleton (exact tree)
 ```
-inov8r-engage/
+engage/
 ├── package.json                 # private workspace root (bun workspaces)
 ├── bun.lock
 ├── tsconfig.base.json           # strict, ES2022, moduleResolution bundler
@@ -217,9 +217,9 @@ Write one schema per type, with these exact names:
 - **npm** (`@inov8r/*`): GitHub Packages registry `https://npm.pkg.github.com`.
   - FitCircleBE `.npmrc`: `@inov8r:registry=https://npm.pkg.github.com` and `//npm.pkg.github.com/:_authToken=${NPM_TOKEN}`.
   - **Human step:** create a fine-grained token with `read:packages` and set **Vercel env `NPM_TOKEN`** on the `fit-circle-web` and `inov8r-admin` projects.
-- **SwiftPM:** `https://github.com/Inov8rlabs/inov8r-engage.git`, product `EngageKit`, from the tag `engage-ios-v0.x.y`. The `Package.swift` sits at `ios/EngageKit/Package.swift`; tag the root, using a root `Package.swift` that points at `ios/EngageKit/Sources`.
+- **SwiftPM:** `https://github.com/Inov8rlabs/engage.git`, product `EngageKit`, from the tag `engage-ios-v0.x.y`. The `Package.swift` sits at `ios/EngageKit/Package.swift`; tag the root, using a root `Package.swift` that points at `ios/EngageKit/Sources`.
   - **Human step:** grant Xcode Cloud access to the repo in App Store Connect → Xcode Cloud → Settings → Repositories.
-- **Maven:** GitHub Packages `https://maven.pkg.github.com/Inov8rlabs/inov8r-engage`, group `com.inov8r.engage`, artifacts `engage-core`, `engage-compose`, `engage-push`.
+- **Maven:** GitHub Packages `https://maven.pkg.github.com/Inov8rlabs/engage`, group `com.inov8r.engage`, artifacts `engage-core`, `engage-compose`, `engage-push`.
   - Android `settings.gradle.kts` adds the repository with credentials from `gradle.properties` (`gpr.user`, `gpr.key`) or the env vars `GITHUB_ACTOR`/`GITHUB_TOKEN`.
   - **Fallback** if credentials are a problem in CI: a Gradle **composite build** from a git submodule at `Fitcircle-Android/engage` (`includeBuild("engage/android")`).
 - **During development:** the FitCircle repos consume local paths:
@@ -235,7 +235,7 @@ Write one schema per type, with these exact names:
 ## 5. E1: server engine and FitCircle backend core (8–9 days)
 
 ### E1.01: Migration `118_engage.sql` (FitCircleBE `supabase/migrations/118_engage.sql`)
-- **Source of truth:** `inov8r-engage/tools/migrate/templates/engage_v1.sql`. `engage migrate --app fitcircle --number 118` writes the file. Hand edits are forbidden; change the template instead.
+- **Source of truth:** `engage/tools/migrate/templates/engage_v1.sql`. `engage migrate --app fitcircle --number 118` writes the file. Hand edits are forbidden; change the template instead.
 - **Exact DDL.** Idempotent, tables, indexes and constraints only, row-level security enabled with **no policies** (service role only):
 
 ```sql
@@ -1095,7 +1095,7 @@ Steps, shown as a left rail with progress:
 
 ## 9. E5: iOS (`FitCircle-iOS`, EngageKit + host integration) (7–8 days)
 
-### E5.01: EngageKit package (`inov8r-engage/ios/EngageKit`)
+### E5.01: EngageKit package (`engage/ios/EngageKit`)
 - **`Package.swift`:** `platforms: [.iOS(.v17)]`, `swift-tools-version: 6.0`, no dependencies.
 - **Targets:** `EngageKit` and `EngageKitTests`.
 - **Sources** (port from FitCircle-iOS `feat/engage`, `Core/Engage/*` and `Features/Engage/*`):
@@ -1180,7 +1180,7 @@ Steps, shown as a left rail with progress:
 
 ## 10. E6: Android (`Fitcircle-Android`, engage-android + host integration) (7–8 days)
 
-### E6.01: The engage-android libraries (`inov8r-engage/android`)
+### E6.01: The engage-android libraries (`engage/android`)
 - **`:engage-core`:**
   - Kotlin 2.x, `kotlinx.serialization`, coroutines; minSdk 26.
   - **No OkHttp or Retrofit dependency.** It uses an `EngageTransport` interface with a default `HttpURLConnection` implementation, plus an optional `OkHttpTransport` in `:engage-okhttp` with an OkHttp `compileOnly` dependency, so it works with both OkHttp 4 and 5.
@@ -1434,8 +1434,8 @@ These follow `ENGAGE_MULTITENANCY.md` §4.2 and §6.
 
 | Layer | Suite | Gate |
 |---|---|---|
-| Protocol | Schema validation of fixtures; codegen produces no diff | inov8r-engage CI |
-| Server engine | Unit tests and pg integration tests (compiler, dispatcher, eligibility, caps, journeys, stats) | inov8r-engage CI |
+| Protocol | Schema validation of fixtures; codegen produces no diff | engage CI |
+| Server engine | Unit tests and pg integration tests (compiler, dispatcher, eligibility, caps, journeys, stats) | engage CI |
 | FitCircleBE | Full vitest suite, including the shipped-client replay (E2.06), migration lint, and orchestrator regression | FitCircleBE CI + local before merge |
 | Conformance | `engage-conformance` against `next dev` | FitCircleBE CI |
 | Tool | vitest (modules whitelist, roles, middleware, composer flows) | inov8r-admin CI |
@@ -1493,9 +1493,9 @@ Each step needs the owner's go. Verify before moving to the next.
 ---
 
 ## 19. Human steps checklist (owner or console)
-- [ ] Create the GitHub repo `Inov8rlabs/inov8r-engage` (E0.03).
+- [ ] Create the GitHub repo `Inov8rlabs/engage` (E0.03).
 - [ ] Create the GitHub token `read:packages`, then set `NPM_TOKEN` on `fit-circle-web` and `inov8r-admin` (E0b.06).
-- [ ] Give Xcode Cloud access to the `inov8r-engage` repo (E0b.06).
+- [ ] Give Xcode Cloud access to the `engage` repo (E0b.06).
 - [ ] Android CI credentials for GitHub Packages, or approve the submodule fallback (E0b.06).
 - [ ] Add the Vercel domain `engage.inov8rlabs.com` plus the DNS CNAME, with SSO off (E4.02).
 - [ ] Add the OAuth redirect URI for the engage host (only if not using the shared cookie domain) (E4.02).

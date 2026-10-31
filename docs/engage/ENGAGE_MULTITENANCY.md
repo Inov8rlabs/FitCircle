@@ -58,7 +58,7 @@ Campaign definitions, assets and the tool live centrally, and each app pulls def
 ## 4. Recommendation: **B, an Engage protocol plus a shared engine, SDKs and a multi-app tool**
 
 ```
-inov8r-engage/                          (new monorepo; private)
+engage/                          (new monorepo; private)
 ├── protocol/        Engage Protocol v1: JSON Schemas + OpenAPI + golden fixtures + TS types
 │                    (content@1, layouts, actions, /sync, /events, /session, /admin/*, push payload keys)
 ├── packages/
@@ -143,7 +143,7 @@ inov8r-engage/                          (new monorepo; private)
 
 ## 5. What this changes in the FitCircle plan
 
-1. **Build FitCircle first, but inside the library boundary from day one.** The v1 code is ported **into `inov8r-engage`** rather than back into FitCircleBE/iOS/Android, and FitCircle consumes it as package version `0.x`. Extracting it later would mean doing the port twice.
+1. **Build FitCircle first, but inside the library boundary from day one.** The v1 code is ported **into `engage`** rather than back into FitCircleBE/iOS/Android, and FitCircle consumes it as package version `0.x`. Extracting it later would mean doing the port twice.
 2. **Cost:** about **+25–30%** on the FitCircle MVP (packaging, adapters as interfaces, conformance suite, publishing, theme injection). In return, BFB and TripWiz become **adapter-and-integration projects of roughly 1.5–2 weeks each**, instead of about 6 weeks each.
 3. The FitCircle-specific parts stay in FitCircle:
    - home-feed integration (`promo@2` source in `composeFeed`);

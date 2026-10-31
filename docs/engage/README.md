@@ -1,5 +1,7 @@
 # Engage: Inov8r Labs' in-house Braze replacement
 
+> **Moved 2026-10-31:** the canonical docs and all shared code now live in **https://github.com/Inov8rlabs/engage** (local checkout `~/Code/Engage`, folder `docs/`). This folder is a snapshot kept beside the parked v1 code.
+
 **Status (2026-10-30):** Parked work-in-progress plus a v2 plan awaiting approval.
 
 Engage runs push, in-app messages, in-app cards, placements, email, journeys and seasonal campaigns from one tool, with no app code changes per campaign. It has rich targeting (platform, app version, OS, locale, country, subscription, behaviour, events), previews for iOS, Android and web, and A/B tests with controls. It is multi-app: FitCircle first, then BuyForBaby and TripWiz.

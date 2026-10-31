@@ -9,7 +9,7 @@
 - `ENGAGE_MULTITENANCY.md`: how one Engage serves FitCircle, BuyForBaby and TripWiz (shared protocol, engine and SDKs, plus per-app adapters).
 
 **Where the code lives** (see `ENGAGE_MULTITENANCY.md` §4):
-- **Shared:** the `inov8r-engage` monorepo:
+- **Shared:** the `engage` monorepo:
   - the protocol;
   - `@inov8r/engage-server`;
   - `@inov8r/engage-web` / `-preview`;
@@ -605,7 +605,7 @@ Prod already applied 104–116 except 104, which is v1 Engage, and v1 was never 
 **Decided by the owner on 2026-10-31:** #1 hosting (engage.inov8rlabs.com, built in the inov8r-admin code), #2 marketing push off until opt-in, #3 seasonal campaigns become Engage campaigns, #7 shared library and protocol, #8 build inside the library from day one. Also decided on 2026-10-31: #4 web push in the first release, #5 email in the first release, #6 no global control group, no approvals, and journeys in the first release. **All decisions are now made.**
 
 1. **Tool hosting:** standalone `engage.inov8rlabs.com` vs a module in Admin Tools. **Recommendation:** one codebase in `inov8r-admin`, served at its own domain `engage.inov8rlabs.com` with focused navigation and an app switcher (FitCircle, BuyForBaby, TripWiz), linked from Admin Tools. See `ENGAGE_TOOL_HOSTING.md`.
-7. **Multi-app architecture:** **a shared protocol, engine and SDKs (`inov8r-engage`), with Engage tables inside each app's own database and per-app adapters**, rather than a central Braze-style service. See `ENGAGE_MULTITENANCY.md` §3–4.
+7. **Multi-app architecture:** **a shared protocol, engine and SDKs (`engage`), with Engage tables inside each app's own database and per-app adapters**, rather than a central Braze-style service. See `ENGAGE_MULTITENANCY.md` §3–4.
 8. **Build FitCircle inside the library boundary from day one:** **yes**. It adds about 25–30% to the FitCircle MVP, and BuyForBaby and TripWiz then take about 2 weeks each instead of about 6.
 2. **Marketing push opt-in default:** **off until the user opts in** (required by App Review 4.5.4 for promotional pushes). Lifecycle pushes keep their current toggles.
 3. **Seasonal campaigns:** ~~rename to "Experiences"~~. **Decided 2026-10-31:** they **become Engage campaigns**. A campaign optionally includes an experience from a native template (§3.4). There is no separate concept, and the old Campaigns module is retired.
