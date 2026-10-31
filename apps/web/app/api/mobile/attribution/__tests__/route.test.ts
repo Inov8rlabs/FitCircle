@@ -135,3 +135,53 @@ describe('RevenueCat fallback', () => {
     expect(await AdsAttributionService.fromRevenueCat(rc({ app_user_id: '99999999-2222-4333-8444-555555555555' }))).toBe('error');
   });
 });
+
+describe('appInstanceId (Firebase app instance id, GA4 join key)', () => {
+  const PLAY = { platform: 'android', source: 'google-play', raw: { utm_source: 'google-play', utm_medium: 'organic' } };
+  const IID = '3f2b9c0d4e5f60718293a4b5c6d7e8f9';
+
+  it('is stored on the first report and never echoed back', async () => {
+    const res = await (await post({ ...PLAY, appInstanceId: IID })).json();
+    expect(res.data).toMatchObject({ channel: 'organic', created: true });
+    expect(res.data).not.toHaveProperty('appInstanceId');
+    expect(db.rows('user_attribution')[0]).toMatchObject({ channel: 'organic', app_instance_id: IID });
+  });
+
+  it('a later report fills it in without changing the first touch', async () => {
+    await post(PLAY);
+    expect(db.rows('user_attribution')[0].app_instance_id).toBeUndefined();
+    const second = await (await post({ ...PLAY, source: 'google_ads', appInstanceId: IID })).json();
+    expect(second.data).toMatchObject({ channel: 'organic', created: false, updated: false });
+    expect(db.rows('user_attribution')[0]).toMatchObject({ channel: 'organic', source: 'google-play', app_instance_id: IID });
+    // an existing id is never overwritten
+    await post({ ...PLAY, appInstanceId: 'ffffffffffffffffffffffffffffffff' });
+    expect(db.rows('user_attribution')[0].app_instance_id).toBe(IID);
+  });
+
+  it('malformed ids are dropped, not rejected; optional', async () => {
+    expect((await post({ ...PLAY, appInstanceId: 'bad id; drop' })).status).toBe(200);
+    expect(db.rows('user_attribution')[0].app_instance_id).toBeUndefined();
+    const U2 = '99999999-2222-4333-8444-555555555555';
+    expect((await post({ ...PLAY, appInstanceId: 'x'.repeat(200) }, U2)).status).toBe(200);
+    expect(db.rows('user_attribution').find((r) => r.user_id === U2)!.app_instance_id).toBeUndefined();
+  });
+
+  it('before migration 117 (no column) the attribution is still stored', async () => {
+    const real = db.client.bind(db);
+    db.client = () => {
+      const c = real();
+      return {
+        from: (t: string) => {
+          const q: any = c.from(t);
+          const insert = q.insert.bind(q);
+          q.insert = (row: any) => (row && 'app_instance_id' in row ? { then: (ok: any) => Promise.resolve({ data: null, error: { code: 'PGRST204', message: "Could not find the 'app_instance_id' column" } }).then(ok) } : insert(row));
+          return q;
+        },
+      };
+    };
+    const res = await post({ ...PLAY, appInstanceId: IID });
+    expect(res.status).toBe(200);
+    expect(db.rows('user_attribution')[0]).toMatchObject({ channel: 'organic' });
+    expect(db.rows('user_attribution')[0]).not.toHaveProperty('app_instance_id');
+  });
+});

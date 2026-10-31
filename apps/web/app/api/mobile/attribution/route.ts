@@ -10,7 +10,8 @@ export const dynamic = 'force-dynamic';
 
 /**
  * POST /api/mobile/attribution (ADS_CONSOLE_SPEC §4)
- * Body: { platform: 'ios'|'android', source, campaignId?, adGroupId?, keywordId?, adId?, clickDate?, country?, raw? }
+ * Body: { platform: 'ios'|'android', source, campaignId?, adGroupId?, keywordId?, adId?, clickDate?, country?, raw?, appInstanceId? }
+ * appInstanceId (Android, Firebase app instance id = GA4 user_pseudo_id) is stored even when the first touch is kept.
  *
  * Idempotent, first touch wins: the first report is stored; later reports are
  * no-ops unless the stored row is `unknown`. Apple's mock campaign 1234567890

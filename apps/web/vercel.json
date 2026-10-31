@@ -85,6 +85,10 @@
       "schedule": "20 * * * *"
     },
     {
+      "path": "/api/cron/ads/ga4-attribution",
+      "schedule": "50 9 * * *"
+    },
+    {
       "path": "/api/cron/ads/report",
       "schedule": "0 12,22 * * *"
     },

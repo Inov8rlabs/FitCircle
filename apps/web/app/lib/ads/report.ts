@@ -6,10 +6,11 @@
  * level land in a per-channel "(none)" row, never folded into another row.
  */
 import { eachDay } from './dates';
-import { addDelivery, computeMetrics, cumulativeRoas, type CohortUser, type DeliveryTotals, emptyDelivery, userOutcome, type UserOutcome } from './metrics';
+import { addDelivery, computeMetrics, cumulativeRoas, type CohortUser, type DeliveryTotals, emptyDelivery, type NetworkConversions, userOutcome, type UserOutcome } from './metrics';
 import {
   AD_CHANNELS,
   type AdEntityRow,
+  type AdConversionRow,
   type AdEntityView,
   type AdLevel,
   type AdMetricRow,
@@ -109,6 +110,8 @@ export interface SliceInput {
   metricRows: AdMetricRow[];
   entities: AdEntityRow[];
   cohort: CohortUser[];
+  /** ad_conversions_daily rows for the range (campaign level). Absent/empty → network sign-ups/trials are null. */
+  conversionRows?: AdConversionRow[];
   rangeEnd: string;
   today: string;
   /** Restrict to one channel / campaign (campaign drill-down, filtered timeseries). */
@@ -138,6 +141,25 @@ function inFilterRow(r: { channel: string; campaign_external_id: string | null }
   if (f?.channel && r.channel !== f.channel) return false;
   if (f?.campaignExternalId && r.campaign_external_id !== f.campaignExternalId) return false;
   return true;
+}
+
+const conversionCount = (r: AdConversionRow) => Number(r.all_conversions) || 0;
+const round2 = (n: number) => Math.round(n * 100) / 100;
+
+/**
+ * Network sign-ups / trials of a set of conversion rows. all_conversions is
+ * used: GA4-imported actions are usually secondary goals (an App installs
+ * campaign bids on installs), so they never reach metrics.conversions.
+ * A kind with no rows at all is null (the network has no such action), not 0.
+ */
+export function networkFor(rows: AdConversionRow[]): NetworkConversions {
+  let signUps: number | null = null;
+  let trials: number | null = null;
+  for (const r of rows) {
+    if (r.kind === 'sign_up') signUps = round2((signUps ?? 0) + conversionCount(r));
+    else if (r.kind === 'trial') trials = round2((trials ?? 0) + conversionCount(r));
+  }
+  return { signUps, trials };
 }
 
 export function buildRows(groupBy: GroupBy, input: SliceInput): AdsRow[] {
@@ -187,9 +209,20 @@ export function buildRows(groupBy: GroupBy, input: SliceInput): AdsRow[] {
     outcomes.set(k, list);
   }
 
+  // Network conversions are stored per campaign: only campaign-level breakdowns carry them.
+  const conversions = new Map<string, AdConversionRow[]>();
+  if (level === 'campaign') {
+    for (const r of input.conversionRows ?? []) {
+      if (r.level !== 'campaign' || !inFilterRow(r, input.filter)) continue;
+      const k = spendKey({ channel: r.channel, external_id: r.external_id } as AdMetricRow);
+      conversions.set(k, [...(conversions.get(k) ?? []), r]);
+    }
+  }
+
   const rows: AdsRow[] = [];
   for (const key of keys) {
-    const metrics = computeMetrics(delivery.get(key) ?? emptyDelivery(), outcomes.get(key) ?? [], { rangeEnd: input.rangeEnd, today: input.today });
+    const conv = conversions.get(key);
+    const metrics = computeMetrics(delivery.get(key) ?? emptyDelivery(), outcomes.get(key) ?? [], { rangeEnd: input.rangeEnd, today: input.today }, conv ? networkFor(conv) : null);
     rows.push({ ...describe(groupBy, key, byEntity, campaigns), metrics });
   }
   rows.sort((a, b) => b.metrics.spend - a.metrics.spend || b.metrics.users - a.metrics.users || a.label.localeCompare(b.label));
@@ -260,10 +293,41 @@ function describe(groupBy: GroupBy, key: string, byEntity: Map<string, AdEntityR
   };
 }
 
+/**
+ * Totals' network conversions: summed across channels, and the coverage
+ * denominator is each channel's own basis (sign-ups where the network reports
+ * them, else installs) summed — 'mixed' when channels differ.
+ */
+export function totalsNetwork(metricRows: AdMetricRow[], conversionRows: AdConversionRow[], filter?: SliceInput['filter']): NetworkConversions | null {
+  const installs = new Map<string, number>();
+  for (const r of metricRows) if (r.level === 'campaign' && inFilterRow(r, filter)) installs.set(r.channel, (installs.get(r.channel) ?? 0) + (Number(r.installs) || 0));
+  const byChannel = new Map<string, AdConversionRow[]>();
+  for (const r of conversionRows) if (r.level === 'campaign' && inFilterRow(r, filter)) byChannel.set(r.channel, [...(byChannel.get(r.channel) ?? []), r]);
+  let signUps: number | null = null;
+  let trials: number | null = null;
+  let denominator = 0;
+  const bases = new Set<'sign_ups' | 'installs'>();
+  for (const channel of new Set([...installs.keys(), ...byChannel.keys()])) {
+    const n = networkFor(byChannel.get(channel) ?? []);
+    if (n.signUps !== null) signUps = round2((signUps ?? 0) + n.signUps);
+    if (n.trials !== null) trials = round2((trials ?? 0) + n.trials);
+    if (n.signUps && n.signUps > 0) {
+      denominator += n.signUps;
+      bases.add('sign_ups');
+    } else if ((installs.get(channel) ?? 0) > 0) {
+      denominator += installs.get(channel)!;
+      bases.add('installs');
+    }
+  }
+  if (!bases.size) return { signUps, trials, coverage: null };
+  return { signUps, trials, coverage: { denominator: round2(denominator), basis: bases.size > 1 ? 'mixed' : [...bases][0] } };
+}
+
 export function buildTotals(input: SliceInput): AdsRow {
   let d = emptyDelivery();
   for (const r of input.metricRows) if (r.level === 'campaign' && inFilterRow(r, input.filter)) d = addDelivery(d, r);
   const outs = input.cohort.filter((u) => inTotalsUser(u, input.filter)).map(userOutcome);
+  const network = totalsNetwork(input.metricRows, input.conversionRows ?? [], input.filter);
   return {
     key: 'total',
     groupBy: 'channel',
@@ -275,7 +339,7 @@ export function buildTotals(input: SliceInput): AdsRow {
     externalId: null,
     campaignExternalId: null,
     entity: null,
-    metrics: computeMetrics(d, outs, { rangeEnd: input.rangeEnd, today: input.today }),
+    metrics: computeMetrics(d, outs, { rangeEnd: input.rangeEnd, today: input.today }, network),
   };
 }
 

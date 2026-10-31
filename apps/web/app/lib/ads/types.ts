@@ -74,6 +74,40 @@ export interface AdDailyMetricInput {
   redownloads: number;
 }
 
+/** Our bucket for a network conversion action (lib/ads/connectors/google-ads.ts conversionKind). */
+export type AdConversionKind = 'install' | 'sign_up' | 'activation' | 'trial' | 'purchase' | 'other';
+
+/** One network-reported conversion row per (campaign, date, conversion action) — maps 1:1 to ad_conversions_daily. */
+export interface AdConversionDailyInput {
+  channel: AdChannel;
+  level: 'campaign';
+  externalId: string;
+  campaignExternalId: string | null;
+  date: string; // YYYY-MM-DD in the network's report time zone
+  conversionActionId: string;
+  conversionActionName: string | null;
+  category: string | null;
+  kind: AdConversionKind;
+  /** metrics.conversions (primary / "Conversions" column; fractional under data-driven attribution). */
+  conversions: number;
+  /** metrics.all_conversions (incl. secondary actions). */
+  allConversions: number;
+}
+
+/** Row shape of ad_conversions_daily as read by the report. */
+export interface AdConversionRow {
+  channel: AdChannel;
+  level: string;
+  external_id: string;
+  campaign_external_id: string | null;
+  date: string;
+  conversion_action_id: string;
+  conversion_action_name: string | null;
+  kind: AdConversionKind;
+  conversions: number | string;
+  all_conversions: number | string;
+}
+
 export interface AdEntityRef {
   channel: AdChannel;
   level: AdLevel;
@@ -150,6 +184,8 @@ export interface AttributionRow {
   is_test: boolean;
   raw: unknown;
   reported_at?: string;
+  /** Firebase app instance id (= GA4 BigQuery user_pseudo_id); Android only, migration 117. */
+  app_instance_id?: string | null;
 }
 
 /** A computed slice (one table row, or totals). Ratios are null when the denominator is 0. */
@@ -180,6 +216,22 @@ export interface AdsMetrics {
   installToUser: number | null;
   userToActivated: number | null;
   userToPayer: number | null;
+  /**
+   * The network's own sign-up conversions for this slice (Google Ads: an imported
+   * GA4 `sign_up` action). Null when the network reports no sign-up conversion
+   * (Apple, Meta, or Google before the action is imported) or the slice is below campaign level.
+   */
+  networkSignUps: number | null;
+  /** The network's own trial conversions (Google Ads: imported `trial_start`). Null as for networkSignUps. */
+  networkTrials: number | null;
+  /**
+   * Attributed users ÷ network sign-ups (or ÷ network installs when the network
+   * reports no sign-ups). Null with no denominator. Below 1 = the network claims
+   * more than we can tie to users.
+   */
+  attributionCoverage: number | null;
+  /** Denominator of attributionCoverage ('mixed' in totals when channels differ). */
+  attributionCoverageBasis: 'sign_ups' | 'installs' | 'mixed' | null;
   /** Cohort windows that have not closed yet (UI greys these). */
   incomplete: { activated: boolean; d7: boolean; d30: boolean };
 }
@@ -313,6 +365,21 @@ export interface SpendReconciliation {
   appleCampaignSpend: number;
 }
 
+/** Attribution coverage of one paid channel (dataHealth.attribution.byChannel). */
+export interface ChannelAttributionCoverage {
+  channel: AdChannel;
+  /** Network-reported installs (campaign level) in the range. */
+  installs: number;
+  /** Network-reported sign-up conversions; null when the network has no sign-up conversion action. */
+  networkSignUps: number | null;
+  networkTrials: number | null;
+  /** Sign-ups in the cohort attributed to this channel (test users excluded). */
+  attributedUsers: number;
+  /** attributedUsers ÷ (networkSignUps, else installs) × 100, 1 decimal; null with no denominator. */
+  coveragePct: number | null;
+  basis: 'sign_ups' | 'installs' | null;
+}
+
 export interface AttributionCoverage {
   status: HealthStatus;
   /** Σ network-reported installs on paid channels in the range. */
@@ -323,6 +390,8 @@ export interface AttributionCoverage {
   coveragePct: number | null;
   /** attributedPaidUsers by user_attribution.source (apple_search_ads, revenuecat, …). */
   bySource: Record<string, number>;
+  /** Per paid channel with installs or attributed users. */
+  byChannel: ChannelAttributionCoverage[];
   explanation: string;
 }
 

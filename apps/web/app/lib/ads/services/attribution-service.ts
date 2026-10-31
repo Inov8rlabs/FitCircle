@@ -17,6 +17,14 @@ export interface RecordResult {
 const PURCHASE_TYPES = new Set(['INITIAL_PURCHASE', 'NON_RENEWING_PURCHASE', 'RENEWAL', 'PRODUCT_CHANGE', 'UNCANCELLATION']);
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+/** PostgREST / Postgres "column does not exist" (migration 117 not applied yet). */
+const isMissingColumn = (e: { code?: string; message?: string }) => e.code === 'PGRST204' || e.code === '42703' || /app_instance_id/.test(e.message ?? '');
+
+function withoutInstanceId(row: AttributionRow): AttributionRow {
+  const { app_instance_id: _drop, ...rest } = row;
+  return rest;
+}
+
 export class AdsAttributionService {
   static async get(userId: string): Promise<AttributionRow | null> {
     const { data, error } = await db().from('user_attribution').select('*').eq('user_id', userId).maybeSingle();
@@ -28,17 +36,34 @@ export class AdsAttributionService {
     const incoming = attributionFromBody(userId, body);
     const existing = await this.get(userId);
     const action = shouldReplace(existing, incoming);
-    if (action === 'keep') return { attribution: existing!, created: false, updated: false };
-    const row = { ...incoming, reported_at: now.toISOString() };
+    if (action === 'keep') {
+      // First touch stays, but a newly reported app instance id is still stored (GA4 join key).
+      if (incoming.app_instance_id && !existing!.app_instance_id) {
+        const { error } = await db().from('user_attribution').update({ app_instance_id: incoming.app_instance_id }).eq('user_id', userId);
+        if (error) console.warn('[ads/attribution] app_instance_id update failed:', error.message);
+        else return { attribution: { ...existing!, app_instance_id: incoming.app_instance_id }, created: false, updated: false };
+      }
+      return { attribution: existing!, created: false, updated: false };
+    }
+    let row: AttributionRow = { ...incoming, reported_at: now.toISOString() };
     if (action === 'upgrade') {
       // Guarded on channel so two concurrent upgrades can't both win.
-      const { data, error } = await db().from('user_attribution').update(row).eq('user_id', userId).eq('channel', 'unknown').select('*');
+      let { data, error } = await db().from('user_attribution').update(row).eq('user_id', userId).eq('channel', 'unknown').select('*');
+      if (error && isMissingColumn(error) && 'app_instance_id' in row) {
+        row = withoutInstanceId(row);
+        ({ data, error } = await db().from('user_attribution').update(row).eq('user_id', userId).eq('channel', 'unknown').select('*'));
+      }
       if (error) throw new Error(`user_attribution update: ${error.message}`);
       const hit = (data ?? [])[0] as AttributionRow | undefined;
       if (hit) return { attribution: hit, created: false, updated: true };
       return { attribution: (await this.get(userId)) ?? existing!, created: false, updated: false };
     }
-    const { error } = await db().from('user_attribution').insert(row);
+    let { error } = await db().from('user_attribution').insert(row);
+    if (error && isMissingColumn(error) && 'app_instance_id' in row) {
+      // Backend deployed before migration 117: keep the attribution, drop the instance id.
+      row = withoutInstanceId(row);
+      ({ error } = await db().from('user_attribution').insert(row));
+    }
     if (error) {
       // Lost a race with another report: first touch (the stored one) wins.
       if (error.code === '23505') return { attribution: (await this.get(userId)) ?? row, created: false, updated: false };

@@ -23,13 +23,16 @@
  *  - Installs = metrics.biddable_app_install_conversions ("Number of app
  *    installs", the App-campaign install column), rounded per row.
  *  - Days (segments.date) are in the account time zone (America/Toronto).
- *  - Quota: 4 search operations per sync (campaigns, ad groups, campaign and ad
- *    group daily metrics) + 1 token mint; hourly = ~96 ops/day against the
- *    Explorer level's 2,880.
+ *  - Conversions by action (installs, GA4-imported sign_up / trial_start /
+ *    purchase) are a separate campaign-level search: GAQL only allows the
+ *    segments.conversion_action* segments with conversion metrics.
+ *  - Quota: 5 search operations per sync (campaigns, ad groups, campaign and ad
+ *    group daily metrics, conversions by action) + 1 token mint; hourly = ~120
+ *    ops/day against the Explorer level's 2,880.
  */
 import { createSign } from 'node:crypto';
 
-import type { AdChangeRequest, AdDailyMetricInput, AdEntityInput, AdEntityRef, AdPlatform, ConnectorChangeResult } from '../types';
+import type { AdChangeRequest, AdConversionDailyInput, AdConversionKind, AdDailyMetricInput, AdEntityInput, AdEntityRef, AdPlatform, ConnectorChangeResult } from '../types';
 
 import { type AdsConnector, ConnectorError, type DeliveryFieldTotals, type FetchLike, type NetworkTotals } from './types';
 
@@ -92,9 +95,9 @@ export function googleAdsCredentialsFromEnv(env: NodeJS.ProcessEnv = process.env
 }
 
 /** RS256 JWT assertion for the JWT-bearer token grant (RFC 7523). */
-export function googleJwtAssertion(key: GoogleServiceAccountKey, nowSec = Math.floor(Date.now() / 1000)): string {
+export function googleJwtAssertion(key: GoogleServiceAccountKey, nowSec = Math.floor(Date.now() / 1000), scope = GOOGLE_ADS_SCOPE): string {
   const header = { alg: 'RS256', typ: 'JWT', ...(key.private_key_id ? { kid: key.private_key_id } : {}) };
-  const claims = { iss: key.client_email, scope: GOOGLE_ADS_SCOPE, aud: key.token_uri || GOOGLE_TOKEN_URL, iat: nowSec, exp: nowSec + 3600 };
+  const claims = { iss: key.client_email, scope, aud: key.token_uri || GOOGLE_TOKEN_URL, iat: nowSec, exp: nowSec + 3600 };
   const enc = (o: unknown) => Buffer.from(JSON.stringify(o)).toString('base64url');
   const input = `${enc(header)}.${enc(claims)}`;
   const sig = createSign('RSA-SHA256').update(input).sign(key.private_key).toString('base64url');
@@ -172,6 +175,14 @@ const AD_GROUP_METRIC_FIELDS = 'metrics.cost_micros, metrics.impressions, metric
 
 export const gaqlAdGroupDaily = (start: string, end: string) =>
   `SELECT ad_group.id, campaign.id, segments.date, customer.currency_code, ${AD_GROUP_METRIC_FIELDS} FROM ad_group WHERE segments.date BETWEEN '${start}' AND '${end}'`;
+
+/** Per campaign, day and conversion action. Zero rows are omitted by Google. */
+export const gaqlConversionsDaily = (start: string, end: string) =>
+  [
+    'SELECT campaign.id, segments.date, segments.conversion_action, segments.conversion_action_name,',
+    'segments.conversion_action_category, metrics.conversions, metrics.all_conversions',
+    `FROM campaign WHERE segments.date BETWEEN '${start}' AND '${end}'`,
+  ].join(' ');
 
 const YMD = /^\d{4}-\d{2}-\d{2}$/;
 const assertYmd = (v: string) => {
@@ -282,6 +293,60 @@ export function mapGoogleDaily(rows: Json[], level: 'campaign' | 'ad_group'): Ad
     acc.set(key, row);
   }
   return [...acc.values()].map(({ _micros, ...rest }) => rest);
+}
+
+/**
+ * Bucket a conversion action. Imported Firebase / GA4 actions are named
+ * "<project> - <package> (Android) <event_name>", so the trailing event name
+ * decides; the category is the fallback.
+ */
+export function conversionKind(name: string | null | undefined, category: string | null | undefined): AdConversionKind {
+  const n = String(name ?? '').toLowerCase();
+  const c = String(category ?? '').toUpperCase();
+  const event = n.split(/[\s)]+/).filter(Boolean).pop() ?? '';
+  if (/^(sign_?up|signup|complete_registration)$/.test(event) || c === 'SIGNUP') return 'sign_up';
+  if (/^(trial_start|start_trial|trial_started)$/.test(event)) return 'trial';
+  if (event === 'activated') return 'activation';
+  if (c === 'DOWNLOAD' || /first open|first_open|installs?\b/.test(n)) return 'install';
+  if (c === 'PURCHASE' || /^(purchase|in_app_purchase|app_store_subscription_convert)$/.test(event) || n.endsWith('in-app purchase')) return 'purchase';
+  return 'other';
+}
+
+const numOrZero = (v: unknown) => {
+  const n = Number(v);
+  return Number.isFinite(n) ? Math.round(n * 100) / 100 : 0;
+};
+
+/** GAQL conversion rows → AdConversionDailyInput (campaign level), summing duplicates. */
+export function mapGoogleConversions(rows: Json[]): AdConversionDailyInput[] {
+  const acc = new Map<string, AdConversionDailyInput>();
+  for (const r of rows) {
+    const date = String(r.segments?.date ?? '').slice(0, 10);
+    const cid = r.campaign?.id ? String(r.campaign.id) : null;
+    const resource = String(r.segments?.conversionAction ?? '');
+    const actionId = resource.split('/').pop() || null;
+    if (!date || !cid || !actionId) continue;
+    const name = r.segments?.conversionActionName ?? null;
+    const category = r.segments?.conversionActionCategory ?? null;
+    const key = `${cid}|${date}|${actionId}`;
+    const row = acc.get(key) ?? {
+      channel: 'google_ads' as const,
+      level: 'campaign' as const,
+      externalId: cid,
+      campaignExternalId: cid,
+      date,
+      conversionActionId: actionId,
+      conversionActionName: name,
+      category,
+      kind: conversionKind(name, category),
+      conversions: 0,
+      allConversions: 0,
+    };
+    row.conversions = Math.round((row.conversions + numOrZero(r.metrics?.conversions)) * 100) / 100;
+    row.allConversions = Math.round((row.allConversions + numOrZero(r.metrics?.allConversions)) * 100) / 100;
+    acc.set(key, row);
+  }
+  return [...acc.values()];
 }
 
 export function totalsFromDaily(rows: AdDailyMetricInput[]): DeliveryFieldTotals {
@@ -402,6 +467,11 @@ export class GoogleAdsConnector implements AdsConnector {
     const campaignRows = await this.search(gaqlCampaignDaily(start, end));
     const adGroupRows = await this.search(gaqlAdGroupDaily(start, end));
     return [...mapGoogleDaily(campaignRows, 'campaign'), ...mapGoogleDaily(adGroupRows, 'ad_group')];
+  }
+
+  /** Network conversions per campaign, day and conversion action (read-only). */
+  async fetchConversions(start: string, end: string): Promise<AdConversionDailyInput[]> {
+    return mapGoogleConversions(await this.search(gaqlConversionsDaily(assertYmd(start), assertYmd(end))));
   }
 
   async fetchTotals(start: string, end: string): Promise<NetworkTotals> {

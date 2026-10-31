@@ -19,6 +19,7 @@ import { buildRows, buildTimeseries, buildTotals, entityView, type SliceInput } 
 import { classifyTestUser, type TestUserReason } from '../test-users';
 import type {
   AdChannel,
+  AdConversionRow,
   AdEntityRow,
   AdMetricRow,
   AdsOverview,
@@ -89,6 +90,31 @@ export class AdsReportService {
         .order('level', { ascending: true })
         .order('external_id', { ascending: true })
     );
+  }
+
+  /**
+   * Network conversions (ad_conversions_daily, migration 117). Never fails the
+   * report: before the migration is applied (or on a read error) the console
+   * shows no network sign-ups/trials instead of a 500.
+   */
+  static async loadConversions(start: string, end: string): Promise<AdConversionRow[]> {
+    try {
+      return await selectAll<AdConversionRow>(() =>
+        db()
+          .from('ad_conversions_daily')
+          .select('channel, level, external_id, campaign_external_id, date, conversion_action_id, conversion_action_name, kind, conversions, all_conversions')
+          .gte('date', start)
+          .lte('date', end)
+          .order('date', { ascending: true })
+          .order('channel', { ascending: true })
+          .order('level', { ascending: true })
+          .order('external_id', { ascending: true })
+          .order('conversion_action_id', { ascending: true })
+      );
+    } catch (e: any) {
+      console.warn('[ads/report] ad_conversions_daily unavailable:', e?.message ?? e);
+      return [];
+    }
   }
 
   static async loadEntities(filter?: { channel?: string; campaignExternalId?: string }): Promise<AdEntityRow[]> {
@@ -240,20 +266,22 @@ export class AdsReportService {
   }
 
   static async overview(range: RangeQuery, groupBy: GroupBy): Promise<AdsOverview> {
-    const [metricRows, entities, cohortResult, lastSync, lastSuccess] = await Promise.all([
+    const [metricRows, entities, cohortResult, lastSync, lastSuccess, conversionRows] = await Promise.all([
       this.loadMetrics(range.start, range.end),
       this.loadEntities(),
       this.reportCohort(range),
       AdsSyncService.status(),
       AdsSyncService.lastSuccess(),
+      this.loadConversions(range.start, range.end),
     ]);
     const { cohort, excluded } = cohortResult;
-    const input: SliceInput = { metricRows, entities, cohort, rangeEnd: range.end, today: range.today };
+    const input: SliceInput = { metricRows, entities, cohort, conversionRows, rangeEnd: range.end, today: range.today };
     const dataHealth = buildDataHealth({
       now: range.now ?? new Date(),
       metricRows,
       cohort,
       duplicatesDroppedAtLoad: cohortResult.duplicatesDropped,
+      conversionRows,
       sync: lastSync.map((s) => ({
         channel: s.channel,
         configured: s.configured,
@@ -295,14 +323,16 @@ export class AdsReportService {
     const campaignRow = entities.find((e) => e.level === 'campaign' && e.external_id === externalId);
     if (!campaignRow) throw new CampaignError(404, 'NOT_FOUND', 'Campaign not found (sync first?)');
 
-    const [metricsAll, todayRows, { cohort }, status] = await Promise.all([
+    const [metricsAll, todayRows, { cohort }, status, conversionsAll] = await Promise.all([
       this.loadMetrics(range.start, range.end),
       this.loadMetrics(range.today, range.today),
       this.reportCohort(range),
       AdsSyncService.status(),
+      this.loadConversions(range.start, range.end),
     ]);
     const metricRows = metricsAll.filter((r) => r.channel === channel && r.campaign_external_id === externalId);
-    const input: SliceInput = { metricRows, entities, cohort, rangeEnd: range.end, today: range.today, filter: { channel, campaignExternalId: externalId } };
+    const conversionRows = conversionsAll.filter((r) => r.channel === channel && r.campaign_external_id === externalId);
+    const input: SliceInput = { metricRows, entities, cohort, conversionRows, rangeEnd: range.end, today: range.today, filter: { channel, campaignExternalId: externalId } };
     const sync = status.find((s) => s.channel === channel) ?? { channel, configured: false, writeEnabled: writeEnabled(channel), finishedAt: null, startedAt: null, ok: null, error: null };
     const access = { configured: getConnector(channel)?.isConfigured() ?? false, writeEnabled: writeEnabled(channel) };
     const todaySpend = (level: string, id: string) =>

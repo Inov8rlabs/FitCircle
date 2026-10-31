@@ -220,7 +220,7 @@ describe('overview / timeseries / campaign shapes', () => {
     expect(h.currency).toEqual({ status: 'ok', mixedCurrency: false, currencies: ['USD'] });
     expect(h.status).toBe('error');
     expect(data.definitions.costPerPayer).toMatch(/payers/);
-    for (const k of Object.keys(data.totals.metrics).filter((k) => !['currency', 'mixedCurrency', 'incomplete'].includes(k))) expect(data.definitions[k]).toBeTruthy();
+    for (const k of Object.keys(data.totals.metrics).filter((k) => !['currency', 'mixedCurrency', 'incomplete', 'attributionCoverageBasis'].includes(k))) expect(data.definitions[k]).toBeTruthy();
   });
 
   it('dataHealth: a failed latest sync with no earlier success is an error', async () => {

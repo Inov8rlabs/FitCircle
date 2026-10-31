@@ -299,7 +299,31 @@ export function incompleteFlags(rangeEnd: string, today: string) {
   return { activated: age < 8, d7: age < 8, d30: age < 31 };
 }
 
-export function computeMetrics(delivery: DeliveryTotals, outcomes: UserOutcome[], ctx: { rangeEnd: string; today: string }): AdsMetrics {
+/** The network's own conversions for a slice (Google Ads conversion actions); see report.ts networkFor. */
+export interface NetworkConversions {
+  signUps: number | null;
+  trials: number | null;
+  /** Override the coverage denominator (totals sum each channel's own basis). */
+  coverage?: { denominator: number; basis: 'sign_ups' | 'installs' | 'mixed' } | null;
+}
+
+/**
+ * Attribution coverage: attributed users ÷ the network's sign-ups when it reports
+ * any, else ÷ its installs. Null without a denominator.
+ */
+export function coverageOf(users: number, installs: number, network?: NetworkConversions | null): { value: number | null; basis: AdsMetrics['attributionCoverageBasis'] } {
+  if (network?.coverage) return { value: ratio(users, network.coverage.denominator), basis: network.coverage.denominator > 0 ? network.coverage.basis : null };
+  if (network?.signUps && network.signUps > 0) return { value: ratio(users, network.signUps), basis: 'sign_ups' };
+  if (installs > 0) return { value: ratio(users, installs), basis: 'installs' };
+  return { value: null, basis: null };
+}
+
+export function computeMetrics(
+  delivery: DeliveryTotals,
+  outcomes: UserOutcome[],
+  ctx: { rangeEnd: string; today: string },
+  network: NetworkConversions | null = null
+): AdsMetrics {
   const users = outcomes.length;
   let activated = 0;
   let trials = 0;
@@ -316,6 +340,7 @@ export function computeMetrics(delivery: DeliveryTotals, outcomes: UserOutcome[]
     rAll += o.revenueToDate;
   }
   const spend = delivery.spend;
+  const coverage = coverageOf(users, delivery.installs, network);
   return {
     spend,
     currency: delivery.currency,
@@ -342,6 +367,10 @@ export function computeMetrics(delivery: DeliveryTotals, outcomes: UserOutcome[]
     installToUser: ratio(users, delivery.installs),
     userToActivated: ratio(activated, users),
     userToPayer: ratio(payers, users),
+    networkSignUps: network?.signUps ?? null,
+    networkTrials: network?.trials ?? null,
+    attributionCoverage: coverage.value,
+    attributionCoverageBasis: coverage.basis,
     incomplete: incompleteFlags(ctx.rangeEnd, ctx.today),
   };
 }

@@ -24,13 +24,25 @@ export const attributionBodySchema = z.object({
   clickDate: z.string().max(64).nullish(),
   country: z.string().trim().max(8).nullish(),
   raw: z.record(z.unknown()).nullish(),
+  /**
+   * Firebase Analytics app instance id (Android, when analytics consent allows):
+   * = user_pseudo_id in the GA4 BigQuery export (docs/ADS_ATTRIBUTION_GA4.md).
+   * 32 hex chars today; anything not a plain token is dropped rather than rejected.
+   */
+  appInstanceId: z
+    .string()
+    .nullish()
+    .transform((v) => {
+      const t = v?.trim();
+      return t && /^[A-Za-z0-9._:-]{8,128}$/.test(t) ? t : null;
+    }),
 });
 
 export type AttributionBody = z.infer<typeof attributionBodySchema>;
 
 const META_SOURCES = new Set(['meta', 'facebook', 'instagram', 'fb', 'ig', 'facebook_ads', 'meta_ads', 'audience_network', 'messenger']);
 const APPLE_SOURCES = new Set(['apple_search_ads', 'apple_ads', 'asa', 'applesearchads', 'apple search ads', 'search_ads', 'searchads']);
-const GOOGLE_PAID = new Set(['google_ads', 'googleads', 'adwords', 'google_adwords']);
+const GOOGLE_PAID = new Set(['google_ads', 'googleads', 'adwords', 'google_adwords', 'google_ads_ga4']);
 const ORGANIC = new Set(['organic', 'google-play', 'google_play', 'play_store', 'app_store', 'none', '(direct)', 'direct']);
 
 const norm = (v: unknown) => String(v ?? '').trim().toLowerCase();
@@ -102,6 +114,7 @@ export function attributionFromBody(userId: string, body: AttributionBody): Attr
     country,
     is_test: body.campaignId === APPLE_MOCK_CAMPAIGN_ID,
     raw: boundedRaw(body.raw ?? null),
+    ...(body.appInstanceId ? { app_instance_id: body.appInstanceId } : {}),
   };
 }
 

@@ -5,7 +5,7 @@
  */
 import type { AdsMetrics } from './types';
 
-type MetricKey = Exclude<keyof AdsMetrics, 'currency' | 'mixedCurrency' | 'incomplete'>;
+type MetricKey = Exclude<keyof AdsMetrics, 'currency' | 'mixedCurrency' | 'incomplete' | 'attributionCoverageBasis'>;
 
 export const METRIC_DEFINITIONS: Record<MetricKey, string> = {
   spend: 'Network-reported spend for days in the range (Apple: localSpend, org time zone), campaign level, summed in the account currency.',
@@ -31,6 +31,9 @@ export const METRIC_DEFINITIONS: Record<MetricKey, string> = {
   installToUser: 'Attributed sign-ups ÷ network installs (low while attribution coverage is partial).',
   userToActivated: 'Activated ÷ users.',
   userToPayer: 'Payers ÷ users.',
+  networkSignUps: 'Sign-ups the network itself reports for days in the range (Google Ads: the GA4 sign_up conversion, all conversions, campaign level; matched by advertising id, incl. view-through). — when the network reports no sign-up conversion.',
+  networkTrials: 'Trials the network itself reports for days in the range (Google Ads: the GA4 trial_start conversion, all conversions). — when the network reports no trial conversion.',
+  attributionCoverage: 'Attributed sign-ups ÷ network-reported sign-ups (÷ network installs when the network reports no sign-ups). Low = the network claims users we cannot tie to it; they show as Organic / Unknown.',
 };
 
 /**

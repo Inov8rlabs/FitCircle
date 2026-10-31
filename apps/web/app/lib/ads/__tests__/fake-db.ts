@@ -1,7 +1,7 @@
 /**
  * In-memory Supabase stand-in for the ads console tests. Supports the query
  * shapes the ads services use: select / eq / in / gte / lte / lt / not-is-null
- * / order (multi-column) / limit / range / maybeSingle / single / insert(+select) / update /
+ * / order (multi-column) / limit / range / maybeSingle / single / insert(+select) / update / delete /
  * upsert(onConflict).
  */
 type Row = Record<string, any>;
@@ -9,6 +9,7 @@ type Row = Record<string, any>;
 const PK: Record<string, string[]> = {
   ad_entities: ['channel', 'level', 'external_id'],
   ad_metrics_daily: ['channel', 'level', 'external_id', 'date'],
+  ad_conversions_daily: ['channel', 'level', 'external_id', 'date', 'conversion_action_id'],
   user_attribution: ['user_id'],
   ad_change_log: ['id'],
   ad_sync_runs: ['id'],
@@ -44,7 +45,7 @@ export class AdsFakeDb {
 type Filter = (r: Row) => boolean;
 
 class FakeQuery implements PromiseLike<any> {
-  private op: 'select' | 'insert' | 'update' | 'upsert' = 'select';
+  private op: 'select' | 'insert' | 'update' | 'upsert' | 'delete' = 'select';
   private filters: Filter[] = [];
   private payload: Row | Row[] | null = null;
   private returning = false;
@@ -70,6 +71,10 @@ class FakeQuery implements PromiseLike<any> {
   update(patch: Row) {
     this.op = 'update';
     this.payload = patch;
+    return this;
+  }
+  delete() {
+    this.op = 'delete';
     return this;
   }
   upsert(rows: Row | Row[], opts?: { onConflict?: string }) {
@@ -145,6 +150,11 @@ class FakeQuery implements PromiseLike<any> {
         else rows.push({ id: this.db.nextId(), ...r });
       }
       return { data: this.returning ? list : null, error: null };
+    }
+    if (this.op === 'delete') {
+      const keep = rows.filter((r) => !this.matches(r));
+      this.db.tables[this.table] = keep;
+      return { data: null, error: null };
     }
     if (this.op === 'update') {
       const hit = rows.filter(this.matches);

@@ -8,7 +8,7 @@ import { writeEnabled, reportTimeZone } from '../config';
 import { getConnector, allConnectors } from '../connectors';
 import { addDays, todayInTz, ymdInTz } from '../dates';
 import { externalChangeRows } from '../external-changes';
-import type { AdChannel, AdDailyMetricInput, AdEntityInput, AdEntityRow, ChannelSyncStatus } from '../types';
+import type { AdChannel, AdConversionDailyInput, AdDailyMetricInput, AdEntityInput, AdEntityRow, ChannelSyncStatus } from '../types';
 import { AD_CHANNELS } from '../types';
 
 import { chunk, db } from './db';
@@ -19,6 +19,10 @@ export interface SyncChannelResult {
   skipped?: 'not_configured' | 'debounced';
   rowsEntities: number;
   rowsMetrics: number;
+  /** ad_conversions_daily rows written (networks with fetchConversions only). */
+  rowsConversions?: number;
+  /** Conversion pull failure: logged, never fails the run (delivery is what the console depends on). */
+  conversionsError?: string | null;
   error: string | null;
   runId: string | null;
 }
@@ -63,6 +67,23 @@ export function metricToRow(m: AdDailyMetricInput, syncedAt: string) {
     installs: m.installs,
     new_downloads: m.newDownloads,
     redownloads: m.redownloads,
+    synced_at: syncedAt,
+  };
+}
+
+export function conversionToRow(c: AdConversionDailyInput, syncedAt: string) {
+  return {
+    channel: c.channel,
+    level: c.level,
+    external_id: c.externalId,
+    campaign_external_id: c.campaignExternalId,
+    date: c.date,
+    conversion_action_id: c.conversionActionId,
+    conversion_action_name: c.conversionActionName,
+    category: c.category,
+    kind: c.kind,
+    conversions: c.conversions,
+    all_conversions: c.allConversions,
     synced_at: syncedAt,
   };
 }
@@ -117,6 +138,22 @@ export class AdsSyncService {
     return uniq.size;
   }
 
+  /** Upsert network conversion rows. Days in [start, end] are replaced per channel so a restated-to-zero action disappears. */
+  static async upsertConversions(channel: AdChannel, rows: AdConversionDailyInput[], start: string, end: string, syncedAt = new Date().toISOString()): Promise<number> {
+    const supabase = db();
+    const uniq = new Map(rows.map((c) => [`${c.channel}|${c.level}|${c.externalId}|${c.date}|${c.conversionActionId}`, c]));
+    // Google omits zero rows: clear the window first so a conversion Google later removes doesn't linger.
+    const { error: delError } = await supabase.from('ad_conversions_daily').delete().eq('channel', channel).gte('date', start).lte('date', end);
+    if (delError) throw new Error(`ad_conversions_daily delete: ${delError.message}`);
+    for (const part of chunk([...uniq.values()], 500)) {
+      const { error } = await supabase
+        .from('ad_conversions_daily')
+        .upsert(part.map((c) => conversionToRow(c, syncedAt)), { onConflict: 'channel,level,external_id,date,conversion_action_id' });
+      if (error) throw new Error(`ad_conversions_daily upsert: ${error.message}`);
+    }
+    return uniq.size;
+  }
+
   /**
    * Sync every configured connector (or `channels`). `start`/`end` backfill a
    * range; default is today-3 … today in the report time zone.
@@ -163,6 +200,8 @@ export class AdsSyncService {
       const runId: string | null = run?.id ?? null;
       let rowsEntities = 0;
       let rowsMetrics = 0;
+      let rowsConversions: number | undefined;
+      let conversionsError: string | null = null;
       let error: string | null = null;
       let rangeStart = start;
       try {
@@ -173,13 +212,21 @@ export class AdsSyncService {
         // since the earliest campaign start instead of only the last 3 days.
         if (!opts.start) rangeStart = await this.firstRunStart(channel, entities, start, end);
         rowsMetrics = await this.upsertMetrics(await connector.fetchDailyMetrics(rangeStart, end), syncedAt);
+        if (connector.fetchConversions) {
+          try {
+            rowsConversions = await this.upsertConversions(channel, await connector.fetchConversions(rangeStart, end), rangeStart, end, syncedAt);
+          } catch (e: any) {
+            conversionsError = String(e?.message ?? e).slice(0, 500);
+            console.warn(`[ads/sync] ${channel} conversions failed (delivery still synced):`, conversionsError);
+          }
+        }
       } catch (e: any) {
         error = String(e?.message ?? e).slice(0, 1000);
         console.error(`[ads/sync] ${channel} failed:`, error);
       }
       const patch = { finished_at: new Date().toISOString(), ok: !error, rows_entities: rowsEntities, rows_metrics: rowsMetrics, error, ...(rangeStart !== start ? { range_start: rangeStart } : {}) };
       if (runId) await supabase.from('ad_sync_runs').update(patch).eq('id', runId);
-      results.push({ channel, ok: !error, rowsEntities, rowsMetrics, error, runId });
+      results.push({ channel, ok: !error, rowsEntities, rowsMetrics, ...(rowsConversions !== undefined || conversionsError ? { rowsConversions: rowsConversions ?? 0, conversionsError } : {}), error, runId });
     }
     return results;
   }

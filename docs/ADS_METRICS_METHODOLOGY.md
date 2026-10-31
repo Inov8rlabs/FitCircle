@@ -114,6 +114,15 @@ Every ratio is `null` (shown "—") when its denominator is 0; never NaN/Infinit
 | `installToUser` | users ÷ installs |
 | `userToActivated` | activated ÷ users |
 | `userToPayer` | payers ÷ users |
+| `attributionCoverage` | users ÷ `networkSignUps` when the network reports sign-ups, else users ÷ installs (`attributionCoverageBasis` says which; totals sum each channel's own denominator → `mixed`) |
+
+**Network conversions** (`networkSignUps`, `networkTrials`): what the ad network itself counts, from
+`ad_conversions_daily` (migration 117; Google Ads `segments.conversion_action*` by campaign and day, synced hourly with
+delivery). Google Ads uses `metrics.all_conversions` of actions bucketed `sign_up` / `trial` (imported GA4 `sign_up`,
+`trial_start`; GA4-imported actions are usually secondary goals, so they never reach `metrics.conversions`). Google
+matches these through the advertising id (incl. view-through), so they are an upper bound for what we can attribute
+per user. `null` = the network has no such conversion action (Apple, Meta, Google until the GA4 event is imported),
+and below campaign level (stored per campaign only).
 
 Rows for organic / unknown have spend 0, so their cost ratios are 0 or null — they are outcome-only rows.
 Time series: spend and installs by report day; users, activated, payers and revenue (to date) by sign-up day;
@@ -129,6 +138,11 @@ Time series: spend and installs by report day; users, activated, payers and reve
   creates an attribution row when the user purchases or starts a trial. Apple Ads sign-ups who never start a trial
   appear as *Unknown*: Apple users / activated are understated, cost per user overstated, user→payer overstated.
   Payers and revenue are mostly captured. dataHealth reports coverage (`attributedPaidUsers ÷ paidInstalls`).
+- **Google Ads coverage.** Google App-campaign installs from Play search / YouTube / Discover / view-through mostly reach
+  the app with an organic Play referrer (`google-play` / `organic`, no click id), so the install referrer can attribute only
+  click-throughs with a gclid/gbraid. Google matches the rest by advertising id inside Firebase / GA4. Until the GA4
+  attribution sync runs (docs/ADS_ATTRIBUTION_GA4.md) those users count as *Organic*; compare Google Ads users with
+  `networkSignUps` / installs (`attributionCoverage`). Users the GA4 sync upgrades have source `google_ads_ga4`.
 - **Installs ≠ sign-ups.** Network installs include redownloads and view-through installs and are dated by install;
   users are dated by sign-up. `installToUser` is not a funnel conversion in the strict sense.
 - **Network restatement.** Apple and Meta restate recent days; the sync re-pulls the last 3 days each run. Older diffs
@@ -150,7 +164,7 @@ Time series: spend and installs by report day; users, activated, payers and reve
 | Sync freshness (per configured channel, latest `ad_sync_runs.ok = true`) | ≤ 2 h old | > 2 h, or the latest run failed | never succeeded, or > 26 h |
 | Spend reconciliation (campaign spend = Σ ad-group spend per campaign/day, ±$0.01) | all match | some mismatch | > $1 and > 1 % of spend unreconciled |
 | Keyword coverage (Apple Σ keyword ÷ campaign spend) | informational — the remainder is Search Match; keyword rows are never compared for equality | | |
-| Attribution coverage (attributed paid users ÷ paid installs) | ≥ 50 % | < 50 % (with the explanation above) | |
+| Attribution coverage (attributed paid users ÷ paid installs; per channel ÷ network sign-ups, else installs — `byChannel`) | ≥ 50 % overall and per channel | < 50 % overall or for any channel (with the explanation above) | |
 | Revenue data (cohort's PRODUCTION revenue events) | no fallbacks | events with no USD price or with the store-fallback rate | |
 | Currency | all USD | | any non-USD spend |
 

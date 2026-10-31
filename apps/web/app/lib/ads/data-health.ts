@@ -6,11 +6,13 @@
  * estimated with fallbacks, and mixed currencies.
  */
 import { classifyEvent, dedupeEvents, type CohortUser } from './metrics';
-import { effectiveAttribution } from './report';
+import { effectiveAttribution, networkFor } from './report';
 import type {
   AdChannel,
+  AdConversionRow,
   AdMetricRow,
   AttributionCoverage,
+  ChannelAttributionCoverage,
   CurrencyHealth,
   DataHealth,
   HealthCheck,
@@ -34,7 +36,10 @@ export const ATTRIBUTION_EXPLANATION =
   "Until then, Apple Ads users are attributed only through RevenueCat's Apple Search Ads attribution fallback, which fills in " +
   'attribution when a user purchases or starts a trial. Apple Ads sign-ups who never start a trial show as Unknown, so Apple Ads ' +
   'users / activated are understated (cost per user overstated, user→payer overstated); payers and revenue are mostly captured. ' +
-  'Installs come from Apple (tap- and view-through, new downloads and redownloads), so not every install becomes a sign-up.';
+  'Installs come from Apple (tap- and view-through, new downloads and redownloads), so not every install becomes a sign-up. ' +
+  'Google Ads: most App-campaign installs (Play search, YouTube, Discover, view-through) arrive with an organic Play referrer and are matched by ' +
+  'Google through the advertising id (Firebase / GA4), which the install referrer cannot see, so they show as Organic here until the GA4 ' +
+  'attribution sync ties them to users (docs/ADS_ATTRIBUTION_GA4.md). Compare with Google-reported sign-ups / installs per channel.';
 
 export interface SyncRunInfo {
   channel: AdChannel;
@@ -55,6 +60,8 @@ export interface DataHealthInput {
   sync: SyncRunInfo[];
   /** Duplicate deliveries the cohort loader already dropped (same event id / same transaction). */
   duplicatesDroppedAtLoad?: number;
+  /** ad_conversions_daily rows for the range (network-reported sign-ups / trials). */
+  conversionRows?: AdConversionRow[];
 }
 
 const rank: Record<HealthStatus, number> = { ok: 0, warn: 1, error: 2 };
@@ -139,20 +146,57 @@ export function spendReconciliation(rows: AdMetricRow[]): SpendReconciliation {
   };
 }
 
-export function attributionCoverage(rows: AdMetricRow[], cohort: CohortUser[]): AttributionCoverage {
+export function attributionCoverage(rows: AdMetricRow[], cohort: CohortUser[], conversionRows: AdConversionRow[] = []): AttributionCoverage {
   let installs = 0;
-  for (const r of rows) if (r.level === 'campaign' && PAID.has(r.channel)) installs += Number(r.installs) || 0;
+  const channelInstalls = new Map<AdChannel, number>();
+  for (const r of rows) {
+    if (r.level !== 'campaign' || !PAID.has(r.channel)) continue;
+    installs += Number(r.installs) || 0;
+    channelInstalls.set(r.channel, (channelInstalls.get(r.channel) ?? 0) + (Number(r.installs) || 0));
+  }
   const bySource: Record<string, number> = {};
+  const channelUsers = new Map<AdChannel, number>();
   let users = 0;
   for (const u of cohort) {
     const a = effectiveAttribution(u);
     if (!a || !PAID.has(a.channel)) continue;
     users += 1;
     bySource[a.source || 'unknown'] = (bySource[a.source || 'unknown'] ?? 0) + 1;
+    channelUsers.set(a.channel as AdChannel, (channelUsers.get(a.channel as AdChannel) ?? 0) + 1);
+  }
+  const convByChannel = new Map<AdChannel, AdConversionRow[]>();
+  for (const r of conversionRows) if (r.level === 'campaign' && PAID.has(r.channel)) convByChannel.set(r.channel, [...(convByChannel.get(r.channel) ?? []), r]);
+  const byChannel: ChannelAttributionCoverage[] = [];
+  for (const channel of ['apple_ads', 'meta', 'google_ads'] as AdChannel[]) {
+    const inst = channelInstalls.get(channel) ?? 0;
+    const attributed = channelUsers.get(channel) ?? 0;
+    const net = networkFor(convByChannel.get(channel) ?? []);
+    if (!inst && !attributed && net.signUps === null && net.trials === null) continue;
+    const bySignUps = net.signUps !== null && net.signUps > 0;
+    const basis = bySignUps ? 'sign_ups' : inst > 0 ? 'installs' : null;
+    byChannel.push({
+      channel,
+      installs: inst,
+      networkSignUps: net.signUps,
+      networkTrials: net.trials,
+      attributedUsers: attributed,
+      coveragePct: bySignUps ? pct(attributed, net.signUps!) : pct(attributed, inst),
+      basis,
+    });
   }
   const coveragePct = pct(users, installs);
-  const status: HealthStatus = installs > 0 && (coveragePct ?? 0) < 50 ? 'warn' : 'ok';
-  return { status, paidInstalls: installs, attributedPaidUsers: users, coveragePct, bySource, explanation: ATTRIBUTION_EXPLANATION };
+  const channelLow = byChannel.some((c) => c.coveragePct !== null && c.coveragePct < 50);
+  const status: HealthStatus = (installs > 0 && (coveragePct ?? 0) < 50) || channelLow ? 'warn' : 'ok';
+  return { status, paidInstalls: installs, attributedPaidUsers: users, coveragePct, bySource, byChannel, explanation: ATTRIBUTION_EXPLANATION };
+}
+
+/** One "Data health" line per channel, e.g. "Google Ads: 3 attributed users for 29 Google-reported sign-ups (10.3%)". */
+export function channelCoverageLine(c: ChannelAttributionCoverage): string {
+  const name = CHANNEL_LABEL[c.channel] ?? c.channel;
+  const trials = c.networkTrials !== null ? `; ${c.networkTrials} ${name}-reported trials` : '';
+  if (c.basis === 'sign_ups') return `${name}: ${c.attributedUsers} attributed users for ${c.networkSignUps} ${name}-reported sign-ups (${c.coveragePct}%)${trials}`;
+  if (c.basis === 'installs') return `${name}: ${c.attributedUsers} attributed users for ${c.installs} installs (${c.coveragePct}%; no sign-up conversion reported)${trials}`;
+  return `${name}: ${c.attributedUsers} attributed users, no installs reported${trials}`;
 }
 
 export function revenueHealth(cohort: CohortUser[], droppedAtLoad = 0): RevenueHealth {
@@ -191,7 +235,7 @@ export function currencyHealth(rows: AdMetricRow[]): CurrencyHealth {
 export function buildDataHealth(input: DataHealthInput): DataHealth {
   const sync = syncHealth(input.sync, input.now);
   const spend = spendReconciliation(input.metricRows);
-  const attribution = attributionCoverage(input.metricRows, input.cohort);
+  const attribution = attributionCoverage(input.metricRows, input.cohort, input.conversionRows ?? []);
   const revenue = revenueHealth(input.cohort, input.duplicatesDroppedAtLoad ?? 0);
   const currency = currencyHealth(input.metricRows);
 
@@ -222,6 +266,7 @@ export function buildDataHealth(input: DataHealthInput): DataHealth {
     attribution.coveragePct === null
       ? `No paid installs in range (${attribution.attributedPaidUsers} attributed paid users)`
       : `${attribution.attributedPaidUsers} attributed paid users for ${attribution.paidInstalls} paid installs (${attribution.coveragePct}% coverage)`,
+    ...attribution.byChannel.map(channelCoverageLine),
     ...Object.entries(attribution.bySource).map(([src, n]) => `${n} via ${src}`),
     attribution.explanation,
   ];
