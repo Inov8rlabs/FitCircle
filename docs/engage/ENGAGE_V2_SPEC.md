@@ -51,14 +51,14 @@ Any of these can span iOS, Android and web in a single campaign. The tool also c
 
 ## 1. Vocabulary
 
-The existing `campaigns` table means seasonal experiences, so the UI renames that concept to **Experience**. The database table name stays.
+**There is one concept called "Campaign".** Today's seasonal campaigns (Hold the Line, Advent, New Year Reset, Ramadan) exist only because Engage doesn't yet. Going forward, they are created and run **in Engage** as campaigns that include an optional **experience** (§3.4). The existing `campaigns` table stays as the storage for experience content. In code it's called the *experience store*; in the UI it's simply part of a campaign. The Admin Tools Campaigns module and the FitCircleBE `/admin/campaigns` editor are retired into the Engage composer.
 
 | Engage term | What it is | Braze equivalent |
 |---|---|---|
-| **Campaign** | The unit you launch. It has an audience, a schedule or trigger, and one or more **messages**, one per channel, sharing a goal and analytics. It can optionally attach to an **Experience**. | Campaign |
+| **Campaign** | The unit you launch. It has an audience, a schedule or trigger, and one or more **messages**, one per channel, sharing a goal and analytics. It can optionally include an **experience** (§3.4). | Campaign |
 | **Message** | Content for one channel inside a campaign: push, in-app message, card, email or web push. It has variants. | Message / step |
 | **Journey** | A multi-step flow. Users enter on a trigger or segment and pass through steps (message, delay, branch, exit). | Canvas |
-| **Experience** | The existing seasonal campaign (`campaigns` table): calendar, circle template, art, and the App Store and Play events. | (none) |
+| **Experience** (part of a campaign) | An interactive, native in-app program a campaign can switch on from a fixed set of **templates**: `seasonal_circle` (joinable circle challenge), `daily_calendar` (Advent-style doors), `spotlight`. It has content, dates, art, participation, and App Store / Play in-app events. Stored in the existing `campaigns` table. | (none; Braze has no equivalent) |
 | **Surface** | Where a message renders: `push`, `in_app`, `feed` (home feed card), `placement:<id>` (fixed slot), `email`, `web_push`. | Channel |
 | **Placement** | A named native slot outside the home feed, for example `circles_top`, `profile_top`, `post_checkin`, `food_log_top`, `fitzy_top`. | Banner placement |
 | **Layout** | The native component a message renders with (§6). | Message type |
@@ -94,7 +94,7 @@ FitCircleBE  /api/admin/engage/*   (authoring, preview, test sends, stats, appro
    │       → PushService (APNs / FCM) · Resend (email) · web push (P2)
    │
    └── Postgres (Supabase): engage_* tables (§12), existing push_tokens, notification_log,
-       experiments, promo_user_state (absorbed), campaigns (Experiences)
+       experiments, promo_user_state (absorbed), campaigns (experience store, §3.4)
 ```
 
 **Rules that carry over from the rest of the stack:**
@@ -102,7 +102,7 @@ FitCircleBE  /api/admin/engage/*   (authoring, preview, test sends, stats, appro
 - **Every push goes through `NotificationOrchestrator.send`.** That path already handles dedupe, category toggles, the daily cap of 3 with exemptions, quiet hours, burst limits, Fitzy's reserved slot and `notification_log`. Engage adds a new `NotificationType` family; it never adds a second send path.
 - **Home feed cards go through `composeFeed`** and its guardrails: promo density, adjacency, the `first_meal` pin, the 250 ms context budget, and `decision_id` events. Engage never builds a parallel home layout.
 - **Authenticated responses are `no-store`.** See the account-switch cache leak incident.
-- **Migrations are applied one at a time.** The next free number is 117 at the time of writing; check before starting. Never run `db push --include-all`.
+- **Migrations are applied one at a time.** The next free number is 118 (117 = ads attribution coverage, applied 2026-10-31); check before starting. Never run `db push --include-all`.
 
 ---
 
@@ -117,7 +117,7 @@ FitCircleBE  /api/admin/engage/*   (authoring, preview, test sends, stats, appro
 | `id`, `key` (slug), `name`, `description`, `tags[]` | Tags drive frequency rules and the global control exclusions. |
 | `status` | `draft → in_review → approved → scheduled → live → paused → completed → archived`. Edits to a live campaign create a new **version**. |
 | `kind` | `one_off` · `scheduled` · `recurring` (RRULE, local time) · `triggered` (event) · `api` (server call) · `journey` (§9) |
-| `experience_id` | Optional link to an Experience (`campaigns.id`). |
+| `experience` | Optional. `{ template, content, dates, art, participation, store_events }` (§3.4), saved to the experience store (`campaigns` row, linked by `experience_id`). |
 | `audience` | `{ segment_ids[], filters (inline tree), exclude_segment_ids[], platforms[], max_audience }` |
 | `schedule` | `{ start_at, end_at, send_at, local_time: bool, rrule, timezone_fallback }` |
 | `trigger` | `{ event, filters (event props), delay_seconds, window_seconds }`, for triggered campaigns. |
@@ -168,6 +168,25 @@ FitCircleBE  /api/admin/engage/*   (authoring, preview, test sends, stats, appro
 
 ---
 
+### 3.4 Experiences (seasonal and interactive campaigns)
+
+Some campaigns are more than messages: users **join** something and the app shows a dedicated **native experience**. Hold the Line, Advent, New Year Reset and Ramadan are examples. In Engage this is an optional **experience** section of a campaign.
+
+- **Templates are native app features** with fixed layouts. Engage switches them on and fills them with content, so **a new campaign needs no app release**. A **new kind** of experience (a new template) does, and reaches users through capability negotiation (§6.4).
+
+| Template | What the app renders | Configured in Engage |
+|---|---|---|
+| `seasonal_circle` | Joinable circle challenge with its own home card, info sheet and circle created from a template | Copy, dates (teaser, start, end, in local days), circle template, goal, marks/badges, art and palette, CTA |
+| `daily_calendar` | Advent-style calendar with daily doors | Doors (content, unlock day, action), dates, art |
+| `spotlight` | Feature spotlight card + info sheet | Copy, art, CTA |
+
+- **Phases.** `teaser → live → ended` are computed per user's local day, as today. They can be used for targeting (`experience_phase`) and as triggers (`experience_joined`, phase changes).
+- **Messaging** around an experience is ordinary Engage messages in the same campaign, with real segments: teaser push, "starts tomorrow", daily nudges to participants, a last-day email, the in-app modal on launch. These replace `campaigns.notifications[]` / `emails[]` and the `all | participants | reminders` audiences.
+- **Store events.** The App Store in-app event is created and submitted through the ASC API, with screenshots, as `lib/campaigns/app-store.ts` does today. The Google Play export pack is a step in the composer's Review screen.
+- **Preview.** The experience card, info sheet and calendar render in the device frames, and previewing on your own phone works as it does today (`preview_user_ids` / `asOf`). Both are folded into Engage preview users and test send (§13).
+- **Storage.** The existing `campaigns`, `campaign_participants` and `campaign-art` tables, the mobile endpoints `/api/mobile/campaigns*` and the client code (`CampaignHomeCard`, `CampaignInfoSheet`, `CampaignCalendarView`) **stay as they are**, so shipped apps keep working. Engage owns authoring and messaging.
+- **Multi-app.** Templates are per-app capabilities, declared through the `Screens`/`Theme` adapters. BuyForBaby or TripWiz can ship their own templates later (for example a trip countdown, or a registry challenge).
+
 ## 4. Surfaces
 
 ### 4.1 Push
@@ -179,7 +198,7 @@ See §8 (send pipeline) and §10 (consent and caps).
 - An Engage `feed` message becomes a **card source inside `composeFeed`**. It is emitted as card type `promo`, version 2 (`promo@2`), which is a superset of `promo@1` (§6.3). Clients that support only promo@1 receive a version down-converted to promo@1 when the layout and actions allow it; otherwise the fallback applies.
 - **Priority and position.** An Engage card enters with `priority` and an optional `slot_hint`: `top` (directly under the header), `upper` (within the first 4 cards) or `any`. The existing feed guardrails always win: at most 2 promo-category cards, at most 1 in the first 4, and none adjacent.
 - **System promos become Engage campaigns.** The four in-code `SYSTEM_PROMOS` (`first_meal`, `log_meal_now`, `pro_value`, `meet_fitzy`) are migrated into Engage campaigns marked `system: true`. They're editable in the tool; their audience predicates move into the segment language (§5.2, journey fields). `promo_user_state` stays the per-user state store for feed cards. It's renamed in the UI only and gains `campaign_id` and `variant_id` columns.
-- **The existing campaign card** (Experience) stays a first-party feed card. An Experience can be promoted or suppressed from the tool through feed rules (§4.4).
+- **The experience card.** A campaign with an experience gets the native experience card in the feed (today's campaign card). Its placement and priority are set in the campaign, under the same guardrails, and it can be promoted or suppressed through feed rules (§4.4).
 
 ### 4.3 Placements (outside the home feed)
 - These are fixed native slots. Each declares `max_shown`, its allowed layouts and the size class (§6.2).
@@ -256,7 +275,7 @@ op ∈ eq, neq, in, not_in, gt, gte, lt, lte, between, exists, not_exists,
 | Activity | `last_active_days`, `sessions_7d`, `meals_logged_total`, `meals_logged_7d`, `checked_in_today`, `current_streak`, `longest_streak`, `streak_at_risk`, `water_logged_today`, `workouts_7d` | `engage_user_facts` (§5.4) |
 | Social | `has_circle`, `circle_count`, `in_circle_with_friend`, `invites_sent_total`, `referral_qualified_count` | facts |
 | Journey | `fitzy_opened`, `meals_ever`, `slots_logged_today`, `onboarding_goal`, `persona`, `health_connected` | `profiles` and journey fields (promo@1 parity) |
-| Experiences | `experience_joined:<slug>`, `experience_phase:<slug>` | `campaign_participants` |
+| Experiences | `experience_joined:<campaign>`, `experience_phase:<campaign>` (teaser/live/ended) | `campaign_participants` |
 | Attribution | `acq_channel` (apple_ads/google_ads/meta/organic/invite), `acq_campaign_id` | `user_attribution` |
 | Consent | `marketing_push_opt_in`, `marketing_email_opt_in`, `category_enabled.<cat>` | §10.1 |
 | Events | `count(event, window, prop filters)`, `last(event)` | `engage_events` plus domain tables (§7) |
@@ -499,13 +518,13 @@ Prod already applied 104–116 except 104, which is v1 Engage, and v1 was never 
 
 **Pages:**
 - **Overview:** live campaigns, today's sends, top movers, warnings such as low coverage, caps hit and failed sends.
-- **Campaigns:** list with filters for status, surface, tag and Experience.
+- **Campaigns:** list with filters for status, surface, tag and "has experience".
 - **Composer.** Steps: Basics → Audience → Messages (per surface) → Schedule/trigger → Goal and experiment → Review (checklist, compatibility, dry run) → Submit or Launch.
 - **Journeys** (P1).
 - **Segments:** builder with a live count, sample users, and where each segment is used.
 - **Assets:** drag-and-drop library from v1.
 - **Feed:** rule editor and "preview the feed as a user".
-- **Experiences:** the existing campaigns module, linked.
+- **Experience step in the composer:** pick a template, then edit content, dates, art (the ring-art generator and art upload from the current campaigns module), the circle template, calendar doors and the App Store / Play event. The device previews (`preview/native/*`) are reused. **This replaces the Admin Tools Campaigns module.**
 - **Analytics** (§14).
 - **Settings:** caps, quiet-hours defaults, approval threshold, test devices, roles.
 - **Audit log.**
@@ -568,7 +587,7 @@ Prod already applied 104–116 except 104, which is v1 Engage, and v1 was never 
 | Today | After Engage |
 |---|---|
 | `SYSTEM_PROMOS` in code (promo@1), with no authoring UI | Engage `feed` campaigns (`system: true`), editable |
-| `campaigns.notifications[]` / `emails[]` plus hourly campaign cron with `all\|participants\|reminders` audiences | Engage campaigns linked to an Experience, with real segments. The campaign cron keeps only Experience mechanics. |
+| Seasonal campaigns as a separate system: the Admin Tools Campaigns module, FitCircleBE `/admin/campaigns`, `campaigns.notifications[]` / `emails[]`, `campaign_deliveries` and the hourly campaign cron with `all\|participants\|reminders` audiences | **Engage campaigns with an experience** (§3.4). Messaging goes through Engage with real segments. The two old editors are retired. The campaign cron keeps only experience mechanics (phase changes), or folds into the dispatcher. Existing campaigns (`hold_the_line`, `advent_2026`, `new_year_reset`, `ramadan_2027`) are migrated. |
 | Home-feed rules (curl only) | Tool → Feed page |
 | Three audience formats + three QA mechanisms | One audience language (§5.1) + preview users / test send |
 | Dead journey ladder in `lib/cron/notification-crons.ts` | Engage journeys (§9) |
@@ -579,11 +598,13 @@ Prod already applied 104–116 except 104, which is v1 Engage, and v1 was never 
 
 ## 17. Open decisions (need the owner's call; recommended answer in **bold**)
 
+**Decided by the owner on 2026-10-31:** #1 hosting (engage.inov8rlabs.com, built in the inov8r-admin code), #2 marketing push off until opt-in, #3 seasonal campaigns become Engage campaigns, #7 shared library and protocol, #8 build inside the library from day one. Still open: #4 web push, #5 email, #6 the global control group, and the approval rule (§3.3).
+
 1. **Tool hosting:** standalone `engage.inov8rlabs.com` vs a module in Admin Tools. **Recommendation:** one codebase in `inov8r-admin`, served at its own domain `engage.inov8rlabs.com` with focused navigation and an app switcher (FitCircle, BuyForBaby, TripWiz), linked from Admin Tools. See `ENGAGE_TOOL_HOSTING.md`.
 7. **Multi-app architecture:** **a shared protocol, engine and SDKs (`inov8r-engage`), with Engage tables inside each app's own database and per-app adapters**, rather than a central Braze-style service. See `ENGAGE_MULTITENANCY.md` §3–4.
 8. **Build FitCircle inside the library boundary from day one:** **yes**. It adds about 25–30% to the FitCircle MVP, and BuyForBaby and TripWiz then take about 2 weeks each instead of about 6.
 2. **Marketing push opt-in default:** **off until the user opts in** (required by App Review 4.5.4 for promotional pushes). Lifecycle pushes keep their current toggles.
-3. **Rename seasonal "campaigns" to "Experiences" in the UI:** **yes** (the database stays as is).
+3. **Seasonal campaigns:** ~~rename to "Experiences"~~. **Decided 2026-10-31:** they **become Engage campaigns**. A campaign optionally includes an experience from a native template (§3.4). There is no separate concept, and the old Campaigns module is retired.
 4. **Web push in v2:** **no**, P2 after mobile.
 5. **Email in the first release:** **yes, but approval is always required.**
 6. **Global control group:** **5%, enabled with journeys (P1).**

@@ -56,9 +56,9 @@ The client wiring points have been rewritten: iOS `DashboardFeature` (2.1k lines
 Each phase ships on its own and is gated by kill switches. Effort is in focused agent-days, with the human steps noted. Sizes assume parallel backend, iOS, Android and tool streams as in earlier releases.
 
 ### E0: Decisions and groundwork (½ day + owner review)
-- Owner approves `ENGAGE_V2_SPEC.md` §17 decisions: hosting, marketing opt-in default, the "Experiences" rename, web push and email scope, global control group.
+- Owner approves `ENGAGE_V2_SPEC.md` §17 decisions: hosting, marketing opt-in default, seasonal campaigns become Engage campaigns with an optional experience (decided 2026-10-31), web push and email scope, global control group.
 - Write the contract fixtures: `engage@1` content, the `promo@2` card and `/engage/sync`. These become the golden files for client tests.
-- Reserve the migration number and create branches `feat/engage-v2` from current main in the backend, iOS, Android and inov8r-admin.
+- Reserve the migration number (next free: 118) and create branches `feat/engage-v2` from current main in the backend, iOS, Android and inov8r-admin.
 
 ### E0b: Shared platform scaffold (3–4 days), see `ENGAGE_MULTITENANCY.md`
 - Create the `inov8r-engage` monorepo:
@@ -175,7 +175,15 @@ Each phase ships on its own and is gated by kill switches. Effort is in focused 
 - Global control group (5%) and materialized segments with enter/exit triggers.
 
 ### E10: Migration and cleanup (2 days)
-- Move Experience push and email (`campaigns.notifications[]` / `emails[]`) into Engage campaigns linked to the Experience; shrink the campaign cron to Experience mechanics only.
+- **Retire the separate campaigns system:**
+  - Migrate `hold_the_line`, `advent_2026`, `new_year_reset` and `ramadan_2027` into Engage campaigns with an experience (§3.4).
+  - Move their push and email (`campaigns.notifications[]` / `emails[]`, `campaign_deliveries`) into Engage messages.
+  - Port the experience editor (templates, calendar doors, circle template, ring-art generator, art upload, App Store / Play event sync) from the Admin Tools Campaigns module into the Engage composer's Experience step.
+  - Remove the Admin Tools Campaigns module and FitCircleBE `/admin/campaigns`.
+  - Shrink the campaign cron to experience phase mechanics.
+  - The mobile campaign endpoints and client views stay unchanged.
+
+  **Time this around live campaigns:** Hold the Line runs Nov 15 – Dec 15 and Advent Dec 1–24. Migrate before or after they run, never mid-flight, or keep the old module read-only until they end.
 - Feed rules UI replaces curl.
 - Optional, P2: move hard-coded marketing copy (trial reminder, `fitzy_intro`) to Engage-managed copy with code-owned triggers.
 
@@ -187,7 +195,7 @@ Each phase ships on its own and is gated by kill switches. Effort is in focused 
 - Registration in Admin Tools.
 - Passing conformance.
 
-**Total:** about 6–7 calendar weeks with parallel streams, plus about 25–30% for building inside the shared library boundary, so **about 8–9 weeks to the FitCircle MVP**, reaching an MVP after E1–E8 (Braze-equivalent for one-off, scheduled and triggered push, in-app messages, cards, placements and email, with segments, experiments, preview and analytics). Journeys (E9) and migration (E10) follow.
+**Total:** about 6–7 calendar weeks (E10 grows by about 2–3 days for the campaigns migration) with parallel streams, plus about 25–30% for building inside the shared library boundary, so **about 8–9 weeks to the FitCircle MVP**, reaching an MVP after E1–E8 (Braze-equivalent for one-off, scheduled and triggered push, in-app messages, cards, placements and email, with segments, experiments, preview and analytics). Journeys (E9) and migration (E10) follow.
 
 ## 4. Release coupling
 

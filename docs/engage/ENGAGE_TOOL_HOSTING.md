@@ -37,7 +37,7 @@ So the question is narrower than it looks: **where does a React app that calls a
   - the experiments `AudienceEditor`, `AllocationEditor` and `OverridesPanel`;
   - the UI kit (`components/ui/kit.tsx`);
   - toasts and icons.
-- Experiences (campaigns), Experiments and the Ads Console sit one click away. Engage campaigns link to Experiences and to Ads cohorts.
+- Experiments and the Ads Console sit one click away, and the existing Campaigns module's editor, art tools and previews are **absorbed into the Engage composer**: seasonal campaigns become Engage campaigns with an experience (spec §3.4).
 - One place for the team to log in, and one set of access to manage. Anki was just set up here.
 
 **Cons:**

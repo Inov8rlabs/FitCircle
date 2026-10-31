@@ -149,7 +149,7 @@ inov8r-engage/                          (new monorepo; private)
    - home-feed integration (`promo@2` source in `composeFeed`);
    - orchestrator push adapter;
    - consent view;
-   - Experiences linkage;
+   - experience templates (seasonal circle, calendar, spotlight) as FitCircle's `Screens`/`Theme` capabilities, plus migration of the seasonal campaigns;
    - absorbing `SYSTEM_PROMOS`.
 4. **Admin Tools gains:** `registry.ts` entries for BFB and TripWiz, a generic `engage` module whitelist, an app switcher and per-app roles.
 5. **New phase E0b in the finish plan:** create the monorepo, CI, publishing, the protocol package and fixtures, and the conformance CLI.
