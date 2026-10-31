@@ -1,6 +1,6 @@
 # FitCircle Engage v2 — in-house Braze replacement
 
-**Status:** Draft for approval · 2026-10-30
+**Status:** Approved by the owner · decisions recorded 2026-10-31 (§17)
 **Supersedes:** `ENGAGE_SPEC_V1_PARKED.md` (2026-10-16, parked on branch `feat/engage`)
 **Companion docs (this folder):**
 - `ENGAGE_FINISH_PLAN.md`: phases, work breakdown, porting map, bugs to fix, test plan.
@@ -91,7 +91,7 @@ FitCircleBE  /api/admin/engage/*   (authoring, preview, test sends, stats, appro
    ├── Delivery: push surfaces (send pipeline, §8)
    │     /api/cron/engage-dispatch (every minute) → due campaign batches / journey steps
    │       → engage_sends (idempotent ledger) → NotificationOrchestrator.send('engage', …)
-   │       → PushService (APNs / FCM) · Resend (email) · web push (P2)
+   │       → PushService (APNs / FCM) · Resend (email) · web push (VAPID)
    │
    └── Postgres (Supabase): engage_* tables (§12), existing push_tokens, notification_log,
        experiments, promo_user_state (absorbed), campaigns (experience store, §3.4)
@@ -156,10 +156,7 @@ FitCircleBE  /api/admin/engage/*   (authoring, preview, test sends, stats, appro
   - push has consent rules satisfied for its category;
   - `max_audience` is set;
   - a dry run has been done (audience count plus 20 sample users with their rendered content).
-- **Approval:**
-  - Required when the estimated audience exceeds `ENGAGE_APPROVAL_THRESHOLD` (default 1,000), the campaign pushes to "everyone", or it's an email campaign.
-  - The approver must be a different person from the editor.
-  - Any edit after approval resets it.
+- **Approval: not required for now** (owner decision, 2026-10-31). Editors launch directly, so the status goes `draft → scheduled → live`. The `in_review` / `approved` states and the `approver` role stay in the model behind `ENGAGE_APPROVAL_THRESHOLD`, which is unset (off). Turning it on later is a setting, not a rebuild. The safety nets are the launch checklist, the mandatory dry run, `max_audience`, the global caps, the kill switches and the audit log. The tool also asks you to **type the audience size** to confirm any launch over 5,000 users or any push to everyone.
 - **Kill switches:**
   - `ENGAGE_ENABLED` turns off all Engage delivery; clients get empty payloads.
   - `ENGAGE_SENDS_ENABLED` turns off push, email and web push only.
@@ -247,7 +244,14 @@ The tool gets a **Feed** page that edits `home_feed_rules`: move, hide, show, va
 
 ### 4.7 Web
 - **Web dashboard:** renders the `feed` cards (promo@2 web renderer) and the `profile_top` and `circles_top` placements where those pages exist, plus in-app messages (modal, slideup) through `WebEngage`. The tool's preview uses the same React renderers (§13), so the web preview is exact.
-- **Web push is P2.** It needs VAPID keys, a real `sw.js` push handler, `push_tokens.platform = 'web'` registration, and iOS Safari home-screen web app support. Declarative Web Push is possible on Safari 18.4+.
+- **Web push is in the first release** (owner decision, 2026-10-31):
+  - VAPID keys; a real push handler in `sw.js`, including notification click → deep link and an open event;
+  - `push_tokens.platform = 'web'` registration with `PushSubscription` JSON (endpoint, keys);
+  - a soft-ask permission prompt after a user gesture, with marketing consent rules identical to mobile;
+  - sending through the `web-push` protocol (aes128gcm) from the dispatcher;
+  - token hygiene: 404/410 deactivate.
+- **Browser support:** desktop Chrome, Edge, Firefox and Safari. iOS/iPadOS only for **home-screen web apps** (16.4+, requires `display: standalone` in the manifest). Use Declarative Web Push on Safari 18.4+ where available.
+- **Reach is likely small for FitCircle.** Most users are on the native apps, so web push mainly serves BuyForBaby and TripWiz later.
 
 ---
 
@@ -408,7 +412,7 @@ Action = one of (existing promo@1 registry, versioned):
 
 ---
 
-## 9. Journeys (P1)
+## 9. Journeys (in the first release, owner decision 2026-10-31)
 
 - **Steps:**
   - `message` (any surface);
@@ -436,7 +440,7 @@ Action = one of (existing promo@1 registry, versioned):
 |---|---|
 | `marketing` | Requires `marketing_enabled` |
 | `lifecycle` (reminders, journey nudges about the user's own data) | Uses the existing category toggles: journey, momentum, coach, circle, challenge, social, celebration |
-| `transactional` | Always allowed, cap-exempt; only for system and account messages, and requires approval |
+| `transactional` | Always allowed, cap-exempt; only for system and account messages (restricted to the `admin` role) |
 
 - **Email:** a consent view `engage_consent_v` merges `profiles.preferences.marketingEmails`, `user_consent(marketing)`, `privacy_settings.marketing_enabled` and `referral_email_optouts`. The most restrictive setting wins, and an unsubscribe writes to all four.
 - **Health data:** lock-screen text must not contain health specifics such as weight or calories in marketing pushes. The tool's linter warns.
@@ -452,9 +456,9 @@ Action = one of (existing promo@1 registry, versioned):
 | Feed cards | Feed guardrails (§4.2) |
 | Email marketing | 2 per week |
 | Quiet hours | Existing per-user window. Engage messages are held and released with jitter. |
-| Per-campaign override | `respect_global_caps = false` needs an approver and is logged |
+| Per-campaign override | `respect_global_caps = false` is restricted to the `admin` role and logged |
 
-**Global control group (P1):** a stable 5% of users never receive `marketing` campaigns. Lifecycle and transactional messages are unaffected. It measures total program lift.
+**Global control group: not now** (owner decision, 2026-10-31). Per-campaign control groups (§3.1 `experiment.control_pct`) still measure the lift of each campaign. The model keeps a `global_control_pct` setting (0 = off) so it can be enabled later without a rebuild. Users would then be bucketed by `random_bucket` with a fixed salt.
 
 ---
 
@@ -520,13 +524,13 @@ Prod already applied 104–116 except 104, which is v1 Engage, and v1 was never 
 - **Overview:** live campaigns, today's sends, top movers, warnings such as low coverage, caps hit and failed sends.
 - **Campaigns:** list with filters for status, surface, tag and "has experience".
 - **Composer.** Steps: Basics → Audience → Messages (per surface) → Schedule/trigger → Goal and experiment → Review (checklist, compatibility, dry run) → Submit or Launch.
-- **Journeys** (P1).
+- **Journeys.**
 - **Segments:** builder with a live count, sample users, and where each segment is used.
 - **Assets:** drag-and-drop library from v1.
 - **Feed:** rule editor and "preview the feed as a user".
 - **Experience step in the composer:** pick a template, then edit content, dates, art (the ring-art generator and art upload from the current campaigns module), the circle template, calendar doors and the App Store / Play event. The device previews (`preview/native/*`) are reused. **This replaces the Admin Tools Campaigns module.**
 - **Analytics** (§14).
-- **Settings:** caps, quiet-hours defaults, approval threshold, test devices, roles.
+- **Settings:** caps, quiet-hours defaults, approval threshold (off by default), global control % (0 by default), test devices, roles.
 - **Audit log.**
 
 **Preview, three tiers:**
@@ -545,7 +549,7 @@ Prod already applied 104–116 except 104, which is v1 Engage, and v1 was never 
    - The images are published to the tool as the "reference renders" for each app version.
    - It's also the release gate for layout changes.
 
-**Roles:** `viewer`, `editor`, `approver`, `admin`. They're stored in Admin Tools config (per module, keyed by email) and enforced in the backend through `X-Admin-Actor` → `engage_roles`.
+**Roles:** `viewer`, `editor`, `admin` (plus `approver`, used only if approvals are switched on later). They're stored in Admin Tools config (per module, keyed by email) and enforced in the backend through `X-Admin-Actor` → `engage_roles`.
 
 ---
 
@@ -598,13 +602,15 @@ Prod already applied 104–116 except 104, which is v1 Engage, and v1 was never 
 
 ## 17. Open decisions (need the owner's call; recommended answer in **bold**)
 
-**Decided by the owner on 2026-10-31:** #1 hosting (engage.inov8rlabs.com, built in the inov8r-admin code), #2 marketing push off until opt-in, #3 seasonal campaigns become Engage campaigns, #7 shared library and protocol, #8 build inside the library from day one. Still open: #4 web push, #5 email, #6 the global control group, and the approval rule (§3.3).
+**Decided by the owner on 2026-10-31:** #1 hosting (engage.inov8rlabs.com, built in the inov8r-admin code), #2 marketing push off until opt-in, #3 seasonal campaigns become Engage campaigns, #7 shared library and protocol, #8 build inside the library from day one. Also decided on 2026-10-31: #4 web push in the first release, #5 email in the first release, #6 no global control group, no approvals, and journeys in the first release. **All decisions are now made.**
 
 1. **Tool hosting:** standalone `engage.inov8rlabs.com` vs a module in Admin Tools. **Recommendation:** one codebase in `inov8r-admin`, served at its own domain `engage.inov8rlabs.com` with focused navigation and an app switcher (FitCircle, BuyForBaby, TripWiz), linked from Admin Tools. See `ENGAGE_TOOL_HOSTING.md`.
 7. **Multi-app architecture:** **a shared protocol, engine and SDKs (`inov8r-engage`), with Engage tables inside each app's own database and per-app adapters**, rather than a central Braze-style service. See `ENGAGE_MULTITENANCY.md` §3–4.
 8. **Build FitCircle inside the library boundary from day one:** **yes**. It adds about 25–30% to the FitCircle MVP, and BuyForBaby and TripWiz then take about 2 weeks each instead of about 6.
 2. **Marketing push opt-in default:** **off until the user opts in** (required by App Review 4.5.4 for promotional pushes). Lifecycle pushes keep their current toggles.
 3. **Seasonal campaigns:** ~~rename to "Experiences"~~. **Decided 2026-10-31:** they **become Engage campaigns**. A campaign optionally includes an experience from a native template (§3.4). There is no separate concept, and the old Campaigns module is retired.
-4. **Web push in v2:** **no**, P2 after mobile.
-5. **Email in the first release:** **yes, but approval is always required.**
-6. **Global control group:** **5%, enabled with journeys (P1).**
+4. **Web push in v2:** **Decided: yes, in the first release** (§4.7).
+5. **Email in the first release:** **Decided: yes.** Approvals are not required (see 6b).
+6. **Global control group:** **Decided: not now** (setting kept, default 0).
+6b. **Approvals:** **Decided: not required for now** (§3.3; threshold setting kept, off).
+6c. **Journeys:** **Decided: in the first release** (§9).

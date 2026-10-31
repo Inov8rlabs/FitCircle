@@ -162,17 +162,24 @@ Each phase ships on its own and is gated by kill switches. Effort is in focused 
   - placements where the pages exist;
   - in-app modal and slide-up.
 - Shared renderers with the tool preview (E4).
-- Web push stays P2: VAPID keys, `sw.js` push handler, subscription UI, `push_tokens.platform='web'`.
+- **Web push (in the first release, +3–4 days):**
+  - VAPID keys (env);
+  - a `sw.js` push and notification-click handler;
+  - a soft-ask subscription UI after a user gesture;
+  - `push_tokens.platform='web'` with the subscription JSON;
+  - a `web-push` sender in the dispatcher, plus a `WebPushSender` adapter in `@inov8r/engage-server`;
+  - 404/410 token hygiene;
+  - tests on desktop Chrome, Firefox and Safari, plus an iOS home-screen web app.
 
 ### E8: Analytics and experiments (2–3 days)
 - `engage_stats_daily` rollup cron (B5), lift vs control with confidence intervals, conversion windows, per-platform breakdown.
 - Tracking plan: Engage Push Opened and Engage Conversion events; regenerate the code for all three clients.
 - An "Engage" filter in the Ads Console (campaigns tagged `acq_*`).
 
-### E9: Journeys and lifecycle (P1, 4–5 days)
+### E9: Journeys and lifecycle (4–5 days, **part of the first release**)
 - `engage_journey_state` and dispatcher steps: delay, branch, split and exit; the list-based editor.
 - Rebuild the dead lifecycle ladder (`lib/cron/notification-crons.ts`) as journeys. Retire the old file.
-- Global control group (5%) and materialized segments with enter/exit triggers.
+- Materialized segments with enter/exit triggers. (No global control group for now; the `global_control_pct` setting stays at 0.)
 
 ### E10: Migration and cleanup (2 days)
 - **Retire the separate campaigns system:**
@@ -195,7 +202,7 @@ Each phase ships on its own and is gated by kill switches. Effort is in focused 
 - Registration in Admin Tools.
 - Passing conformance.
 
-**Total:** about 6–7 calendar weeks (E10 grows by about 2–3 days for the campaigns migration) with parallel streams, plus about 25–30% for building inside the shared library boundary, so **about 8–9 weeks to the FitCircle MVP**, reaching an MVP after E1–E8 (Braze-equivalent for one-off, scheduled and triggered push, in-app messages, cards, placements and email, with segments, experiments, preview and analytics). Journeys (E9) and migration (E10) follow.
+**Total:** about 6–7 calendar weeks (E10 grows by about 2–3 days for the campaigns migration) with parallel streams, plus about 25–30% for building inside the shared library boundary, so **about 8–9 weeks to the FitCircle MVP**, **The first release now includes E1–E9:** push, in-app messages, cards, placements, email, **web push** and **journeys**, with segments, experiments, preview and analytics. That's about **9–10 weeks** to the FitCircle first release. The E10 migration follows, timed around the live seasonal campaigns.
 
 ## 4. Release coupling
 
@@ -225,7 +232,8 @@ Each phase ships on its own and is gated by kill switches. Effort is in focused 
 - **Acceptance**, before marketing campaigns go to real users:
   - App Review 4.5.4 consent flow verified;
   - kill switches tested;
-  - the approval flow tested with two different admins.
+  - the launch confirmation (type-to-confirm above 5,000 users) tested;
+  - the approval flow stays dormant (threshold unset).
 
 ## 6. Human steps (account, DNS and console clicks)
 
@@ -233,7 +241,7 @@ Each phase ships on its own and is gated by kill switches. Effort is in focused 
 2. Add the OAuth redirect URI `https://engage.inov8rlabs.com/api/auth/callback/google`, unless the shared cookie domain is used instead.
 3. Set the env vars in Vercel:
    - `ENGAGE_ENABLED`, `ENGAGE_SENDS_ENABLED` (start false);
-   - `ENGAGE_APPROVAL_THRESHOLD`;
+   - `ENGAGE_APPROVAL_THRESHOLD` (leave unset: approvals are off);
    - the rate and cap settings;
    - `ADMIN_MODULE_ROLES` in inov8r-admin.
 4. Apply the migration (alone).
@@ -245,7 +253,7 @@ Each phase ships on its own and is gated by kill switches. Effort is in focused 
 | Risk | Mitigation |
 |---|---|
 | Marketing push without proper opt-in leads to App Review rejection (4.5.4) | Consent gate enforced on the server; category on every campaign; the linter |
-| Spammy volume or user churn | Global caps, weekly marketing cap, approval threshold, global control group to measure harm |
+| Spammy volume or user churn | Global caps, weekly marketing cap, mandatory dry run, type-to-confirm for large sends, per-campaign control groups. Approvals and a global control group can be switched on later if needed. |
 | Feed clutter fighting first-party cards | Engage feed cards pass through the existing guardrails; density caps |
 | Duplicate logic with Experiments, Promos and Campaigns | Explicit absorb list (spec §16); adapters, then deletion |
 | Previews mislead | Tier-1 previews labelled "approximation"; tier-2 test send is the ground truth; tier-3 CI renders |
