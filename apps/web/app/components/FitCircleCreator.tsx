@@ -234,15 +234,17 @@ export default function FitCircleCreator() {
     }
 
     try {
-      const { error } = await supabase
-        .from('fitcircle_members')
-        .insert({
-          challenge_id: challengeId,
-          user_id: user.id,
-          status: 'active',
-        } as any);
-
-      if (error) throw error;
+      // Server join (member row, count, chat post, daily goals) — never insert from the browser.
+      const response = await fetch(`/api/mobile/circles/${challengeId}/join`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: '{}',
+      });
+      if (!response.ok) {
+        const body = (await response.json().catch(() => null)) as { message?: string } | null;
+        throw new Error(body?.message || 'Failed to join FitCircle');
+      }
 
       toast.success('Successfully joined FitCircle!');
       void fetchFitCircles();

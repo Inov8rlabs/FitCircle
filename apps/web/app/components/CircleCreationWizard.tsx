@@ -405,8 +405,9 @@ export default function CircleCreationWizard({ isOpen, onClose, onSuccess, initi
       const { error: joinError } = await supabase
         .from('fitcircle_members')
         .insert({
-          challenge_id: data.id,
+          fitcircle_id: data.id,
           user_id: user.id,
+          invited_by: user.id,
           status: 'active',
         } as any);
 
