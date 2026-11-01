@@ -74,7 +74,7 @@ export async function POST(request: NextRequest) {
       password: validatedData.password,
       options: {
         data: {
-          full_name: validatedData.fullName,
+          display_name: validatedData.fullName,
           username,
         }
       }
@@ -100,7 +100,7 @@ export async function POST(request: NextRequest) {
       .insert({
         id: authData.user.id,
         email: validatedData.email,
-        full_name: validatedData.fullName,
+        display_name: validatedData.fullName,
         username,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
