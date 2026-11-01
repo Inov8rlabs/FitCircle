@@ -30,7 +30,7 @@ export async function generateMetadata(props: Props): Promise<Metadata> {
 /**
  * Circle invite landing page: https://www.fitcircle.ai/join/{CIRCLECODE}?ref={REFCODE}.
  * Signed-out visitors get the "saved you a seat" landing; signed-in members can
- * join right here (JoinCircleFlow → POST /api/mobile/circles/join).
+ * are seated in the circle automatically (AutoJoinCircle → POST /api/mobile/circles/join).
  */
 export default async function JoinCirclePage(props: Props) {
   const { code, ref } = await resolve(props);

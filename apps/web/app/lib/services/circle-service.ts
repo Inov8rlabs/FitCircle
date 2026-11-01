@@ -72,6 +72,33 @@ export class CircleJoinError extends Error {
   }
 }
 
+export type InviteJoinFailureCode =
+  | 'INVALID_CODE'
+  | 'WRONG_CIRCLE'
+  | 'CIRCLE_ENDED'
+  | 'NOT_ACCEPTING'
+  | 'CIRCLE_FULL';
+
+/** `joinViaInvite` refusal. `message` is the user-facing sentence the routes have always sent. */
+export class InviteJoinError extends CircleJoinError {
+  constructor(
+    public readonly code: InviteJoinFailureCode,
+    message: string
+  ) {
+    super(message);
+    this.name = 'InviteJoinError';
+  }
+}
+
+export interface InviteJoinResult {
+  status: 'joined' | 'rejoined' | 'already_member';
+  circleId: string;
+  circleName: string;
+  inviteCode: string;
+  /** The caller created this circle (always `already_member` in practice). */
+  isCreator: boolean;
+}
+
 export type RemoveParticipantFailure =
   | 'CIRCLE_NOT_FOUND'
   | 'NOT_CREATOR'
@@ -655,32 +682,45 @@ export class CircleService {
   }
 
   /**
-   * Join a circle from its invite code alone (no goal; the member sets one
-   * later). Used by `POST /api/mobile/circles/[id]/join` when the body carries
-   * an invite code: iOS 1.0 posts the code to that route with a RANDOM uuid in
-   * the path, so the circle has to be found from the code.
+   * THE invite join (one shared, idempotent implementation). Every path that
+   * puts someone into a circle because of an invite goes through here:
+   * `POST /api/mobile/circles/join`, `POST /api/mobile/circles/[id]/join`
+   * (invite body), the referral claims (web signup, `/api/referrals/claim`,
+   * `/api/mobile/referrals/claim`) and the signed-in web `/join/{code}` page.
    *
-   * `pathCircleId` is only a cross-check: when it names a real circle, the code
-   * must belong to that circle; when it names nothing, it is ignored.
+   * - Already a member (or the creator) → `already_member`, nothing written.
+   * - Left earlier (`dropped`) → the same row is reactivated (`rejoined`).
+   * - Otherwise a member row is inserted (`joined`); a concurrent insert that
+   *   hits the (fitcircle_id, user_id) unique key resolves as `already_member`.
+   * - Ended / late-join closed / full / unknown code → `InviteJoinError`.
+   * - The joiner's profile row is created first if it is missing (web signups
+   *   only get one at the end of web onboarding; members FK to profiles).
+   * - `attribute` (default true): a brand-new account joining through an
+   *   invite becomes a referral (`source: circle_join`); never fails the join.
    *
-   * Throws `CircleJoinError` for every "cannot join" reason and rethrows
-   * database errors unchanged.
+   * `pathCircleId` is only a cross-check (iOS 1.0 posts a random uuid): when it
+   * names a real circle, the code must belong to that circle.
    */
-  static async joinByInviteCode(
+  static async joinViaInvite(
     userId: string,
-    inviteCode: string,
-    options: { pathCircleId?: string | null } = {}
-  ): Promise<CircleWithDetails> {
+    rawCode: string,
+    options: {
+      goal?: GoalInput | null;
+      pathCircleId?: string | null;
+      ref?: string | null;
+      attribute?: boolean;
+    } = {}
+  ): Promise<InviteJoinResult> {
     const supabaseAdmin = createAdminSupabase();
 
-    const candidates = inviteCodeCandidates(inviteCode);
+    const candidates = inviteCodeCandidates(rawCode);
     if (candidates.length === 0) {
-      throw new CircleJoinError('Invalid invite code');
+      throw new InviteJoinError('INVALID_CODE', 'Invalid invite code');
     }
 
     const { data: matches, error: lookupError } = await supabaseAdmin
       .from('fitcircles')
-      .select('id, creator_id, invite_code, participant_count')
+      .select('id, name, creator_id, invite_code, start_date, max_participants')
       .in('invite_code', candidates)
       .limit(1);
 
@@ -696,58 +736,147 @@ export class CircleService {
         .maybeSingle();
 
       if (pathCircle) {
-        throw new CircleJoinError('Invalid invite code for this circle');
+        throw new InviteJoinError('WRONG_CIRCLE', 'Invalid invite code for this circle');
       }
     }
 
     if (!circle) {
-      throw new CircleJoinError('Invalid invite code');
+      throw new InviteJoinError('INVALID_CODE', 'Invalid invite code');
     }
 
-    // Same joinability rules as POST /api/mobile/circles/join (ended circles,
-    // late-join window).
-    const invite = await this.getInviteByCode(circle.invite_code);
-    if (!invite.valid) {
-      throw new CircleJoinError(invite.error_reason || 'Invalid invite code');
-    }
+    const base = {
+      circleId: circle.id as string,
+      circleName: (circle.name as string) ?? '',
+      inviteCode: circle.invite_code as string,
+      isCreator: circle.creator_id === userId,
+    };
 
-    const { data: existing } = await supabaseAdmin
+    const { data: existingRows } = await supabaseAdmin
       .from('fitcircle_members')
       .select('id, status')
       .eq('fitcircle_id', circle.id)
       .eq('user_id', userId)
       .limit(1);
 
-    const previous = existing?.[0];
+    const previous = existingRows?.[0] ?? null;
     if (previous && previous.status !== 'dropped') {
-      throw new CircleJoinError('You are already a member of this circle');
+      return { ...base, status: 'already_member' };
     }
+
+    // Joinability (ended circles, late-join window).
+    const invite = await this.getInviteByCode(circle.invite_code);
+    if (!invite.valid) {
+      const reason = invite.error_reason || 'Invalid invite code';
+      const code: InviteJoinFailureCode = /ended/i.test(reason)
+        ? 'CIRCLE_ENDED'
+        : /invalid/i.test(reason)
+          ? 'INVALID_CODE'
+          : 'NOT_ACCEPTING';
+      throw new InviteJoinError(code, reason);
+    }
+
+    if (options.goal) this.validateGoal(options.goal, circle.start_date);
+
+    if (circle.max_participants) {
+      const { count } = await supabaseAdmin
+        .from('fitcircle_members')
+        .select('id', { count: 'exact', head: true })
+        .eq('fitcircle_id', circle.id)
+        .eq('status', 'active');
+      if ((count ?? 0) >= circle.max_participants) {
+        throw new InviteJoinError('CIRCLE_FULL', 'This circle is full');
+      }
+    }
+
+    // Members FK to profiles; a web signup may not have its row yet.
+    const { ensureProfileRow } = await import('./profile-bootstrap');
+    await ensureProfileRow(userId);
 
     await this.acceptInvite(circle.invite_code, userId);
+
+    let status: InviteJoinResult['status'];
     if (previous) {
       await this.reactivateDroppedMember(previous.id);
+      status = 'rejoined';
+      if (!base.isCreator) {
+        const { ChatActivityHooks } = await import('./chat-activity-hooks');
+        ChatActivityHooks.onMemberJoined(circle.id, userId).catch(() => {});
+        void CircleLobbyService.onMemberJoined(circle.id);
+      }
     } else {
-      await this.addMemberToCircle(userId, circle.id, circle.creator_id);
+      try {
+        await this.addMemberToCircle(userId, circle.id, circle.creator_id, options.goal ?? undefined);
+      } catch (error: any) {
+        // Two joins raced (e.g. the claim and the app's own join call).
+        if (error?.code === '23505') return { ...base, status: 'already_member' };
+        throw error;
+      }
+      status = 'joined';
     }
 
-    const { error: countError } = await supabaseAdmin
-      .from('fitcircles')
-      .update({ participant_count: (circle.participant_count ?? 0) + 1 })
-      .eq('id', circle.id);
-
-    if (countError) {
-      // The member row exists; a stale cached count must not fail the join.
-      console.error('[CircleService.joinByInviteCode] Failed to update participant count:', countError);
-    }
+    await this.refreshParticipantCount(circle.id);
 
     try {
       const { DailyGoalService } = await import('./daily-goals');
       await DailyGoalService.createDailyGoalsForChallenge(userId, circle.id, supabaseAdmin);
     } catch (goalError) {
-      console.error('[CircleService.joinByInviteCode] Failed to create daily goals:', goalError);
+      console.error('[CircleService.joinViaInvite] Failed to create daily goals:', goalError);
     }
 
-    return this.getCircle(circle.id);
+    if (options.attribute !== false) {
+      const { ReferralService } = await import('./referral-service');
+      await ReferralService.attributeCircleJoin(userId, circle.invite_code, options.ref ?? null);
+    }
+
+    return { ...base, status };
+  }
+
+  /** `participant_count` = active member rows (a recount, so retries never drift it). */
+  private static async refreshParticipantCount(circleId: string): Promise<void> {
+    const supabaseAdmin = createAdminSupabase();
+    const { count, error } = await supabaseAdmin
+      .from('fitcircle_members')
+      .select('id', { count: 'exact', head: true })
+      .eq('fitcircle_id', circleId)
+      .eq('status', 'active');
+    if (error || count === null || count === undefined) {
+      if (error) console.error('[CircleService] participant recount failed:', error);
+      return;
+    }
+    const { error: updateError } = await supabaseAdmin
+      .from('fitcircles')
+      .update({ participant_count: count })
+      .eq('id', circleId);
+    if (updateError) {
+      // The member row exists; a stale cached count must not fail the join.
+      console.error('[CircleService] Failed to update participant count:', updateError);
+    }
+  }
+
+  /**
+   * Join from an invite code alone, refusing an existing member. Kept for
+   * callers that want the old "already a member" error; new code calls
+   * `joinViaInvite`, which treats that as success. Never attributes.
+   */
+  static async joinByInviteCode(
+    userId: string,
+    inviteCode: string,
+    options: { pathCircleId?: string | null } = {}
+  ): Promise<CircleWithDetails> {
+    let result: InviteJoinResult;
+    try {
+      result = await this.joinViaInvite(userId, inviteCode, {
+        pathCircleId: options.pathCircleId,
+        attribute: false,
+      });
+    } catch (error) {
+      if (error instanceof InviteJoinError) throw new CircleJoinError(error.message);
+      throw error;
+    }
+    if (result.status === 'already_member') {
+      throw new CircleJoinError('You are already a member of this circle');
+    }
+    return this.getCircle(result.circleId);
   }
 
   /**

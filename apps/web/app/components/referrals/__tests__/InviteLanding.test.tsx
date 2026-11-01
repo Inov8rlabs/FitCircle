@@ -1,5 +1,5 @@
 import { render, screen, waitFor } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type * as AnalyticsModule from '@/lib/analytics';
 import type { ReferralPreview } from '@/lib/referrals/types';
@@ -98,11 +98,47 @@ describe('InviteLanding', () => {
     await waitFor(() => expect(document.cookie).toContain('fc_ref='));
   });
 
-  it('shows "Join circle" to signed-in users on a circle invite', async () => {
-    mockUser = { id: 'u1', name: 'Sam' };
-    render(<InviteLanding kind="circle" code="FITAB12CD" refCode="MAYA7K2" preview={circle} {...base} />);
-    expect(await screen.findByRole('button', { name: /Join circle/ })).toBeInTheDocument();
-    expect(screen.queryByRole('link', { name: /Continue on the web/ })).not.toBeInTheDocument();
+  describe('signed in on a circle invite: joins automatically (no tap)', () => {
+    const mockFetch = (status: number, body: unknown) => {
+      const fetchMock = vi.fn().mockResolvedValue({
+        status,
+        ok: status >= 200 && status < 300,
+        json: async () => body,
+      });
+      vi.stubGlobal('fetch', fetchMock);
+      return fetchMock;
+    };
+    afterEach(() => vi.unstubAllGlobals());
+
+    it('posts the join with code + ref and confirms "You joined"', async () => {
+      mockUser = { id: 'u1', name: 'Sam' };
+      const fetchMock = mockFetch(201, { success: true, circle: { id: 'c1', name: 'Morning Movers' } });
+      render(<InviteLanding kind="circle" code="FITAB12CD" refCode="MAYA7K2" preview={circle} {...base} />);
+      expect(await screen.findByText(/You joined Morning Movers/)).toBeInTheDocument();
+      expect(fetchMock).toHaveBeenCalledWith(
+        '/api/mobile/circles/join',
+        expect.objectContaining({ method: 'POST', body: JSON.stringify({ inviteCode: 'FITAB12CD', ref: 'MAYA7K2' }) })
+      );
+      expect(track).toHaveBeenCalledWith({ name: 'FitCircle Joined', properties: { source: 'invite_link' } });
+      expect(screen.getByRole('link', { name: /Open the circle on the web/ })).toHaveAttribute('href', '/fitcircles/c1');
+      expect(screen.queryByRole('button', { name: /Join circle/ })).not.toBeInTheDocument();
+      expect(screen.queryByRole('link', { name: /Continue on the web/ })).not.toBeInTheDocument();
+    });
+
+    it('an existing member (200 alreadyMember, or legacy 409) sees "already in"', async () => {
+      mockUser = { id: 'u1', name: 'Sam' };
+      mockFetch(200, { success: true, alreadyMember: true, circle: { id: 'c1', name: 'Morning Movers' } });
+      render(<InviteLanding kind="circle" code="FITAB12CD" refCode={null} preview={circle} {...base} />);
+      expect(await screen.findByText(/You're already in Morning Movers/)).toBeInTheDocument();
+      expect(track).not.toHaveBeenCalledWith({ name: 'FitCircle Joined', properties: { source: 'invite_link' } });
+    });
+
+    it('shows the server reason when the circle cannot be joined', async () => {
+      mockUser = { id: 'u1', name: 'Sam' };
+      mockFetch(400, { error: 'Invalid invite', message: 'This circle is full' });
+      render(<InviteLanding kind="circle" code="FITAB12CD" refCode={null} preview={circle} {...base} />);
+      expect(await screen.findByText('This circle is full')).toBeInTheDocument();
+    });
   });
 
   it('tells signed-in users on a personal invite they are already on FitCircle', async () => {

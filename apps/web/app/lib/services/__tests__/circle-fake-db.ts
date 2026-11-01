@@ -16,7 +16,7 @@ type Filter = (row: Row) => boolean;
 export const CIRCLE_TABLE_COLUMNS: Record<string, string[]> = {
   fitcircles: [
     'id', 'creator_id', 'name', 'description', 'type', 'status', 'visibility', 'start_date',
-    'end_date', 'participant_count', 'invite_code', 'privacy_mode', 'auto_accept_invites',
+    'end_date', 'participant_count', 'invite_code', 'privacy_mode', 'auto_accept_invites', 'max_participants',
     'allow_late_join', 'late_join_deadline', 'is_official', 'created_at', 'updated_at',
     'metadata', 'timezone',
   ],

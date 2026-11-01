@@ -97,6 +97,13 @@ interface RegisterData {
   password: string;
   name: string;
   username: string;
+  /**
+   * Invite the person signed up through (/join/{circle}?ref=…). Stored in the
+   * auth user's metadata so /api/referrals/claim can still seat them in the
+   * circle when the signup finishes elsewhere (email confirmation in another
+   * browser, cleared cookies). Cleared by the claim once settled.
+   */
+  invite?: { ref: string | null; circle: string | null } | null;
 }
 
 const defaultPreferences: UserPreferences = {
@@ -273,6 +280,9 @@ export const useAuthStore = create<AuthState>()(
               data: {
                 name: data.name,
                 username: data.username,
+                ...(data.invite && (data.invite.circle || data.invite.ref)
+                  ? { pending_invite: { circle: data.invite.circle, ref: data.invite.ref } }
+                  : {}),
               }
             }
           });

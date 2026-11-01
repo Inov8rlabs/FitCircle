@@ -1,11 +1,11 @@
-import { type NextRequest } from 'next/server';
+import { NextResponse, type NextRequest } from 'next/server';
 import { z } from 'zod';
 
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { applyRateLimit, createRateLimiter, getIdentifier } from '@/lib/middleware/rate-limit';
+import { acceptInvite } from '@/lib/referrals/accept-invite';
 import { failFrom, ok } from '@/lib/referrals/http';
 import { ATTRIBUTION_SOURCES, type AttributionSource } from '@/lib/referrals/types';
-import { ReferralService } from '@/lib/services/referral-service';
 import { parseLenient } from '@/lib/validation/lenient-parse';
 
 export const dynamic = 'force-dynamic';
@@ -20,10 +20,21 @@ const claimSchema = z.object({
 });
 
 /**
- * POST /api/mobile/referrals/claim — attribute this (new) account to an invite.
- * Body {code, ref?, source, deviceId?}. Errors: INVALID_CODE 404, SELF_REFERRAL
- * 400, ALREADY_ATTRIBUTED 409, WINDOW_CLOSED / DEVICE_INELIGIBLE 422,
- * PROGRAM_DISABLED 403. Does not join circles (POST /circles/join does that).
+ * POST /api/mobile/referrals/claim — accept an invite for this account.
+ * Body {code, ref?, source, deviceId?}.
+ *
+ * 1. Attribution (new accounts only). Errors: INVALID_CODE 404, SELF_REFERRAL
+ *    400, ALREADY_ATTRIBUTED 409, WINDOW_CLOSED / DEVICE_INELIGIBLE 422,
+ *    PROGRAM_DISABLED 403 (unchanged envelope).
+ * 2. For a CIRCLE code, the person is also joined to the circle — whatever
+ *    happened to the attribution (an existing account or a reused device still
+ *    gets their seat). Idempotent (CircleService.joinViaInvite).
+ *
+ * `circleJoin` ({status: joined|rejoined|already_member, circle:{id,name,inviteCode}}
+ * or {status:'failed', reason, message}) is in `data.circleJoin` on success and
+ * in `error.details.circleJoin` on a refused attribution. Shipped clients ignore
+ * it and still call POST /circles/join afterwards, which now answers 200 for an
+ * existing member, so their flow completes as a success.
  */
 export async function POST(request: NextRequest) {
   const startTime = Date.now();
@@ -32,13 +43,21 @@ export async function POST(request: NextRequest) {
     const limited = await applyRateLimit(request, claimLimiter, getIdentifier(request, user.id));
     if (limited) return limited;
     const body = parseLenient(claimSchema, await request.json());
-    const result = await ReferralService.claim(user.id, {
+    const { referral, circleJoin } = await acceptInvite(user.id, {
       code: body.code,
       ref: body.ref ?? null,
       source: body.source,
       deviceId: body.deviceId ?? null,
     });
-    return ok(result, startTime);
+    if (referral.claimed) return ok({ ...referral.result, circleJoin }, startTime);
+
+    const error = referral.error;
+    const response = failFrom(error ?? new Error('claim failed'), 'claim');
+    if (!circleJoin) return response;
+    // Same envelope, plus what happened to the circle.
+    const payload = await response.json();
+    payload.error = { ...payload.error, details: { ...(payload.error?.details ?? {}), circleJoin } };
+    return NextResponse.json(payload, { status: response.status, headers: { 'Cache-Control': 'no-store' } });
   } catch (error) {
     return failFrom(error, 'claim');
   }

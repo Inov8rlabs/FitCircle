@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { sendWelcomeEmail } from '@/lib/email/email-service';
 import { registerRateLimiter, getIdentifier, applyRateLimit } from '@/lib/middleware/rate-limit';
 import { CLEAR_FC_REF_COOKIE, claimWebInvite, resolveWebInvite } from '@/lib/referrals/web-claim';
+import { ensureProfileRow } from '@/lib/services/profile-bootstrap';
 import {
   USERNAME_PATTERN,
   USERNAME_RULES_MESSAGE,
@@ -107,9 +108,16 @@ export async function POST(request: NextRequest) {
       });
 
     if (profileError) {
-      console.error('Profile creation error:', profileError);
-      // Don't fail the registration if profile creation fails
-      // It can be created later
+      // Never silently: the invite claim + circle join below need this row
+      // (fitcircle_members/referrals FK to profiles). Fall back to the shared
+      // bootstrap (unique username, display name from metadata).
+      console.error('[register] profile insert failed', {
+        userId: authData.user.id,
+        code: profileError.code,
+        message: profileError.message,
+      });
+      const ensured = await ensureProfileRow(authData.user.id);
+      if (!ensured) console.error('[register] profile still missing after bootstrap', { userId: authData.user.id });
     }
 
     // Send welcome email (don't wait for it, send async)
@@ -121,7 +129,8 @@ export async function POST(request: NextRequest) {
       console.error('Failed to send welcome email:', error);
     });
 
-    // Invite attribution: best-effort, never fails registration.
+    // Invite: attribution + circle join (runs after the profile exists).
+    // Best-effort, never fails registration.
     const invite = resolveWebInvite(
       { ref: validatedData.ref, circle: validatedData.circle },
       request.headers.get('cookie')
@@ -136,9 +145,10 @@ export async function POST(request: NextRequest) {
         fullName: validatedData.fullName,
       },
       session: authData.session,
+      circleJoin: referral?.circleJoin ?? null,
       message: 'Registration successful! Check your email for a welcome message.'
     });
-    if (referral && (referral.claimed || referral.reason !== 'ERROR')) {
+    if (referral?.settled) {
       response.cookies.set(CLEAR_FC_REF_COOKIE);
     }
     return response;

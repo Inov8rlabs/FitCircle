@@ -125,12 +125,14 @@ describe('POST /api/mobile/circles/[id]/join', () => {
       expect(iosEnvelopeProblems(body)).toEqual([]);
     });
 
-    it('400 INVALID_JOIN when already a member', async () => {
+    it('idempotent: an existing member gets 200 + the circle (alreadyMember), nothing written', async () => {
       requireMobileAuth.mockResolvedValue({ id: CREATOR });
       const res = await post(RANDOM_IOS_PATH_ID, { invite_code: 'FITABC234' });
+      const body = await res.json();
 
-      expect(res.status).toBe(400);
-      expect((await res.json()).error.message).toBe('You are already a member of this circle');
+      expect(res.status).toBe(200);
+      expect(body).toMatchObject({ success: true, alreadyMember: true });
+      expect(body.data.id).toBe(PRIVATE_CIRCLE);
       expect(members(PRIVATE_CIRCLE)).toEqual([CREATOR]);
     });
   });
