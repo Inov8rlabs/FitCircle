@@ -27,6 +27,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { LogoIcon } from '@/components/ui/logo';
 import { useFormPersistence } from '@/hooks/useFormPersistence';
+import { AnalyticsEvents, analytics } from '@/lib/analytics';
 import { normalizeCode } from '@/lib/referrals/links';
 import type { ReferralPreview } from '@/lib/referrals/types';
 import {
@@ -171,17 +172,26 @@ function RegisterForm() {
         password: data.password,
         name: data.name,
         username: data.email.split('@')[0],
+        invite,
       });
 
-      // Invite attribution (best-effort; the route also falls back to the fc_ref cookie
-      // and never errors for a signed-in caller).
+      // Accept the invite: referral attribution + joining the circle of a circle
+      // invite, server-side, right now (best-effort; the route also falls back to
+      // the fc_ref cookie / signup metadata and never errors for a signed-in caller).
+      let joinedCircleName: string | null = null;
       try {
-        await fetch('/api/referrals/claim', {
+        const res = await fetch('/api/referrals/claim', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           credentials: 'same-origin',
           body: JSON.stringify(invite ?? {}),
         });
+        const body = await res.json().catch(() => null);
+        const circleJoin = body?.data?.circleJoin;
+        if (circleJoin && (circleJoin.status === 'joined' || circleJoin.status === 'rejoined')) {
+          joinedCircleName = circleJoin.circle?.name ?? null;
+          analytics.track(AnalyticsEvents.fitCircleJoined({ source: 'invite_link' }));
+        }
       } catch {
         // never block signup on attribution
       }
@@ -190,7 +200,10 @@ function RegisterForm() {
       clearForm();
       setHasUnsavedChanges(false);
 
-      showToast('Account created successfully!', 'success');
+      showToast(
+        joinedCircleName ? `Account created. You're in ${joinedCircleName}!` : 'Account created successfully!',
+        'success'
+      );
 
       // New users need to complete onboarding first, but preserve returnUrl
       // only when it's a safe same-origin path to avoid open redirects.
@@ -200,7 +213,13 @@ function RegisterForm() {
         router.push('/onboarding');
       }
     } catch (error) {
-      showToast('Registration failed. Please try again.', 'error');
+      // Email confirmation on: the account exists; the invite rides along in the
+      // signup metadata + fc_ref cookie and is accepted after confirming.
+      const message = error instanceof Error ? error.message : '';
+      showToast(
+        /check your email/i.test(message) ? message : 'Registration failed. Please try again.',
+        /check your email/i.test(message) ? 'success' : 'error'
+      );
     }
   };
 

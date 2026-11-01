@@ -92,15 +92,52 @@ describe('POST /api/mobile/circles/join', () => {
     expect(res.status).toBe(201);
   });
 
-  it('409 with { error, message } when already a member', async () => {
+  it('is idempotent: an existing member (or the creator) gets 200 + the circle, nothing written', async () => {
     requireMobileAuth.mockResolvedValue({ id: CREATOR });
+    const before = db.tables.fitcircle_members.length;
     const res = await post({ inviteCode: 'FITABC234' });
+    const body = await res.json();
 
-    expect(res.status).toBe(409);
-    expect(await res.json()).toEqual({
-      error: 'Already a member',
+    expect(res.status).toBe(200);
+    expect(body).toMatchObject({
+      success: true,
+      alreadyMember: true,
       message: 'You are already a member of this circle',
     });
+    expect(body.circle.id).toBe(CIRCLE);
+    expect(db.tables.fitcircle_members.length).toBe(before);
+    expect(attributeCircleJoin).not.toHaveBeenCalled();
+  });
+
+  it('a second join of the same person is a no-op (no duplicate row, count unchanged)', async () => {
+    await post({ inviteCode: 'FITABC234' });
+    const res = await post({ inviteCode: 'FIT-ABC234' });
+    expect(res.status).toBe(200);
+    expect(db.tables.fitcircle_members.filter((m) => m.user_id === JOINER)).toHaveLength(1);
+    expect(db.tables.fitcircles[0].participant_count).toBe(2);
+  });
+
+  it('reactivates a member who left', async () => {
+    db.tables.fitcircle_members.push({ id: 'm2', fitcircle_id: CIRCLE, user_id: JOINER, status: 'dropped' });
+    const res = await post({ inviteCode: 'FITABC234' });
+    expect(res.status).toBe(201);
+    expect(db.tables.fitcircle_members.find((m) => m.id === 'm2')?.status).toBe('active');
+    expect(db.tables.fitcircles[0].participant_count).toBe(2);
+  });
+
+  it('400 when the circle is full', async () => {
+    db.tables.fitcircles[0].max_participants = 1;
+    const res = await post({ inviteCode: 'FITABC234' });
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({ error: 'Invalid invite', message: 'This circle is full' });
+  });
+
+  it('400 when the circle has ended', async () => {
+    db.tables.fitcircles[0].start_date = inDays(-40);
+    db.tables.fitcircles[0].end_date = inDays(-10);
+    const res = await post({ inviteCode: 'FITABC234' });
+    expect(res.status).toBe(400);
+    expect((await res.json()).message).toMatch(/ended/);
   });
 
   it('400 with { error, message } for an unknown code', async () => {

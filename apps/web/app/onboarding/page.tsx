@@ -96,15 +96,27 @@ function OnboardingForm() {
   const [inviteReturnUrl, setInviteReturnUrl] = useState<string | null>(null);
   const returnUrl = queryReturnUrl ?? inviteReturnUrl;
 
-  // Invite attribution fallback for signups that didn't go through /register's
-  // claim (e.g. email confirmation): claim the landing page's fc_ref cookie once
-  // signed in, and send circle invitees back to /join/{circle} afterwards.
+  // Invite fallback for signups that didn't go through /register's claim
+  // (email confirmation, another browser): once signed in, ask the server to
+  // accept any pending invite — it reads the landing page's fc_ref cookie or
+  // the invite stored in the signup metadata, records the referral and joins
+  // the circle. Circle invitees land on /join/{circle} afterwards ("You're in"
+  // + get the app).
   useEffect(() => {
     if (!user) return;
     const pending = readPendingInviteFromCookieHeader(document.cookie);
-    if (!pending) return;
-    setInviteReturnUrl(postSignupReturnUrl(pending.circle, pending.ref));
-    fetch('/api/referrals/claim', { method: 'POST', credentials: 'same-origin' }).catch(() => {});
+    if (pending) setInviteReturnUrl(postSignupReturnUrl(pending.circle, pending.ref));
+    fetch('/api/referrals/claim', { method: 'POST', credentials: 'same-origin' })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((body) => {
+        const circleJoin = body?.data?.circleJoin;
+        if (!circleJoin?.circle?.inviteCode) return;
+        if (circleJoin.status === 'joined' || circleJoin.status === 'rejoined') {
+          analytics.track(AnalyticsEvents.fitCircleJoined({ source: 'invite_link' }));
+        }
+        setInviteReturnUrl((current) => current ?? postSignupReturnUrl(circleJoin.circle.inviteCode, null));
+      })
+      .catch(() => {});
   }, [user]);
   const { updateProfile, isLoading } = useProfile();
   const [currentStep, setCurrentStep] = useState(0);

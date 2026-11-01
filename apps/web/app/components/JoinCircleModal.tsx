@@ -16,6 +16,7 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { joinCircleByCode } from '@/lib/circles/join-by-code';
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/stores/auth-store';
 
@@ -125,15 +126,7 @@ export default function JoinCircleModal({ isOpen, onClose, onSuccess }: JoinCirc
 
     setIsJoining(true);
     try {
-      const { error } = await supabase
-        .from('fitcircle_members')
-        .insert({
-          challenge_id: circlePreview.id,
-          user_id: user.id,
-          status: 'active',
-        } as any);
-
-      if (error) throw error;
+      await joinCircleByCode(inviteCode);
 
       toast.success(`Successfully joined ${circlePreview.name}!`);
 

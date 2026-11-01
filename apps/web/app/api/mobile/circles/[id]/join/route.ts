@@ -3,7 +3,6 @@ import { z } from 'zod';
 
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { CircleJoinError, CircleService } from '@/lib/services/circle-service';
-import { ReferralService } from '@/lib/services/referral-service';
 import { safeParseLenient, validationMessage } from '@/lib/validation/lenient-parse';
 
 const idSchema = z.string().uuid();
@@ -63,15 +62,17 @@ export async function POST(
     }
 
     if (inviteCode) {
-      const circle = await CircleService.joinByInviteCode(user.id, inviteCode, {
+      // Shared idempotent join (also attributes a brand-new account's referral).
+      const result = await CircleService.joinViaInvite(user.id, inviteCode, {
         pathCircleId: id,
+        ref,
       });
-      // New accounts joining through an invite become referrals; never fails the join.
-      await ReferralService.attributeCircleJoin(user.id, inviteCode, ref);
+      const circle = await CircleService.getCircle(result.circleId);
+      const alreadyMember = result.status === 'already_member';
 
       return NextResponse.json(
-        { success: true, data: circle, error: null },
-        { status: 201 }
+        { success: true, data: circle, error: null, ...(alreadyMember ? { alreadyMember: true } : {}) },
+        { status: alreadyMember ? 200 : 201 }
       );
     }
 

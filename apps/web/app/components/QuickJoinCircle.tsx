@@ -22,6 +22,7 @@ import { Card } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { AnalyticsEvents, analytics, toErrorKind } from '@/lib/analytics';
+import { joinCircleByCode } from '@/lib/circles/join-by-code';
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/stores/auth-store';
 
@@ -128,25 +129,7 @@ export default function QuickJoinCircle({ isOpen, onClose, initialCode = '' }: Q
     setIsJoining(true);
     analytics.track(AnalyticsEvents.fitCircleJoinStarted({ source: 'invite_code' }));
     try {
-      // Direct approach to join the circle
-      const joinResult = (await (supabase
-        .from('fitcircle_members') as any)
-        .insert({
-          challenge_id: circlePreview.id,
-          user_id: user.id,
-          status: 'active',
-          joined_at: new Date().toISOString(),
-        }));
-
-      const joinError = joinResult.error;
-
-      if (joinError) {
-        // Check for specific error types
-        if (joinError.code === '23505' || joinError.message?.includes('duplicate')) {
-          throw new Error('You are already a member of this FitCircle');
-        }
-        throw new Error(joinError.message || 'Failed to join FitCircle');
-      }
+      await joinCircleByCode(inviteCode);
 
       // Success animation
       analytics.track(AnalyticsEvents.fitCircleJoined({ source: 'invite_code' }));

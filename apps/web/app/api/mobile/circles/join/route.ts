@@ -2,10 +2,7 @@ import { type NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
-import { CircleService } from '@/lib/services/circle-service';
-import { DailyGoalService } from '@/lib/services/daily-goals';
-import { ReferralService } from '@/lib/services/referral-service';
-import { createAdminSupabase } from '@/lib/supabase-admin';
+import { CircleJoinError, CircleService, InviteJoinError } from '@/lib/services/circle-service';
 import { parseLenient } from '@/lib/validation/lenient-parse';
 
 // Validation schema
@@ -38,126 +35,30 @@ export async function POST(request: NextRequest) {
     // An explicit JSON null on an optional field (e.g. `goal: null`) means "not sent".
     const validatedData = parseLenient(joinCircleSchema, body);
 
-    // Normalize invite code
-    const inviteCode = validatedData.inviteCode.toUpperCase().trim();
+    // One shared, idempotent join (CircleService.joinViaInvite): joinability,
+    // capacity, member row, participant count, chat/lobby hooks, daily goals
+    // and the referral attribution of a brand-new account.
+    const result = await CircleService.joinViaInvite(user.id, validatedData.inviteCode, {
+      goal: validatedData.goal ?? null,
+      ref: validatedData.ref ?? null,
+    });
 
-    // Get invite details
-    const inviteDetails = await CircleService.getInviteByCode(inviteCode);
+    const updatedCircle = await CircleService.getCircle(result.circleId);
 
-    if (!inviteDetails.valid) {
+    if (result.status === 'already_member') {
+      // Idempotent: already in (e.g. the invite claim seated them a moment
+      // ago, or the creator opened their own link). 200, not 409, so shipped
+      // apps that join after claiming land on the circle instead of an error.
       return NextResponse.json(
         {
-          error: 'Invalid invite',
-          message: inviteDetails.error_reason || 'Invalid invite code',
-        },
-        { status: 400 }
-      );
-    }
-
-    // Find the circle
-    const supabaseAdmin = createAdminSupabase();
-
-    // `creator_id` is the column; this used to select `created_by`, which does
-    // not exist on fitcircles, so the lookup failed and every join answered 404.
-    const { data: circle, error: circleError } = await supabaseAdmin
-      .from('fitcircles')
-      .select('id, creator_id, start_date')
-      .eq('invite_code', inviteCode)
-      .single();
-
-    if (circleError || !circle) {
-      return NextResponse.json(
-        {
-          error: 'Circle not found',
-          message: 'Could not find circle with this invite code',
-        },
-        { status: 404 }
-      );
-    }
-
-    // Check if already a member
-    const { data: existing } = await supabaseAdmin
-      .from('fitcircle_members')
-      .select('id, status')
-      .eq('fitcircle_id', circle.id)
-      .eq('user_id', user.id)
-      .single();
-
-    // A member who left (status 'dropped') may join again.
-    const rejoining = existing?.status === 'dropped';
-    if (existing && !rejoining) {
-      return NextResponse.json(
-        {
-          error: 'Already a member',
+          success: true,
+          circle: updatedCircle,
           message: 'You are already a member of this circle',
+          alreadyMember: true,
         },
-        { status: 409 }
+        { status: 200 }
       );
     }
-
-    // Join the circle
-    if (validatedData.goal) {
-      await CircleService.joinCircle(user.id, circle.id, inviteCode, validatedData.goal);
-    } else {
-      // Accept invite without goal (for now)
-      await CircleService.acceptInvite(inviteCode, user.id);
-
-      // Add as member without goal (or reactivate the row of a member who left)
-      const { error: memberError } = rejoining
-        ? await supabaseAdmin
-            .from('fitcircle_members')
-            .update({ status: 'active', dropped_at: null, joined_at: new Date().toISOString(), updated_at: new Date().toISOString() })
-            .eq('id', existing!.id)
-        : await supabaseAdmin.from('fitcircle_members').insert({
-            fitcircle_id: circle.id,
-            user_id: user.id,
-            invited_by: circle.creator_id,
-            status: 'active',
-          });
-
-      if (memberError) throw memberError;
-
-      // Update participant count
-      const { data: currentCircle } = await supabaseAdmin
-        .from('fitcircles')
-        .select('participant_count')
-        .eq('id', circle.id)
-        .single();
-
-      await supabaseAdmin
-        .from('fitcircles')
-        .update({
-          participant_count: (currentCircle?.participant_count || 0) + 1,
-        })
-        .eq('id', circle.id);
-
-      // This path bypasses CircleService.addMemberToCircle, which is what normally
-      // posts the "just joined — say hi" chat update. Fire-and-forget; never throws.
-      const { ChatActivityHooks } = await import('@/lib/services/chat-activity-hooks');
-      ChatActivityHooks.onMemberJoined(circle.id, user.id).catch(() => {});
-      const { CircleLobbyService } = await import('@/lib/services/circle-lobby-service');
-      void CircleLobbyService.onMemberJoined(circle.id);
-    }
-
-    // Create daily goals for the user based on the challenge
-    try {
-      await DailyGoalService.createDailyGoalsForChallenge(
-        user.id,
-        circle.id,
-        supabaseAdmin
-      );
-    } catch (goalError) {
-      // Log but don't fail the request if goal creation fails
-      console.error('[Mobile API] Failed to create daily goals:', goalError);
-    }
-
-    // A brand-new account joining through an invite is a referral (no-op for
-    // everyone else). Awaited so the referral exists before the client asks for
-    // the hub, but it never fails the join.
-    await ReferralService.attributeCircleJoin(user.id, inviteCode, validatedData.ref ?? null);
-
-    // Get updated circle details
-    const updatedCircle = await CircleService.getCircle(circle.id);
 
     return NextResponse.json(
       {
@@ -177,6 +78,13 @@ export async function POST(request: NextRequest) {
           message: 'Invalid or expired token',
         },
         { status: 401 }
+      );
+    }
+
+    if (error instanceof InviteJoinError || error instanceof CircleJoinError) {
+      return NextResponse.json(
+        { error: 'Invalid invite', message: error.message },
+        { status: 400 }
       );
     }
 

@@ -18,6 +18,20 @@ const svc = vi.hoisted(() => ({
 const invites = vi.hoisted(() => ({ unsubscribe: vi.fn(), verifyUnsubscribeToken: (t: string) => (t === 'ok' ? 'h' : null) }));
 vi.mock('@/lib/services/referral-invite-service', () => ({ ReferralInviteService: invites, verifyUnsubscribeToken: invites.verifyUnsubscribeToken }));
 vi.mock('@/lib/services/referral-service', () => ({ ReferralService: svc }));
+const joinViaInvite = vi.hoisted(() => vi.fn());
+vi.mock('@/lib/services/profile-bootstrap', () => ({ ensureProfileRow: vi.fn().mockResolvedValue(true) }));
+vi.mock('@/lib/services/circle-service', () => {
+  class CircleJoinError extends Error {}
+  class InviteJoinError extends CircleJoinError {
+    constructor(
+      public readonly code: string,
+      message: string
+    ) {
+      super(message);
+    }
+  }
+  return { CircleJoinError, InviteJoinError, CircleService: { joinViaInvite } };
+});
 
 import { GET as previewGET } from '../../../referrals/preview/route';
 import { GET as unsubscribeGET, POST as unsubscribePOST } from '../../../referrals/unsubscribe/route';
@@ -34,6 +48,13 @@ const json = (url: string, body: unknown, headers: Record<string, string> = {}) 
 beforeEach(() => {
   vi.clearAllMocks();
   requireMobileAuth.mockResolvedValue({ id: USER });
+  joinViaInvite.mockResolvedValue({
+    status: 'joined',
+    circleId: 'c1',
+    circleName: 'Nov steps challenge',
+    inviteCode: 'FITAB12CD',
+    isCreator: false,
+  });
 });
 
 describe('POST /api/mobile/referrals/claim', () => {
@@ -65,6 +86,36 @@ describe('POST /api/mobile/referrals/claim', () => {
     expect(res.status).toBe(status);
     expect(body).toMatchObject({ success: false, error: { code } });
     if (code === 'ALREADY_ATTRIBUTED') expect(body.data).toEqual({ firstName: 'Maya' });
+  });
+
+  it('a circle code also joins the circle and says so in data.circleJoin', async () => {
+    svc.claim.mockResolvedValue({ status: 'pending', circle: { id: 'c1' } });
+    const res = await claimPOST(json('http://localhost/x', { code: 'fitab12cd', ref: 'maya7k2', source: 'play_referrer' }));
+    const body = await res.json();
+    expect(res.status).toBe(200);
+    expect(svc.claim).toHaveBeenCalledWith(USER, { code: 'FITAB12CD', ref: 'MAYA7K2', source: 'play_referrer', deviceId: null });
+    expect(joinViaInvite).toHaveBeenCalledWith(USER, 'FITAB12CD', { ref: 'MAYA7K2', attribute: false });
+    expect(body.data.circleJoin).toEqual({
+      status: 'joined',
+      circle: { id: 'c1', name: 'Nov steps challenge', inviteCode: 'FITAB12CD' },
+      isCreator: false,
+    });
+  });
+
+  it('joins even when the attribution is refused; same error envelope + error.details.circleJoin', async () => {
+    svc.claim.mockRejectedValue(new ReferralError('ALREADY_ATTRIBUTED', 'nope', { firstName: 'Maya' }));
+    const res = await claimPOST(json('http://localhost/x', { code: 'FITAB12CD', source: 'universal_link' }));
+    const body = await res.json();
+    expect(res.status).toBe(409);
+    expect(body).toMatchObject({ success: false, data: { firstName: 'Maya' }, error: { code: 'ALREADY_ATTRIBUTED' } });
+    expect(body.error.details.circleJoin).toMatchObject({ status: 'joined', circle: { id: 'c1' } });
+  });
+
+  it('never joins for a personal code', async () => {
+    svc.claim.mockResolvedValue({ status: 'pending' });
+    const body = await (await claimPOST(json('http://localhost/x', { code: 'MAYA7K2', source: 'typed' }))).json();
+    expect(joinViaInvite).not.toHaveBeenCalled();
+    expect(body.data.circleJoin).toBeNull();
   });
 
   it('rejects unknown sources and unauthenticated calls', async () => {

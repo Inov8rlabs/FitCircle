@@ -1,12 +1,12 @@
 'use client';
 
 import { motion } from 'framer-motion';
-import { ArrowRight, Check, Gift, Globe, Heart, LayoutDashboard, Smartphone, Sparkles, Users } from 'lucide-react';
+import { ArrowRight, Check, Gift, Globe, Heart, LayoutDashboard, Loader2, Smartphone, Sparkles, Users } from 'lucide-react';
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 
-import { AnalyticsEvents, analytics } from '@/lib/analytics';
+import { AnalyticsEvents, analytics, toErrorKind } from '@/lib/analytics';
 import { useTrackOnce } from '@/lib/analytics/react';
 import { copyText } from '@/lib/referrals/clipboard';
 import { playStoreUrl } from '@/lib/referrals/links';
@@ -23,8 +23,6 @@ import {
   type InvitePlatform,
 } from '@/lib/referrals/web';
 import { useAuthStore } from '@/stores/auth-store';
-
-import { JoinCircleFlow } from './JoinCircleFlow';
 
 export interface InviteLandingProps {
   kind: 'personal' | 'circle';
@@ -50,7 +48,6 @@ export function InviteLanding(props: InviteLandingProps) {
   const user = useAuthStore((s) => s.user);
   const [mounted, setMounted] = useState(false);
   const [platform, setPlatform] = useState<InvitePlatform>(initialPlatform);
-  const [joining, setJoining] = useState(false);
 
   const usable = preview.valid || degraded;
   const isCircle = kind === 'circle';
@@ -83,14 +80,6 @@ export function InviteLanding(props: InviteLandingProps) {
   useTrackOnce(AnalyticsEvents.inviteLinkOpened({ signed_in: Boolean(user) }), mounted, code);
 
   if (!usable) return <InvalidInvite />;
-
-  if (joining && circleCode) {
-    return (
-      <Shell>
-        <JoinCircleFlow inviteCode={circleCode} refCode={refCode} onBack={() => setJoining(false)} />
-      </Shell>
-    );
-  }
 
   const name = degraded ? 'A friend' : inviterFirstName(preview);
   const rewardDays = degraded ? 0 : preview.inviteeRewardDays ?? 0;
@@ -144,10 +133,17 @@ export function InviteLanding(props: InviteLandingProps) {
           data-testid="invite-ctas"
         >
           {signedIn ? (
-            isCircle ? (
-              <PrimaryButton onClick={() => setJoining(true)}>
-                <Users className="h-5 w-5" /> Join circle
-              </PrimaryButton>
+            isCircle && circleCode ? (
+              <AutoJoinCircle
+                inviteCode={circleCode}
+                refCode={refCode}
+                fallbackName={circle?.name ?? null}
+                platform={platform}
+                appStoreUrl={appStoreUrl}
+                playUrl={playUrl}
+                playStoreLive={playStoreLive}
+                inviteUrl={inviteUrl}
+              />
             ) : (
               <div className="rounded-2xl border border-purple-500/30 bg-purple-500/10 p-5 text-center">
                 <p className="font-semibold text-white">You&apos;re already on FitCircle</p>
@@ -425,6 +421,161 @@ function HowItWorks({ inviterName, reward }: { inviterName: string; reward: bool
         ))}
       </ol>
     </section>
+  );
+}
+
+type AutoJoinState =
+  | { kind: 'joining' }
+  | { kind: 'joined' | 'already'; circleId: string | null; name: string | null }
+  | { kind: 'signed_out' }
+  | { kind: 'error'; message: string; retryable: boolean };
+
+/**
+ * Signed-in visitor on /join/{code} (an existing account, or a new one coming
+ * back from signup/onboarding): seat them in the circle right away — no extra
+ * tap — through the same idempotent server join the apps use, then confirm and
+ * point them at the app.
+ */
+function AutoJoinCircle({
+  inviteCode,
+  refCode,
+  fallbackName,
+  platform,
+  appStoreUrl,
+  playUrl,
+  playStoreLive,
+  inviteUrl,
+}: {
+  inviteCode: string;
+  refCode: string | null;
+  fallbackName: string | null;
+  platform: InvitePlatform;
+  appStoreUrl: string;
+  playUrl: string;
+  playStoreLive: boolean;
+  inviteUrl: string;
+}) {
+  const [state, setState] = useState<AutoJoinState>({ kind: 'joining' });
+  const [attempt, setAttempt] = useState(0);
+
+  useEffect(() => {
+    let cancelled = false;
+    setState({ kind: 'joining' });
+    analytics.track(AnalyticsEvents.fitCircleJoinStarted({ source: 'invite_link' }));
+    fetch('/api/mobile/circles/join', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'same-origin',
+      body: JSON.stringify({ inviteCode, ...(refCode ? { ref: refCode } : {}) }),
+    })
+      .then(async (res) => {
+        const body = (await res.json().catch(() => null)) as
+          | { circle?: { id?: string; name?: string }; message?: string; alreadyMember?: boolean }
+          | null;
+        if (cancelled) return;
+        const circleId = body?.circle?.id ?? null;
+        const name = body?.circle?.name ?? fallbackName;
+        if (res.status === 201) {
+          analytics.track(AnalyticsEvents.fitCircleJoined({ source: 'invite_link' }));
+          setState({ kind: 'joined', circleId, name });
+        } else if (res.ok || res.status === 409) {
+          setState({ kind: 'already', circleId, name });
+        } else if (res.status === 401) {
+          setState({ kind: 'signed_out' });
+        } else {
+          analytics.track(
+            AnalyticsEvents.fitCircleJoinFailed({ source: 'invite_link', error_kind: toErrorKind(null, res.status) })
+          );
+          setState({
+            kind: 'error',
+            message: res.status >= 500 ? "We couldn't save your seat. Please try again." : body?.message || "This circle can't be joined.",
+            retryable: res.status >= 500,
+          });
+        }
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setState({ kind: 'error', message: "We couldn't reach FitCircle. Check your connection and try again.", retryable: true });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [inviteCode, refCode, fallbackName, attempt]);
+
+  if (state.kind === 'joining') {
+    return (
+      <div data-testid="invite-autojoin-joining" className="flex items-center justify-center gap-3 rounded-2xl border border-slate-800 bg-slate-900/60 p-5 text-gray-200">
+        <Loader2 className="h-5 w-5 animate-spin text-purple-300" aria-hidden />
+        Saving your seat{fallbackName ? ` in ${fallbackName}` : ''}…
+      </div>
+    );
+  }
+
+  if (state.kind === 'signed_out') {
+    return (
+      <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-5 text-center">
+        <p className="font-semibold text-white">Please log in again to join</p>
+        <Link
+          href={`/login?returnUrl=${encodeURIComponent(`/join/${inviteCode}${refCode ? `?ref=${refCode}` : ''}`)}`}
+          className="mt-3 inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-purple-600 to-pink-600 px-5 py-3 font-semibold text-white"
+        >
+          Log in <ArrowRight className="h-4 w-4" />
+        </Link>
+      </div>
+    );
+  }
+
+  if (state.kind === 'error') {
+    return (
+      <div data-testid="invite-autojoin-error" className="rounded-2xl border border-red-500/30 bg-red-500/10 p-5 text-center">
+        <p className="font-semibold text-white">{state.message}</p>
+        <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:justify-center">
+          {state.retryable && (
+            <PrimaryButton onClick={() => setAttempt((n) => n + 1)}>Try again</PrimaryButton>
+          )}
+          <Link
+            href="/dashboard"
+            className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-700 px-5 py-3 font-medium text-gray-200 hover:bg-slate-800"
+          >
+            <LayoutDashboard className="h-4 w-4" /> Dashboard
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+  const name = state.name || 'the circle';
+  return (
+    <div data-testid="invite-autojoin-done" className="space-y-3">
+      <div className="rounded-2xl border border-emerald-500/30 bg-emerald-500/10 p-5 text-center">
+        <p className="flex items-center justify-center gap-2 text-lg font-semibold text-white">
+          <Check className="h-5 w-5 text-emerald-300" aria-hidden />
+          {state.kind === 'joined' ? `You joined ${name}` : `You're already in ${name}`}
+        </p>
+        <p className="mt-1 text-sm text-gray-300">Get the app to check in every day and keep each other honest.</p>
+      </div>
+      {(platform === 'ios' || platform === 'desktop') && (
+        <AppStoreButton
+          url={appStoreUrl}
+          primary={platform === 'ios'}
+          onClick={() => {
+            analytics.track(AnalyticsEvents.appStoreLinkClicked({ store: 'app_store', placement: 'invite_landing' }));
+            window.location.assign(appStoreUrl);
+          }}
+        />
+      )}
+      {(platform === 'android' || platform === 'desktop') && (
+        <PlayStoreButton url={playUrl} live={playStoreLive} primary={platform === 'android'} />
+      )}
+      {platform !== 'desktop' && <OpenInAppLink platform={platform} inviteUrl={inviteUrl} fallbackUrl={playUrl} />}
+      <Link
+        href={state.circleId ? `/fitcircles/${state.circleId}` : '/dashboard'}
+        className="flex w-full items-center justify-center gap-2 rounded-2xl border border-slate-700 bg-slate-900/60 px-5 py-4 font-medium text-gray-200 transition-colors hover:border-purple-500/60 hover:bg-slate-900"
+      >
+        <Users className="h-5 w-5 text-purple-300" /> Open the circle on the web
+        <ArrowRight className="h-4 w-4" />
+      </Link>
+    </div>
   );
 }
 
