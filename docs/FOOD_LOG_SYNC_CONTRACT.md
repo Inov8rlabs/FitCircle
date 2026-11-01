@@ -47,6 +47,15 @@ Backend changes made for the mobile local-first outbox. Every change is additive
 - For water, `data.hydration` ("today") uses the header zone, or the body zone when there is no header.
 - An explicit `entry_date` still wins. Old clients that send no `timezone` behave exactly as before.
 
+## POST /api/mobile/food-log: `meta.milestones` (conversion milestones)
+
+- New optional field `meta.milestones: string[]`. Omitted when empty, so older clients see no change.
+- Only value today: `"meals_logged_3_days"`. It is returned on the food create (`entry_type: "food"`) that adds the user's **3rd distinct local day** with food: the entry's day is new and exactly 2 other days already have food. The day is `data.entry_date`, filed in the log-time zone above (body `timezone` → header → profile → UTC). Deleted entries, water and supplements don't count.
+- Once per user, server-side: recorded in `profiles.metadata.milestones.meals_logged_3_days` (`{ at, entry_id }`) by a conditional update, so a second device, a reinstall, or deleting a day and logging a new one never reports it again. Users who were past 3 days before this shipped never get it.
+- A retried create of the **same entry id** (`meta.duplicate: true`) that originally reached the milestone reports it again, because the first response was lost. Clients should still dedupe locally (Android keeps a per-user "fired" flag).
+- An outbox that syncs queued meals reads it from each create response, like `meta.streak`.
+- Clients log it as the analytics / ad conversion event of the same name (Android: Firebase `meals_logged_3_days` → Google Ads in-app action). It is never shown in the UI.
+
 ## Photo uploads: idempotent per entry + key
 
 ### POST `/api/mobile/food-log/{id}/images/batch` (multipart, `images` repeated)

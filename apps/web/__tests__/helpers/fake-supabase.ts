@@ -102,9 +102,10 @@ class FakeQuery {
     return this;
   }
 
-  /** PostgREST `.is(col, null)` — the only form the services use. */
+  /** PostgREST `.is(col, null)` — the only form the services use. `col` may be a JSON path (`a->b->>c`). */
   is(column: string, value: any) {
-    this.filters.push(r => (value === null ? r[column] == null : r[column] === value));
+    const read = (r: Row) => readPath(r, column);
+    this.filters.push(r => (value === null ? read(r) == null : read(r) === value));
     return this;
   }
 
@@ -282,6 +283,14 @@ class FakeQuery {
       this.op === 'select' || this.returnRows ? { data, error } : { data: null, error };
     return Promise.resolve(value).then(resolve, reject);
   }
+}
+
+/** Column or PostgREST JSON path (`metadata->milestones->>x`): missing keys read as null. */
+function readPath(row: Row, column: string): any {
+  if (!column.includes('->')) return row[column];
+  return column
+    .split(/->>?/)
+    .reduce<any>((v, key) => (v != null && typeof v === 'object' ? v[key] : undefined), row);
 }
 
 /** Table definitions matching the streak schema's unique constraints. */
