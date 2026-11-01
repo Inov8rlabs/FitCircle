@@ -819,7 +819,7 @@ export class ChallengeService {
     const { error } = await supabaseAdmin
       .from('circle_encouragements')
       .insert({
-        fitcircle_id: challenge.fitcircle_id,
+        circle_id: challenge.fitcircle_id,
         from_user_id: fromUserId,
         to_user_id: toUserId,
         type: 'high_five',

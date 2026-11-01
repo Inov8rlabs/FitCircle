@@ -97,7 +97,6 @@ export async function POST(
       .from('circle_invites')
       .update({
         status: 'expired',
-        updated_at: new Date().toISOString(),
       })
       .eq('id', inviteId);
 
