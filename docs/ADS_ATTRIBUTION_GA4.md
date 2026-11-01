@@ -33,7 +33,7 @@ There are two fixes:
 ```
 Android app (release build, analytics consent permitted)
   ├─ FirebaseAnalytics.setUserId(profile UUID) on identify / null on logout
-  ├─ logs first_open (automatic), sign_up, activated, trial_start, purchase  ──►  GA4 property 553928425
+  ├─ logs first_open (automatic), sign_up, circle_created, meals_logged_3_days, activated, trial_start, purchase  ──►  GA4 property 553928425
   └─ POST /api/mobile/attribution { …referrer…, appInstanceId }                       │ (Firebase project
         └─► user_attribution.app_instance_id   (= user_pseudo_id in BigQuery)         │  fitcircle-fitness-app)
                                                                                       ▼
@@ -131,7 +131,7 @@ are never exported, so every day of delay is a day of Google-driven installs tha
 6. **Ship Android** `feat/ga4-attribution`. It sends `setUserId` and `appInstanceId`. It can ride with the next
    release; no version bump is on the branch.
 7. **Import GA4 conversions in Google Ads** (optional for the sync, needed for `networkSignUps`). In GA4 Admin →
-   Events, mark `sign_up`, `activated` and `trial_start` as **key events** once they appear. Then in Google Ads →
+   Events, mark `sign_up`, `circle_created`, `meals_logged_3_days`, `activated` and `trial_start` as **key events** once they appear (`circle_created` = the user created a FitCircle; `meals_logged_3_days` = food logged on 3 distinct local days, decided server-side via `meta.milestones` on the food-log create). Then in Google Ads →
    Goals → Conversions → New → Import → Google Analytics 4 (app), select them. Keep them **secondary** unless you
    want to bid on them. The console reads `all_conversions`, so secondary actions count.
 8. **Set env vars and turn the sync on.** Set `GA4_BIGQUERY_PROJECT_ID` and `GA4_BIGQUERY_DATASET`. When the first

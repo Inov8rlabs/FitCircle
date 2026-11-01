@@ -1,7 +1,7 @@
 {
   "$schema": "./tracking-plan.schema.json",
-  "version": 16,
-  "updated": "2026-10-28",
+  "version": 17,
+  "updated": "2026-11-01",
   "conventions": {
     "eventNames": "Title Case, '<Object> <Past-tense verb>' (e.g. 'Meal Logged'). Names are frozen once shipped: rename in the analytics tool, never in code.",
     "propertyNames": "snake_case. Enum values are lowercase snake_case.",
@@ -969,6 +969,25 @@
           "name": "shared_circle_count",
           "type": "int",
           "required": false
+        }
+      ]
+    },
+    {
+      "name": "Meal Logging Milestone Reached",
+      "category": "nutrition",
+      "platforms": [
+        "ios",
+        "android"
+      ],
+      "description": "A once-per-user meal-logging milestone the SERVER reported in a food-log create response (meta.milestones; docs/FOOD_LOG_SYNC_CONTRACT.md). meals_logged_3_days = food logged on 3 distinct local days. Fired once per user, also when a queued offline meal syncs. Android maps it to the Firebase / Google Ads conversion of the same name.",
+      "properties": [
+        {
+          "name": "milestone",
+          "type": "enum",
+          "values": [
+            "meals_logged_3_days"
+          ],
+          "required": true
         }
       ]
     },

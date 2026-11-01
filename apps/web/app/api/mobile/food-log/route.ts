@@ -9,6 +9,7 @@ import { z } from 'zod';
 
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { promosConfig } from '@/lib/promos/config';
+import { ConversionMilestoneService } from '@/lib/services/conversion-milestone-service';
 import { FeatureFlagService } from '@/lib/services/feature-flag-service';
 import { FoodLogImageService } from '@/lib/services/food-log-image-service';
 import { FoodLogService } from '@/lib/services/food-log-service';
@@ -209,6 +210,10 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
  *   before. meta.entryTimezone reports the zone used and its source.
  * - `data.image_urls` (always, may be []) and `data.photo_url` (when any): the
  *   entry's photos, same shape as GET.
+ * - `meta.milestones` (optional, string[]): once-per-user conversion milestones
+ *   this create reached — today only "meals_logged_3_days" (first food entry
+ *   on the user's 3rd distinct local day). Omitted when none. Clients log it
+ *   as an analytics / ad conversion event (ConversionMilestoneService).
  * - Round trips (water, day already claimed): auth (blacklist ∥ profile) → flag
  *   → insert → (streak ∥ hydration). The audit row, circle meal post and the
  *   training reconcile run after the response.
@@ -317,7 +322,10 @@ export async function POST(request: NextRequest) {
     // is already claimed (the usual case for water) it's a single read.
     // A retried create re-runs it too: idempotent, and the first response was lost.
     // Today's hydration total is independent of the claim, so it's read in parallel.
-    const [streak, hydration] = await Promise.all([
+    // meta.milestones (once per user, e.g. meals_logged_3_days — the user's 3rd
+    // distinct local day with food): the apps log it as an ad conversion event.
+    // Food only; water skips it entirely. Never fails the create.
+    const [streak, hydration, milestones] = await Promise.all([
       StreakClaimingService.autoClaimForManualLog(user.id, {
         // Claim the day the entry was filed under, so the two can never disagree.
         occurredAt: validatedData.entry_date ?? result.data?.logged_at ?? null,
@@ -330,6 +338,9 @@ export async function POST(request: NextRequest) {
       isWater
         ? VitalsService.hydrationForResponse(user.id, request, user, entryTz.source === 'body' ? entryTz.timezone : null)
         : Promise.resolve(undefined),
+      result.data?.entry_type === 'food'
+        ? ConversionMilestoneService.forFoodLogCreate(supabase, user.id, result.data, { duplicate: result.duplicate })
+        : Promise.resolve([]),
     ]);
 
     // Photo URLs in the list endpoint's shape (`image_urls`, always; `photo_url`
@@ -350,6 +361,7 @@ export async function POST(request: NextRequest) {
           entryTimezone: { timezone: entryTz.timezone, source: entryTz.source },
           ...(entryTz.rejected !== undefined ? { ignoredTimezone: entryTz.rejected } : {}),
           ...(result.duplicate ? { duplicate: true } : {}),
+          ...(milestones.length > 0 ? { milestones } : {}),
         },
         error: null,
       },
