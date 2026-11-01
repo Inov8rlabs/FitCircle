@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from 'next/server';
 
+import { createAdminSupabase } from '@/lib/supabase-admin';
 import { createServerSupabase } from '@/lib/supabase-server';
 
 export async function PATCH(
@@ -52,8 +53,9 @@ export async function PATCH(
 
     console.log('Updating participant goals:', { challengeId, userId, updateData });
 
-    // Update challenge_participants table
-    const { data, error } = await supabase
+    // Members can't UPDATE their own row under RLS (migration 118), so the
+    // write goes through the admin client after the ownership check above.
+    const { data, error } = await createAdminSupabase()
       .from('fitcircle_members')
       .update(updateData)
       .eq('fitcircle_id', challengeId)
