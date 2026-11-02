@@ -54,6 +54,43 @@ export default function ResetPasswordPage() {
   useEffect(() => {
     let active = true;
 
+    // The browser client uses the PKCE flow, so it only consumes `?code=` on
+    // its own. Reset emails sent from the server carry the session in the URL
+    // fragment (`#access_token=…&type=recovery`) or as `?token_hash=`, which it
+    // ignores — leaving the form disabled. Establish the session explicitly.
+    const establishFromUrl = async () => {
+      const hash = new URLSearchParams(window.location.hash.replace(/^#/, ''));
+      const query = new URLSearchParams(window.location.search);
+      const linkError = hash.get('error_description') || query.get('error_description');
+      if (linkError) {
+        setError(`${linkError.replace(/\+/g, ' ')}. Please request a new reset link.`);
+        return;
+      }
+      const accessToken = hash.get('access_token');
+      const refreshToken = hash.get('refresh_token');
+      const code = query.get('code');
+      const tokenHash = query.get('token_hash');
+      let failure: { message: string } | null = null;
+      if (accessToken && refreshToken) {
+        ({ error: failure } = await supabase.auth.setSession({ access_token: accessToken, refresh_token: refreshToken }));
+      } else if (code) {
+        ({ error: failure } = await supabase.auth.exchangeCodeForSession(code));
+      } else if (tokenHash) {
+        ({ error: failure } = await supabase.auth.verifyOtp({ type: 'recovery', token_hash: tokenHash }));
+      } else {
+        return;
+      }
+      if (!active) return;
+      if (failure) {
+        setError('This reset link has expired or was already used. Please request a new one.');
+        return;
+      }
+      setHasRecoverySession(true);
+      // Drop the tokens from the address bar.
+      window.history.replaceState(null, '', window.location.pathname);
+    };
+    void establishFromUrl();
+
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (active && session) {
         setHasRecoverySession(true);
