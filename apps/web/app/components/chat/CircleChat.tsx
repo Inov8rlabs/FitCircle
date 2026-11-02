@@ -3,7 +3,9 @@
 import { Loader2, MessageCircle, Send } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
+import { ChatCircleSwitcher } from '@/components/chat/ChatSwitcher';
 import { MessageBubble } from '@/components/chat/MessageBubble';
+import { requestChatInboxRefresh, useChatInbox } from '@/components/chat/useChatInbox';
 import { Button } from '@/components/ui/button';
 import { AnalyticsEvents, analytics } from '@/lib/analytics';
 import {
@@ -16,6 +18,10 @@ import { useAuthStore } from '@/stores/auth-store';
 
 interface CircleChatProps {
   circleId: string;
+  /** Header title; with 2+ chats it becomes the circle switcher. */
+  circleName?: string;
+  /** Swap the chat to another circle in place (no history growth). */
+  onSwitchCircle?: (circleId: string) => void;
 }
 
 const PAGE_SIZE = 30;
@@ -35,8 +41,9 @@ function newClientId(): string {
  * API returns newest-first, so we reverse on ingest. Realtime INSERTs on
  * circle_messages append; our own optimistic echoes are de-duped by clientId.
  */
-export function CircleChat({ circleId }: CircleChatProps) {
+export function CircleChat({ circleId, circleName, onSwitchCircle }: CircleChatProps) {
   const { user } = useAuthStore();
+  const { inbox } = useChatInbox();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -117,7 +124,7 @@ export function CircleChat({ circleId }: CircleChatProps) {
   // Mark read once the timeline is loaded.
   useEffect(() => {
     if (!loading && messages.length >= 0) {
-      void chatClient.markRead(circleId).catch(() => {});
+      void chatClient.markRead(circleId).then(requestChatInboxRefresh).catch(() => {});
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loading, circleId]);
@@ -155,7 +162,7 @@ export function CircleChat({ circleId }: CircleChatProps) {
               scrollToBottom('smooth');
               // The message was read live in the open timeline — advance the
               // persisted cursor so the unread badge stays accurate on reload.
-              void chatClient.markRead(circleId).catch(() => {});
+              void chatClient.markRead(circleId).then(requestChatInboxRefresh).catch(() => {});
             })
             .catch((err) => console.warn('[chat] realtime refetch failed', err));
         }
@@ -348,6 +355,23 @@ export function CircleChat({ circleId }: CircleChatProps) {
 
   return (
     <div className="flex h-[70vh] min-h-[420px] flex-col">
+      {circleName !== undefined && (
+        <div className="mb-1 flex items-center border-b border-slate-800/60 pb-2" data-testid="chat-header">
+          <ChatCircleSwitcher
+            circleId={circleId}
+            circleName={circleName}
+            chats={inbox?.chats ?? []}
+            onOpen={() =>
+              analytics.track(AnalyticsEvents.chatSwitcherOpened({ source: 'header', circle_count: inbox?.chats.length ?? 0 }))
+            }
+            onSwitch={(to) => {
+              analytics.track(AnalyticsEvents.chatCircleSwitched({ from_circle_id: circleId, to_circle_id: to }));
+              analytics.track(AnalyticsEvents.chatOpened({ entry: 'switcher', circle_id: to }));
+              onSwitchCircle?.(to);
+            }}
+          />
+        </div>
+      )}
       {/* Message timeline */}
       <div ref={scrollRef} className="flex-1 space-y-2 overflow-y-auto px-1 py-2">
         {loading ? (

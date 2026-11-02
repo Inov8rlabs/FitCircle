@@ -69,6 +69,19 @@ export interface ScoredCard extends Candidate {
  * `null` means "unknown" (the loader failed or timed out) — eligibility hints
  * never drop a card on an unknown, and audience filters never match one.
  */
+/** Unread circle chat summary for the circle_chat card (from ChatInboxService). */
+export interface ChatUnreadHint {
+  /** Non-muted unread across all circles; 0 = known nothing to show. */
+  total_unread: number;
+  circles_with_unread: number;
+  /** The chat to open (= /chats default_circle_id) and its newest message. */
+  circle_id: string | null;
+  circle_name: string | null;
+  unread_count: number;
+  sender_display_name: string | null;
+  preview: string | null;
+}
+
 export interface FeedContext {
   userId: string;
   now: Date;
@@ -96,4 +109,6 @@ export interface FeedContext {
   waterLoggedToday: boolean | null;
   /** Hint only: the client still enforces ads eligibility (flag + consent + non-premium). */
   adsEligible: boolean | null;
+  /** Unread chat; only loaded for clients that declare circle_chat. undefined/null = unknown. */
+  chatUnread?: ChatUnreadHint | null;
 }

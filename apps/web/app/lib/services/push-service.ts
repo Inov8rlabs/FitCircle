@@ -2,6 +2,8 @@ import * as jwt from 'jsonwebtoken';
 
 import { createAdminSupabase } from '../supabase-admin';
 
+import { QUIET_CHAT_RELEVANCE } from './push-presentation';
+
 // ============================================================================
 // TYPES
 // ============================================================================
@@ -12,6 +14,11 @@ export interface PushNotification {
   data?: Record<string, string>;
   badge?: number;
   sound?: string;
+  /**
+   * Deliver without a sound (burst follow-ups — docs/CHAT_NAV_NOTIFICATIONS_CHEERS.md §2.1):
+   * `aps.sound` is omitted on both wire shapes. Pair with interruptionLevel 'passive'.
+   */
+  silent?: boolean;
   /**
    * Chat wire shape (set by NotificationOrchestrator for chat types only):
    * data-only on Android (no top-level notification block, HIGH priority) and
@@ -44,6 +51,13 @@ export interface PushNotification {
    * Android ignores all of it.
    */
   apns?: ApnsExtras;
+  /**
+   * chat_message "alert once" (docs/CHAT_NAV_NOTIFICATIONS_CHEERS.md §2.1), applied
+   * per device by forDevice(): only tokens that declared `chat_quiet` get the quiet
+   * variant (`quiet`) or a burst follow-up (`burstFollowUp`); other tokens get the
+   * plain push, and nothing for a burst follow-up (the pre-2026-11-02 drop rule).
+   */
+  chatDelivery?: { quiet: boolean; burstFollowUp: boolean };
 }
 
 export interface ApnsExtras {
@@ -51,6 +65,8 @@ export interface ApnsExtras {
   mutableContent?: boolean;
   interruptionLevel?: 'passive' | 'active' | 'time-sensitive';
   relevanceScore?: number;
+  /** `aps.summary-arg`: "N more notifications from <summaryArg>" on a collapsed stack. */
+  summaryArg?: string;
   custom?: Record<string, unknown>;
 }
 
@@ -63,6 +79,7 @@ type ApsDictionary = {
   'mutable-content'?: 1;
   'interruption-level'?: 'passive' | 'active' | 'time-sensitive';
   'relevance-score'?: number;
+  'summary-arg'?: string;
 };
 
 /** The `aps` additions for `extras` (absent fields stay absent). Pure; unit-tested. */
@@ -75,6 +92,7 @@ export function apsExtras(extras: ApnsExtras | undefined): Partial<ApsDictionary
   if (typeof extras.relevanceScore === 'number' && Number.isFinite(extras.relevanceScore)) {
     out['relevance-score'] = Math.min(1, Math.max(0, extras.relevanceScore));
   }
+  if (extras.summaryArg) out['summary-arg'] = extras.summaryArg;
   return out;
 }
 
@@ -87,6 +105,64 @@ export interface PushToken {
   is_active: boolean;
   last_used_at: string;
   created_at: string;
+  /** X-Client-Features the app sent when it registered this token (migration 123; absent before it). */
+  client_features?: string[] | null;
+}
+
+/**
+ * The device's app resets/updates the icon badge itself (chat read sync), so a
+ * push may set `aps.badge`. Shipped builds never clear it — they get no badge.
+ */
+export const CHAT_BADGE_FEATURE = 'chat_badge';
+/**
+ * The device's app renders quiet chat follow-ups (passive / setOnlyAlertOnce),
+ * so it gets every member message: burst follow-ups are delivered quietly
+ * instead of dropped. Without it a device keeps the old burst drop rule.
+ */
+export const CHAT_QUIET_FEATURE = 'chat_quiet';
+
+/** X-Client-Features → normalized list (lowercase snake tokens, ≤ 32). Pure. */
+export function parseClientFeatures(header: string | null | undefined): string[] {
+  const out = new Set<string>();
+  for (const raw of (header ?? '').split(',')) {
+    const f = raw.trim().toLowerCase();
+    if (/^[a-z][a-z0-9_]{0,39}$/.test(f)) out.add(f);
+    if (out.size >= 32) break;
+  }
+  return [...out];
+}
+
+/** The quiet variant of a chat push: passive, no sound, data.quiet. Pure. */
+export function quietVariant(n: PushNotification): PushNotification {
+  return {
+    ...n,
+    silent: true,
+    data: { ...(n.data ?? {}), quiet: 'true' },
+    apns: { ...(n.apns ?? {}), interruptionLevel: 'passive', relevanceScore: QUIET_CHAT_RELEVANCE },
+  };
+}
+
+/**
+ * The notification as this device may receive it, or null (skip this device):
+ *  - chat "alert once": chat_quiet devices get every member message, quiet inside
+ *    the circle's window; other devices get the plain push and no burst follow-ups;
+ *  - no badge unless the device declared chat_badge.
+ * Pure.
+ */
+export function forDevice(token: Pick<PushToken, 'client_features'>, notification: PushNotification): PushNotification | null {
+  const features = token.client_features ?? [];
+  let out = notification;
+  if (out.chatDelivery) {
+    const { chatDelivery, ...plain } = out;
+    const capable = features.includes(CHAT_QUIET_FEATURE);
+    if (!capable && chatDelivery.burstFollowUp) return null;
+    out = capable && chatDelivery.quiet ? quietVariant(plain) : plain;
+  }
+  if (out.badge !== undefined && !features.includes(CHAT_BADGE_FEATURE)) {
+    const { badge: _badge, ...rest } = out;
+    out = rest;
+  }
+  return out;
 }
 
 interface FCMMessage {
@@ -213,7 +289,8 @@ export function buildFCMMessage(token: string, notification: PushNotification): 
                 title: notification.title,
                 body: notification.body,
               },
-              sound: notification.sound || 'default',
+              ...(notification.silent ? {} : { sound: notification.sound || 'default' }),
+              ...(typeof notification.badge === 'number' ? { badge: notification.badge } : {}),
               ...(notification.chat.threadId ? { 'thread-id': notification.chat.threadId } : {}),
               ...extras,
             },
@@ -238,7 +315,7 @@ export function buildFCMMessage(token: string, notification: PushNotification): 
           ...custom,
           aps: {
             badge: notification.badge,
-            sound: notification.sound || 'default',
+            ...(notification.silent ? {} : { sound: notification.sound || 'default' }),
             ...(notification.threadId ? { 'thread-id': notification.threadId } : {}),
             ...extras,
           },
@@ -271,26 +348,30 @@ export class PushService {
     userId: string,
     token: string,
     platform: 'ios' | 'android' | 'web',
-    deviceName?: string
+    deviceName?: string,
+    clientFeatures: string[] = []
   ): Promise<PushToken> {
     const supabaseAdmin = createAdminSupabase();
 
-    // Upsert: if token already exists, update it
-    const { data, error } = await supabaseAdmin
+    const row = {
+      user_id: userId,
+      token,
+      platform,
+      device_name: deviceName || null,
+      is_active: true,
+      last_used_at: new Date().toISOString(),
+    };
+    // Upsert: if token already exists, update it. client_features is replaced on
+    // every registration (an app downgrade drops its capabilities).
+    let { data, error } = await supabaseAdmin
       .from('push_tokens')
-      .upsert(
-        {
-          user_id: userId,
-          token,
-          platform,
-          device_name: deviceName || null,
-          is_active: true,
-          last_used_at: new Date().toISOString(),
-        },
-        { onConflict: 'token' }
-      )
+      .upsert({ ...row, client_features: clientFeatures }, { onConflict: 'token' })
       .select()
       .single();
+    // Before migration 123 the column doesn't exist: register without it (no badge for this device).
+    if (error && (error.code === '42703' || error.code === 'PGRST204')) {
+      ({ data, error } = await supabaseAdmin.from('push_tokens').upsert(row, { onConflict: 'token' }).select().single());
+    }
 
     if (error) {
       console.error('[PushService.registerToken] Error:', error);
@@ -360,7 +441,9 @@ export class PushService {
     const invalidTokenIds: string[] = [];
 
     for (const tokenRecord of tokens) {
-      const result = await this.sendToToken(tokenRecord, notification);
+      const shaped = forDevice(tokenRecord, notification);
+      if (!shaped) continue; // e.g. a burst follow-up for a device without chat_quiet
+      const result = await this.sendToToken(tokenRecord, shaped);
       if (result.success) {
         successCount++;
       } else if (result.invalidToken) {

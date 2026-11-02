@@ -109,10 +109,12 @@ export const COMMUNICATION_TYPES: ReadonlySet<NotificationType> = new Set<Notifi
   'chat_message',
   'chat_mention',
   'chat_reaction',
+  'chat_cheer',
 ]);
 
 const RELEVANCE: Partial<Record<NotificationType, number>> = {
   momentum_at_risk: 0.9,
+  chat_cheer: 0.9,
   chat_mention: 0.85,
   circle_streak_saved: 0.8,
   perfect_day: 0.75,
@@ -132,14 +134,21 @@ export function isHttpsUrl(value: unknown): value is string {
   }
 }
 
+/** Relevance of a quiet burst follow-up (below a fresh chat message, above passive nudges). */
+export const QUIET_CHAT_RELEVANCE = 0.3;
+
 export function presentationFor(type: NotificationType, data: NotificationData = {}, env: Env = process.env): ApnsPresentation {
+  // `quiet`: a chat burst follow-up (docs/CHAT_NAV_NOTIFICATIONS_CHEERS.md §2.1) —
+  // delivered into the circle's stack without sound or banner.
+  const quiet = data.quiet === true;
   const interruptionLevel: InterruptionLevel = TIME_SENSITIVE_TYPES.has(type)
     ? 'time-sensitive'
-    : passiveTypes(env).has(type)
+    : quiet || passiveTypes(env).has(type)
       ? 'passive'
       : 'active';
-  const relevanceScore =
-    RELEVANCE[type] ?? (interruptionLevel === 'passive' ? 0.2 : 0.5);
+  const relevanceScore = quiet
+    ? QUIET_CHAT_RELEVANCE
+    : RELEVANCE[type] ?? (interruptionLevel === 'passive' ? 0.2 : 0.5);
   const hasSender = COMMUNICATION_TYPES.has(type) && !!(data.senderName ?? data.friendName);
   return {
     category: TYPE_APNS_CATEGORY[type],

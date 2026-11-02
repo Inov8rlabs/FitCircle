@@ -1,9 +1,14 @@
 'use client';
 
-import { CalendarClock, Footprints, Lock } from 'lucide-react';
+import { CalendarClock, Footprints, HandHeart, Lock } from 'lucide-react';
 import { useEffect, useState, type ReactNode } from 'react';
 
+import { ClapBurst } from '@/components/chat/ReactionBar';
+import { CheerHoverButton } from '@/components/circles/CheerHoverButton';
+import { CheerSheet, type CheerTarget } from '@/components/circles/CheerSheet';
+import { useCheerGesture } from '@/components/circles/useCheerGesture';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import type { CheerSource } from '@/lib/api/circle-chat-client';
 import { AvatarCircle, GlassCard, ProgressBar } from '@/components/ui/ios';
 import { AnalyticsEvents, analytics } from '@/lib/analytics';
 import { cn } from '@/lib/utils';
@@ -99,6 +104,8 @@ export function StepsLeaderboard({ circleId, fallback }: { circleId: string; fal
   const [failed, setFailed] = useState(false);
   const [metric, setMetric] = useState<StepsMetric>('today_steps');
   const [selected, setSelected] = useState<StepsMemberRow | null>(null);
+  const [cheer, setCheer] = useState<{ target: CheerTarget; source: CheerSource } | null>(null);
+  const [bursts, setBursts] = useState<Record<string, number>>({});
 
   useEffect(() => {
     let cancelled = false;
@@ -125,6 +132,9 @@ export function StepsLeaderboard({ circleId, fallback }: { circleId: string; fal
     : sortStepsRows(board.members, metric);
   const syncing = board.members.filter((m) => m.steps_synced_recently).length;
   const goalLine = board.daily_goal ? `Goal ${fmt(board.daily_goal.steps)} steps/day` : "Each member's own step goal";
+
+  const openCheer = (row: StepsMemberRow, source: CheerSource) =>
+    setCheer({ target: cheerTargetFor(row), source });
 
   const choose = (next: StepsMetric) => {
     if (next === metric) return;
@@ -172,61 +182,17 @@ export function StepsLeaderboard({ circleId, fallback }: { circleId: string; fal
       )}
 
       <ul className="space-y-2">
-        {rows.map((row) => {
-          const rank = upcoming ? null : row.ranks[metric];
-          const canOpen = row.steps_visible && row.days.length > 0;
-          return (
-            <li key={row.user_id}>
-              <button
-                type="button"
-                data-testid="steps-leaderboard-row"
-                disabled={!canOpen}
-                onClick={() => setSelected(row)}
-                className={cn(
-                  'flex w-full items-center gap-3 rounded-xl border p-3 text-left transition duration-200 ease-ios',
-                  row.is_me ? 'border-brand-indigo/30 bg-brand-indigo/10' : 'border-glass bg-surface-raised/50',
-                  canOpen ? 'hover:border-white/20' : 'cursor-default'
-                )}
-              >
-                {!upcoming && (
-                  <span className="w-7 shrink-0 text-center text-headline font-bold tabular-nums text-fg-secondary">
-                    {rank ?? '–'}
-                  </span>
-                )}
-                <AvatarCircle name={row.display_name} src={row.avatar_url} size={36} />
-                <span className="min-w-0 flex-1">
-                  <span className="flex items-center gap-1.5">
-                    <span className="truncate text-body font-semibold text-white">{row.display_name}</span>
-                    {row.is_me && (
-                      <span className="shrink-0 rounded-full bg-brand-indigo/20 px-1.5 py-0.5 text-caption font-semibold text-brand-indigo">You</span>
-                    )}
-                  </span>
-                  <span className="block truncate text-caption text-fg-secondary">
-                    {!row.steps_visible
-                      ? 'Private'
-                      : upcoming
-                        ? row.steps_synced_recently
-                          ? 'Steps syncing'
-                          : 'No steps synced yet'
-                        : secondaryLine(row, metric)}
-                  </span>
-                </span>
-                {!upcoming && (
-                  <span className="flex w-[84px] shrink-0 flex-col items-end gap-1.5">
-                    {row.steps_visible ? (
-                      <>
-                        <span className="text-title3 font-bold tabular-nums text-white">{primaryValue(row, metric)}</span>
-                        <ProgressBar value={row.goal_pct_today ?? 0} className="w-[64px]" />
-                      </>
-                    ) : (
-                      <Lock className="h-4 w-4 text-fg-tertiary" aria-label="Private" />
-                    )}
-                  </span>
-                )}
-              </button>
-            </li>
-          );
-        })}
+        {rows.map((row) => (
+          <StepsRowItem
+            key={row.user_id}
+            row={row}
+            metric={metric}
+            upcoming={upcoming}
+            burst={bursts[row.user_id] ?? 0}
+            onOpen={() => setSelected(row)}
+            onCheer={() => openCheer(row, 'leaderboard_long_press')}
+          />
+        ))}
       </ul>
 
       <Dialog open={selected !== null} onOpenChange={(open) => !open && setSelected(null)}>
@@ -239,6 +205,21 @@ export function StepsLeaderboard({ circleId, fallback }: { circleId: string; fal
                   {fmt(selected.total_steps ?? 0)} steps total · goal met {selected.days_goal_met ?? 0} of {selected.days.length} days
                 </DialogDescription>
               </DialogHeader>
+              {!selected.is_me && (
+                <button
+                  type="button"
+                  data-testid="member-sheet-cheer"
+                  onClick={() => {
+                    const row = selected;
+                    setSelected(null);
+                    openCheer(row, 'member_sheet');
+                  }}
+                  className="inline-flex min-h-[44px] items-center justify-center gap-2 rounded-xl border border-glass bg-surface-raised/60 px-4 text-sm font-semibold text-white transition hover:bg-surface-raised"
+                >
+                  <HandHeart className="h-4 w-4 text-brand-orange" aria-hidden />
+                  Cheer {selected.display_name}
+                </button>
+              )}
               <ul className="max-h-[50vh] space-y-1 overflow-y-auto" data-testid="steps-day-breakdown">
                 {[...selected.days].reverse().map((d) => (
                   <li key={d.date} className="flex items-center justify-between rounded-lg px-2 py-1.5 text-body">
@@ -258,6 +239,105 @@ export function StepsLeaderboard({ circleId, fallback }: { circleId: string; fal
           )}
         </DialogContent>
       </Dialog>
+
+      <CheerSheet
+        circleId={circleId}
+        target={cheer?.target ?? null}
+        source={cheer?.source ?? 'leaderboard_long_press'}
+        onClose={() => setCheer(null)}
+        onSent={(id) => setBursts((b) => ({ ...b, [id]: (b[id] ?? 0) + 1 }))}
+      />
     </div>
+  );
+}
+
+/** What the cheer sheet shows for a steps row (nothing for a private member). */
+export function cheerTargetFor(row: StepsMemberRow): CheerTarget {
+  return {
+    user_id: row.user_id,
+    display_name: row.display_name,
+    avatar_url: row.avatar_url,
+    steps: row.steps_visible ? row.today_steps : null,
+    goalPct: row.steps_visible ? row.goal_pct_today : null,
+  };
+}
+
+function StepsRowItem({
+  row,
+  metric,
+  upcoming,
+  burst,
+  onOpen,
+  onCheer,
+}: {
+  row: StepsMemberRow;
+  metric: StepsMetric;
+  upcoming: boolean;
+  burst: number;
+  onOpen: () => void;
+  onCheer: () => void;
+}) {
+  const rank = upcoming ? null : row.ranks[metric];
+  const canOpen = row.steps_visible && row.days.length > 0;
+  const canCheer = !row.is_me;
+  const gesture = useCheerGesture(canCheer, onCheer);
+  return (
+    <li className="group relative">
+      <button
+        type="button"
+        data-testid="steps-leaderboard-row"
+        aria-disabled={!canOpen}
+        onClick={() => gesture.shouldHandleClick() && canOpen && onOpen()}
+        onPointerDown={gesture.onPointerDown}
+        onPointerMove={gesture.onPointerMove}
+        onPointerUp={gesture.onPointerUp}
+        onPointerCancel={gesture.onPointerCancel}
+        onPointerLeave={gesture.onPointerLeave}
+        onContextMenu={gesture.onContextMenu}
+        className={cn(
+          'flex w-full touch-manipulation select-none items-center gap-3 rounded-xl border p-3 text-left transition duration-200 ease-ios',
+          row.is_me ? 'border-brand-indigo/30 bg-brand-indigo/10' : 'border-glass bg-surface-raised/50',
+          canOpen ? 'hover:border-white/20' : 'cursor-default'
+        )}
+      >
+        {!upcoming && (
+          <span className="w-7 shrink-0 text-center text-headline font-bold tabular-nums text-fg-secondary">
+            {rank ?? '–'}
+          </span>
+        )}
+        <AvatarCircle name={row.display_name} src={row.avatar_url} size={36} />
+        <span className="min-w-0 flex-1">
+          <span className="flex items-center gap-1.5">
+            <span className="truncate text-body font-semibold text-white">{row.display_name}</span>
+            {row.is_me && (
+              <span className="shrink-0 rounded-full bg-brand-indigo/20 px-1.5 py-0.5 text-caption font-semibold text-brand-indigo">You</span>
+            )}
+          </span>
+          <span className="block truncate text-caption text-fg-secondary">
+            {!row.steps_visible
+              ? 'Private'
+              : upcoming
+                ? row.steps_synced_recently
+                  ? 'Steps syncing'
+                  : 'No steps synced yet'
+                : secondaryLine(row, metric)}
+          </span>
+        </span>
+        {!upcoming && (
+          <span className="flex w-[84px] shrink-0 flex-col items-end gap-1.5">
+            {row.steps_visible ? (
+              <>
+                <span className="text-title3 font-bold tabular-nums text-white">{primaryValue(row, metric)}</span>
+                <ProgressBar value={row.goal_pct_today ?? 0} className="w-[64px]" />
+              </>
+            ) : (
+              <Lock className="h-4 w-4 text-fg-tertiary" aria-label="Private" />
+            )}
+          </span>
+        )}
+      </button>
+      {canCheer && <CheerHoverButton name={row.display_name} onCheer={onCheer} className={upcoming ? 'right-3' : 'right-[108px]'} />}
+      {burst > 0 && <ClapBurst burstKey={burst} />}
+    </li>
   );
 }

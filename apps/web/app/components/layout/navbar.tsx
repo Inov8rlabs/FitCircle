@@ -18,6 +18,7 @@ import Link from 'next/link';
 import { useRouter, usePathname } from 'next/navigation';
 import { useState, useRef, useEffect } from 'react';
 
+import { ChatNavButton } from '@/components/chat/ChatNavButton';
 import { BottomNav, isNavItemActive } from '@/components/layout/bottom-nav';
 import { FitzyLauncher } from '@/components/nutrition/FitzyLauncher';
 import { Logo } from '@/components/ui/logo';
@@ -96,6 +97,7 @@ export function Navbar() {
 
           {/* Desktop User Menu */}
           <div className="hidden md:flex items-center gap-3 relative" ref={profileMenuRef}>
+            <ChatNavButton />
             <button
               onClick={() => setProfileMenuOpen(!profileMenuOpen)}
               className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-white/5 transition-colors"
@@ -168,6 +170,7 @@ export function Navbar() {
 
           {/* Mobile actions */}
           <div className="md:hidden flex items-center gap-1">
+            <ChatNavButton />
             <FitzyLauncher variant="icon" />
           {/* Mobile Menu Button */}
           <button

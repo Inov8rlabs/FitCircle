@@ -6,7 +6,8 @@
  * show (e.g. campaign lookup succeeded and found none). Unknown → keep: the
  * clients self-gate every card anyway, so an extra slot just collapses.
  */
-import { CARD_TYPE_PATTERN, CATALOG, DEFAULT_ORDER, cardId } from './catalog';
+import { CARD_TYPE_PATTERN, CATALOG, DEFAULT_ORDER, EXTRA_CARDS, cardId } from './catalog';
+import { SLOT_POINTS, baseScore } from './rankers/default-ranker';
 import type { Candidate, CardType, ClientCardSupport, FeedContext } from './types';
 
 /** Hard cap on parsed `cards=` entries (a typo can't make the server do unbounded work). */
@@ -62,6 +63,9 @@ export function ineligibleReason(type: CardType, ctx: FeedContext | null): strin
       return ctx.subscriptionsEnabled === false ? 'subscriptions_off' : null;
     case 'native_ad':
       return ctx.isPro === true || ctx.adsEligible === false ? 'ads_ineligible' : null;
+    case 'circle_chat':
+      if (ctx.hasCircle === false) return 'no_circle';
+      return ctx.chatUnread && ctx.chatUnread.total_unread === 0 ? 'no_unread_chat' : null;
     default:
       return null;
   }
@@ -72,6 +76,20 @@ function candidateFor(type: CardType, ctx: FeedContext | null): Candidate {
   if (type === 'campaign' && ctx?.campaign?.slug) {
     const props = { slug: ctx.campaign.slug };
     return { id: cardId(type, props), type, version, props };
+  }
+  // Props only when the unread lookup answered; without them the client uses its own /chats data.
+  if (type === 'circle_chat' && ctx?.chatUnread && ctx.chatUnread.circle_id) {
+    const u = ctx.chatUnread;
+    const props = {
+      circle_id: u.circle_id,
+      circle_name: u.circle_name,
+      unread_count: u.unread_count,
+      total_unread: u.total_unread,
+      circles_with_unread: u.circles_with_unread,
+      sender_display_name: u.sender_display_name,
+      preview: u.preview,
+    };
+    return { id: cardId(type), type, version, props };
   }
   return { id: cardId(type), type, version };
 }
@@ -96,6 +114,11 @@ export function buildCandidates(
     if (!clientSupports(support, type, CATALOG[type].version)) continue;
     const candidate = candidateFor(type, ctx);
     (ineligibleReason(type, ctx) || opts.replaced?.has(type) ? suppressed : eligible).push(candidate);
+  }
+  for (const extra of EXTRA_CARDS) {
+    if (!clientSupports(support, extra.type, CATALOG[extra.type].version)) continue;
+    const candidate = { ...candidateFor(extra.type, ctx), baseScore: baseScore(extra.after) - SLOT_POINTS / 2 };
+    (ineligibleReason(extra.type, ctx) || opts.replaced?.has(extra.type) ? suppressed : eligible).push(candidate);
   }
   for (const p of opts.promos ?? []) {
     if (clientSupports(support, p.type, p.version)) eligible.push(p);

@@ -2,7 +2,8 @@ import { type NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
-import { PushService } from '@/lib/services/push-service';
+import { CLIENT_FEATURES_HEADER } from '@/lib/design/icon-compat';
+import { PushService, parseClientFeatures } from '@/lib/services/push-service';
 
 const registerSchema = z.object({
   token: z.string().min(1),
@@ -24,7 +25,9 @@ export async function POST(request: NextRequest) {
       user.id,
       validated.token,
       validated.platform,
-      validated.device_name
+      validated.device_name,
+      // e.g. `chat_badge`: this build manages the icon badge, so chat pushes may set it.
+      parseClientFeatures(request.headers.get(CLIENT_FEATURES_HEADER))
     );
 
     return NextResponse.json({

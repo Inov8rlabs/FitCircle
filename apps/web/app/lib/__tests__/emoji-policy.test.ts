@@ -12,7 +12,8 @@ import { SystemPostEngine } from '../services/system-post-engine';
 import { hasEmoji } from '../text/strip-emoji';
 import type { SystemEventType } from '../types/circle-chat';
 
-const USER_CONTENT: NotificationType[] = ['chat_message', 'chat_mention', 'chat_reaction'];
+// chat_cheer: the emoji in "Ani cheered you 👏" is the sender's chosen reaction.
+const USER_CONTENT: NotificationType[] = ['chat_message', 'chat_mention', 'chat_reaction', 'chat_cheer'];
 // Title/body are composed upstream from circle names (user content) by DailySummaryService.
 const PASSTHROUGH: NotificationType[] = ['circle_daily_summary'];
 

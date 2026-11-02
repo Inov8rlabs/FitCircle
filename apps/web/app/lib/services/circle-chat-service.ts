@@ -8,6 +8,7 @@ import {
   type ListMessagesResult,
   type MessagePriority,
   type MessageReactionSummary,
+  type MessageCheer,
   type MessageReactor,
   type MessageSender,
   type MessageSystemBlock,
@@ -136,10 +137,11 @@ export class CircleChatService {
     }
 
     // Hide messages from members this user has blocked (or who blocked them).
-    // System posts have sender_id = null, so `.not in` never excludes them.
+    // System posts have sender_id = null, and SQL `NULL NOT IN (…)` is NULL
+    // (row dropped), so keep them explicitly.
     const hiddenIds = await ChatSafetyService.getBlockedIdsFor(userId);
     if (hiddenIds.length > 0) {
-      query = query.not('sender_id', 'in', `(${hiddenIds.join(',')})`);
+      query = query.or(`sender_id.is.null,sender_id.not.in.(${hiddenIds.join(',')})`);
     }
 
     const { data, error } = await query;
@@ -281,6 +283,8 @@ export class CircleChatService {
     if (row.sender_id !== userId) throw new Error('Forbidden');
     if (row.deleted_at) throw new Error('MessageDeleted');
     if (row.kind !== 'user_text') throw new Error('InvalidMessageKind');
+    // A cheer's body is generated from its structured data; editing would desync them.
+    if (this.cheerOf(row)) throw new Error('InvalidMessageKind');
 
     const createdAtMs = new Date(row.created_at).getTime();
     if (Date.now() - createdAtMs > MESSAGE_EDIT_WINDOW_MS) {
@@ -419,6 +423,52 @@ export class CircleChatService {
     // No viewer context for system writes; pass a sentinel so reactedByMe=false.
     const [dto] = await this.mapRowsToDTOs([inserted as CircleMessageRow], '');
     return dto;
+  }
+
+  /**
+   * Map one stored row to the client DTO as `viewerId` sees it (used by the
+   * cheer service after its insert).
+   */
+  static async toDTO(row: CircleMessageRow, viewerId: string): Promise<ChatMessageDTO> {
+    const [dto] = await this.mapRowsToDTOs([row], viewerId);
+    return dto;
+  }
+
+  /** Resolve a circle's display name for notification copy ('your circle' on failure). */
+  static async circleNameOf(circleId: string): Promise<string> {
+    return this.resolveCircleName(circleId);
+  }
+
+  /**
+   * The structured cheer on a row, normalized to the wire shape, or null (not
+   * a cheer, deleted, or malformed). Pure.
+   */
+  static cheerOf(row: Pick<CircleMessageRow, 'kind' | 'system_payload' | 'deleted_at'>): MessageCheer | null {
+    if (row.kind !== 'user_text' || row.deleted_at) return null;
+    const raw = (row.system_payload as { cheer?: unknown } | null)?.cheer;
+    if (!raw || typeof raw !== 'object') return null;
+    const c = raw as Record<string, unknown>;
+    if (typeof c.to_user_id !== 'string' || !c.to_user_id) return null;
+    const reaction = typeof c.reaction === 'string' && c.reaction ? c.reaction : 'clap';
+    const snap = c.stat_snapshot && typeof c.stat_snapshot === 'object' ? (c.stat_snapshot as Record<string, unknown>) : null;
+    return {
+      to_user_id: c.to_user_id,
+      to_display_name: typeof c.to_display_name === 'string' ? c.to_display_name : '',
+      reaction,
+      emoji: typeof c.emoji === 'string' && c.emoji ? c.emoji : reactionEmoji(reaction),
+      message: typeof c.message === 'string' && c.message ? c.message : null,
+      source: c.source === 'member_sheet' ? 'member_sheet' : 'leaderboard_long_press',
+      stat_snapshot:
+        snap && typeof snap.today_steps === 'number' && typeof snap.daily_goal_steps === 'number'
+          ? {
+              metric: 'steps',
+              date: typeof snap.date === 'string' ? snap.date : '',
+              today_steps: snap.today_steps,
+              daily_goal_steps: snap.daily_goal_steps,
+              goal_pct_today: typeof snap.goal_pct_today === 'number' ? snap.goal_pct_today : null,
+            }
+          : null,
+    };
   }
 
   // ============================================================================
@@ -886,6 +936,7 @@ export class CircleChatService {
         createdAt: row.created_at,
         editedAt: row.edited_at ?? null,
         deletedAt: row.deleted_at ?? null,
+        cheer: this.cheerOf(row),
       };
     });
   }
