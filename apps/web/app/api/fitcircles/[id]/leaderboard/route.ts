@@ -27,7 +27,15 @@ export async function GET(
       is_current_user: entry.user_id === user?.id,
     }));
 
+    // `success` + `data` is the envelope the iOS app decodes (Manage circle →
+    // Participants); `leaderboard` stays for the web circle page.
     return NextResponse.json({
+      success: true,
+      data: leaderboardWithCurrentUser.map(entry => ({
+        ...entry,
+        // iOS decodes ISO8601 with milliseconds (as the mobile leaderboard sends)
+        last_check_in_at: entry.last_check_in_at ? new Date(entry.last_check_in_at).toISOString() : null,
+      })),
       leaderboard: leaderboardWithCurrentUser,
       total_participants: leaderboard.length
     });
