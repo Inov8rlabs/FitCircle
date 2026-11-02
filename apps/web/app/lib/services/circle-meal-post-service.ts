@@ -18,6 +18,7 @@ import { createAdminSupabase } from '../supabase-admin';
 import { ChatNotificationService, type SystemPushIntent } from './chat-notification-service';
 import { CircleChatService } from './circle-chat-service';
 import { FoodPrivacyService } from './food-privacy-service';
+import { logIgnoredQueryError } from '@/lib/api/route-errors';
 
 /** What the meal card renders. Snake_case like every other system payload. */
 export interface MealPostPayload {
@@ -367,7 +368,7 @@ export class CircleMealPostService {
 
   private static async primaryImageId(entryId: string): Promise<string | null> {
     const supabaseAdmin = createAdminSupabase();
-    const { data } = await supabaseAdmin
+    const { data, error: dataError } = await supabaseAdmin
       .from('food_log_images')
       .select('id')
       .eq('food_log_entry_id', entryId)
@@ -375,26 +376,29 @@ export class CircleMealPostService {
       .order('display_order', { ascending: true })
       .limit(1)
       .maybeSingle();
+    logIgnoredQueryError('CircleMealPostService.primaryImageId', dataError);
     return (data?.id as string | undefined) ?? null;
   }
 
   private static async actorName(userId: string): Promise<string> {
     const supabaseAdmin = createAdminSupabase();
-    const { data } = await supabaseAdmin
+    const { data, error: dataError } = await supabaseAdmin
       .from('profiles')
       .select('display_name')
       .eq('id', userId)
       .maybeSingle();
+    logIgnoredQueryError('CircleMealPostService.actorName', dataError);
     return (data?.display_name as string | null) ?? 'Someone';
   }
 
   private static async circleName(circleId: string): Promise<string> {
     const supabaseAdmin = createAdminSupabase();
-    const { data } = await supabaseAdmin
+    const { data, error: dataError } = await supabaseAdmin
       .from('fitcircles')
       .select('name')
       .eq('id', circleId)
       .maybeSingle();
+    logIgnoredQueryError('CircleMealPostService.circleName', dataError);
     return (data?.name as string | null) ?? 'your circle';
   }
 }

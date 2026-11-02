@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from 'next/server';
 
+import { reportRouteError } from '@/lib/api/route-errors';
 import { CircleLobbyService } from '@/lib/services/circle-lobby-service';
 import { CircleStreakService } from '@/lib/services/circle-streak-service';
 import { verifyCronSecret } from '@/lib/utils/api-auth';
@@ -19,11 +20,13 @@ export async function GET(request: NextRequest) {
   try {
     result.streaks = await CircleStreakService.settleYesterday();
   } catch (err: any) {
+    reportRouteError('cron/circles streaks', err);
     result.streaks = { error: err?.message };
   }
   try {
     result.lobbiesStarted = await CircleLobbyService.autoStartDue();
   } catch (err: any) {
+    reportRouteError('cron/circles lobbies', err);
     result.lobbiesStarted = { error: err?.message };
   }
   return NextResponse.json(result);

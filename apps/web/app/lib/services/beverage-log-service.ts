@@ -24,6 +24,7 @@ import {
   toClientBeverageCustomizations,
   toClientBeverageEntry,
 } from '@/lib/validation/beverage-log-validation';
+import { logIgnoredQueryError } from '@/lib/api/route-errors';
 
 export class BeverageLogService {
   /**
@@ -186,12 +187,13 @@ export class BeverageLogService {
   ): Promise<{ data: BeverageLogEntry | null; error: Error | null }> {
     try {
       // Verify ownership
-      const { data: existing } = await supabase
+      const { data: existing, error: existingError } = await supabase
         .from('beverage_logs')
         .select('user_id')
         .eq('id', entryId)
         .is('deleted_at', null)
         .single();
+      logIgnoredQueryError('BeverageLogService.updateEntry', existingError);
 
       if (!existing || existing.user_id !== userId) {
         return { data: null, error: new Error('Not authorized') };
@@ -249,11 +251,12 @@ export class BeverageLogService {
   ): Promise<{ success: boolean; error: Error | null }> {
     try {
       // Verify ownership
-      const { data: entry } = await supabase
+      const { data: entry, error: entryError } = await supabase
         .from('beverage_logs')
         .select('user_id')
         .eq('id', entryId)
         .single();
+      logIgnoredQueryError('BeverageLogService.deleteEntry', entryError);
 
       if (!entry || entry.user_id !== userId) {
         return { success: false, error: new Error('Not authorized') };
@@ -366,12 +369,13 @@ export class BeverageLogService {
       }
 
       // Get favorite count
-      const { count: favoriteCount } = await supabase
+      const { count: favoriteCount, error: favoriteCountError } = await supabase
         .from('beverage_logs')
         .select('id', { count: 'exact', head: true })
         .eq('user_id', userId)
         .eq('is_favorite', true)
         .is('deleted_at', null);
+      logIgnoredQueryError('BeverageLogService.getStats', favoriteCountError);
 
       // Aggregate statistics
       const byCategory: Record<string, number> = {};
@@ -469,12 +473,13 @@ export class BeverageLogService {
   ): Promise<number> {
     try {
       // Get unique dates with entries, sorted descending
-      const { data: entries } = await supabase
+      const { data: entries, error: entriesError } = await supabase
         .from('beverage_logs')
         .select('entry_date')
         .eq('user_id', userId)
         .is('deleted_at', null)
         .order('entry_date', { ascending: false });
+      logIgnoredQueryError('BeverageLogService.calculateStreak', entriesError);
 
       if (!entries || entries.length === 0) return 0;
 

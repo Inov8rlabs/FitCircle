@@ -12,6 +12,7 @@ import {
 } from '../types/foods';
 
 import { DietaryPreferencesService } from './dietary-preferences-service';
+import { logIgnoredQueryError } from '@/lib/api/route-errors';
 
 /**
  * FoodsService — search / barcode / custom foods over the `foods` reference table (PRD §6.1).
@@ -52,12 +53,13 @@ export class FoodsService {
 
     // Fallback to trigram name match if FTS found nothing (typos / partial words).
     if (!error && rows.length === 0) {
-      const { data: fuzzy } = await supabase
+      const { data: fuzzy, error: fuzzyError } = await supabase
         .from('foods')
         .select('*')
         .or(`owner_id.is.null,owner_id.eq.${userId}`)
         .ilike('name', `%${q}%`)
         .limit(overFetch);
+      logIgnoredQueryError('FoodsService.search', fuzzyError);
       rows = (fuzzy ?? []) as FoodRow[];
     }
 
@@ -108,22 +110,24 @@ export class FoodsService {
       // Stemmed prefix terms ("egg:*" matches "eggs", "tomato:*" matches "Tomatoes") — the
       // search_vector uses the 'simple' config, which does no stemming of its own.
       const prefix = (t: string) => `${t.replace(/[^a-z0-9]/g, '')}:*`;
-      const { data } = await supabase
+      const { data, error: dataError } = await supabase
         .from('foods')
         .select('*')
         .or(visible)
         .textSearch('search_vector', stems.map(prefix).join(' & '), { config: 'simple' })
         .limit(overFetch);
+      logIgnoredQueryError('FoodsService.searchGeneric', dataError);
       rows = (data ?? []) as FoodRow[];
       if (rows.length < 5 && stems.length > 1) {
         // Widen to ANY food word (never the state words alone — "raw" alone matches thousands).
         const foodStems = stems.filter((t) => !STATE_TOKENS.has(t));
-        const { data: wide } = await supabase
+        const { data: wide, error: wideError } = await supabase
           .from('foods')
           .select('*')
           .or(visible)
           .textSearch('search_vector', (foodStems.length ? foodStems : stems).map(prefix).join(' | '), { config: 'simple' })
           .limit(overFetch * 2);
+        logIgnoredQueryError('FoodsService.searchGeneric', wideError);
         const seen = new Set(rows.map((r) => r.id));
         for (const r of (wide ?? []) as FoodRow[]) if (!seen.has(r.id)) rows.push(r);
       }
@@ -161,12 +165,13 @@ export class FoodsService {
     if (!ids.length) return out;
     try {
       const supabase = createAdminSupabase();
-      const { data } = await supabase
+      const { data, error: dataError } = await supabase
         .from('food_portions')
         .select('id, food_id, amount, unit, description, gram_weight, seq_num')
         .in('food_id', ids)
         .order('seq_num', { ascending: true })
         .limit(ids.length * 20);
+      logIgnoredQueryError('FoodsService.portionsFor', dataError);
       for (const p of (data ?? []) as Array<{ id: number; food_id: string; amount: number; unit: string; description: string | null; gram_weight: number }>) {
         const list = out.get(p.food_id) ?? [];
         list.push({ id: p.id, foodId: p.food_id, amount: Number(p.amount), unit: p.unit, description: p.description, gramWeight: Number(p.gram_weight) });
@@ -206,13 +211,14 @@ export class FoodsService {
     const supabase = createAdminSupabase();
     const code = barcode.trim();
     if (!code) return null;
-    const { data } = await supabase
+    const { data, error: dataError } = await supabase
       .from('foods')
       .select('*')
       .eq('barcode', code)
       .is('owner_id', null)
       .limit(1)
       .maybeSingle();
+    logIgnoredQueryError('FoodsService.lookupBarcode', dataError);
     return data ? this.toDTO(data as FoodRow) : null;
   }
 
@@ -249,11 +255,12 @@ export class FoodsService {
   /** The user's saved custom foods + recipes, newest first. */
   static async listCustomFoods(userId: string): Promise<FoodDTO[]> {
     const supabase = createAdminSupabase();
-    const { data } = await supabase
+    const { data, error: dataError } = await supabase
       .from('foods')
       .select('*')
       .eq('owner_id', userId)
       .order('created_at', { ascending: false });
+    logIgnoredQueryError('FoodsService.listCustomFoods', dataError);
     return ((data ?? []) as FoodRow[]).map((r) => this.toDTO(r));
   }
 

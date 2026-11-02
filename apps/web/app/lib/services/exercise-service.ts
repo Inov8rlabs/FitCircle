@@ -39,6 +39,7 @@ import type {
   ExerciseHistorySession,
   ExerciseTrackingType,
 } from '../types/exercise';
+import { logIgnoredQueryError } from '@/lib/api/route-errors';
 
 // MET values for calorie estimation (MET × weight_kg × duration_hours)
 const MET_VALUES: Record<string, number> = {
@@ -190,11 +191,12 @@ export class ExerciseService {
       let caloriesBurned = data.calories_burned ?? null;
       let caloriesEstimated = false;
       if (caloriesBurned == null) {
-        const { data: profile } = await supabase
+        const { data: profile, error: profileError } = await supabase
           .from('profiles')
           .select('weight_kg')
           .eq('id', userId)
           .single();
+        logIgnoredQueryError('ExerciseService.createExercise', profileError);
 
         if (profile?.weight_kg) {
           caloriesBurned = this.estimateCalories(
@@ -267,11 +269,12 @@ export class ExerciseService {
           return { data: null, error: persistError };
         } else {
           // Refresh the parent row so the response carries the recomputed rollups.
-          const { data: refreshed } = await supabase
+          const { data: refreshed, error: refreshedError } = await supabase
             .from('exercise_logs')
             .select('*')
             .eq('id', exercise.id)
             .single();
+          logIgnoredQueryError('ExerciseService.createExercise', refreshedError);
           if (refreshed) Object.assign(exercise, refreshed);
           strengthPRs = await this.detectStrengthPRs(userId, exercise.id, supabase);
         }
@@ -377,12 +380,13 @@ export class ExerciseService {
           }
 
           // Check if already synced
-          const { data: existing } = await supabase
+          const { data: existing, error: existingError } = await supabase
             .from('exercise_logs')
             .select('id')
             .eq('user_id', userId)
             .eq('healthkit_workout_id', exercise.healthkit_workout_id)
             .maybeSingle();
+          logIgnoredQueryError('ExerciseService.bulkSyncExercises', existingError);
 
           if (existing) {
             results.push({
@@ -733,12 +737,13 @@ export class ExerciseService {
   ): Promise<{ data: ExerciseLog | null; error: Error | null; newPersonalRecords?: DetectedPR[] }> {
     try {
       // Verify ownership + fetch source for HealthKit protection
-      const { data: existing } = await supabase
+      const { data: existing, error: existingError } = await supabase
         .from('exercise_logs')
         .select('user_id, source')
         .eq('id', exerciseId)
         .eq('is_deleted', false)
         .single();
+      logIgnoredQueryError('ExerciseService.updateExercise', existingError);
 
       if (!existing || existing.user_id !== userId) {
         return { data: null, error: new Error('Not authorized') };
@@ -911,11 +916,12 @@ export class ExerciseService {
     supabase: SupabaseClient
   ): Promise<string | null> {
     if (ex.exercise_id) {
-      const { data: cat } = await supabase
+      const { data: cat, error: catError } = await supabase
         .from('exercises')
         .select('id, is_public, created_by, is_deleted')
         .eq('id', ex.exercise_id)
         .maybeSingle();
+      logIgnoredQueryError('ExerciseService.resolveCatalogExerciseId', catError);
 
       const visible =
         cat && cat.is_deleted !== true && (cat.is_public === true || cat.created_by === userId);
@@ -948,10 +954,11 @@ export class ExerciseService {
     exerciseLogId: string,
     supabase: SupabaseClient
   ): Promise<void> {
-    const { data: weRows } = await supabase
+    const { data: weRows, error: weRowsError } = await supabase
       .from('workout_exercises')
       .select('id')
       .eq('exercise_log_id', exerciseLogId);
+    logIgnoredQueryError('ExerciseService.recomputeRollups', weRowsError);
 
     const exerciseCount = weRows?.length || 0;
     let totalSets = 0;
@@ -959,10 +966,11 @@ export class ExerciseService {
 
     if (exerciseCount > 0) {
       const weIds = weRows!.map((r) => r.id);
-      const { data: sets } = await supabase
+      const { data: sets, error: setsError } = await supabase
         .from('exercise_sets')
         .select('reps, weight_kg, set_type, is_completed, workout_exercise_id')
         .in('workout_exercise_id', weIds);
+      logIgnoredQueryError('ExerciseService.recomputeRollups', setsError);
 
       for (const s of sets || []) {
         totalSets++;
@@ -1075,7 +1083,7 @@ export class ExerciseService {
     const slug = this.slugify(input.name);
 
     // Dedup: reuse an existing custom exercise with the same slug for this user.
-    const { data: existing } = await supabase
+    const { data: existing, error: existingError } = await supabase
       .from('exercises')
       .select('id, name, primary_muscle, equipment, tracking_type')
       .eq('created_by', userId)
@@ -1083,6 +1091,7 @@ export class ExerciseService {
       .eq('is_deleted', false)
       .eq('slug', slug)
       .maybeSingle();
+    logIgnoredQueryError('ExerciseService.findOrCreateCustomExercise', existingError);
 
     if (existing) {
       return existing as {
@@ -1137,11 +1146,12 @@ export class ExerciseService {
   ): Promise<{ data: ExerciseHistoryResponse | null; error: Error | null }> {
     try {
       // Verify the exercise is visible to this user (global or their own custom).
-      const { data: cat } = await supabase
+      const { data: cat, error: catError } = await supabase
         .from('exercises')
         .select('id, name, primary_muscle, equipment, tracking_type, is_custom, is_public, created_by')
         .eq('id', exerciseId)
         .maybeSingle();
+      logIgnoredQueryError('ExerciseService.getExerciseHistory', catError);
 
       if (!cat || (!cat.is_public && cat.created_by !== userId)) {
         return { data: null, error: new Error('Exercise not found') };
@@ -1272,7 +1282,7 @@ export class ExerciseService {
     const prs: DetectedPR[] = [];
     try {
       // This workout's exercises + their sets + catalog name.
-      const { data: weRows } = await supabase
+      const { data: weRows, error: weRowsError } = await supabase
         .from('workout_exercises')
         .select(
           `id, exercise_id,
@@ -1280,6 +1290,7 @@ export class ExerciseService {
            sets:exercise_sets ( set_type, weight_kg, reps, is_completed )`
         )
         .eq('exercise_log_id', exerciseLogId);
+      logIgnoredQueryError('ExerciseService.detectStrengthPRs', weRowsError);
 
       for (const we of (weRows || []) as unknown as Record<string, unknown>[]) {
         // PostgREST may type a to-one embed as an array; normalize to a single object.
@@ -1304,7 +1315,7 @@ export class ExerciseService {
         if (curWeight <= 0 && curE1rm <= 0) continue;
 
         // Prior history for this movement (all the user's OTHER logs).
-        const { data: priorWe } = await supabase
+        const { data: priorWe, error: priorWeError } = await supabase
           .from('workout_exercises')
           .select(
             `id, exercise_log_id,
@@ -1315,6 +1326,7 @@ export class ExerciseService {
           .eq('log.user_id', userId)
           .eq('log.is_deleted', false)
           .neq('exercise_log_id', exerciseLogId);
+        logIgnoredQueryError('ExerciseService.detectStrengthPRs', priorWeError);
 
         let prevWeight = -1;
         let prevE1rm = -1;
@@ -1368,12 +1380,13 @@ export class ExerciseService {
   ): Promise<{ success: boolean; error: Error | null }> {
     try {
       // Verify ownership
-      const { data: existing } = await supabase
+      const { data: existing, error: existingError } = await supabase
         .from('exercise_logs')
         .select('user_id')
         .eq('id', exerciseId)
         .eq('is_deleted', false)
         .single();
+      logIgnoredQueryError('ExerciseService.deleteExercise', existingError);
 
       if (!existing || existing.user_id !== userId) {
         return { success: false, error: new Error('Not authorized') };
@@ -1679,11 +1692,12 @@ export class ExerciseService {
     const milestones: DetectedMilestone[] = [];
 
     try {
-      const { count } = await supabase
+      const { count, error: countError } = await supabase
         .from('exercise_logs')
         .select('*', { count: 'exact', head: true })
         .eq('user_id', userId)
         .eq('is_deleted', false);
+      logIgnoredQueryError('ExerciseService.detectMilestones', countError);
 
       const total = count || 0;
 
@@ -1706,13 +1720,14 @@ export class ExerciseService {
       let mOffset = 0;
       let mHasMore = true;
       while (mHasMore) {
-        const { data: mPage } = await supabase
+        const { data: mPage, error: mPageError } = await supabase
           .from('exercise_logs')
           .select('duration_minutes')
           .eq('user_id', userId)
           .eq('is_deleted', false)
           .order('created_at', { ascending: false })
           .range(mOffset, mOffset + 999);
+        logIgnoredQueryError('ExerciseService.detectMilestones', mPageError);
 
         if (mPage && mPage.length > 0) {
           allMinutesData = allMinutesData.concat(mPage);
@@ -1737,12 +1752,13 @@ export class ExerciseService {
       // Check this week's workouts
       const weekAgo = new Date();
       weekAgo.setDate(weekAgo.getDate() - 7);
-      const { count: weekCount } = await supabase
+      const { count: weekCount, error: weekCountError } = await supabase
         .from('exercise_logs')
         .select('*', { count: 'exact', head: true })
         .eq('user_id', userId)
         .eq('is_deleted', false)
         .gte('exercise_date', weekAgo.toISOString().split('T')[0]);
+      logIgnoredQueryError('ExerciseService.detectMilestones', weekCountError);
 
       if (weekCount === 5) {
         milestones.push({
@@ -1753,11 +1769,12 @@ export class ExerciseService {
       }
 
       // Check category variety
-      const { data: categories } = await supabase
+      const { data: categories, error: categoriesError } = await supabase
         .from('exercise_logs')
         .select('category')
         .eq('user_id', userId)
         .eq('is_deleted', false);
+      logIgnoredQueryError('ExerciseService.detectMilestones', categoriesError);
 
       const uniqueCategories = new Set((categories || []).map((e) => e.category));
       if (uniqueCategories.size >= 5 && categories && categories.length >= 5) {
@@ -1786,7 +1803,7 @@ export class ExerciseService {
 
     try {
       // Get previous max duration for this exercise type
-      const { data: prevDuration } = await supabase
+      const { data: prevDuration, error: prevDurationError } = await supabase
         .from('exercise_logs')
         .select('duration_minutes')
         .eq('user_id', userId)
@@ -1796,6 +1813,7 @@ export class ExerciseService {
         .order('duration_minutes', { ascending: false })
         .limit(1)
         .maybeSingle();
+      logIgnoredQueryError('ExerciseService.detectPRs', prevDurationError);
 
       if (prevDuration && exerciseLog.duration_minutes > prevDuration.duration_minutes) {
         prs.push({
@@ -1809,7 +1827,7 @@ export class ExerciseService {
 
       // Check distance PR (for distance-relevant types)
       if (exerciseLog.distance_meters && exerciseLog.distance_meters > 0) {
-        const { data: prevDistance } = await supabase
+        const { data: prevDistance, error: prevDistanceError } = await supabase
           .from('exercise_logs')
           .select('distance_meters')
           .eq('user_id', userId)
@@ -1820,6 +1838,7 @@ export class ExerciseService {
           .order('distance_meters', { ascending: false })
           .limit(1)
           .maybeSingle();
+        logIgnoredQueryError('ExerciseService.detectPRs', prevDistanceError);
 
         if (prevDistance && Number(exerciseLog.distance_meters) > Number(prevDistance.distance_meters)) {
           prs.push({
@@ -1834,7 +1853,7 @@ export class ExerciseService {
 
       // Check calories PR
       if (exerciseLog.calories_burned && Number(exerciseLog.calories_burned) > 0 && !exerciseLog.calories_estimated) {
-        const { data: prevCalories } = await supabase
+        const { data: prevCalories, error: prevCaloriesError } = await supabase
           .from('exercise_logs')
           .select('calories_burned')
           .eq('user_id', userId)
@@ -1846,6 +1865,7 @@ export class ExerciseService {
           .order('calories_burned', { ascending: false })
           .limit(1)
           .maybeSingle();
+        logIgnoredQueryError('ExerciseService.detectPRs', prevCaloriesError);
 
         if (prevCalories && Number(exerciseLog.calories_burned) > Number(prevCalories.calories_burned)) {
           prs.push({

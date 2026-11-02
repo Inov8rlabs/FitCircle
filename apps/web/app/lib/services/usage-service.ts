@@ -1,5 +1,6 @@
 import { createAdminSupabase } from '../supabase-admin';
 import { TIER_LIMITS, LEGACY_LIMITS } from '../config/tier-limits';
+import { logIgnoredQueryError } from '@/lib/api/route-errors';
 
 /**
  * UsageService — tier-aware daily quotas for metered AI features.
@@ -120,12 +121,13 @@ export class UsageService {
 
     const supabase = createAdminSupabase();
     const today = new Date().toISOString().slice(0, 10);
-    const { count } = await supabase
+    const { count, error: countError } = await supabase
       .from('fitcircles')
       .select('*', { count: 'exact', head: true })
       .eq('creator_id', userId)
       .eq('is_official', false)
       .gte('end_date', today);
+    logIgnoredQueryError('UsageService.checkCircleCreation', countError);
     const used = count ?? 0;
     return used >= limit ? { used, limit } : null;
   }
@@ -146,11 +148,12 @@ export class UsageService {
 
   private static async getTier(userId: string): Promise<Tier> {
     const supabase = createAdminSupabase();
-    const { data } = await supabase
+    const { data, error: dataError } = await supabase
       .from('profiles')
       .select('subscription_tier')
       .eq('id', userId)
       .maybeSingle();
+    logIgnoredQueryError('UsageService.getTier', dataError);
     const raw = data?.subscription_tier;
     return raw === 'premium' || raw === 'enterprise' ? 'premium' : 'free';
   }
@@ -158,11 +161,12 @@ export class UsageService {
   /** A gate is "live" once 077 flips it to premium; missing/dark rows are not. */
   private static async isGateLive(featureKey: string): Promise<boolean> {
     const supabase = createAdminSupabase();
-    const { data } = await supabase
+    const { data, error: dataError } = await supabase
       .from('feature_gates')
       .select('required_tier')
       .eq('feature_key', featureKey)
       .maybeSingle();
+    logIgnoredQueryError('UsageService.isGateLive', dataError);
     return data?.required_tier === 'premium';
   }
 
@@ -173,11 +177,12 @@ export class UsageService {
     const supabase = createAdminSupabase();
     const since = new Date();
     since.setUTCHours(0, 0, 0, 0);
-    const { count } = await supabase
+    const { count, error: countError } = await supabase
       .from(table)
       .select('*', { count: 'exact', head: true })
       .eq('user_id', userId)
       .gte('created_at', since.toISOString());
+    logIgnoredQueryError('UsageService.countToday', countError);
     return count ?? 0;
   }
 }

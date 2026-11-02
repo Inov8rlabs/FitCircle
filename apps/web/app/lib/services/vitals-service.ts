@@ -27,6 +27,7 @@ import {
 } from '../types/vitals';
 import { BMI_BANDS, BMI_SCALE, bmiCategory, computeBmi, healthyWeightRangeKg } from '../utils/bmi';
 import { getLastNDays, getTodayInTimezone } from '../utils/timezone';
+import { logIgnoredQueryError } from '@/lib/api/route-errors';
 
 const MAX_DAYS = 90;
 
@@ -39,11 +40,12 @@ export class VitalsService {
     const supabase = createAdminSupabase();
     const days = Math.min(MAX_DAYS, Math.max(1, Math.floor(opts.days ?? 7)));
 
-    const { data: profile } = await supabase
+    const { data: profile, error: profileError } = await supabase
       .from('profiles')
       .select('height_cm, weight_kg, goals, preferences, timezone')
       .eq('id', userId)
       .maybeSingle();
+    logIgnoredQueryError('VitalsService.getSummary', profileError);
 
     const timezone = opts.timezone || profile?.timezone || 'UTC';
     const dayList = getLastNDays(days, timezone); // today first
@@ -85,11 +87,12 @@ export class VitalsService {
     const supabase = createAdminSupabase();
     let profile = opts.profile ?? null;
     if (!profile || !('preferences' in profile)) {
-      const { data } = await supabase
+      const { data, error: dataError } = await supabase
         .from('profiles')
         .select('preferences, timezone')
         .eq('id', userId)
         .maybeSingle();
+      logIgnoredQueryError('VitalsService.getHydrationToday', dataError);
       profile = data ?? null;
     }
 
@@ -133,18 +136,19 @@ export class VitalsService {
     end: string
   ): Promise<VitalsWeight | null> {
     // Latest reading on file (may be older than the period).
-    const { data: latestRows } = await supabase
+    const { data: latestRows, error: latestRowsError } = await supabase
       .from('daily_tracking')
       .select('tracking_date, weight_kg')
       .eq('user_id', userId)
       .gt('weight_kg', 0)
       .order('tracking_date', { ascending: false })
       .limit(1);
+    logIgnoredQueryError('VitalsService.buildWeight', latestRowsError);
     const latest = (latestRows ?? [])[0];
     if (!latest?.weight_kg) return null;
 
     // Readings inside the period, oldest first.
-    const { data: inWindow } = await supabase
+    const { data: inWindow, error: inWindowError } = await supabase
       .from('daily_tracking')
       .select('tracking_date, weight_kg')
       .eq('user_id', userId)
@@ -152,6 +156,7 @@ export class VitalsService {
       .gte('tracking_date', start)
       .lte('tracking_date', end)
       .order('tracking_date', { ascending: true });
+    logIgnoredQueryError('VitalsService.buildWeight', inWindowError);
     const series = ((inWindow ?? []) as { tracking_date: string; weight_kg: number }[]).map(r => ({
       date: r.tracking_date,
       kg: Number(r.weight_kg),
@@ -164,7 +169,7 @@ export class VitalsService {
     if (series.length >= 2) {
       baseline = series[0];
     } else {
-      const { data: before } = await supabase
+      const { data: before, error: beforeError } = await supabase
         .from('daily_tracking')
         .select('tracking_date, weight_kg')
         .eq('user_id', userId)
@@ -172,6 +177,7 @@ export class VitalsService {
         .lt('tracking_date', start)
         .order('tracking_date', { ascending: false })
         .limit(1);
+      logIgnoredQueryError('VitalsService.buildWeight', beforeError);
       const b = (before ?? [])[0];
       if (b?.weight_kg) baseline = { date: b.tracking_date, kg: Number(b.weight_kg) };
     }
@@ -180,13 +186,14 @@ export class VitalsService {
     const changeKg = baseline && baseline.date !== latest.tracking_date ? round1(currentKg - baseline.kg) : null;
 
     // Earliest reading ever — the starting point when the user never set one.
-    const { data: earliestRows } = await supabase
+    const { data: earliestRows, error: earliestRowsError } = await supabase
       .from('daily_tracking')
       .select('tracking_date, weight_kg')
       .eq('user_id', userId)
       .gt('weight_kg', 0)
       .order('tracking_date', { ascending: true })
       .limit(1);
+    logIgnoredQueryError('VitalsService.buildWeight', earliestRowsError);
     const earliestKg = (earliestRows ?? [])[0]?.weight_kg ? Number(earliestRows[0].weight_kg) : profileWeightKg;
 
     return {

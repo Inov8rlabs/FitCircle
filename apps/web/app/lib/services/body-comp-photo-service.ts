@@ -14,6 +14,7 @@ import {
   bodyCompParseResultSchema,
   segmentalDataSchema,
 } from '../types/body-composition';
+import { logIgnoredQueryError } from '@/lib/api/route-errors';
 
 /**
  * BodyCompPhotoService — vision parse of a body-composition report into a DRAFT
@@ -391,11 +392,12 @@ export class BodyCompPhotoService {
   /** Look up a previously-parsed identical image set (content-hash cache). */
   private static async getCachedResult(imageHash: string): Promise<CacheEntry | null> {
     const supabase = createAdminSupabase();
-    const { data } = await supabase
+    const { data, error: dataError } = await supabase
       .from('body_comp_parse_cache')
       .select('result')
       .eq('image_hash', imageHash)
       .maybeSingle();
+    logIgnoredQueryError('BodyCompPhotoService.getCachedResult', dataError);
     if (!data?.result) return null;
     const parsed = cacheEntrySchema.safeParse(data.result);
     return parsed.success ? parsed.data : null;
@@ -406,11 +408,12 @@ export class BodyCompPhotoService {
     const supabase = createAdminSupabase();
     const since = new Date();
     since.setUTCHours(0, 0, 0, 0);
-    const { count } = await supabase
+    const { count, error: countError } = await supabase
       .from('body_comp_parse_log')
       .select('*', { count: 'exact', head: true })
       .eq('user_id', userId)
       .gte('created_at', since.toISOString());
+    logIgnoredQueryError('BodyCompPhotoService.countTodayParses', countError);
     return count ?? 0;
   }
 

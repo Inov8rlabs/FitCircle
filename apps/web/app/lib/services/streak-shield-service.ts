@@ -27,6 +27,7 @@ import {
 } from '../streaks/streak-config';
 import { addDays, localToday } from '../streaks/streak-calculator';
 import { normalizeTier } from './entitlement-service';
+import { logIgnoredQueryError } from '@/lib/api/route-errors';
 
 export type ShieldType = 'freeze' | 'milestone_shield' | 'purchased';
 
@@ -122,11 +123,12 @@ export class StreakShieldService {
   /** Pro users get unlimited shields. Tier cache is written by the RC webhook. */
   static async hasUnlimitedShields(userId: string): Promise<boolean> {
     const supabase = createAdminSupabase();
-    const { data } = await supabase
+    const { data, error: dataError } = await supabase
       .from('profiles')
       .select('subscription_tier')
       .eq('id', userId)
       .maybeSingle();
+    logIgnoredQueryError('StreakShieldService.hasUnlimitedShields', dataError);
     return normalizeTier(data?.subscription_tier) === 'premium';
   }
 
@@ -159,10 +161,11 @@ export class StreakShieldService {
         ],
         { onConflict: 'user_id,shield_type', ignoreDuplicates: true }
       );
-      const { data: seeded } = await supabase
+      const { data: seeded, error: seededError } = await supabase
         .from('streak_shields')
         .select('shield_type, available_count')
         .eq('user_id', userId);
+      logIgnoredQueryError('StreakShieldService.getInventory', seededError);
       effectiveRows = seeded;
     }
     for (const row of effectiveRows || []) {
@@ -276,12 +279,13 @@ export class StreakShieldService {
     const supabase = createAdminSupabase();
     const inventory = await this.getInventory(userId);
 
-    const { data: milestoneRow } = await supabase
+    const { data: milestoneRow, error: milestoneRowError } = await supabase
       .from('streak_shields')
       .select('available_count, metadata')
       .eq('user_id', userId)
       .eq('shield_type', 'milestone_shield')
       .maybeSingle();
+    logIgnoredQueryError('StreakShieldService.awardForStreakGrowth', milestoneRowError);
     const metadata: Record<string, unknown> = (milestoneRow?.metadata as Record<string, unknown>) || {};
     const paidBoundaries = new Set<string>((metadata.paid_boundaries as string[]) || []);
     const celebrated = new Set<string>((metadata.celebrated_milestone_days as string[]) || []);

@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from 'next/server';
 
+import { unhandledChallengeError } from '@/lib/http/circle-challenge-errors';
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { CustomChallengeService, type CustomChallengeInput } from '@/lib/services/custom-challenge-service';
 
@@ -33,9 +34,6 @@ export async function POST(request: NextRequest) {
         { status: 401 }
       );
     }
-    return NextResponse.json(
-      { success: false, data: null, error: { code: 'ERROR', message: error.message } },
-      { status: 400 }
-    );
+    return unhandledChallengeError(error, 'mobile/challenges/validate POST');
   }
 }

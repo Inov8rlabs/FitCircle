@@ -13,6 +13,7 @@ import { ImageProcessingError, StorageError } from '@/lib/errors/food-log-errors
 import type { FoodLogImage } from '@/lib/types/food-log';
 
 import { CircleMealPostService } from './circle-meal-post-service';
+import { logIgnoredQueryError } from '@/lib/api/route-errors';
 
 /** A client-supplied per-file idempotency key: 1–128 chars of [A-Za-z0-9._:-]. */
 const IMAGE_KEY_RE = /^[A-Za-z0-9._:-]{1,128}$/;
@@ -82,11 +83,12 @@ export class FoodLogImageService {
     entryId: string,
     supabase: SupabaseClient
   ): Promise<{ image: FoodLogImage | null; softDeleted: boolean }> {
-    const { data } = await supabase
+    const { data, error: dataError } = await supabase
       .from('food_log_images')
       .select('*')
       .eq('id', imageId)
       .maybeSingle();
+    logIgnoredQueryError('FoodLogImageService.findLiveImage', dataError);
     // Compare as uuids: the path id may be uppercase (iOS), the column reads back lowercase.
     if (!data || String(data.food_log_entry_id).toLowerCase() !== entryId.toLowerCase()) {
       return { image: null, softDeleted: false };
@@ -115,11 +117,12 @@ export class FoodLogImageService {
       this.validateImage(file);
 
       // Verify entry ownership
-      const { data: entry } = await supabase
+      const { data: entry, error: entryError } = await supabase
         .from('food_log_entries')
         .select('user_id')
         .eq('id', entryId)
         .single();
+      logIgnoredQueryError('FoodLogImageService.uploadImage', entryError);
 
       if (!entry || entry.user_id !== userId) {
         throw new Error('Not authorized to upload images to this entry');
@@ -228,11 +231,12 @@ export class FoodLogImageService {
       }
 
       // Update parent entry image count - using direct update instead of RPC
-      const { data: entryData } = await supabase
+      const { data: entryData, error: entryDataError } = await supabase
         .from('food_log_entries')
         .select('image_count')
         .eq('id', entryId)
         .single();
+      logIgnoredQueryError('FoodLogImageService.uploadImage', entryDataError);
       
       await supabase
         .from('food_log_entries')
@@ -293,11 +297,12 @@ export class FoodLogImageService {
 
     // Snapshot the starting display_order so the batch lays out in order
     // even if a sibling upload happens mid-flight.
-    const { data: entry } = await supabase
+    const { data: entry, error: entryError } = await supabase
       .from('food_log_entries')
       .select('image_count')
       .eq('id', entryId)
       .single();
+    logIgnoredQueryError('FoodLogImageService.uploadImages', entryError);
     const startOrder = entry?.image_count ?? 0;
 
     const uploaded: (FoodLogImage & { image_key?: string; duplicate?: boolean })[] = [];
@@ -348,12 +353,13 @@ export class FoodLogImageService {
 
     const idsByEntry = new Map<string, string[]>();
     if (withImages.length > 0) {
-      const { data: images } = await supabase
+      const { data: images, error: imagesError } = await supabase
         .from('food_log_images')
         .select('id, food_log_entry_id, display_order')
         .in('food_log_entry_id', withImages.map((e) => e.id))
         .is('deleted_at', null)
         .order('display_order', { ascending: true });
+      logIgnoredQueryError('FoodLogImageService.withPhotoUrls', imagesError);
 
       for (const img of images || []) {
         const list = idsByEntry.get(img.food_log_entry_id) ?? [];
@@ -479,12 +485,13 @@ export class FoodLogImageService {
     thumbnail: string;
   } | null> {
     try {
-      const { data: image } = await supabase
+      const { data: image, error: imageError } = await supabase
         .from('food_log_images')
         .select('storage_path, thumbnail_path, storage_bucket')
         .eq('id', imageId)
         .is('deleted_at', null)
         .single();
+      logIgnoredQueryError('FoodLogImageService.getSignedUrls', imageError);
 
       if (!image) return null;
 
@@ -517,12 +524,13 @@ export class FoodLogImageService {
   ): Promise<{ success: boolean; error?: Error }> {
     try {
       // Get image record
-      const { data: image } = await supabase
+      const { data: image, error: imageError } = await supabase
         .from('food_log_images')
         .select('*')
         .eq('id', imageId)
         .is('deleted_at', null)
         .single();
+      logIgnoredQueryError('FoodLogImageService.deleteImage', imageError);
 
       if (!image || image.user_id !== userId) {
         return { success: false, error: new Error('Not authorized') };
@@ -543,11 +551,12 @@ export class FoodLogImageService {
         .eq('id', imageId);
 
       // Update parent entry image count - using direct update instead of RPC
-      const { data: entry } = await supabase
+      const { data: entry, error: entryError } = await supabase
         .from('food_log_entries')
         .select('image_count')
         .eq('id', image.food_log_entry_id)
         .single();
+      logIgnoredQueryError('FoodLogImageService.deleteImage', entryError);
       
       const newCount = Math.max(0, (entry?.image_count || 1) - 1);
       await supabase
@@ -586,11 +595,12 @@ export class FoodLogImageService {
   ): Promise<{ success: boolean; error?: Error }> {
     try {
       // Verify ownership
-      const { data: image } = await supabase
+      const { data: image, error: imageError } = await supabase
         .from('food_log_images')
         .select('user_id')
         .eq('id', imageId)
         .single();
+      logIgnoredQueryError('FoodLogImageService.updateDisplayOrder', imageError);
 
       if (!image || image.user_id !== userId) {
         return { success: false, error: new Error('Not authorized') };

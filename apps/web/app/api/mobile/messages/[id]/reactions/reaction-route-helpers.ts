@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 
+import { reportRouteError } from '@/lib/api/route-errors';
 import { canonicalizeChatReaction } from '@/lib/chat/reactions';
 import { CHAT_REACTION_KINDS } from '@/lib/types/circle-chat';
 import { validationMessage } from '@/lib/validation/lenient-parse';
@@ -46,11 +47,13 @@ export function ok<T>(data: T, startTime: number) {
 
 /** Service/validation error → the mobile API envelope + status. */
 export function mapChatReactionError(error: any, label: string) {
-  console.error(`[Mobile API] ${label} error:`, {
-    message: error?.message,
-    stack: process.env.NODE_ENV === 'development' ? error?.stack : undefined,
-  });
+  const response = mapChatReactionErrorResponse(error);
+  // 4xx → console.warn; 5xx → console.error (full error) + Sentry. Client message is already generic for 5xx.
+  reportRouteError(`mobile/${label}`, error, { status: response.status });
+  return response;
+}
 
+function mapChatReactionErrorResponse(error: any) {
   switch (error?.message) {
     case 'Unauthorized':
       return NextResponse.json(errorBody('UNAUTHORIZED', 'Invalid or expired token'), { status: 401 });

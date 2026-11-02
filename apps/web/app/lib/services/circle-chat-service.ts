@@ -25,6 +25,7 @@ import {
 
 import { ChatNotificationService } from './chat-notification-service';
 import { ChatSafetyService } from './chat-safety-service';
+import { logIgnoredQueryError } from '@/lib/api/route-errors';
 
 /** A replacement this soon after the reactor's previous reaction does not push. */
 export const REACTION_PUSH_QUIET_MS = 60_000;
@@ -257,11 +258,12 @@ export class CircleChatService {
   private static async resolveCircleName(circleId: string): Promise<string> {
     try {
       const supabaseAdmin = createAdminSupabase();
-      const { data } = await supabaseAdmin
+      const { data, error: dataError } = await supabaseAdmin
         .from('fitcircles')
         .select('name')
         .eq('id', circleId)
         .maybeSingle();
+      logIgnoredQueryError('CircleChatService.resolveCircleName', dataError);
       return (data?.name as string | undefined) ?? 'your circle';
     } catch {
       return 'your circle';
@@ -723,11 +725,12 @@ export class CircleChatService {
   ): Promise<void> {
     try {
       const supabaseAdmin = createAdminSupabase();
-      const { data: row } = await supabaseAdmin
+      const { data: row, error: rowError } = await supabaseAdmin
         .from('circle_messages')
         .select('sender_id, kind, body, system_payload')
         .eq('id', messageId)
         .maybeSingle();
+      logIgnoredQueryError('CircleChatService.notifyReactionAuthor', rowError);
       if (!row) return;
 
       const recipientId = ChatNotificationService.reactionRecipient(

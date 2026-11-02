@@ -1,4 +1,5 @@
 import { createAdminSupabase } from '../supabase-admin';
+import { logIgnoredQueryError } from '@/lib/api/route-errors';
 
 // ============================================================================
 // TYPES
@@ -567,11 +568,12 @@ export class DailyChallengeService {
 
     // If it has a template, fetch template details
     if (data.template_id) {
-      const { data: template } = await supabaseAdmin
+      const { data: template, error: templateError } = await supabaseAdmin
         .from('challenge_templates')
         .select('*')
         .eq('id', data.template_id)
         .single();
+      logIgnoredQueryError('DailyChallengeService.getChallengeByDate', templateError);
 
       return this.enrichChallenge(data, template);
     }
@@ -594,11 +596,12 @@ export class DailyChallengeService {
     }
 
     if (data.template_id) {
-      const { data: template } = await supabaseAdmin
+      const { data: template, error: templateError } = await supabaseAdmin
         .from('challenge_templates')
         .select('*')
         .eq('id', data.template_id)
         .single();
+      logIgnoredQueryError('DailyChallengeService.getChallengeById', templateError);
 
       return this.enrichChallenge(data, template);
     }

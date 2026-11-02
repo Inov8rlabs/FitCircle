@@ -9,6 +9,7 @@ import {
   normalizeTotals,
   type Totals,
 } from './nutrition-draft-reconcile';
+import { logIgnoredQueryError } from '@/lib/api/route-errors';
 
 /**
  * Captures (image, original AI draft, user-confirmed labels) so corrections become a
@@ -148,7 +149,7 @@ export class NutritionTrainingService {
   }): Promise<boolean> {
     try {
       const supabase = createAdminSupabase();
-      const { data: row } = await supabase
+      const { data: row, error: rowError } = await supabase
         .from('nutrition_training_samples')
         .select('id')
         .eq('user_id', params.userId)
@@ -156,6 +157,7 @@ export class NutritionTrainingService {
         .order('created_at', { ascending: false })
         .limit(1)
         .maybeSingle();
+      logIgnoredQueryError('NutritionTrainingService.rateDraft', rowError);
       if (!row) return false;
       const { error } = await supabase
         .from('nutrition_training_samples')

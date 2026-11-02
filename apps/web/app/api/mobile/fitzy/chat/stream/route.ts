@@ -82,7 +82,7 @@ export async function POST(request: NextRequest) {
         }
       };
       const sendError = (error: unknown) => {
-        const d = describeFitzyError(error);
+        const d = describeFitzyError(error, 'mobile/fitzy/chat/stream');
         write(frame('error', { code: d.code, message: d.message, ...(d.paywall ? { paywall: d.paywall } : {}) }));
       };
 

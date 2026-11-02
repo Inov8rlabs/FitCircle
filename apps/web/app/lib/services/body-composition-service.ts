@@ -16,6 +16,7 @@ import {
   type SegmentalData,
   BODY_COMP_SOURCES,
 } from '../types/body-composition';
+import { logIgnoredQueryError } from '@/lib/api/route-errors';
 
 /**
  * BodyCompositionService — CRUD + platform import for body_composition_logs
@@ -789,12 +790,13 @@ export class BodyCompositionService {
   ): Promise<void> {
     try {
       const trackingDate = localDateOfMeasurement(measuredAt);
-      const { data: existing } = await supabase
+      const { data: existing, error: existingError } = await supabase
         .from('daily_tracking')
         .select('id, is_override')
         .eq('user_id', userId)
         .eq('tracking_date', trackingDate)
         .maybeSingle();
+      logIgnoredQueryError('BodyCompositionService.syncDailyWeight', existingError);
 
       if (existing) {
         if (existing.is_override) return;

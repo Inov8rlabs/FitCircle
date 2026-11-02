@@ -2,6 +2,8 @@ import { createHash, timingSafeEqual } from 'crypto';
 
 import { NextResponse, type NextRequest } from 'next/server';
 
+import { reportRouteError } from '../api/route-errors';
+
 import { ReferralError } from './types';
 
 /** Standard mobile envelope helpers for the referral routes. */
@@ -21,10 +23,14 @@ export function fail(status: number, code: string, message: string, data: unknow
 
 /** Map anything a referral route can throw to the envelope. */
 export function failFrom(error: unknown, label: string): NextResponse {
-  if (error instanceof ReferralError) return fail(error.status, error.code, error.message, error.data);
+  if (error instanceof ReferralError) {
+    if (error.status >= 500) reportRouteError(label, error, { status: error.status, code: error.code });
+    return fail(error.status, error.code, error.message, error.data);
+  }
   if ((error as any)?.message === 'Unauthorized') return fail(401, 'UNAUTHORIZED', 'Invalid or expired token');
   if ((error as any)?.name === 'ZodError') return fail(400, 'VALIDATION_ERROR', 'Invalid request body');
-  console.error(`[referrals] ${label} failed:`, (error as any)?.message);
+  // Logs the full error (Vercel) + Sentry; the client only sees the generic message.
+  reportRouteError(label, error, { code: 'INTERNAL_SERVER_ERROR' });
   return fail(500, 'INTERNAL_SERVER_ERROR', 'An unexpected error occurred');
 }
 

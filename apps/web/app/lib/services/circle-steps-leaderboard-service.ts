@@ -25,6 +25,7 @@ import { isValidTimezone } from '@/lib/streaks/streak-calculator';
 import { createAdminSupabase } from '@/lib/supabase-admin';
 import { savedTargets, DEFAULT_STEPS_TARGET } from '@/lib/targets/user-targets';
 import { getTodayInTimezone } from '@/lib/utils/timezone';
+import { logIgnoredQueryError } from '@/lib/api/route-errors';
 
 export interface StepsLeaderboard extends StepsPeriod {
   circle_id: string;
@@ -81,11 +82,12 @@ export class CircleStepsLeaderboardService {
   static async build(circleId: string, viewerId: string, clientTimezone: string | null): Promise<StepsLeaderboardResult> {
     const db = createAdminSupabase();
 
-    const { data: circle } = await db
+    const { data: circle, error: circleError } = await db
       .from('fitcircles')
       .select('id, creator_id, type, start_date, end_date, timezone')
       .eq('id', circleId)
       .maybeSingle();
+    logIgnoredQueryError('CircleStepsLeaderboardService.build', circleError);
     if (!circle) return { ok: false, code: 'CIRCLE_NOT_FOUND' };
 
     const { data: memberRows, error: membersError } = await db
@@ -105,10 +107,11 @@ export class CircleStepsLeaderboardService {
     const today = getTodayInTimezone(viewerTz);
     const period = stepsPeriod(calendarDay(circle.start_date), calendarDay(circle.end_date), today);
 
-    const { data: challengeRows } = await db
+    const { data: challengeRows, error: challengeRowsError } = await db
       .from('challenges')
       .select('id, name, template_id, unit, status, starts_at, participant_count')
       .eq('fitcircle_id', circleId);
+    logIgnoredQueryError('CircleStepsLeaderboardService.build', challengeRowsError);
     const challenge = pickStepsChallenge((challengeRows ?? []) as Row[]);
     const challengeGoal = challengeDailyStepGoal(challenge);
 

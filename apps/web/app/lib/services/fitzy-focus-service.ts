@@ -43,6 +43,7 @@ const CTA_TYPES = ['log_meal', 'log_workout', 'start_plan', 'open_circle'] as co
 const cp = (s: string) => [...s].length;
 export { fitBody } from '../fitzy/text';
 import { fitBody } from '../fitzy/text';
+import { logIgnoredQueryError } from '@/lib/api/route-errors';
 
 const FREE_CTA = (): FitzyDailyFocus['cta'] => ({ label: 'Make this my plan', action: { type: 'start_plan', label: 'Make this my plan' } });
 
@@ -117,7 +118,8 @@ export class FitzyFocusService {
     const date = timezone ? new Intl.DateTimeFormat('en-CA', { timeZone: timezone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(now) : todayFor(null);
     const tier = await UsageService.fitzyTier(userId);
     const supabase = createAdminSupabase();
-    const { data: cached } = await supabase.from('fitzy_daily').select('payload').eq('user_id', userId).eq('date', date).maybeSingle();
+    const { data: cached, error: cachedError } = await supabase.from('fitzy_daily').select('payload').eq('user_id', userId).eq('date', date).maybeSingle();
+    logIgnoredQueryError('FitzyFocusService.get', cachedError);
     if (cached && (cached as any).payload) return this.forTier((cached as any).payload as FitzyDailyFocus, tier);
 
     let focus: FitzyDailyFocus | null = null;

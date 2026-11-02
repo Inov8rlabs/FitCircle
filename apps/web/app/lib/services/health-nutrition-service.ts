@@ -5,6 +5,7 @@ import {
   type ImportNutritionRequest,
   type ImportNutritionResult,
 } from '../types/health-nutrition';
+import { logIgnoredQueryError } from '@/lib/api/route-errors';
 
 /**
  * HealthNutritionService — server side of HealthKit / Health Connect nutrition sync (PRD §6.2).
@@ -22,10 +23,11 @@ const ALL_PLATFORMS: HealthPlatform[] = ['healthkit', 'healthconnect', 'mfp'];
 export class HealthNutritionService {
   static async getState(userId: string): Promise<HealthNutritionSyncState[]> {
     const supabase = createAdminSupabase();
-    const { data } = await supabase
+    const { data, error: dataError } = await supabase
       .from('health_nutrition_sync')
       .select('platform, enabled, last_sync_at, last_cursor')
       .eq('user_id', userId);
+    logIgnoredQueryError('HealthNutritionService.getState', dataError);
     const byPlatform = new Map((data ?? []).map((r) => [r.platform as HealthPlatform, r]));
     // Return a row for every platform (default disabled/unsynced when no row yet).
     return ALL_PLATFORMS.map((platform) => {
@@ -70,12 +72,13 @@ export class HealthNutritionService {
 
     // Which externalIds are already imported for this (user, platform)?
     const externalIds = req.items.map((i) => i.externalId);
-    const { data: existing } = await supabase
+    const { data: existing, error: existingError } = await supabase
       .from('food_log_entries')
       .select('source_external_id')
       .eq('user_id', userId)
       .eq('nutrition_source', req.platform)
       .in('source_external_id', externalIds);
+    logIgnoredQueryError('HealthNutritionService.importBatch', existingError);
     const seen = new Set((existing ?? []).map((r) => r.source_external_id as string));
 
     const fresh = req.items.filter((i) => !seen.has(i.externalId));

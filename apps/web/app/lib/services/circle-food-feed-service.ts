@@ -16,6 +16,7 @@ import {
 } from '../types/food-feed';
 
 import { FoodPrivacyService } from './food-privacy-service';
+import { logIgnoredQueryError } from '@/lib/api/route-errors';
 
 /**
  * CircleFoodFeedService — promotes food logs into circle content (PRD v4 §6.3).
@@ -503,9 +504,10 @@ export class CircleFoodFeedService {
     await Promise.all(
       Array.from(primaryByEntry.entries()).map(async ([eid, img]) => {
         const mediumPath = img.storage_path.replace('_original.', '_medium.');
-        const { data: signed } = await supabaseAdmin.storage
+        const { data: signed, error: signedError } = await supabaseAdmin.storage
           .from(img.storage_bucket)
           .createSignedUrl(mediumPath, SIGNED_URL_TTL_SECONDS);
+        logIgnoredQueryError('CircleFoodFeedService.fetchPhotos', signedError);
         if (signed?.signedUrl) {
           byEntry.set(eid, signed.signedUrl);
         }

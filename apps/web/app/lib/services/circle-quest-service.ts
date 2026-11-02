@@ -1,4 +1,5 @@
 import { createAdminSupabase } from '../supabase-admin';
+import { logIgnoredQueryError } from '@/lib/api/route-errors';
 
 // ============================================================================
 // Types
@@ -302,12 +303,13 @@ export class CircleQuestService {
     await this.verifyCircleMembership(userId, quest.fitcircle_id);
 
     // Upsert progress record (create if doesn't exist)
-    const { data: existing } = await supabaseAdmin
+    const { data: existing, error: existingError } = await supabaseAdmin
       .from('circle_quest_progress')
       .select('*')
       .eq('quest_id', questId)
       .eq('user_id', userId)
       .maybeSingle();
+    logIgnoredQueryError('CircleQuestService.updateProgress', existingError);
 
     let newIndividualProgress: number;
     let isCompleted: boolean;
@@ -353,10 +355,11 @@ export class CircleQuestService {
 
     if (quest.quest_type === 'collaborative') {
       // Sum all participants' individual progress
-      const { data: allProgress } = await supabaseAdmin
+      const { data: allProgress, error: allProgressError } = await supabaseAdmin
         .from('circle_quest_progress')
         .select('individual_progress')
         .eq('quest_id', questId);
+      logIgnoredQueryError('CircleQuestService.updateProgress', allProgressError);
 
       collectiveProgress = (allProgress || []).reduce(
         (sum, p) => sum + (p.individual_progress || 0),
@@ -381,16 +384,18 @@ export class CircleQuestService {
 
     // For individual/competitive quests, check if all participants completed
     if (quest.quest_type === 'individual' || quest.quest_type === 'competitive') {
-      const { count: totalParticipants } = await supabaseAdmin
+      const { count: totalParticipants, error: totalParticipantsError } = await supabaseAdmin
         .from('circle_quest_progress')
         .select('*', { count: 'exact', head: true })
         .eq('quest_id', questId);
+      logIgnoredQueryError('CircleQuestService.updateProgress', totalParticipantsError);
 
-      const { count: completedParticipants } = await supabaseAdmin
+      const { count: completedParticipants, error: completedParticipantsError } = await supabaseAdmin
         .from('circle_quest_progress')
         .select('*', { count: 'exact', head: true })
         .eq('quest_id', questId)
         .eq('is_completed', true);
+      logIgnoredQueryError('CircleQuestService.updateProgress', completedParticipantsError);
 
       if (totalParticipants && completedParticipants && completedParticipants >= totalParticipants) {
         questCompleted = true;
@@ -458,20 +463,22 @@ export class CircleQuestService {
     const now = new Date().toISOString();
 
     // Activate pending quests whose start time has passed
-    const { data: toActivate } = await supabaseAdmin
+    const { data: toActivate, error: toActivateError } = await supabaseAdmin
       .from('circle_quests')
       .update({ status: 'active' })
       .eq('status', 'pending')
       .lte('starts_at', now)
       .select('id');
+    logIgnoredQueryError('CircleQuestService.checkExpiredQuests', toActivateError);
 
     // Expire active quests whose end time has passed
-    const { data: toExpire } = await supabaseAdmin
+    const { data: toExpire, error: toExpireError } = await supabaseAdmin
       .from('circle_quests')
       .update({ status: 'expired' })
       .eq('status', 'active')
       .lte('ends_at', now)
       .select('id');
+    logIgnoredQueryError('CircleQuestService.checkExpiredQuests', toExpireError);
 
     return {
       expired: toExpire?.length || 0,
@@ -534,18 +541,20 @@ export class CircleQuestService {
     const supabaseAdmin = createAdminSupabase();
 
     // Get user's own progress
-    const { data: myProgress } = await supabaseAdmin
+    const { data: myProgress, error: myProgressError } = await supabaseAdmin
       .from('circle_quest_progress')
       .select('individual_progress, is_completed')
       .eq('quest_id', quest.id)
       .eq('user_id', userId)
       .maybeSingle();
+    logIgnoredQueryError('CircleQuestService.enrichQuest', myProgressError);
 
     // Get participant count
-    const { count: participantCount } = await supabaseAdmin
+    const { count: participantCount, error: participantCountError } = await supabaseAdmin
       .from('circle_quest_progress')
       .select('*', { count: 'exact', head: true })
       .eq('quest_id', quest.id);
+    logIgnoredQueryError('CircleQuestService.enrichQuest', participantCountError);
 
     const now = new Date();
     const endsAt = new Date(quest.ends_at);

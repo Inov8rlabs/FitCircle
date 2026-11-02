@@ -12,6 +12,7 @@
 import { type SupabaseClient } from '@supabase/supabase-js';
 
 import { createAdminSupabase } from '@/lib/supabase';
+import { logIgnoredQueryError } from '@/lib/api/route-errors';
 
 export interface GoalRecommendation {
   goal_type: 'steps' | 'weight_log' | 'workout' | 'mood' | 'energy' | 'custom';
@@ -77,7 +78,7 @@ export class GoalRecommendationService {
     const today = new Date().toISOString();
 
     // The user's active circles (fitcircles.type is the challenge type)
-    const { data: participantData, error } = await supabase
+    const { data: participantData, error: participantDataError } = await supabase
       .from('fitcircle_members')
       .select(`
         fitcircles!inner (
@@ -91,11 +92,7 @@ export class GoalRecommendationService {
       .eq('user_id', userId)
       .eq('status', 'active')
       .gt('fitcircles.end_date', today);
-
-    if (error) {
-      console.error('[GoalRecommendationService] active circles query failed:', error.message);
-      return [];
-    }
+    logIgnoredQueryError('GoalRecommendationService.getUserActiveChallenges', participantDataError);
 
     if (!participantData || participantData.length === 0) {
       return [];

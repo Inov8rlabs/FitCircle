@@ -1,4 +1,5 @@
 import { createAdminSupabase } from '../supabase-admin';
+import { logIgnoredQueryError } from '@/lib/api/route-errors';
 
 // ============================================================================
 // TYPES
@@ -130,10 +131,11 @@ export class BoostService {
     }
 
     // Build member status list
-    const { data: profiles } = await supabaseAdmin
+    const { data: profiles, error: profilesError } = await supabaseAdmin
       .from('profiles')
       .select('id, display_name, avatar_url')
       .in('id', memberIds);
+    logIgnoredQueryError('BoostService.recalculateBoost', profilesError);
 
     const profileMap = new Map((profiles || []).map(p => [p.id, p]));
     const memberStatuses: MemberCheckInStatus[] = memberIds.map(uid => {

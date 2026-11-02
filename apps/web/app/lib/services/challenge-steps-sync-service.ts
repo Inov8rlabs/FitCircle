@@ -17,6 +17,7 @@ import { isValidTimezone } from '@/lib/streaks/streak-calculator';
 import { createAdminSupabase } from '@/lib/supabase-admin';
 
 import { reconcileMilestones, toNumber, type ParticipantProgress } from './circle-challenge-progress';
+import { logIgnoredQueryError } from '@/lib/api/route-errors';
 
 type Row = Record<string, any>;
 
@@ -184,18 +185,20 @@ export class ChallengeStepsSyncService {
   static async syncUser(userId: string, now: Date = new Date()): Promise<void> {
     try {
       const db = createAdminSupabase();
-      const { data: rows } = await db
+      const { data: rows, error: rowsError } = await db
         .from('challenge_participants')
         .select('challenge_id')
         .eq('user_id', userId)
         .eq('status', 'active');
+      logIgnoredQueryError('ChallengeStepsSyncService.syncUser', rowsError);
       const ids = [...new Set((rows ?? []).map((r: Row) => r.challenge_id as string))];
       if (ids.length === 0) return;
-      const { data: challenges } = await db
+      const { data: challenges, error: challengesError } = await db
         .from('challenges')
         .select('*')
         .in('id', ids)
         .in('status', ['scheduled', 'active']);
+      logIgnoredQueryError('ChallengeStepsSyncService.syncUser', challengesError);
       await this.refresh(challenges ?? [], now);
     } catch (err: any) {
       console.warn('[ChallengeStepsSync] syncUser failed:', err?.message ?? err);

@@ -11,6 +11,7 @@ import {
 } from '../types/circle-streak';
 
 import type * as OrchestratorModule from './notification-orchestrator';
+import { logIgnoredQueryError } from '@/lib/api/route-errors';
 
 /**
  * CircleStreakService — collective circle streak + the weekly save pool
@@ -147,11 +148,12 @@ export class CircleStreakService {
   /** Activity hook: a member claimed `date` — advance each of their circles' streaks. */
   static async onMemberActivity(userId: string, date: string): Promise<void> {
     const supabaseAdmin = createAdminSupabase();
-    const { data } = await supabaseAdmin
+    const { data, error: dataError } = await supabaseAdmin
       .from('fitcircle_members')
       .select('fitcircle_id')
       .eq('user_id', userId)
       .eq('status', 'active');
+    logIgnoredQueryError('CircleStreakService.onMemberActivity', dataError);
     for (const row of (data ?? []) as Array<{ fitcircle_id: string }>) {
       await this.recomputeForDay(row.fitcircle_id, date).catch((err) =>
         console.error('[CircleStreakService] activity recompute failed:', row.fitcircle_id, err?.message)
@@ -165,11 +167,12 @@ export class CircleStreakService {
    */
   static async settleYesterday(limit = 500): Promise<{ checked: number; reset: number }> {
     const supabaseAdmin = createAdminSupabase();
-    const { data } = await supabaseAdmin
+    const { data, error: dataError } = await supabaseAdmin
       .from('circle_streaks')
       .select('fitcircle_id, current_streak')
       .gt('current_streak', 0)
       .limit(limit);
+    logIgnoredQueryError('CircleStreakService.settleYesterday', dataError);
     let reset = 0;
     for (const row of (data ?? []) as Array<{ fitcircle_id: string; current_streak: number }>) {
       try {
@@ -283,23 +286,25 @@ export class CircleStreakService {
     }
 
     // Existing save for this friend & day → idempotent replay (no budget spent).
-    const { data: prior } = await supabaseAdmin
+    const { data: prior, error: priorError } = await supabaseAdmin
       .from('circle_streak_saves')
       .select('id, fitcircle_id, saver_user_id, covered_user_id, save_date, created_at')
       .eq('fitcircle_id', fitcircleId)
       .eq('covered_user_id', coveredUserId)
       .eq('save_date', day)
       .maybeSingle();
+    logIgnoredQueryError('CircleStreakService.useSave', priorError);
     let saveRow = prior as CircleStreakSaveRow | null;
     let created = false;
 
     if (!saveRow) {
-      const { count } = await supabaseAdmin
+      const { count, error: countError } = await supabaseAdmin
         .from('circle_streak_saves')
         .select('id', { count: 'exact', head: true })
         .eq('fitcircle_id', fitcircleId)
         .eq('saver_user_id', saverUserId)
         .gte('save_date', this.weekStart(day));
+      logIgnoredQueryError('CircleStreakService.useSave', countError);
       if ((count ?? 0) >= 1) {
         throw new CircleStreakError('SAVE_USED', 'Your save for this week is used — it resets Monday', 409);
       }
@@ -310,13 +315,14 @@ export class CircleStreakService {
         .single();
       if (error) {
         if ((error as { code?: string }).code !== '23505') throw error;
-        const { data: raced } = await supabaseAdmin
+        const { data: raced, error: racedError } = await supabaseAdmin
           .from('circle_streak_saves')
           .select('id, fitcircle_id, saver_user_id, covered_user_id, save_date, created_at')
           .eq('fitcircle_id', fitcircleId)
           .eq('covered_user_id', coveredUserId)
           .eq('save_date', day)
           .single();
+        logIgnoredQueryError('CircleStreakService.useSave', racedError);
         saveRow = raced as CircleStreakSaveRow;
       } else {
         saveRow = inserted as CircleStreakSaveRow;
@@ -401,7 +407,8 @@ export class CircleStreakService {
     try {
       const { ChatActivityHooks } = await import('./chat-activity-hooks');
       await ChatActivityHooks.onCircleStreakMilestone(fitcircleId, days);
-      const { data: circle } = await createAdminSupabase().from('fitcircles').select('name').eq('id', fitcircleId).maybeSingle();
+      const { data: circle, error: circleError } = await createAdminSupabase().from('fitcircles').select('name').eq('id', fitcircleId).maybeSingle();
+      logIgnoredQueryError('CircleStreakService.celebrateMilestone', circleError);
       for (const id of memberIds) {
         push(id, 'circle_streak_milestone', {
           circleName: circle?.name,
@@ -416,7 +423,8 @@ export class CircleStreakService {
   }
 
   private static async timezoneOf(fitcircleId: string): Promise<string | null> {
-    const { data } = await createAdminSupabase().from('fitcircles').select('timezone').eq('id', fitcircleId).maybeSingle();
+    const { data, error: dataError } = await createAdminSupabase().from('fitcircles').select('timezone').eq('id', fitcircleId).maybeSingle();
+    logIgnoredQueryError('CircleStreakService.timezoneOf', dataError);
     return (data?.timezone as string | null) ?? null;
   }
 

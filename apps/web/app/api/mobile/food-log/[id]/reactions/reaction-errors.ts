@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 
+import { reportRouteError } from '@/lib/api/route-errors';
 import { REACTION_KINDS } from '@/lib/types/food-feed';
 import { validationMessage } from '@/lib/validation/lenient-parse';
 
@@ -14,11 +15,13 @@ import { validationMessage } from '@/lib/validation/lenient-parse';
  * import this from here instead.
  */
 export function mapReactionError(error: any, label: string) {
-  console.error(`[Mobile API] ${label} error:`, {
-    message: error?.message,
-    stack: process.env.NODE_ENV === 'development' ? error?.stack : undefined,
-  });
+  const response = mapReactionErrorResponse(error);
+  // 4xx → console.warn; 5xx → console.error (full error) + Sentry. Client message is already generic for 5xx.
+  reportRouteError(`mobile/${label}`, error, { status: response.status });
+  return response;
+}
 
+function mapReactionErrorResponse(error: any) {
   if (error?.message === 'Unauthorized') {
     return NextResponse.json(
       { success: false, data: null, error: { code: 'UNAUTHORIZED', message: 'Invalid or expired token', details: {}, timestamp: new Date().toISOString() }, meta: null },

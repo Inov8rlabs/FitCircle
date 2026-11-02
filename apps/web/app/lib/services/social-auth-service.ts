@@ -8,6 +8,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 import { deriveUsernameBase, ensureUniqueUsername } from './username-service';
+import { logIgnoredQueryError } from '@/lib/api/route-errors';
 
 export type SocialProvider = 'apple' | 'google';
 
@@ -70,12 +71,13 @@ export async function findOrCreateSocialUser(
   // 1. Fast path: a profile row already carries this email (register and both
   //    social routes write it). Case-insensitive because Apple relay addresses
   //    and Google addresses can differ in case between sign-ins.
-  const { data: existingProfile } = await supabase
+  const { data: existingProfile, error: existingProfileError } = await supabase
     .from('profiles')
     .select('*')
     .ilike('email', email)
     .limit(1)
     .maybeSingle();
+  logIgnoredQueryError('findOrCreateSocialUser', existingProfileError);
 
   if (existingProfile?.id) {
     return { userId: existingProfile.id, profile: existingProfile, isNewUser: false };
@@ -114,11 +116,12 @@ export async function findOrCreateSocialUser(
 
   // 3. Make sure a profile exists. Existing account, missing profile → still
   //    create one so the app has something to load; that user is not "new".
-  const { data: profileById } = await supabase
+  const { data: profileById, error: profileByIdError } = await supabase
     .from('profiles')
     .select('*')
     .eq('id', userId)
     .maybeSingle();
+  logIgnoredQueryError('findOrCreateSocialUser', profileByIdError);
 
   if (profileById) {
     if (!profileById.email) {
@@ -128,12 +131,13 @@ export async function findOrCreateSocialUser(
   }
 
   const usernameTaken = async (candidate: string): Promise<boolean> => {
-    const { data } = await supabase
+    const { data, error: dataError } = await supabase
       .from('profiles')
       .select('id')
       .ilike('username', candidate)
       .limit(1)
       .maybeSingle();
+    logIgnoredQueryError('findOrCreateSocialUser.usernameTaken', dataError);
     return !!data;
   };
   const username = await ensureUniqueUsername(deriveUsernameBase(email), usernameTaken);

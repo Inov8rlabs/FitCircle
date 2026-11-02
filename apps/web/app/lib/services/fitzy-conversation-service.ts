@@ -4,6 +4,7 @@
  */
 import { createAdminSupabase } from '../supabase-admin';
 import type { FitzyAction, FitzyMessage, FitzyStoredMessage, FitzyTier } from '../types/fitzy';
+import { logIgnoredQueryError } from '@/lib/api/route-errors';
 
 export class FitzyNotFoundError extends Error {
   constructor(what = 'Conversation') {
@@ -121,7 +122,8 @@ export class FitzyConversationService {
     const supabase = createAdminSupabase();
     // Keep created_at strictly increasing within a conversation (stable ordering even when
     // turns land in the same millisecond).
-    const { data: conv } = await supabase.from('fitzy_conversations').select('updated_at').eq('id', conversationId).maybeSingle();
+    const { data: conv, error: convError } = await supabase.from('fitzy_conversations').select('updated_at').eq('id', conversationId).maybeSingle();
+    logIgnoredQueryError('FitzyConversationService.addMessage', convError);
     const floor = Date.parse((conv as { updated_at?: string } | null)?.updated_at ?? '') + 1 || 0;
     const at = new Date(Math.max(Date.parse(m.createdAt ?? '') || Date.now(), floor)).toISOString();
     const { data, error } = await supabase
@@ -167,12 +169,13 @@ export class FitzyConversationService {
     const rows = (data ?? []) as ConversationRow[];
     const conversations = [];
     for (const c of rows) {
-      const { data: last } = await supabase
+      const { data: last, error: lastError } = await supabase
         .from('fitzy_messages')
         .select('content')
         .eq('conversation_id', c.id)
         .order('created_at', { ascending: false })
         .limit(1);
+      logIgnoredQueryError('FitzyConversationService.list', lastError);
       const text = ((last ?? []) as Array<{ content: string }>)[0]?.content ?? '';
       conversations.push({ id: c.id, title: c.title, updatedAt: c.updated_at, preview: text.replace(/\s+/g, ' ').trim().slice(0, 100) });
     }

@@ -28,6 +28,7 @@ import {
 } from '../types/circle';
 
 import { LeaderboardService } from './leaderboard-service';
+import { logIgnoredQueryError } from '@/lib/api/route-errors';
 
 /** Alphabet without look-alikes (no 0/O, 1/I/L). */
 const INVITE_CODE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
@@ -205,10 +206,11 @@ export class CircleService {
     console.log(`[CircleService.getCircle] Member count query result: ${memberCount} active members`);
 
     // Also query without status filter to see total
-    const { count: totalMembers } = await supabaseAdmin
+    const { count: totalMembers, error: totalMembersError } = await supabaseAdmin
       .from('fitcircle_members')
       .select('*', { count: 'exact', head: true })
       .eq('fitcircle_id', circleId);
+    logIgnoredQueryError('CircleService.getCircle', totalMembersError);
 
     console.log(`[CircleService.getCircle] Total members (all statuses): ${totalMembers}`);
 
@@ -322,11 +324,12 @@ export class CircleService {
       const code = 'FIT' + randomInviteSuffix(6);
 
       // Check uniqueness
-      const { data: existing } = await supabaseAdmin
+      const { data: existing, error: existingError } = await supabaseAdmin
         .from('fitcircles')
         .select('id')
         .eq('invite_code', code)
         .single();
+      logIgnoredQueryError('CircleService.generateInviteCode', existingError);
 
       if (!existing) {
         return code;
@@ -521,12 +524,13 @@ export class CircleService {
     }
 
     // Check if already a member (using challenge_participants table)
-    const { data: existing } = await supabaseAdmin
+    const { data: existing, error: existingError } = await supabaseAdmin
       .from('fitcircle_members')
       .select('id, status')
       .eq('fitcircle_id', circleId)
       .eq('user_id', userId)
       .single();
+    logIgnoredQueryError('CircleService.joinCircle', existingError);
 
     // Someone who left (status 'dropped') may join again: their old row is
     // reactivated instead of treated as a current membership.
@@ -550,11 +554,12 @@ export class CircleService {
     }
 
     // Update participant count - using direct update instead of RPC
-    const { data: circleData } = await supabaseAdmin
+    const { data: circleData, error: circleDataError } = await supabaseAdmin
       .from('fitcircles')
       .select('participant_count')
       .eq('id', circleId)
       .single();
+    logIgnoredQueryError('CircleService.joinCircle', circleDataError);
     
     await supabaseAdmin
       .from('fitcircles')
@@ -579,10 +584,11 @@ export class CircleService {
     const supabaseAdmin = createAdminSupabase();
 
     // Pull the IDs the user is already a member of so we can exclude them.
-    const { data: memberships } = await supabaseAdmin
+    const { data: memberships, error: membershipsError } = await supabaseAdmin
       .from('fitcircle_members')
       .select('fitcircle_id')
       .eq('user_id', userId);
+    logIgnoredQueryError('CircleService.getJoinablePublicCircles', membershipsError);
 
     const memberCircleIds = (memberships ?? []).map(m => m.fitcircle_id);
 
@@ -639,12 +645,13 @@ export class CircleService {
     }
 
     // Already a member?
-    const { data: existing } = await supabaseAdmin
+    const { data: existing, error: existingError } = await supabaseAdmin
       .from('fitcircle_members')
       .select('id, status')
       .eq('fitcircle_id', circleId)
       .eq('user_id', userId)
       .maybeSingle();
+    logIgnoredQueryError('CircleService.joinPublicCircle', existingError);
 
     if (existing && existing.status !== 'dropped') {
       throw new Error('You are already a member of this circle');
@@ -729,11 +736,12 @@ export class CircleService {
 
     const pathCircleId = options.pathCircleId?.trim().toLowerCase() || null;
     if (pathCircleId && UUID_PATTERN.test(pathCircleId) && circle?.id !== pathCircleId) {
-      const { data: pathCircle } = await supabaseAdmin
+      const { data: pathCircle, error: pathCircleError } = await supabaseAdmin
         .from('fitcircles')
         .select('id')
         .eq('id', pathCircleId)
         .maybeSingle();
+      logIgnoredQueryError('CircleService.joinViaInvite', pathCircleError);
 
       if (pathCircle) {
         throw new InviteJoinError('WRONG_CIRCLE', 'Invalid invite code for this circle');
@@ -751,12 +759,13 @@ export class CircleService {
       isCreator: circle.creator_id === userId,
     };
 
-    const { data: existingRows } = await supabaseAdmin
+    const { data: existingRows, error: existingRowsError } = await supabaseAdmin
       .from('fitcircle_members')
       .select('id, status')
       .eq('fitcircle_id', circle.id)
       .eq('user_id', userId)
       .limit(1);
+    logIgnoredQueryError('CircleService.joinViaInvite', existingRowsError);
 
     const previous = existingRows?.[0] ?? null;
     if (previous && previous.status !== 'dropped') {
@@ -778,11 +787,12 @@ export class CircleService {
     if (options.goal) this.validateGoal(options.goal, circle.start_date);
 
     if (circle.max_participants) {
-      const { count } = await supabaseAdmin
+      const { count, error: countError } = await supabaseAdmin
         .from('fitcircle_members')
         .select('id', { count: 'exact', head: true })
         .eq('fitcircle_id', circle.id)
         .eq('status', 'active');
+      logIgnoredQueryError('CircleService.joinViaInvite', countError);
       if ((count ?? 0) >= circle.max_participants) {
         throw new InviteJoinError('CIRCLE_FULL', 'This circle is full');
       }
@@ -965,11 +975,12 @@ export class CircleService {
     // Keep the cached count in step with the real roster. Best effort: the read
     // paths recount active members themselves.
     try {
-      const { count } = await supabaseAdmin
+      const { count, error: countQueryError } = await supabaseAdmin
         .from('fitcircle_members')
         .select('*', { count: 'exact', head: true })
         .eq('fitcircle_id', circle_id)
         .eq('status', 'active');
+      logIgnoredQueryError('CircleService.removeParticipant', countQueryError);
 
       if (typeof count === 'number') {
         await supabaseAdmin
@@ -1113,12 +1124,13 @@ export class CircleService {
 
     // Check if already checked in today
     const today = new Date().toISOString().split('T')[0];
-    const { data: existingCheckIn } = await supabaseAdmin
+    const { data: existingCheckIn, error: existingCheckInError } = await supabaseAdmin
       .from('circle_check_ins')
       .select('id')
       .eq('member_id', member.id)
       .eq('check_in_date', today)
       .single();
+    logIgnoredQueryError('CircleService.submitCheckIn', existingCheckInError);
 
     if (existingCheckIn) {
       throw new Error('You have already checked in today');
@@ -1321,7 +1333,7 @@ export class CircleService {
     // Get latest check-in values for each member
     for (const member of members || []) {
       // Try circle_check_ins first
-      const { data: latestCircleCheckIn } = await supabaseAdmin
+      const { data: latestCircleCheckIn, error: latestCircleCheckInError } = await supabaseAdmin
         .from('circle_check_ins')
         .select('check_in_value')
         .eq('user_id', member.user_id)
@@ -1329,6 +1341,7 @@ export class CircleService {
         .order('check_in_date', { ascending: false })
         .limit(1)
         .single();
+      logIgnoredQueryError('CircleService.getLeaderboard', latestCircleCheckInError);
 
       if (latestCircleCheckIn) {
         member.current_value = latestCircleCheckIn.check_in_value;
@@ -1336,7 +1349,7 @@ export class CircleService {
       }
 
       // Fall back to daily_tracking
-      const { data: latestTracking } = await supabaseAdmin
+      const { data: latestTracking, error: latestTrackingError } = await supabaseAdmin
         .from('daily_tracking')
         .select('weight_kg')
         .eq('user_id', member.user_id)
@@ -1344,6 +1357,7 @@ export class CircleService {
         .order('tracking_date', { ascending: false })
         .limit(1)
         .single();
+      logIgnoredQueryError('CircleService.getLeaderboard', latestTrackingError);
 
       if (latestTracking && latestTracking.weight_kg) {
         member.current_value = latestTracking.weight_kg;
@@ -1448,12 +1462,13 @@ export class CircleService {
     console.log(`[CircleService.sendEncouragement] User ${fromUserId} sending encouragement in circle ${circleId}`);
 
     // Check if sender is a member (using challenge_participants table)
-    const { data: sender } = await supabaseAdmin
+    const { data: sender, error: senderError } = await supabaseAdmin
       .from('fitcircle_members')
       .select('id')
       .eq('fitcircle_id', circleId)
       .eq('user_id', fromUserId)
       .single();
+    logIgnoredQueryError('CircleService.sendEncouragement', senderError);
 
     if (!sender) {
       console.log(`[CircleService.sendEncouragement] User is not a member of this circle`);
@@ -1504,12 +1519,13 @@ export class CircleService {
       if (input.to_user_id) {
         console.log(`[CircleService.sendEncouragement] Incrementing high-fives for user ${input.to_user_id}`);
         
-        const { data: recipient } = await supabaseAdmin
+        const { data: recipient, error: recipientError } = await supabaseAdmin
           .from('fitcircle_members')
           .select('total_high_fives_received')
           .eq('fitcircle_id', circleId)
           .eq('user_id', input.to_user_id)
           .single();
+        logIgnoredQueryError('CircleService.sendEncouragement', recipientError);
         
         if (recipient) {
           await supabaseAdmin
@@ -1891,11 +1907,12 @@ export class CircleService {
       console.log(`[CircleService.getTeamCollectiveStreak] Creating new streak tracking record`);
 
       // Calculate grace days based on challenge duration
-      const { data: circle } = await supabaseAdmin
+      const { data: circle, error: circleError } = await supabaseAdmin
         .from('fitcircles')
         .select('start_date, end_date')
         .eq('id', circleId)
         .single();
+      logIgnoredQueryError('CircleService.getTeamCollectiveStreak', circleError);
 
       const graceDays = circle
         ? this.calculateCircleGraceDays(circle.start_date, circle.end_date)
@@ -1935,11 +1952,12 @@ export class CircleService {
     console.log(`[CircleService.updateTeamCollectiveStreak] Updating team streak for circle ${circleId}`);
 
     // Get all active members
-    const { data: members } = await supabaseAdmin
+    const { data: members, error: membersError } = await supabaseAdmin
       .from('fitcircle_members')
       .select('id, user_id')
       .eq('fitcircle_id', circleId)
       .eq('status', 'active');
+    logIgnoredQueryError('CircleService.updateTeamCollectiveStreak', membersError);
 
     if (!members || members.length === 0) {
       console.log(`[CircleService.updateTeamCollectiveStreak] No active members found`);
@@ -1960,12 +1978,13 @@ export class CircleService {
       let allCheckedIn = true;
 
       for (const member of members) {
-        const { data: checkIn } = await supabaseAdmin
+        const { data: checkIn, error: checkInError } = await supabaseAdmin
           .from('circle_check_ins')
           .select('id')
           .eq('member_id', member.id)
           .eq('check_in_date', checkDateStr)
           .single();
+        logIgnoredQueryError('CircleService.updateTeamCollectiveStreak', checkInError);
 
         if (!checkIn) {
           allCheckedIn = false;
@@ -1984,11 +2003,12 @@ export class CircleService {
     console.log(`[CircleService.updateTeamCollectiveStreak] Team streak calculated: ${teamStreak} days`);
 
     // Update circle streak tracking
-    const { data: currentTracking } = await supabaseAdmin
+    const { data: currentTracking, error: currentTrackingError } = await supabaseAdmin
       .from('circle_streak_tracking')
       .select('longest_team_streak')
       .eq('circle_id', circleId)
       .single();
+    logIgnoredQueryError('CircleService.updateTeamCollectiveStreak', currentTrackingError);
 
     const longestStreak = Math.max(teamStreak, currentTracking?.longest_team_streak || 0);
 

@@ -1,4 +1,5 @@
 import { createAdminSupabase } from '../supabase-admin';
+import { logIgnoredQueryError } from '@/lib/api/route-errors';
 
 // ============================================================================
 // TYPES
@@ -326,11 +327,12 @@ export class AssessmentService {
     }
 
     // Get circles user is already in
-    const { data: memberships } = await supabaseAdmin
+    const { data: memberships, error: membershipsError } = await supabaseAdmin
       .from('fitcircle_members')
       .select('fitcircle_id')
       .eq('user_id', userId)
       .eq('status', 'active');
+    logIgnoredQueryError('AssessmentService.recommendCircles', membershipsError);
 
     const memberCircleIds = new Set((memberships || []).map((m: any) => m.fitcircle_id));
 

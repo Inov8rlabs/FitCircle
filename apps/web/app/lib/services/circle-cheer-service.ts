@@ -26,6 +26,7 @@ import { ChatNotificationService } from './chat-notification-service';
 import { ChatSafetyService } from './chat-safety-service';
 import { CircleChatService } from './circle-chat-service';
 import { CircleStepsLeaderboardService } from './circle-steps-leaderboard-service';
+import { logIgnoredQueryError } from '@/lib/api/route-errors';
 
 const MESSAGE_COLUMNS =
   'id, fitcircle_id, sender_id, kind, body, photo_url, client_id, system_event_type, system_event_ref, system_payload, priority, edited_at, deleted_at, created_at, updated_at';
@@ -280,7 +281,8 @@ export class CircleCheerService {
   }
 
   private static async displayNameOf(userId: string): Promise<string> {
-    const { data } = await createAdminSupabase().from('profiles').select('display_name').eq('id', userId).maybeSingle();
+    const { data, error: dataError } = await createAdminSupabase().from('profiles').select('display_name').eq('id', userId).maybeSingle();
+    logIgnoredQueryError('CircleCheerService.displayNameOf', dataError);
     return ((data?.display_name as string | null) ?? '').trim();
   }
 }

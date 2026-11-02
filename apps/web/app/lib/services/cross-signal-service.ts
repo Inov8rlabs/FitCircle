@@ -14,6 +14,7 @@ import {
 
 import { BodyCompTrendsService } from './body-comp-trends-service';
 import { EntitlementService } from './entitlement-service';
+import { logIgnoredQueryError } from '@/lib/api/route-errors';
 
 /**
  * CrossSignalService — gentle, correlational cross-signal insights (PRD v4 §6.10).
@@ -45,11 +46,12 @@ export class CrossSignalService {
 
     // --- Pull each signal as a per-day map (date string -> number) ---------------
     // daily_tracking: one row per day already, so mood/energy/steps map directly.
-    const { data: tracking } = await supabase
+    const { data: tracking, error: trackingError } = await supabase
       .from('daily_tracking')
       .select('tracking_date, mood_score, energy_level, steps')
       .eq('user_id', userId)
       .gte('tracking_date', since);
+    logIgnoredQueryError('CrossSignalService.getInsights', trackingError);
 
     const mood = new Map<string, number>();
     const energy = new Map<string, number>();
@@ -63,12 +65,13 @@ export class CrossSignalService {
     }
 
     // beverage_logs: multiple rows per day -> sum caffeine_mg per entry_date.
-    const { data: beverages } = await supabase
+    const { data: beverages, error: beveragesError } = await supabase
       .from('beverage_logs')
       .select('entry_date, caffeine_mg')
       .eq('user_id', userId)
       .is('deleted_at', null)
       .gte('entry_date', since);
+    logIgnoredQueryError('CrossSignalService.getInsights', beveragesError);
 
     const caffeine = sumByDate(
       (beverages ?? []) as DatedValueRow[],
@@ -77,12 +80,13 @@ export class CrossSignalService {
     );
 
     // food_log_entries: multiple rows per day -> sum protein_g / calories per entry_date.
-    const { data: food } = await supabase
+    const { data: food, error: foodError } = await supabase
       .from('food_log_entries')
       .select('entry_date, protein_g, calories')
       .eq('user_id', userId)
       .is('deleted_at', null)
       .gte('entry_date', since);
+    logIgnoredQueryError('CrossSignalService.getInsights', foodError);
 
     const protein = sumByDate(
       (food ?? []) as FoodRow[],
@@ -167,12 +171,13 @@ export class CrossSignalService {
 
       const supabase = createAdminSupabase();
       const sinceISO = new Date(Date.now() - this.BODY_COMP_LOOKBACK_DAYS * 86_400_000).toISOString();
-      const { data } = await supabase
+      const { data, error: dataError } = await supabase
         .from('body_composition_logs')
         .select('measured_at, body_fat_pct, fat_mass_kg, skeletal_muscle_mass_kg')
         .eq('user_id', userId)
         .gte('measured_at', sinceISO)
         .order('measured_at', { ascending: true });
+      logIgnoredQueryError('CrossSignalService.bodyCompInsights', dataError);
 
       // A "scan" is a log carrying composition data (BF% / fat mass / SMM) — the same
       // definition the trend engine's sufficiency rule uses.

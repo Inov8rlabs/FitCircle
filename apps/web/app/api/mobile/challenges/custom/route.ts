@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 
+import { unhandledChallengeError } from '@/lib/http/circle-challenge-errors';
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { CustomChallengeService, type CustomChallengeInput } from '@/lib/services/custom-challenge-service';
 import { parseLenient, validationMessage } from '@/lib/validation/lenient-parse';
@@ -62,9 +63,6 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       );
     }
-    return NextResponse.json(
-      { success: false, data: null, error: { code: 'ERROR', message: error.message } },
-      { status: 400 }
-    );
+    return unhandledChallengeError(error, 'mobile/challenges/custom POST');
   }
 }
