@@ -1,6 +1,6 @@
 {
   "$schema": "./tracking-plan.schema.json",
-  "version": 22,
+  "version": 23,
   "updated": "2026-11-02",
   "conventions": {
     "eventNames": "Title Case, '<Object> <Past-tense verb>' (e.g. 'Meal Logged'). Names are frozen once shipped: rename in the analytics tool, never in code.",
@@ -875,6 +875,27 @@
           "values": [
             "imperial",
             "metric"
+          ],
+          "required": true
+        }
+      ]
+    },
+    {
+      "name": "Profile Name Changed",
+      "category": "settings",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "description": "The user saved a new display name (never send the name itself).",
+      "properties": [
+        {
+          "name": "entry_point",
+          "type": "enum",
+          "values": [
+            "profile_header",
+            "edit_profile"
           ],
           "required": true
         }

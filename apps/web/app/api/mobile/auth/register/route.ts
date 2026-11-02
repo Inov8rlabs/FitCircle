@@ -11,6 +11,7 @@ import {
   deriveUsernameBase,
   ensureUniqueUsername,
 } from '@/lib/services/username-service';
+import { coerceDisplayName } from '@/lib/validation/display-name';
 import { parseLenient } from '@/lib/validation/lenient-parse';
 
 // Validation schema
@@ -110,7 +111,7 @@ export async function POST(request: NextRequest) {
         id: authData.user.id,
         email: validatedData.email,
         username,
-        display_name: validatedData.displayName,
+        display_name: coerceDisplayName(validatedData.displayName, username),
         onboarding_completed: false,
       })
       .select()

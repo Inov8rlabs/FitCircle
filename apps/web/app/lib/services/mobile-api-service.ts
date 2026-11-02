@@ -1,14 +1,16 @@
 import jwt from 'jsonwebtoken';
 
+import { logIgnoredQueryError } from '@/lib/api/route-errors';
+import { cleanDisplayName } from '@/lib/validation/display-name';
+
 import { createAdminSupabase } from '../supabase-admin';
 
 import { EngagementStreakService } from './engagement-streak-service';
 import { MetricStreakService } from './metric-streak-service';
 import { toMobileProfile } from './mobile-profile-response';
+import { resolveStepsMerge } from './steps-merge';
 import { StreakClaimingService } from './streak-claiming-service';
 import { isValidUsername } from './username-service';
-import { resolveStepsMerge } from './steps-merge';
-import { logIgnoredQueryError } from '@/lib/api/route-errors';
 
 /**
  * True when PostgREST / Postgres rejected a statement because `column` does not
@@ -845,14 +847,16 @@ export class MobileAPIService {
     const supabaseAdmin = createAdminSupabase();
 
     // Sanitize inputs
-    const { sanitizeBio, sanitizeDisplayName, sanitizeUsername, sanitizeUrl } = await import(
-      '../utils/sanitize'
-    );
+    const { sanitizeBio, sanitizeUsername, sanitizeUrl } = await import('../utils/sanitize');
 
     const sanitizedUpdates: any = {};
 
     if (updates.display_name !== undefined) {
-      sanitizedUpdates.display_name = sanitizeDisplayName(updates.display_name);
+      // The route validated it (validation/display-name.ts). Normalize again so
+      // no caller can store control/invisible characters; never store ''.
+      // (sanitizeDisplayName() used to strip every non-ASCII letter.)
+      const name = cleanDisplayName(updates.display_name);
+      if (name) sanitizedUpdates.display_name = name;
     }
     if (updates.username !== undefined) {
       // A username that satisfies the shared rule (username-service.ts) is
@@ -909,6 +913,24 @@ export class MobileAPIService {
 
     if (error) throw error;
     return data;
+  }
+
+  /**
+   * Mirror a changed display name into the auth user's metadata
+   * (`full_name`/`name`/`display_name`), which GoTrue merges key by key. Read
+   * as a fallback by web (stores/auth-store.ts) and by profile-bootstrap.ts;
+   * `profiles.display_name` stays the source of truth. Best-effort.
+   */
+  static async syncAuthMetadataName(userId: string, displayName: string): Promise<void> {
+    try {
+      const supabaseAdmin = createAdminSupabase() as any;
+      const { error } = await supabaseAdmin.auth.admin.updateUserById(userId, {
+        user_metadata: { full_name: displayName, name: displayName, display_name: displayName },
+      });
+      if (error) console.warn('[syncAuthMetadataName] failed', { userId, message: error.message });
+    } catch (error) {
+      console.warn('[syncAuthMetadataName] failed', { userId, message: (error as Error)?.message });
+    }
   }
 
   /**

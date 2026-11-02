@@ -6,6 +6,7 @@ import { MobileAPIService } from '@/lib/services/mobile-api-service';
 import { toProfileUpdateResponse } from '@/lib/services/mobile-profile-response';
 import { resolveClientTimezone } from '@/lib/streaks/client-timezone';
 import { isFutureCalendarDate, normalizeDateOfBirth } from '@/lib/validation/date-of-birth';
+import { cleanDisplayName, validateDisplayName } from '@/lib/validation/display-name';
 import { parseLenient, validationMessage } from '@/lib/validation/lenient-parse';
 import { updateProfileSchema } from '@/lib/validation/profile-validation';
 
@@ -103,8 +104,19 @@ export async function PUT(request: NextRequest) {
     // Build update object
     const updates: any = {};
 
+    let nameChanged = false;
     if (validatedData.displayName !== undefined) {
-      updates.display_name = validatedData.displayName;
+      const stored = typeof user.display_name === 'string' ? user.display_name : '';
+      // Clients that echo the whole profile resend the stored name: accept it
+      // untouched (even a legacy one over today's limit) and don't rewrite it.
+      if (cleanDisplayName(validatedData.displayName) !== cleanDisplayName(stored) || !stored) {
+        const name = validateDisplayName(validatedData.displayName);
+        if (!name.ok) throw fieldError('displayName', name.message);
+        if (name.value !== stored) {
+          updates.display_name = name.value;
+          nameChanged = true;
+        }
+      }
     }
 
     if (validatedData.username !== undefined) {
@@ -154,6 +166,12 @@ export async function PUT(request: NextRequest) {
 
     // Update profile
     const updatedProfile = await MobileAPIService.updateUserProfile(user.id, updates);
+
+    if (nameChanged) {
+      // Best-effort: keep the auth user's metadata name equal to the profile
+      // (web falls back to it; Supabase email templates can read it).
+      void MobileAPIService.syncAuthMetadataName(user.id, updates.display_name).catch(() => undefined);
+    }
 
     return NextResponse.json({
       success: true,

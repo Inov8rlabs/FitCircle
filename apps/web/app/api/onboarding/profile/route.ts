@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { MobileAPIService } from '@/lib/services/mobile-api-service';
 import { UpdateProfileSchema } from '@/lib/types/onboarding';
+import { coerceDisplayName } from '@/lib/validation/display-name';
 
 /**
  * GET /api/onboarding/profile
@@ -77,7 +78,10 @@ export async function POST(request: NextRequest) {
     const updates: any = {};
 
     if (validatedData.displayName !== undefined) {
-      updates.display_name = validatedData.displayName;
+      // Onboarding never rejects a name (shipped clients): normalized + cut to
+      // the limit, keeping the stored name when nothing usable is left.
+      updates.display_name = coerceDisplayName(validatedData.displayName, user.display_name || user.username || '');
+      if (!updates.display_name) delete updates.display_name;
     }
 
     if (validatedData.username !== undefined) {
