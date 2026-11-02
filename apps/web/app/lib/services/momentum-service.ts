@@ -1,5 +1,6 @@
 import type { IconKey } from '../design/icons';
 import { createAdminSupabase } from '../supabase-admin';
+import { logIgnoredQueryError } from '@/lib/api/route-errors';
 
 // ============================================================================
 // TYPES
@@ -398,11 +399,12 @@ export class MomentumService {
 
     // Get check-in history to determine unlock dates
     const supabaseAdmin = createAdminSupabase();
-    const { data: claims } = await supabaseAdmin
+    const { data: claims, error: claimsError } = await supabaseAdmin
       .from('streak_claims')
       .select('claim_date')
       .eq('user_id', userId)
       .order('claim_date', { ascending: true });
+    logIgnoredQueryError('MomentumService.getMilestones', claimsError);
 
     const claimDates = (claims || []).map((c: { claim_date: string }) => c.claim_date);
 

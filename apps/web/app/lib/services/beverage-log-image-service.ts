@@ -11,6 +11,7 @@ import sharp from 'sharp';
 
 import { ImageProcessingError, StorageError } from '@/lib/errors/food-log-errors';
 import type { BeverageLogImage } from '@/lib/types/beverage-log';
+import { logIgnoredQueryError } from '@/lib/api/route-errors';
 
 const BUCKET = 'beverage-logs';
 const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/heic'] as const;
@@ -28,11 +29,12 @@ export class BeverageLogImageService {
       this.validateImage(file);
 
       // Verify ownership
-      const { data: entry } = await supabase
+      const { data: entry, error: entryError } = await supabase
         .from('beverage_logs')
         .select('user_id')
         .eq('id', beverageLogId)
         .single();
+      logIgnoredQueryError('BeverageLogImageService.uploadImage', entryError);
       if (!entry || entry.user_id !== userId) {
         throw new Error('Not authorized to upload images to this beverage log');
       }
@@ -122,11 +124,12 @@ export class BeverageLogImageService {
   }> {
     if (files.length === 0) return { uploaded: [], failed: [] };
 
-    const { data: existing } = await supabase
+    const { data: existing, error: existingError } = await supabase
       .from('beverage_log_images')
       .select('id', { count: 'exact', head: true })
       .eq('beverage_log_id', beverageLogId)
       .is('deleted_at', null);
+    logIgnoredQueryError('BeverageLogImageService.uploadImages', existingError);
     const startOrder = Array.isArray(existing) ? existing.length : 0;
 
     const uploaded: BeverageLogImage[] = [];
@@ -161,12 +164,13 @@ export class BeverageLogImageService {
     userId: string,
     supabase: SupabaseClient
   ): Promise<{ success: boolean; error?: Error }> {
-    const { data: image } = await supabase
+    const { data: image, error: imageError } = await supabase
       .from('beverage_log_images')
       .select('*')
       .eq('id', imageId)
       .is('deleted_at', null)
       .single();
+    logIgnoredQueryError('BeverageLogImageService.deleteImage', imageError);
 
     if (!image || image.user_id !== userId) {
       return { success: false, error: new Error('Not authorized') };
@@ -187,12 +191,13 @@ export class BeverageLogImageService {
     imageId: string,
     supabase: SupabaseClient
   ): Promise<{ original: string; medium: string; thumbnail: string } | null> {
-    const { data: image } = await supabase
+    const { data: image, error: imageError } = await supabase
       .from('beverage_log_images')
       .select('storage_path, thumbnail_path, storage_bucket')
       .eq('id', imageId)
       .is('deleted_at', null)
       .single();
+    logIgnoredQueryError('BeverageLogImageService.getSignedUrls', imageError);
 
     if (!image) return null;
 

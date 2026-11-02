@@ -22,6 +22,7 @@ import type {
 } from '@/lib/types/food-log';
 
 import { CircleMealPostService } from './circle-meal-post-service';
+import { logIgnoredQueryError } from '@/lib/api/route-errors';
 
 /**
  * Runs best-effort work that must not hold up the response. Routes pass Next's
@@ -137,11 +138,12 @@ export class FoodLogService {
     supabase: SupabaseClient,
     insertError: string
   ): Promise<{ data: FoodLogEntry | null; error: Error | null; duplicate?: boolean; conflict?: boolean }> {
-    const { data: existing } = await supabase
+    const { data: existing, error: existingError } = await supabase
       .from('food_log_entries')
       .select('*')
       .eq('id', id)
       .maybeSingle();
+    logIgnoredQueryError('FoodLogService.existingForRetry', existingError);
     if (!existing) return { data: null, error: new Error(insertError) };
     if (existing.user_id !== userId) {
       return { data: null, error: new Error('Entry id is already in use'), conflict: true };
@@ -402,12 +404,13 @@ export class FoodLogService {
   ): Promise<boolean> {
     try {
       // Check if user owns the entry
-      const { data: entry } = await supabase
+      const { data: entry, error: entryError } = await supabase
         .from('food_log_entries')
         .select('user_id, entry_type')
         .eq('id', entryId)
         .is('deleted_at', null)
         .single();
+      logIgnoredQueryError('FoodLogService.canViewEntry', entryError);
 
       if (!entry) return false;
       if (entry.user_id === viewerId) return true;
@@ -416,13 +419,14 @@ export class FoodLogService {
       if (entry.entry_type === 'supplement') return false;
 
       // Check if entry is shared with viewer
-      const { data: share } = await supabase
+      const { data: share, error: shareError } = await supabase
         .from('food_log_shares')
         .select('id')
         .eq('food_log_entry_id', entryId)
         .eq('shared_with_user_id', viewerId)
         .or(`expires_at.is.null,expires_at.gt.${new Date().toISOString()}`)
         .single();
+      logIgnoredQueryError('FoodLogService.canViewEntry', shareError);
 
       return !!share;
     } catch (error) {
@@ -441,12 +445,13 @@ export class FoodLogService {
   ): Promise<{ success: boolean; shares?: FoodLogShare[]; error: Error | null }> {
     try {
       // Verify ownership
-      const { data: entry } = await supabase
+      const { data: entry, error: entryError } = await supabase
         .from('food_log_entries')
         .select('user_id, entry_type')
         .eq('id', entryId)
         .is('deleted_at', null)
         .single();
+      logIgnoredQueryError('FoodLogService.shareEntry', entryError);
 
       if (!entry || entry.user_id !== ownerId) {
         return { success: false, error: new Error('Not authorized') };
@@ -540,11 +545,12 @@ export class FoodLogService {
   ): Promise<{ data: FoodLogShare[]; error: Error | null }> {
     try {
       // Verify ownership
-      const { data: entry } = await supabase
+      const { data: entry, error: entryError } = await supabase
         .from('food_log_entries')
         .select('user_id')
         .eq('id', entryId)
         .single();
+      logIgnoredQueryError('FoodLogService.getShares', entryError);
 
       if (!entry || entry.user_id !== ownerId) {
         return { data: [], error: new Error('Not authorized') };
@@ -800,12 +806,13 @@ export class FoodLogService {
     supabase: SupabaseClient
   ): Promise<number> {
     // Get dates with entries, sorted descending
-    const { data: entries } = await supabase
+    const { data: entries, error: entriesError } = await supabase
       .from('food_log_entries')
       .select('entry_date')
       .eq('user_id', userId)
       .is('deleted_at', null)
       .order('entry_date', { ascending: false });
+    logIgnoredQueryError('FoodLogService.calculateStreak', entriesError);
 
     if (!entries || entries.length === 0) return 0;
 

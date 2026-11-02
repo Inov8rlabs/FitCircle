@@ -7,6 +7,7 @@ import {
   type GroupMealTagRow,
   type PendingGroupMealTagDTO,
 } from '../types/group-meal';
+import { logIgnoredQueryError } from '@/lib/api/route-errors';
 
 /**
  * GroupMealService — Dining-Out & Group Meal Mode (PRD §6.12).
@@ -37,12 +38,13 @@ export class GroupMealService {
 
     // Every tagged user must be an active member of THIS circle.
     if (taggedUserIds.length > 0) {
-      const { data: members } = await supabase
+      const { data: members, error: membersError } = await supabase
         .from('fitcircle_members')
         .select('user_id')
         .eq('fitcircle_id', input.fitcircleId)
         .eq('status', 'active')
         .in('user_id', taggedUserIds);
+      logIgnoredQueryError('GroupMealService.createGroupMeal', membersError);
       const activeSet = new Set((members ?? []).map((m: { user_id: string }) => m.user_id));
       const allActive = taggedUserIds.every((id) => activeSet.has(id));
       if (!allActive) throw new Error('Forbidden');
@@ -96,20 +98,22 @@ export class GroupMealService {
   static async getPendingTags(userId: string): Promise<PendingGroupMealTagDTO[]> {
     const supabase = createAdminSupabase();
 
-    const { data: tagsData } = await supabase
+    const { data: tagsData, error: tagsDataError } = await supabase
       .from('group_meal_tags')
       .select('*')
       .eq('tagged_user_id', userId)
       .eq('status', 'pending')
       .order('created_at', { ascending: false });
+    logIgnoredQueryError('GroupMealService.getPendingTags', tagsDataError);
     const tags = (tagsData ?? []) as GroupMealTagRow[];
     if (tags.length === 0) return [];
 
     const mealIds = Array.from(new Set(tags.map((t) => t.group_meal_id)));
-    const { data: mealsData } = await supabase
+    const { data: mealsData, error: mealsDataError } = await supabase
       .from('group_meals')
       .select('*')
       .in('id', mealIds);
+    logIgnoredQueryError('GroupMealService.getPendingTags', mealsDataError);
     const mealsById = new Map<string, GroupMealRow>(
       ((mealsData ?? []) as GroupMealRow[]).map((m) => [m.id, m])
     );
@@ -137,11 +141,12 @@ export class GroupMealService {
     // Idempotency: already accepted → return as-is, never create a second diary entry.
     if (tag.status === 'accepted') return this.toTagDTO(tag);
 
-    const { data: mealData } = await supabase
+    const { data: mealData, error: mealDataError } = await supabase
       .from('group_meals')
       .select('*')
       .eq('id', tag.group_meal_id)
       .maybeSingle();
+    logIgnoredQueryError('GroupMealService.acceptTag', mealDataError);
     if (!mealData) throw new Error('NotFound');
     const meal = mealData as GroupMealRow;
 
@@ -179,22 +184,24 @@ export class GroupMealService {
   static async getGroupMeal(groupMealId: string, viewerUserId: string): Promise<GroupMealDTO> {
     const supabase = createAdminSupabase();
 
-    const { data: mealData } = await supabase
+    const { data: mealData, error: mealDataError } = await supabase
       .from('group_meals')
       .select('*')
       .eq('id', groupMealId)
       .maybeSingle();
+    logIgnoredQueryError('GroupMealService.getGroupMeal', mealDataError);
     if (!mealData) throw new Error('NotFound');
     const meal = mealData as GroupMealRow;
 
     const viewerActive = await this.isActiveMember(meal.fitcircle_id, viewerUserId);
     if (!viewerActive) throw new Error('Forbidden');
 
-    const { data: tagsData } = await supabase
+    const { data: tagsData, error: tagsDataError } = await supabase
       .from('group_meal_tags')
       .select('*')
       .eq('group_meal_id', groupMealId)
       .order('created_at', { ascending: true });
+    logIgnoredQueryError('GroupMealService.getGroupMeal', tagsDataError);
 
     return this.toMealDTO(meal, (tagsData ?? []) as GroupMealTagRow[]);
   }
@@ -204,24 +211,26 @@ export class GroupMealService {
   /** True iff userId is an active member of the circle. */
   private static async isActiveMember(fitcircleId: string, userId: string): Promise<boolean> {
     const supabase = createAdminSupabase();
-    const { data } = await supabase
+    const { data, error: dataError } = await supabase
       .from('fitcircle_members')
       .select('user_id')
       .eq('fitcircle_id', fitcircleId)
       .eq('user_id', userId)
       .eq('status', 'active')
       .maybeSingle();
+    logIgnoredQueryError('GroupMealService.isActiveMember', dataError);
     return !!data;
   }
 
   /** Load a tag and assert it is owned by userId. Throws NotFound / Forbidden. */
   private static async requireOwnedTag(tagId: string, userId: string): Promise<GroupMealTagRow> {
     const supabase = createAdminSupabase();
-    const { data } = await supabase
+    const { data, error: dataError } = await supabase
       .from('group_meal_tags')
       .select('*')
       .eq('id', tagId)
       .maybeSingle();
+    logIgnoredQueryError('GroupMealService.requireOwnedTag', dataError);
     if (!data) throw new Error('NotFound');
     const tag = data as GroupMealTagRow;
     if (tag.tagged_user_id !== userId) throw new Error('Forbidden');

@@ -27,7 +27,7 @@ export async function GET(
       progressData = await UserService.getUserProgress(userId, user.id, circleId);
     } catch (error) {
       // Progress data is optional, ignore errors
-      console.log(`[Circle User Profile] Could not fetch progress data: ${error}`);
+      console.warn(`[Circle User Profile] Could not fetch progress data: ${error}`);
     }
 
     const response = NextResponse.json(

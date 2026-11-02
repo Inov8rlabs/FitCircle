@@ -14,6 +14,7 @@
 import { type SupabaseClient } from '@supabase/supabase-js';
 
 import { updateUserRankAfterSubmission } from './leaderboard-service-v2';
+import { logIgnoredQueryError } from '@/lib/api/route-errors';
 
 // ============================================================================
 // TYPES
@@ -194,7 +195,7 @@ export async function submitToFitCircle(
 
       // Update submission with rank info
       if (newRank !== null) {
-        const { data: updated } = await supabase
+        const { data: updated, error: updatedError } = await supabase
           .from('fitcircle_data_submissions')
           .update({
             rank_after_submission: newRank,
@@ -203,6 +204,7 @@ export async function submitToFitCircle(
           .eq('id', submission.id)
           .select()
           .single();
+        logIgnoredQueryError('submitToFitCircle', updatedError);
 
         if (updated) {
           return { submission: updated, error: null };

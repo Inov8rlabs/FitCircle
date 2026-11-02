@@ -10,6 +10,7 @@
 import { type SupabaseClient } from '@supabase/supabase-js';
 
 import type { FeatureFlagResult } from '@/lib/types/food-log';
+import { logIgnoredQueryError } from '@/lib/api/route-errors';
 
 export class FeatureFlagService {
   /**
@@ -103,11 +104,12 @@ export class FeatureFlagService {
     supabase: SupabaseClient
   ): Promise<{ success: boolean; error?: Error }> {
     try {
-      const { data: flag } = await supabase
+      const { data: flag, error: flagError } = await supabase
         .from('feature_flags')
         .select('allowed_user_ids')
         .eq('name', featureName)
         .single();
+      logIgnoredQueryError('FeatureFlagService.addUsersToAllowlist', flagError);
 
       if (!flag) {
         return { success: false, error: new Error('Feature flag not found') };

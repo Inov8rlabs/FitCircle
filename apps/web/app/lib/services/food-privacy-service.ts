@@ -10,6 +10,7 @@ import {
   type MemberFoodTier,
   type OwnerFoodEntry,
 } from '../types/food-privacy';
+import { logIgnoredQueryError } from '@/lib/api/route-errors';
 
 /**
  * FoodPrivacyService — three-tier per-circle food privacy (PRD §6.4) and its single
@@ -153,10 +154,11 @@ export class FoodPrivacyService implements IFoodPrivacyService {
     if (membersErr || !members) return [];
 
     // Their explicit tier rows (absent => default).
-    const { data: rows } = await supabase
+    const { data: rows, error: rowsError } = await supabase
       .from('circle_food_privacy')
       .select('user_id, tier')
       .eq('fitcircle_id', fitcircleId);
+    logIgnoredQueryError('FoodPrivacyService.getTiersForCircle', rowsError);
 
     const tierByUser = new Map<string, FoodPrivacyTier>();
     for (const r of rows ?? []) {

@@ -1,6 +1,7 @@
 /** Envelope + error mapping for the Fitzy routes (docs/FITZY_V2_SPEC.md §3, §6). */
 import { type NextResponse } from 'next/server';
 
+import { reportRouteError } from '../api/route-errors';
 import { fail, ok } from '../referrals/http';
 import { FitzyLockedError, FitzyNotFoundError } from '../services/fitzy-conversation-service';
 import { UpgradeRequiredError } from '../services/usage-service';
@@ -19,7 +20,7 @@ export interface FitzyErrorBody {
 }
 
 /** Map anything a Fitzy route can throw to {status, code, message, paywall?}. */
-export function describeFitzyError(error: unknown): FitzyErrorBody {
+export function describeFitzyError(error: unknown, label = 'fitzy'): FitzyErrorBody {
   if (error instanceof UpgradeRequiredError) {
     return {
       status: 429,
@@ -38,12 +39,12 @@ export function describeFitzyError(error: unknown): FitzyErrorBody {
   if (e?.message === 'RateLimited') return { status: 429, code: 'RATE_LIMITED', message: "You've reached today's message limit — try again tomorrow." };
   if (e?.name === 'ZodError') return { status: 400, code: 'VALIDATION_ERROR', message: e.issues?.[0]?.message ?? 'Invalid request body' };
   if (e?.code === 'VALIDATION_ERROR') return { status: 400, code: 'VALIDATION_ERROR', message: e.message };
-  console.error('[fitzy] route error:', e?.message ?? e);
+  reportRouteError(label, error, { code: 'INTERNAL' });
   return { status: 500, code: 'INTERNAL', message: 'An unexpected error occurred' };
 }
 
-export function fitzyFail(error: unknown): NextResponse {
-  const d = describeFitzyError(error);
+export function fitzyFail(error: unknown, label = 'fitzy'): NextResponse {
+  const d = describeFitzyError(error, label);
   return fail(d.status, d.code, d.message, d.paywall ? { paywall: d.paywall, ...(d.details ?? {}) } : (d.details ?? null));
 }
 

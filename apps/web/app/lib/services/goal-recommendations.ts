@@ -12,6 +12,7 @@
 import { type SupabaseClient } from '@supabase/supabase-js';
 
 import { createAdminSupabase } from '@/lib/supabase';
+import { logIgnoredQueryError } from '@/lib/api/route-errors';
 
 export interface GoalRecommendation {
   goal_type: 'steps' | 'weight_log' | 'workout' | 'mood' | 'energy' | 'custom';
@@ -77,7 +78,7 @@ export class GoalRecommendationService {
     const today = new Date().toISOString();
 
     // Get challenges through circle_participants
-    const { data: participantData } = await supabase
+    const { data: participantData, error: participantDataError } = await supabase
       .from('circle_participants')
       .select(`
         circles!inner (
@@ -92,6 +93,7 @@ export class GoalRecommendationService {
       .eq('user_id', userId)
       .eq('status', 'active')
       .gt('circles.end_date', today);
+    logIgnoredQueryError('GoalRecommendationService.getUserActiveChallenges', participantDataError);
 
     if (!participantData || participantData.length === 0) {
       return [];

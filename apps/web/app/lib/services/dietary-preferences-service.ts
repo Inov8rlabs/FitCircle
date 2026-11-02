@@ -6,6 +6,7 @@ import {
   type SetDietaryPreferencesInput,
   type UnitSystem,
 } from '../types/dietary-prefs';
+import { logIgnoredQueryError } from '@/lib/api/route-errors';
 
 /**
  * DietaryPreferencesService — per-user dietary pattern, allergens, and unit preference
@@ -31,11 +32,12 @@ export class DietaryPreferencesService {
   static async getPrefs(userId: string): Promise<DietaryPreferencesDTO> {
     const supabase = createAdminSupabase();
 
-    const { data } = await supabase
+    const { data, error: dataError } = await supabase
       .from('dietary_preferences')
       .select('diet, allergens, units')
       .eq('user_id', userId)
       .maybeSingle();
+    logIgnoredQueryError('DietaryPreferencesService.getPrefs', dataError);
 
     const row = data as Pick<DietaryPreferencesRow, 'diet' | 'allergens' | 'units'> | null;
 
@@ -63,11 +65,12 @@ export class DietaryPreferencesService {
     // Only persist the unit choice when it was explicitly provided OR already stored; we never
     // want to "freeze" a locale-inferred default into the row (so a later locale change still
     // takes effect). To know whether a stored unit exists, re-read the raw row's units column.
-    const { data: rawRow } = await supabase
+    const { data: rawRow, error: rawRowError } = await supabase
       .from('dietary_preferences')
       .select('units')
       .eq('user_id', userId)
       .maybeSingle();
+    logIgnoredQueryError('DietaryPreferencesService.setPrefs', rawRowError);
     const storedUnits = (rawRow as { units: UnitSystem | null } | null)?.units ?? null;
 
     const nextDiet: DietType = input.diet ?? current.diet;
@@ -116,11 +119,12 @@ export class DietaryPreferencesService {
   private static async inferUnitsFromLocale(userId: string): Promise<UnitSystem> {
     try {
       const supabase = createAdminSupabase();
-      const { data } = await supabase
+      const { data, error: dataError } = await supabase
         .from('profiles')
         .select('country_code')
         .eq('id', userId)
         .maybeSingle();
+      logIgnoredQueryError('DietaryPreferencesService.inferUnitsFromLocale', dataError);
       const cc = ((data as { country_code: string | null } | null)?.country_code ?? '')
         .trim()
         .toUpperCase();

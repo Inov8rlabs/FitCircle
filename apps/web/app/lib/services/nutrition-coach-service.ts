@@ -6,6 +6,7 @@ import type { CoachResponse, INutritionCoachService } from '../types/nutrition-c
 
 import { DietaryPreferencesService } from './dietary-preferences-service';
 import { UsageService } from './usage-service';
+import { logIgnoredQueryError } from '@/lib/api/route-errors';
 
 /**
  * NutritionCoachService — the AI Nutrition Coach (PRD v4 §6.9).
@@ -230,12 +231,13 @@ export class NutritionCoachService implements INutritionCoachService {
       since.setUTCDate(since.getUTCDate() - 7);
       const sinceDate = since.toISOString().split('T')[0];
 
-      const { data: entries } = await supabase
+      const { data: entries, error: entriesError } = await supabase
         .from('food_log_entries')
         .select('calories, protein_g, carbs_g, fat_g, entry_date')
         .eq('user_id', userId)
         .gte('entry_date', sinceDate)
         .is('deleted_at', null);
+      logIgnoredQueryError('NutritionCoachService.buildContext', entriesError);
 
       const rows = (entries ?? []) as Array<{
         calories: number | null;
@@ -283,13 +285,14 @@ export class NutritionCoachService implements INutritionCoachService {
       }
 
       // (b) Latest Plate Score (a positive, balance-oriented signal).
-      const { data: plate } = await supabase
+      const { data: plate, error: plateError } = await supabase
         .from('plate_scores')
         .select('score, score_date')
         .eq('user_id', userId)
         .order('score_date', { ascending: false })
         .limit(1)
         .maybeSingle();
+      logIgnoredQueryError('NutritionCoachService.buildContext', plateError);
 
       if (plate && typeof (plate as any).score === 'number') {
         parts.push(
@@ -300,21 +303,23 @@ export class NutritionCoachService implements INutritionCoachService {
 
       // (c) Optional circle context: only if the user is actually a member of the circle.
       if (circleId) {
-        const { data: membership } = await supabase
+        const { data: membership, error: membershipError } = await supabase
           .from('fitcircle_members')
           .select('user_id')
           .eq('fitcircle_id', circleId)
           .eq('user_id', userId)
           .maybeSingle();
+        logIgnoredQueryError('NutritionCoachService.buildContext', membershipError);
 
         if (membership) {
-          const { data: circle } = await supabase
+          const { data: circle, error: circleError } = await supabase
             .from('fitcircles')
             .select('name')
             .eq('id', circleId)
             .maybeSingle();
+          logIgnoredQueryError('NutritionCoachService.buildContext', circleError);
 
-          const { data: challenge } = await supabase
+          const { data: challenge, error: challengeError } = await supabase
             .from('challenges')
             .select('name, description, status')
             .eq('fitcircle_id', circleId)
@@ -322,6 +327,7 @@ export class NutritionCoachService implements INutritionCoachService {
             .order('created_at', { ascending: false })
             .limit(1)
             .maybeSingle();
+          logIgnoredQueryError('NutritionCoachService.buildContext', challengeError);
 
           const circleName = (circle as any)?.name as string | undefined;
           if (challenge) {

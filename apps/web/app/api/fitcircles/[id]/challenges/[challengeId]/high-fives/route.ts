@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 
+import { unhandledChallengeError } from '@/lib/http/circle-challenge-errors';
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { ChallengeService } from '@/lib/services/circle-challenge-service';
 import { parseLenient, validationMessage } from '@/lib/validation/lenient-parse';
@@ -45,9 +46,6 @@ export async function POST(
         { status: 400 }
       );
     }
-    return NextResponse.json(
-      { success: false, data: null, error: { code: 'ERROR', message: error.message } },
-      { status: 400 }
-    );
+    return unhandledChallengeError(error, 'fitcircles/[id]/challenges/[challengeId]/high-fives POST');
   }
 }

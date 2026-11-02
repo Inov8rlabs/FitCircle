@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 
+import { reportRouteError } from '@/lib/api/route-errors';
 import { validationMessage } from '@/lib/validation/lenient-parse';
 
 /**
@@ -49,7 +50,7 @@ export function groupMealErrorResponse(error: any, startTime: number): NextRespo
       { status: 400 }
     );
   }
-  console.error('[Mobile API] Group meal error:', error?.message);
+  reportRouteError('mobile/group-meals', error, { code: 'INTERNAL_SERVER_ERROR' });
   return NextResponse.json(
     { success: false, data: null, error: { code: 'INTERNAL_SERVER_ERROR', message: 'An unexpected error occurred', details: {}, timestamp: new Date().toISOString() }, meta: null },
     { status: 500 }

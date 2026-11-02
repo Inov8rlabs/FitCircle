@@ -19,6 +19,7 @@ import { shieldXpPrice } from '../streaks/streak-config';
 import { MomentumService } from './momentum-service';
 import { StreakShieldService } from './streak-shield-service';
 import { StreakClaimingService } from './streak-claiming-service';
+import { logIgnoredQueryError } from '@/lib/api/route-errors';
 
 /**
  * EngagementStreakService
@@ -246,12 +247,13 @@ export class EngagementStreakService {
       };
     }
 
-    const { data: claims } = await supabaseAdmin
+    const { data: claims, error: claimsError } = await supabaseAdmin
       .from('streak_claims')
       .select('claim_date')
       .eq('user_id', userId)
       .gte('claim_date', addDays(localToday(), -730))
       .order('claim_date', { ascending: false });
+    logIgnoredQueryError('EngagementStreakService.getEngagementStreak', claimsError);
 
     const claimDates = new Set((claims || []).map(c => c.claim_date));
     const currentStreak = calculateStreak(claimDates, localToday(timezone));

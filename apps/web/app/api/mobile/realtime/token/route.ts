@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from 'next/server';
 import jwt from 'jsonwebtoken';
 
+import { reportRouteError } from '@/lib/api/route-errors';
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 
 /**
@@ -77,10 +78,21 @@ export async function GET(request: NextRequest) {
       data: { token, expires_at: expiresAt },
     });
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'Unauthorized';
+    if (error instanceof Error && error.message === 'Unauthorized') {
+      return NextResponse.json(
+        { success: false, error: { code: 'UNAUTHORIZED', message: 'Unauthorized' } },
+        { status: 401 }
+      );
+    }
+    // Anything else (e.g. token signing failed) is a server fault, not an auth one: answering
+    // 401 sent clients into a refresh loop. Use the documented degrade-to-REST response.
+    reportRouteError('mobile/realtime/token GET', error, { status: 503, code: 'REALTIME_UNAVAILABLE' });
     return NextResponse.json(
-      { success: false, error: { code: 'UNAUTHORIZED', message } },
-      { status: 401 }
+      {
+        success: false,
+        error: { code: 'REALTIME_UNAVAILABLE', message: 'Realtime is temporarily unavailable.' },
+      },
+      { status: 503 }
     );
   }
 }

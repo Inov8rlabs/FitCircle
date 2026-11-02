@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from 'next/server';
 
+import { isDatabaseError, isNotFoundDatabaseError, reportRouteError } from '@/lib/api/route-errors';
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { CircleService } from '@/lib/services/circle-service';
 import { CircleStepsLeaderboardService } from '@/lib/services/circle-steps-leaderboard-service';
@@ -73,6 +74,9 @@ export async function GET(
     try {
       circle = await CircleService.getCircle(circleId);
     } catch (error: any) {
+      // Response stays 404; a real DB failure (not "no row") is reported at error level so it is not hidden.
+      const unexpected = isDatabaseError(error) ? !isNotFoundDatabaseError(error) : !(error instanceof Error);
+      reportRouteError('mobile/circles/[id]/leaderboard GET getCircle', error, { status: unexpected ? 500 : 404, code: 'CIRCLE_NOT_FOUND' });
       return NextResponse.json(
         {
           success: false,

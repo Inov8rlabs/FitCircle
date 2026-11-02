@@ -1,6 +1,7 @@
 import { createAdminSupabase } from '../supabase-admin';
 
 import { LeaderboardService } from './leaderboard-service';
+import { logIgnoredQueryError } from '@/lib/api/route-errors';
 
 /** A weight only counts when it is a real positive number; 0 / null / '' mean "not set". */
 function positiveOrNull(value: unknown): number | null {
@@ -196,25 +197,28 @@ export class UserService {
     }
 
     // Get circle statistics
-    const { count: totalCircles } = await supabaseAdmin
+    const { count: totalCircles, error: totalCirclesError } = await supabaseAdmin
       .from('fitcircle_members')
       .select('id', { count: 'exact', head: true })
       .eq('user_id', userId)
       .eq('status', 'active');
+    logIgnoredQueryError('UserService.getUserPublicProfile', totalCirclesError);
 
-    const { count: circlesCompleted } = await supabaseAdmin
+    const { count: circlesCompleted, error: circlesCompletedError } = await supabaseAdmin
       .from('fitcircle_members')
       .select('id', { count: 'exact', head: true })
       .eq('user_id', userId)
       .eq('status', 'completed');
+    logIgnoredQueryError('UserService.getUserPublicProfile', circlesCompletedError);
 
     // Get current streak from daily_tracking
-    const { data: trackingData } = await supabaseAdmin
+    const { data: trackingData, error: trackingDataError } = await supabaseAdmin
       .from('daily_tracking')
       .select('tracking_date')
       .eq('user_id', userId)
       .order('tracking_date', { ascending: false })
       .limit(30);
+    logIgnoredQueryError('UserService.getUserPublicProfile', trackingDataError);
 
     const currentStreak = this.calculateStreak(trackingData || []);
 
@@ -330,7 +334,7 @@ export class UserService {
     // weigh-in, else the member row's cached value.
     let currentKg: number | null = null;
     if (circleId) {
-      const { data: latestCheckIn } = await supabaseAdmin
+      const { data: latestCheckIn, error: latestCheckInError } = await supabaseAdmin
         .from('circle_check_ins')
         .select('check_in_value, check_in_date')
         .eq('user_id', userId)
@@ -338,10 +342,11 @@ export class UserService {
         .order('check_in_date', { ascending: false })
         .limit(1)
         .maybeSingle();
+      logIgnoredQueryError('UserService.getUserProgress', latestCheckInError);
       currentKg = positiveOrNull(latestCheckIn?.check_in_value);
     }
     if (currentKg == null) {
-      const { data: latestTracking } = await supabaseAdmin
+      const { data: latestTracking, error: latestTrackingError } = await supabaseAdmin
         .from('daily_tracking')
         .select('weight_kg, tracking_date')
         .eq('user_id', userId)
@@ -349,6 +354,7 @@ export class UserService {
         .order('tracking_date', { ascending: false })
         .limit(1)
         .maybeSingle();
+      logIgnoredQueryError('UserService.getUserProgress', latestTrackingError);
       currentKg = positiveOrNull(latestTracking?.weight_kg);
     }
     if (currentKg == null) currentKg = positiveOrNull(progressData?.current_value);
@@ -487,11 +493,12 @@ export class UserService {
     let challengeEndDate: string | null = null;
 
     if (circleId) {
-      const { data: challenge } = await supabaseAdmin
+      const { data: challenge, error: challengeError } = await supabaseAdmin
         .from('fitcircles')
         .select('type, start_date, end_date')
         .eq('id', circleId)
         .single();
+      logIgnoredQueryError('UserService.getUserHistory', challengeError);
 
       if (challenge) {
         challengeType = challenge.type;

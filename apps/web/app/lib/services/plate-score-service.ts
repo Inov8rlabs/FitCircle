@@ -69,12 +69,13 @@ export class PlateScoreService {
     const supabase = createAdminSupabase();
 
     // 1. Pull the day's macro-bearing food log entries.
-    const { data: entries } = await supabase
+    const { data: entries, error: entriesError } = await supabase
       .from('food_log_entries')
       .select('meal_type, calories, protein_g, carbs_g, fat_g')
       .eq('user_id', userId)
       .eq('entry_date', date)
       .is('deleted_at', null);
+    logIgnoredQueryError('PlateScoreService.computeForDay', entriesError);
 
     const rows = (entries ?? []) as Array<{
       meal_type: string | null;
@@ -87,11 +88,12 @@ export class PlateScoreService {
     const totals = this.aggregate(rows);
 
     // 2. Persona / fitness level (drives weights + default target). Best-effort.
-    const { data: profile } = await supabase
+    const { data: profile, error: profileError } = await supabase
       .from('profiles')
       .select('persona, fitness_level, preferences')
       .eq('id', userId)
       .maybeSingle();
+    logIgnoredQueryError('PlateScoreService.computeForDay', profileError);
     const persona = (profile?.persona ?? null) as string | null;
     const fitnessLevel = (profile?.fitness_level ?? null) as string | null;
     const isAthlete = fitnessLevel === 'athlete' || persona === 'mike';
@@ -168,12 +170,13 @@ export class PlateScoreService {
     try {
       return await this.computeForDay(userId, date);
     } catch (err) {
-      const { data } = await createAdminSupabase()
+      const { data, error: dataError } = await createAdminSupabase()
         .from('plate_scores')
         .select('*')
         .eq('user_id', userId)
         .eq('score_date', date)
         .maybeSingle();
+      logIgnoredQueryError('PlateScoreService.getForDay', dataError);
       if (data) return this.toDTO(data);
       throw err;
     }
@@ -182,13 +185,14 @@ export class PlateScoreService {
   /** List scores for an inclusive ISO date range, newest first. */
   static async getRange(userId: string, startDate: string, endDate: string): Promise<PlateScoreDTO[]> {
     const supabase = createAdminSupabase();
-    const { data } = await supabase
+    const { data, error: dataError } = await supabase
       .from('plate_scores')
       .select('*')
       .eq('user_id', userId)
       .gte('score_date', startDate)
       .lte('score_date', endDate)
       .order('score_date', { ascending: false });
+    logIgnoredQueryError('PlateScoreService.getRange', dataError);
     return ((data ?? [])).map((r) => this.toDTO(r));
   }
 
@@ -289,12 +293,13 @@ export class PlateScoreService {
     const supabase = createAdminSupabase();
 
     // Active challenge participation with a calorie-style nutrition goal.
-    const { data } = await supabase
+    const { data, error: dataError } = await supabase
       .from('circle_challenge_participants')
       .select('circle_challenges!inner(unit, goal_amount, status, starts_at, ends_at, category)')
       .eq('user_id', userId)
       .eq('status', 'active')
       .limit(10);
+    logIgnoredQueryError('PlateScoreService.resolveGoalTarget', dataError);
 
     const rows = (data ?? []) as any[];
     for (const r of rows) {
@@ -364,6 +369,7 @@ export class PlateScoreService {
 // Compile-time guarantee that the static methods conform to the FROZEN signatures
 // (IPlateScoreService) even though the service uses static methods (FoodsService style).
 import { type IPlateScoreService, type PlateScoreTargetSource } from '../types/plate-score';
+import { logIgnoredQueryError } from '@/lib/api/route-errors';
 const _signatureCheck: IPlateScoreService = PlateScoreService;
 void _signatureCheck;
 

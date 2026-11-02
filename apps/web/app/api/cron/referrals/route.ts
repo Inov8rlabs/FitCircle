@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from 'next/server';
 
+import { reportRouteError } from '@/lib/api/route-errors';
 import { ComplimentaryGrantService } from '@/lib/services/complimentary-grant-service';
 import { ReferralInviteService } from '@/lib/services/referral-invite-service';
 import { ReferralRewardService } from '@/lib/services/referral-reward-service';
@@ -51,6 +52,7 @@ export async function GET(request: NextRequest) {
     }
     result.banked = { users: users.length, applied };
   } catch (err: any) {
+    reportRouteError('cron/referrals banked', err);
     result.banked = { error: err?.message };
   }
 
@@ -69,7 +71,8 @@ export async function GET(request: NextRequest) {
         try {
           // A store purchase we never heard about wins; otherwise hold/downgrade.
           await SubscriptionService.syncFromRevenueCat(row.id);
-        } catch {
+        } catch (syncErr: any) {
+          console.warn('[cron/referrals] RevenueCat sync failed; holding/downgrading expired promo:', row.id, syncErr?.message);
           if (!(await ComplimentaryGrantService.holdIfGranted(row.id))) {
             await supabase
               .from('profiles')
@@ -91,18 +94,21 @@ export async function GET(request: NextRequest) {
     }
     result.expired = { checked: expired?.length ?? 0, ended };
   } catch (err: any) {
+    reportRouteError('cron/referrals expired', err);
     result.expired = { error: err?.message };
   }
 
   try {
     result.pushRetries = await ReferralService.retryUndeliveredPushes();
   } catch (err: any) {
+    reportRouteError('cron/referrals push-retries', err);
     result.pushRetries = { error: err?.message };
   }
 
   try {
     result.purgedEmails = await ReferralInviteService.purgeStale();
   } catch (err: any) {
+    reportRouteError('cron/referrals purge-emails', err);
     result.purgedEmails = { error: err?.message };
   }
 

@@ -12,6 +12,7 @@ import { addDays, localToday } from '../streaks/streak-calculator';
 import { createAdminSupabase } from '../supabase-admin';
 
 import type * as OrchestratorModule from './notification-orchestrator';
+import { logIgnoredQueryError } from '@/lib/api/route-errors';
 
 export const LOBBY_AUTO_START_HOURS = 72;
 
@@ -111,11 +112,12 @@ export class CircleLobbyService {
   /** Cron: lobbies whose 72h timer ran out start anyway. */
   static async autoStartDue(limit = 200): Promise<number> {
     const supabase = createAdminSupabase();
-    const { data } = await supabase
+    const { data, error: dataError } = await supabase
       .from('fitcircles')
       .select('id, name, creator_id, start_date, end_date, timezone, metadata')
       .not('metadata->lobby', 'is', null)
       .limit(limit);
+    logIgnoredQueryError('CircleLobbyService.autoStartDue', dataError);
     let started = 0;
     for (const c of (data ?? []) as CircleRow[]) {
       const lobby = c.metadata?.lobby as LobbyMeta | undefined;
@@ -168,20 +170,22 @@ export class CircleLobbyService {
   }
 
   private static async load(circleId: string): Promise<CircleRow | null> {
-    const { data } = await createAdminSupabase()
+    const { data, error: dataError } = await createAdminSupabase()
       .from('fitcircles')
       .select('id, name, creator_id, start_date, end_date, timezone, metadata')
       .eq('id', circleId)
       .maybeSingle();
+    logIgnoredQueryError('CircleLobbyService.load', dataError);
     return (data as CircleRow | null) ?? null;
   }
 
   private static async memberIds(circleId: string): Promise<string[]> {
-    const { data } = await createAdminSupabase()
+    const { data, error: dataError } = await createAdminSupabase()
       .from('fitcircle_members')
       .select('user_id')
       .eq('fitcircle_id', circleId)
       .eq('status', 'active');
+    logIgnoredQueryError('CircleLobbyService.memberIds', dataError);
     return ((data ?? []) as Array<{ user_id: string }>).map((r) => r.user_id);
   }
 

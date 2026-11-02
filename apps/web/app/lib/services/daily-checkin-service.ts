@@ -23,6 +23,7 @@ import { EngagementStreakService } from './engagement-streak-service';
 import { MomentumService } from './momentum-service';
 import { StreakClaimingService } from './streak-claiming-service';
 import { StreakShieldService } from './streak-shield-service';
+import { logIgnoredQueryError } from '@/lib/api/route-errors';
 
 // ============================================================================
 // TYPES
@@ -121,11 +122,12 @@ export async function performDailyCheckIn(
   const checkInDate = checkInData.date || todayStr;
 
   // 1. Get or create streak record (for points + longest)
-  let { data: streak } = await supabase
+  let { data: streak, error: streakError } = await supabase
     .from('engagement_streaks')
     .select('*')
     .eq('user_id', userId)
     .maybeSingle();
+  logIgnoredQueryError('performDailyCheckIn', streakError);
 
   if (!streak) {
     const { data: newStreakRecord, error: createError } = await supabase
@@ -146,11 +148,12 @@ export async function performDailyCheckIn(
   }
 
   // 2. Existing claims decide whether this is the first check-in of the day
-  const { data: claims } = await supabase
+  const { data: claims, error: claimsError } = await supabase
     .from('streak_claims')
     .select('claim_date')
     .eq('user_id', userId)
     .gte('claim_date', addDays(checkInDate, -730));
+  logIgnoredQueryError('performDailyCheckIn', claimsError);
 
   const claimDates = new Set((claims || []).map(c => c.claim_date));
   const isFirstCheckInToday = !claimDates.has(checkInDate);
@@ -274,12 +277,13 @@ export async function performDailyCheckIn(
   });
 
   // 4. Update or create daily_tracking entry (always, even for subsequent check-ins)
-  const { data: existingTracking } = await supabase
+  const { data: existingTracking, error: existingTrackingError } = await supabase
     .from('daily_tracking')
     .select('id')
     .eq('user_id', userId)
     .eq('tracking_date', checkInDate)
     .maybeSingle();
+  logIgnoredQueryError('performDailyCheckIn', existingTrackingError);
 
   // Only write mood/energy when sent, so a 1.0.9 check-in never blanks values
   // an older build stored earlier the same day.
@@ -357,11 +361,12 @@ export async function getStreakStatus(
 ): Promise<StreakStatusResponse> {
   const today = localToday(timezone);
 
-  const { data: streak } = await supabase
+  const { data: streak, error: streakError } = await supabase
     .from('engagement_streaks')
     .select('*')
     .eq('user_id', userId)
     .maybeSingle();
+  logIgnoredQueryError('getStreakStatus', streakError);
 
   if (!streak) {
     await supabase.from('engagement_streaks').insert({
@@ -388,12 +393,13 @@ export async function getStreakStatus(
     };
   }
 
-  const { data: claims } = await supabase
+  const { data: claims, error: claimsError } = await supabase
     .from('streak_claims')
     .select('claim_date')
     .eq('user_id', userId)
     .gte('claim_date', addDays(today, -730))
     .order('claim_date', { ascending: false });
+  logIgnoredQueryError('getStreakStatus', claimsError);
 
   const claimDates = new Set((claims || []).map(c => c.claim_date));
   const hasCheckedInToday = claimDates.has(today);
@@ -452,12 +458,13 @@ export async function useFreeze(
   const today = localToday(timezone);
 
   // Already claimed/protected today? Nothing to do.
-  const { data: existing } = await supabase
+  const { data: existing, error: existingError } = await supabase
     .from('streak_claims')
     .select('id')
     .eq('user_id', userId)
     .eq('claim_date', today)
     .maybeSingle();
+  logIgnoredQueryError('useFreeze', existingError);
 
   if (existing) {
     const inventory = await StreakShieldService.getInventory(userId);

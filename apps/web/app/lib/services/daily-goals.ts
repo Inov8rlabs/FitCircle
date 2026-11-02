@@ -14,6 +14,7 @@
 import { type SupabaseClient } from '@supabase/supabase-js';
 
 import { createAdminSupabase } from '@/lib/supabase';
+import { logIgnoredQueryError } from '@/lib/api/route-errors';
 
 // Types
 export type GoalType = 'steps' | 'weight_log' | 'workout' | 'mood' | 'energy' | 'custom';
@@ -204,13 +205,14 @@ export class DailyGoalService {
       }
 
       // 3. Calculate user's baseline activity
-      const { data: recentTracking } = await supabase
+      const { data: recentTracking, error: recentTrackingError } = await supabase
         .from('daily_tracking')
         .select('steps')
         .eq('user_id', userId)
         .not('steps', 'is', null)
         .order('tracking_date', { ascending: false })
         .limit(7);
+      logIgnoredQueryError('DailyGoalService.createDailyGoalsForChallenge', recentTrackingError);
 
       const userBaseline = recentTracking && recentTracking.length > 0
         ? Math.floor(recentTracking.reduce((sum, t) => sum + (t.steps || 0), 0) / recentTracking.length)
@@ -463,21 +465,23 @@ export class DailyGoalService {
       const { data: goals } = await this.getUserDailyGoals(userId, supabase);
 
       // 2. Get today's tracking data
-      const { data: tracking } = await supabase
+      const { data: tracking, error: trackingError } = await supabase
         .from('daily_tracking')
         .select('*')
         .eq('user_id', userId)
         .eq('tracking_date', today)
         .maybeSingle();
+      logIgnoredQueryError('DailyGoalService.getTodayProgress', trackingError);
 
       console.log(`[getTodayProgress] Found tracking data:`, tracking);
 
       // 3. Get completion history for today
-      const { data: completions } = await supabase
+      const { data: completions, error: completionsError } = await supabase
         .from('goal_completion_history')
         .select('*')
         .eq('user_id', userId)
         .eq('completion_date', today);
+      logIgnoredQueryError('DailyGoalService.getTodayProgress', completionsError);
 
       console.log(`[getTodayProgress] Found ${completions?.length || 0} goal completions for today`);
 

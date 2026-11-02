@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from 'next/server';
 
 import { iconCompatFor } from '@/lib/design/icon-compat';
+import { unhandledChallengeError } from '@/lib/http/circle-challenge-errors';
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { TemplateService } from '@/lib/services/template-service';
 
@@ -36,9 +37,6 @@ export async function GET(
         { status: 404 }
       );
     }
-    return NextResponse.json(
-      { success: false, data: null, error: { code: 'ERROR', message: error.message } },
-      { status: 400 }
-    );
+    return unhandledChallengeError(error, 'mobile/challenges/templates/[id] GET');
   }
 }

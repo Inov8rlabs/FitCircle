@@ -29,6 +29,7 @@ import { FoodsSemanticService, type SemanticCandidate } from './foods-semantic-s
 import { FoodsService } from './foods-service';
 import { NutritionGroundingService, type GroundingMode } from './nutrition-grounding-service';
 import { UsageService } from './usage-service';
+import { logIgnoredQueryError } from '@/lib/api/route-errors';
 
 /**
  * NutritionIntelligenceService — the server-side "brain" for nutrition (PRD §6.1, §7.2.1).
@@ -1460,11 +1461,12 @@ export class NutritionIntelligenceService {
   /** Look up a previously-parsed identical image (content-hash cache). */
   private static async getCachedResult(imageHash: string): Promise<PhotoParseResult | null> {
     const supabase = createAdminSupabase();
-    const { data } = await supabase
+    const { data, error: dataError } = await supabase
       .from('nutrition_parse_cache')
       .select('result')
       .eq('image_hash', imageHash)
       .maybeSingle();
+    logIgnoredQueryError('NutritionIntelligenceService.getCachedResult', dataError);
     if (!data?.result) return null;
     const parsed = photoParseResultSchema.safeParse(data.result);
     return parsed.success ? parsed.data : null;

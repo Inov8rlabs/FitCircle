@@ -8,6 +8,7 @@ import { toMobileProfile } from './mobile-profile-response';
 import { StreakClaimingService } from './streak-claiming-service';
 import { isValidUsername } from './username-service';
 import { resolveStepsMerge } from './steps-merge';
+import { logIgnoredQueryError } from '@/lib/api/route-errors';
 
 /**
  * True when PostgREST / Postgres rejected a statement because `column` does not
@@ -566,12 +567,13 @@ export class MobileAPIService {
     const sanitizedNotes = data.notes ? sanitizeNote(data.notes) : undefined;
 
     // Check if entry exists for this date
-    const { data: existing } = await supabaseAdmin
+    const { data: existing, error: existingError } = await supabaseAdmin
       .from('daily_tracking')
       .select('id, steps, steps_source, is_override, steps_synced_at')
       .eq('user_id', userId)
       .eq('tracking_date', trackingDate)
       .single();
+    logIgnoredQueryError('MobileAPIService.upsertDailyTracking', existingError);
 
     // Step conflict resolution (manual vs platform auto-sync): see steps-merge.ts.
     // A weight/mood-only row (steps NULL, steps_source defaulted to 'manual') is
@@ -791,19 +793,21 @@ export class MobileAPIService {
     if (profileError) throw profileError;
 
     // Get tracking data for stats
-    const { data: trackingData } = await supabaseAdmin
+    const { data: trackingData, error: trackingDataError } = await supabaseAdmin
       .from('daily_tracking')
       .select('*')
       .eq('user_id', userId)
       .order('tracking_date', { ascending: false })
       .limit(30);
+    logIgnoredQueryError('MobileAPIService.getUserProfileWithStats', trackingDataError);
 
     // Get challenges completed count
-    const { count: challengesCompleted } = await supabaseAdmin
+    const { count: challengesCompleted, error: challengesCompletedError } = await supabaseAdmin
       .from('fitcircle_members')
       .select('id', { count: 'exact', head: true })
       .eq('user_id', userId)
       .eq('status', 'completed');
+    logIgnoredQueryError('MobileAPIService.getUserProfileWithStats', challengesCompletedError);
 
     // Calculate streak
     const currentStreak = this.calculateStreak(trackingData || []);

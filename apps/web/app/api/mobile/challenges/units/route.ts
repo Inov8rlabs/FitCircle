@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from 'next/server';
 
+import { unhandledChallengeError } from '@/lib/http/circle-challenge-errors';
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { UNITS_BY_CATEGORY } from '@/lib/services/template-service';
 
@@ -34,9 +35,6 @@ export async function GET(request: NextRequest) {
         { status: 401 }
       );
     }
-    return NextResponse.json(
-      { success: false, data: null, error: { code: 'ERROR', message: error.message } },
-      { status: 400 }
-    );
+    return unhandledChallengeError(error, 'mobile/challenges/units GET');
   }
 }

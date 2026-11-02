@@ -43,6 +43,7 @@ import {
 } from '../streaks/streak-calculator';
 import { StreakShieldService } from './streak-shield-service';
 import { MomentumService } from './momentum-service';
+import { logIgnoredQueryError } from '@/lib/api/route-errors';
 
 /** Normalize route inputs (Date at UTC midnight, or YYYY-MM-DD string). */
 function toDayStr(date: Date | string): string {
@@ -309,11 +310,12 @@ export class StreakClaimingService {
    */
   static async firstLocalDay(userId: string, timezone: string): Promise<string | null> {
     try {
-      const { data } = await createAdminSupabase()
+      const { data, error: dataError } = await createAdminSupabase()
         .from('profiles')
         .select('created_at')
         .eq('id', userId)
         .maybeSingle();
+      logIgnoredQueryError('StreakClaimingService.firstLocalDay', dataError);
       return data?.created_at ? localDayOf(data.created_at, timezone) : null;
     } catch {
       return null;
@@ -544,12 +546,13 @@ export class StreakClaimingService {
     }
 
     // Already claimed/protected? Nothing to do — don't burn a shield.
-    const { data: existing } = await supabaseAdmin
+    const { data: existing, error: existingError } = await supabaseAdmin
       .from('streak_claims')
       .select('id')
       .eq('user_id', userId)
       .eq('claim_date', dateStr)
       .maybeSingle();
+    logIgnoredQueryError('StreakClaimingService.activateFreeze', existingError);
     if (existing) {
       throw new StreakClaimError('Day is already claimed or protected', CLAIM_ERROR_CODES.ALREADY_CLAIMED, {
         date: dateStr,
@@ -792,12 +795,13 @@ export class StreakClaimingService {
   private static async countTrailingAutoProtects(userId: string, dayStr: string): Promise<number> {
     const supabaseAdmin = createAdminSupabase();
     const lookback = SHIELD_RULES.MAX_CONSECUTIVE_AUTO_PROTECTS + 1;
-    const { data: rows } = await supabaseAdmin
+    const { data: rows, error: rowsError } = await supabaseAdmin
       .from('streak_claims')
       .select('claim_date, claim_method, metadata')
       .eq('user_id', userId)
       .gte('claim_date', addDays(dayStr, -lookback))
       .lt('claim_date', dayStr);
+    logIgnoredQueryError('StreakClaimingService.countTrailingAutoProtects', rowsError);
 
     const byDate = new Map((rows || []).map(r => [r.claim_date, r]));
     let count = 0;
@@ -825,12 +829,13 @@ export class StreakClaimingService {
     const supabaseAdmin = createAdminSupabase();
     const brokenDateStr = toDayStr(brokenDate);
 
-    const { data: existing } = await supabaseAdmin
+    const { data: existing, error: existingError } = await supabaseAdmin
       .from('streak_recoveries')
       .select('*')
       .eq('user_id', userId)
       .eq('broken_date', brokenDateStr)
       .maybeSingle();
+    logIgnoredQueryError('StreakClaimingService.startRecovery', existingError);
 
     if (existing && existing.recovery_status === 'pending') {
       throw new StreakClaimError('Recovery already in progress', CLAIM_ERROR_CODES.RECOVERY_IN_PROGRESS);
@@ -876,12 +881,13 @@ export class StreakClaimingService {
   static async completeRecoveryAction(userId: string, recoveryId: string): Promise<boolean> {
     const supabaseAdmin = createAdminSupabase();
 
-    const { data: recovery } = await supabaseAdmin
+    const { data: recovery, error: recoveryError } = await supabaseAdmin
       .from('streak_recoveries')
       .select('*')
       .eq('id', recoveryId)
       .eq('user_id', userId)
       .maybeSingle();
+    logIgnoredQueryError('StreakClaimingService.completeRecoveryAction', recoveryError);
 
     if (!recovery) {
       throw new StreakClaimError('Recovery not found', CLAIM_ERROR_CODES.RECOVERY_EXPIRED);
@@ -1014,26 +1020,28 @@ export class StreakClaimingService {
   /** All claim dates for the last two years as a Set of YYYY-MM-DD. */
   private static async getClaimDates(userId: string): Promise<Set<string>> {
     const supabaseAdmin = createAdminSupabase();
-    const { data: claims } = await supabaseAdmin
+    const { data: claims, error: claimsError } = await supabaseAdmin
       .from('streak_claims')
       .select('claim_date')
       .eq('user_id', userId)
       .gte('claim_date', addDays(localToday('UTC'), -730))
       .order('claim_date', { ascending: false })
-      .limit(732); // one row per day max — hard bound on the payload
+      .limit(732);
+    logIgnoredQueryError('StreakClaimingService.getClaimDates', claimsError); // one row per day max — hard bound on the payload
     return new Set((claims || []).map(c => c.claim_date));
   }
 
   /** Timezone of the most recent claim — best available signal for crons. */
   private static async getLastKnownTimezone(userId: string): Promise<string | null> {
     const supabaseAdmin = createAdminSupabase();
-    const { data } = await supabaseAdmin
+    const { data, error: dataError } = await supabaseAdmin
       .from('streak_claims')
       .select('timezone')
       .eq('user_id', userId)
       .order('claim_date', { ascending: false })
       .limit(1)
       .maybeSingle();
+    logIgnoredQueryError('StreakClaimingService.getLastKnownTimezone', dataError);
     return data?.timezone || null;
   }
 
@@ -1050,11 +1058,12 @@ export class StreakClaimingService {
   ): Promise<void> {
     const supabaseAdmin = createAdminSupabase();
     try {
-      const { data: record } = await supabaseAdmin
+      const { data: record, error: recordError } = await supabaseAdmin
         .from('engagement_streaks')
         .select('longest_streak, total_claims, paused, current_streak')
         .eq('user_id', userId)
         .maybeSingle();
+      logIgnoredQueryError('StreakClaimingService.syncStreakRecord', recordError);
 
       const updates: Record<string, unknown> = {
         user_id: userId,

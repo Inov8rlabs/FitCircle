@@ -3,6 +3,7 @@ import { localToday } from '../streaks/streak-calculator';
 
 import { BoostService } from './boost-service';
 import { MomentumService } from './momentum-service';
+import { logIgnoredQueryError } from '@/lib/api/route-errors';
 
 // ============================================================================
 // TYPES
@@ -112,11 +113,12 @@ export class WorkoutLoggingService {
     // Estimate calories from profile weight
     let caloriesBurned: number | null = null;
     let caloriesEstimated = false;
-    const { data: profile } = await supabaseAdmin
+    const { data: profile, error: profileError } = await supabaseAdmin
       .from('profiles')
       .select('weight_kg')
       .eq('id', userId)
       .single();
+    logIgnoredQueryError('WorkoutLoggingService.quickLog', profileError);
 
     if (profile?.weight_kg) {
       // Simple MET-based estimation

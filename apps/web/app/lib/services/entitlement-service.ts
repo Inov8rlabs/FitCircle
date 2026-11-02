@@ -14,6 +14,7 @@ import {
 
 import { CampaignService } from './campaign-service';
 import { FeatureFlagService } from './feature-flag-service';
+import { logIgnoredQueryError } from '@/lib/api/route-errors';
 
 /**
  * EntitlementService — server-driven feature gating (BODY_COMP_BUILD_CONTRACT §2).
@@ -130,19 +131,21 @@ export class EntitlementService {
   /** Is a single feature allowed for this user? Missing gate row → allowed (free). */
   static async isFeatureAllowed(userId: string, featureKey: string): Promise<boolean> {
     const supabase = createAdminSupabase();
-    const { data: gate } = await supabase
+    const { data: gate, error: gateError } = await supabase
       .from('feature_gates')
       .select('required_tier')
       .eq('feature_key', featureKey)
       .maybeSingle();
+    logIgnoredQueryError('EntitlementService.isFeatureAllowed', gateError);
 
     if (!gate || normalizeTier(gate.required_tier) === 'free') return true;
 
-    const { data: profile } = await supabase
+    const { data: profile, error: profileError } = await supabase
       .from('profiles')
       .select('subscription_tier')
       .eq('id', userId)
       .maybeSingle();
+    logIgnoredQueryError('EntitlementService.isFeatureAllowed', profileError);
     return normalizeTier(profile?.subscription_tier) === 'premium';
   }
 

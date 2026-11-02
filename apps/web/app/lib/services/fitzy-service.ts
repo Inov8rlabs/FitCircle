@@ -39,6 +39,7 @@ import { FitzyConversationService, HISTORY_TURNS, LEGACY_REUSE_HOURS } from './f
 import { FitzyMemoryService } from './fitzy-memory-service';
 import { FitzyPlanService } from './fitzy-plan-service';
 import { UsageService } from './usage-service';
+import { logIgnoredQueryError } from '@/lib/api/route-errors';
 
 /**
  * FitzyService — "Fitzy", the FitCircle AI coach (full fitness + nutrition).
@@ -640,12 +641,13 @@ export class FitzyService implements IFitzyService {
 
     // (a) Food log macros — daily averages only.
     try {
-      const { data: entries } = await supabase
+      const { data: entries, error: entriesError } = await supabase
         .from('food_log_entries')
         .select('calories, protein_g, carbs_g, fat_g, entry_date')
         .eq('user_id', userId)
         .gte('entry_date', sinceDate)
         .is('deleted_at', null);
+      logIgnoredQueryError('FitzyService.buildContext', entriesError);
       const rows = (entries ?? []) as Array<{ calories: number | null; protein_g: number | null; carbs_g: number | null; fat_g: number | null; entry_date: string | null }>;
       if (rows.length > 0) {
         const days = new Set(rows.map((r) => r.entry_date).filter(Boolean)).size || 1;
@@ -669,12 +671,13 @@ export class FitzyService implements IFitzyService {
 
     // (c) Recent workouts.
     try {
-      const { data: workouts } = await supabase
+      const { data: workouts, error: workoutsError } = await supabase
         .from('exercise_logs')
         .select('exercise_type, duration_minutes, exercise_date')
         .eq('user_id', userId)
         .gte('exercise_date', sinceDate)
         .eq('is_deleted', false);
+      logIgnoredQueryError('FitzyService.buildContext', workoutsError);
       const w = (workouts ?? []) as Array<{ exercise_type: string | null; duration_minutes: number | null }>;
       const mins = w.reduce((a, r) => a + (r.duration_minutes ?? 0), 0);
       const types = [...new Set(w.map((r) => r.exercise_type).filter((t): t is string => !!t))];
@@ -685,13 +688,14 @@ export class FitzyService implements IFitzyService {
 
     // (d) Weight TREND only (direction, never a target or rate).
     try {
-      const { data: wt } = await supabase
+      const { data: wt, error: wtError } = await supabase
         .from('daily_tracking')
         .select('weight_kg, tracking_date')
         .eq('user_id', userId)
         .not('weight_kg', 'is', null)
         .order('tracking_date', { ascending: false })
         .limit(10);
+      logIgnoredQueryError('FitzyService.buildContext', wtError);
       const series = (wt ?? []) as Array<{ weight_kg: number | null }>;
       if (series.length >= 2) {
         const latest = series[0].weight_kg ?? 0;
@@ -705,13 +709,14 @@ export class FitzyService implements IFitzyService {
 
     // (e) Latest Plate Score.
     try {
-      const { data: plate } = await supabase
+      const { data: plate, error: plateError } = await supabase
         .from('plate_scores')
         .select('score')
         .eq('user_id', userId)
         .order('score_date', { ascending: false })
         .limit(1)
         .maybeSingle();
+      logIgnoredQueryError('FitzyService.buildContext', plateError);
       if (plate && typeof (plate as any).score === 'number') {
         parts.push(plateScoreBlock((plate as any).score));
       }
@@ -722,15 +727,17 @@ export class FitzyService implements IFitzyService {
     // (f) Circle challenge, only if the user is a member.
     if (circleId) {
       try {
-        const { data: membership } = await supabase
+        const { data: membership, error: membershipError } = await supabase
           .from('fitcircle_members')
           .select('user_id')
           .eq('fitcircle_id', circleId)
           .eq('user_id', userId)
           .maybeSingle();
+        logIgnoredQueryError('FitzyService.buildContext', membershipError);
         if (membership) {
-          const { data: circle } = await supabase.from('fitcircles').select('name').eq('id', circleId).maybeSingle();
-          const { data: challenge } = await supabase
+          const { data: circle, error: circleError } = await supabase.from('fitcircles').select('name').eq('id', circleId).maybeSingle();
+          logIgnoredQueryError('FitzyService.buildContext', circleError);
+          const { data: challenge, error: challengeError } = await supabase
             .from('challenges')
             .select('name, description')
             .eq('fitcircle_id', circleId)
@@ -738,6 +745,7 @@ export class FitzyService implements IFitzyService {
             .order('created_at', { ascending: false })
             .limit(1)
             .maybeSingle();
+          logIgnoredQueryError('FitzyService.buildContext', challengeError);
           const line = circleBlock((circle as any)?.name as string | undefined, (challenge as { name: string; description?: string | null } | null) ?? null);
           if (line) parts.push(line);
         }
@@ -753,13 +761,14 @@ export class FitzyService implements IFitzyService {
     // the model always sees the rules next to the numbers.
     try {
       if (await EntitlementService.isFeatureAllowed(userId, 'body_comp_coach')) {
-        const { data: latest } = await supabase
+        const { data: latest, error: latestError } = await supabase
           .from('body_composition_logs')
           .select('measured_at, source, weight_kg, body_fat_pct, skeletal_muscle_mass_kg, fat_mass_kg')
           .eq('user_id', userId)
           .order('measured_at', { ascending: false })
           .limit(1)
           .maybeSingle();
+        logIgnoredQueryError('FitzyService.buildContext', latestError);
         if (latest) {
           const row = latest as {
             measured_at: string;
@@ -789,7 +798,8 @@ export class FitzyService implements IFitzyService {
           }
 
           try {
-            const { data: profile } = await supabase.from('profiles').select('goals').eq('id', userId).maybeSingle();
+            const { data: profile, error: profileError } = await supabase.from('profiles').select('goals').eq('id', userId).maybeSingle();
+            logIgnoredQueryError('FitzyService.buildContext', profileError);
             b.bodyFatGoal = extractBodyFatGoal((profile as { goals?: unknown } | null)?.goals);
           } catch (err) {
             console.error('[FitzyService.buildContext] body-comp goal bit non-fatal:', err);

@@ -46,6 +46,7 @@ import { createAdminSupabase } from '../supabase-admin';
 import { FeatureFlagService } from './feature-flag-service';
 import { ReferralInviteService, joinedNudgeState } from './referral-invite-service';
 import { ReferralRewardService } from './referral-reward-service';
+import { logIgnoredQueryError } from '@/lib/api/route-errors';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -138,18 +139,20 @@ export class ReferralService {
 
   static async getOrCreateCode(userId: string): Promise<string> {
     const supabase = createAdminSupabase();
-    const { data: existing } = await supabase
+    const { data: existing, error: existingError } = await supabase
       .from('referral_codes')
       .select('code')
       .eq('user_id', userId)
       .maybeSingle();
+    logIgnoredQueryError('ReferralService.getOrCreateCode', existingError);
     if (existing?.code) return existing.code;
 
-    const { data: profile } = await supabase
+    const { data: profile, error: profileError } = await supabase
       .from('profiles')
       .select('display_name, username')
       .eq('id', userId)
       .maybeSingle();
+    logIgnoredQueryError('ReferralService.getOrCreateCode', profileError);
     const stem = firstNameOf(profile as ProfileLite | null);
     for (let attempt = 0; attempt < 8; attempt++) {
       const code = generateReferralCode(attempt < 6 ? stem : null);
@@ -157,11 +160,12 @@ export class ReferralService {
       if (!error) return code;
       if (error.code !== '23505') throw new Error(`referral code insert failed: ${error.message}`);
       // Either the code collided (retry) or a concurrent request created ours.
-      const { data: raced } = await supabase
+      const { data: raced, error: racedError } = await supabase
         .from('referral_codes')
         .select('code')
         .eq('user_id', userId)
         .maybeSingle();
+      logIgnoredQueryError('ReferralService.getOrCreateCode', racedError);
       if (raced?.code) return raced.code;
     }
     throw new Error('could not allocate a referral code');
@@ -180,7 +184,8 @@ export class ReferralService {
 
     const ownerOf = async (ref: string): Promise<string | null> => {
       if (classifyCode(ref) !== 'personal') return null;
-      const { data } = await supabase.from('referral_codes').select('user_id').eq('code', ref).maybeSingle();
+      const { data, error: dataError } = await supabase.from('referral_codes').select('user_id').eq('code', ref).maybeSingle();
+      logIgnoredQueryError('ReferralService.resolve.ownerOf', dataError);
       return data?.user_id ?? null;
     };
 
@@ -191,11 +196,12 @@ export class ReferralService {
 
     // Circle codes are stored as FITXXXXXX or FIT-XXXXXX; accept either spelling.
     const variants = Array.from(new Set([code, code.replace('-', ''), code.replace(/^FIT-?/, 'FIT-')]));
-    const { data: circles } = await supabase
+    const { data: circles, error: circlesError } = await supabase
       .from('fitcircles')
       .select('id, name, invite_code, creator_id, type, status, end_date')
       .in('invite_code', variants)
       .limit(1);
+    logIgnoredQueryError('ReferralService.resolve', circlesError);
     const circle = (circles?.[0] as CircleLite | undefined) ?? null;
     if (!circle) return null;
     const ref = normalizeCode(rawRef);
@@ -207,11 +213,12 @@ export class ReferralService {
     const resolved = await this.resolve(rawCode, rawRef);
     if (!resolved) return { valid: false };
     const supabase = createAdminSupabase();
-    const { data: inviter } = await supabase
+    const { data: inviter, error: inviterError } = await supabase
       .from('profiles')
       .select('id, display_name, username, avatar_url')
       .eq('id', resolved.inviterId)
       .maybeSingle();
+    logIgnoredQueryError('ReferralService.preview', inviterError);
     if (!inviter) return { valid: false };
 
     let circle: ReferralPreview['circle'] = null;
@@ -265,11 +272,12 @@ export class ReferralService {
       );
     }
 
-    const { data: invitee } = await supabase
+    const { data: invitee, error: inviteeError } = await supabase
       .from('profiles')
       .select('id, created_at')
       .eq('id', inviteeId)
       .maybeSingle();
+    logIgnoredQueryError('ReferralService.claim', inviteeError);
     if (!invitee) throw new ReferralError('INVALID_CODE', 'Account not found');
     const ageMs = Date.now() - new Date(invitee.created_at).getTime();
     if (ageMs > REFERRAL_POLICY.attributionWindowDays * DAY_MS) {
@@ -277,12 +285,13 @@ export class ReferralService {
     }
 
     // A↔B cycles: the inviter can't have been invited by this invitee.
-    const { data: reverse } = await supabase
+    const { data: reverse, error: reverseError } = await supabase
       .from('referrals')
       .select('id')
       .eq('invitee_id', resolved.inviterId)
       .eq('inviter_id', inviteeId)
       .maybeSingle();
+    logIgnoredQueryError('ReferralService.claim', reverseError);
     if (reverse) throw new ReferralError('SELF_REFERRAL', "You can't use this invite");
 
     // Device: a phone that belongs to the inviter, or to any account older
@@ -392,17 +401,19 @@ export class ReferralService {
     inviteeCreatedAt: string
   ): Promise<string | null> {
     const supabase = createAdminSupabase();
-    const { data } = await supabase.from('referral_devices').select('user_id').eq('device_hash', deviceHash);
+    const { data, error: dataError } = await supabase.from('referral_devices').select('user_id').eq('device_hash', deviceHash);
+    logIgnoredQueryError('ReferralService.deviceVerdict', dataError);
     const others = ((data ?? []) as Array<{ user_id: string }>)
       .map((r) => r.user_id)
       .filter((id) => id !== inviteeId);
     if (others.length === 0) return null;
     if (others.includes(inviterId)) return 'device_matches_inviter';
-    const { data: olderAccounts } = await supabase
+    const { data: olderAccounts, error: olderAccountsError } = await supabase
       .from('profiles')
       .select('id')
       .in('id', others)
       .lt('created_at', inviteeCreatedAt);
+    logIgnoredQueryError('ReferralService.deviceVerdict', olderAccountsError);
     return (olderAccounts ?? []).length > 0 ? 'device_reused' : null;
   }
 
@@ -422,11 +433,12 @@ export class ReferralService {
     const supabase = createAdminSupabase();
 
     const deadline = new Date(referral.attributed_at).getTime() + REFERRAL_POLICY.qualifyWindowDays * DAY_MS;
-    const { data: invitee } = await supabase
+    const { data: invitee, error: inviteeError } = await supabase
       .from('profiles')
       .select('id, email, onboarding_completed')
       .eq('id', referral.invitee_id)
       .maybeSingle();
+    logIgnoredQueryError('ReferralService.evaluate', inviteeError);
     if (!invitee) return referral.status;
 
     const days = await this.activityDays(referral.invitee_id, new Date(deadline));
@@ -448,12 +460,13 @@ export class ReferralService {
     let next: ReferralStatus = 'qualified';
     if (referral.inviter_id) {
       const since = new Date(Date.now() - DAY_MS).toISOString();
-      const { count } = await supabase
+      const { count, error: countError } = await supabase
         .from('referrals')
         .select('id', { count: 'exact', head: true })
         .eq('inviter_id', referral.inviter_id)
         .eq('status', 'qualified')
         .gte('qualified_at', since);
+      logIgnoredQueryError('ReferralService.evaluate', countError);
       if ((count ?? 0) >= REFERRAL_POLICY.velocityPer24h) next = 'review';
     }
 
@@ -487,24 +500,26 @@ export class ReferralService {
 
   static async listForReview(status: ReferralStatus = 'review', limit = 100): Promise<ReferralRow[]> {
     const supabase = createAdminSupabase();
-    const { data } = await supabase
+    const { data, error: dataError } = await supabase
       .from('referrals')
       .select('*')
       .eq('status', status)
       .order('attributed_at', { ascending: false })
       .limit(limit);
+    logIgnoredQueryError('ReferralService.listForReview', dataError);
     return (data ?? []) as ReferralRow[];
   }
 
   /** Cron safety net: re-evaluate every pending referral (activity hook misses, window expiry). */
   static async evaluatePending(limit = 500): Promise<{ checked: number; qualified: number; rejected: number }> {
     const supabase = createAdminSupabase();
-    const { data } = await supabase
+    const { data, error: dataError } = await supabase
       .from('referrals')
       .select('*')
       .eq('status', 'pending')
       .order('attributed_at', { ascending: true })
       .limit(limit);
+    logIgnoredQueryError('ReferralService.evaluatePending', dataError);
     let qualified = 0;
     let rejected = 0;
     for (const row of (data ?? []) as ReferralRow[]) {
@@ -534,11 +549,12 @@ export class ReferralService {
       );
       inviterBanked = outcome.banked;
       if (outcome.created) await this.deliverReward(referral, 'inviter_week', { banked: outcome.banked });
-      const { count } = await supabase
+      const { count, error: countError } = await supabase
         .from('referrals')
         .select('id', { count: 'exact', head: true })
         .eq('inviter_id', referral.inviter_id)
         .eq('status', 'qualified');
+      logIgnoredQueryError('ReferralService.payOut', countError);
       if ((count ?? 0) >= REFERRAL_POLICY.lifetimeThreshold) {
         const lifetime = await ReferralRewardService.award(referral.inviter_id, 'lifetime', null, referral.id);
         if (lifetime.created) await this.deliverReward(referral, 'lifetime', {});
@@ -606,12 +622,14 @@ export class ReferralService {
     inviterBanked: boolean
   ): Promise<void> {
     const supabase = createAdminSupabase();
-    const { data: rows } = await supabase
+    const { data: rows, error: rowsError } = await supabase
       .from('referral_rewards')
       .select('id, user_id, kind, days, emailed_at')
       .eq('referral_id', referral.id);
+    logIgnoredQueryError('ReferralService.emailRewards', rowsError);
     const ids = [referral.invitee_id, referral.inviter_id].filter((id): id is string => !!id);
-    const { data: contacts } = await supabase.from('profiles').select('id, email').in('id', ids);
+    const { data: contacts, error: contactsError } = await supabase.from('profiles').select('id, email').in('id', ids);
+    logIgnoredQueryError('ReferralService.emailRewards', contactsError);
     const emailOf = new Map(((contacts ?? []) as Array<{ id: string; email: string | null }>).map((c) => [c.id, c.email]));
     for (const row of (rows ?? []) as Array<{ id: string; user_id: string; kind: RewardKind; days: number | null; emailed_at: string | null }>) {
       if (row.emailed_at || row.kind === 'lifetime' || !row.days) continue;
@@ -639,13 +657,14 @@ export class ReferralService {
   static async retryUndeliveredPushes(): Promise<{ rewards: number; joins: number }> {
     const supabase = createAdminSupabase();
     const since = new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString();
-    const { data: rewards } = await supabase
+    const { data: rewards, error: rewardsError } = await supabase
       .from('referral_rewards')
       .select('referral_id, kind, status, notified_at, created_at')
       .is('notified_at', null)
       .neq('status', 'revoked')
       .gte('created_at', since)
       .limit(200);
+    logIgnoredQueryError('ReferralService.retryUndeliveredPushes', rewardsError);
     let rewardCount = 0;
     for (const r of (rewards ?? []) as Array<{ referral_id: string | null; kind: RewardKind; status: string }>) {
       if (!r.referral_id) continue;
@@ -654,13 +673,14 @@ export class ReferralService {
       await this.deliverReward(referral, r.kind, { banked: r.status === 'banked' });
       rewardCount++;
     }
-    const { data: joins } = await supabase
+    const { data: joins, error: joinsError } = await supabase
       .from('referrals')
       .select('*')
       .is('inviter_notified_at', null)
       .in('status', ['pending', 'qualified', 'review'])
       .gte('attributed_at', since)
       .limit(200);
+    logIgnoredQueryError('ReferralService.retryUndeliveredPushes', joinsError);
     let joinCount = 0;
     for (const j of (joins ?? []) as ReferralRow[]) {
       if (!j.inviter_id) continue;
@@ -696,12 +716,13 @@ export class ReferralService {
 
     const count = referral.nudge_count ?? 0;
     const now = new Date().toISOString();
-    const { data: claimed } = await supabase
+    const { data: claimed, error: claimedError } = await supabase
       .from('referrals')
       .update({ nudge_count: count + 1, last_nudged_at: now })
       .eq('id', referral.id)
       .eq('nudge_count', count)
       .select('id');
+    logIgnoredQueryError('ReferralService.nudge', claimedError);
     if ((claimed ?? []).length !== 1) return { status: 'too_soon', nextAt: null, remaining: state.remaining, smsBody: null };
     const inviter = await this.profile(userId);
     notify(referral.invitee_id, 'referral_nudge', { inviterName: firstNameOf(inviter) });
@@ -713,13 +734,15 @@ export class ReferralService {
   static async autoAttributeByEmail(userId: string): Promise<boolean> {
     if (await this.referralFor(userId)) return false;
     const supabase = createAdminSupabase();
-    const { data: me } = await supabase.from('profiles').select('email').eq('id', userId).maybeSingle();
+    const { data: me, error: meError } = await supabase.from('profiles').select('email').eq('id', userId).maybeSingle();
+    logIgnoredQueryError('ReferralService.autoAttributeByEmail', meError);
     const invite = await ReferralInviteService.findInviteForEmail(me?.email, userId);
     if (!invite) return false;
     const code = await this.getOrCreateCode(invite.inviter_id);
     let circleCode: string | null = null;
     if (invite.circle_id) {
-      const { data: c } = await supabase.from('fitcircles').select('invite_code').eq('id', invite.circle_id).maybeSingle();
+      const { data: c, error: cError } = await supabase.from('fitcircles').select('invite_code').eq('id', invite.circle_id).maybeSingle();
+      logIgnoredQueryError('ReferralService.autoAttributeByEmail', cError);
       circleCode = c?.invite_code ?? null;
     }
     try {
@@ -737,11 +760,12 @@ export class ReferralService {
    */
   static async activityDays(userId: string, deadline: Date = new Date()): Promise<number> {
     const supabase = createAdminSupabase();
-    const { data } = await supabase
+    const { data, error: dataError } = await supabase
       .from('streak_claims')
       .select('claim_date, claim_method')
       .eq('user_id', userId)
       .limit(400);
+    logIgnoredQueryError('ReferralService.activityDays', dataError);
     const cutoff = deadline.toISOString().slice(0, 10);
     const days = new Set(
       ((data ?? []) as Array<{ claim_date: string; claim_method: string | null }>)
@@ -765,12 +789,13 @@ export class ReferralService {
     }
     const oneAway = REFERRAL_POLICY.qualifyingDays - 1;
     if (capped === oneAway && oneAway > 0 && (row.progress_notified_days ?? 0) < oneAway) {
-      const { data: claimed } = await supabase
+      const { data: claimed, error: claimedError } = await supabase
         .from('referrals')
         .update({ progress_notified_days: oneAway })
         .eq('id', referral.id)
         .lt('progress_notified_days', oneAway)
         .select('id');
+      logIgnoredQueryError('ReferralService.recordProgress', claimedError);
       if ((claimed ?? []).length === 1) {
         const inviter = await this.profile(referral.inviter_id);
         notify(referral.invitee_id, 'referral_progress', { inviterName: firstNameOf(inviter) });
@@ -1031,11 +1056,12 @@ export class ReferralService {
     const circleIds = ((memberships ?? []) as Array<{ fitcircle_id: string }>).map((m) => m.fitcircle_id);
     let circleOf3 = false;
     if (circleIds.length) {
-      const { data: members } = await supabase
+      const { data: members, error: membersError } = await supabase
         .from('fitcircle_members')
         .select('fitcircle_id')
         .in('fitcircle_id', circleIds)
         .eq('status', 'active');
+      logIgnoredQueryError('ReferralService.activation', membersError);
       const counts = new Map<string, number>();
       for (const m of (members ?? []) as Array<{ fitcircle_id: string }>) counts.set(m.fitcircle_id, (counts.get(m.fitcircle_id) ?? 0) + 1);
       circleOf3 = [...counts.values()].some((n) => n >= 3);
@@ -1043,13 +1069,14 @@ export class ReferralService {
     let reactionReceived = false;
     const messageIds = ((myMessages ?? []) as Array<{ id: string }>).map((m) => m.id);
     if (messageIds.length) {
-      const { data: reactions } = await supabase
+      const { data: reactions, error: reactionsError } = await supabase
         .from('circle_message_reactions')
         .select('user_id')
         .in('message_id', messageIds)
         .neq('user_id', userId)
         .lt('created_at', windowEnd.toISOString())
         .limit(1);
+      logIgnoredQueryError('ReferralService.activation', reactionsError);
       reactionReceived = (reactions ?? []).length > 0;
     }
     const loggedDays3 = loggedDays >= 3;
@@ -1103,12 +1130,13 @@ export class ReferralService {
 
   private static async starterCircle(userId: string, code: string): Promise<ReferralHub['starterCircle']> {
     const supabase = createAdminSupabase();
-    const { data } = await supabase
+    const { data, error: dataError } = await supabase
       .from('fitcircles')
       .select('id, name, invite_code, creator_id, type, status, end_date')
       .eq('creator_id', userId)
       .order('created_at', { ascending: false })
       .limit(10);
+    logIgnoredQueryError('ReferralService.starterCircle', dataError);
     const now = Date.now();
     const circle = ((data ?? []) as CircleLite[]).find(
       (c) => !!c.invite_code && c.status !== 'completed' && c.status !== 'cancelled' && (!c.end_date || new Date(c.end_date).getTime() > now)
@@ -1128,41 +1156,46 @@ export class ReferralService {
 
   private static async circleMembers(circleId: string, take: number): Promise<{ members: ProfileLite[]; count: number }> {
     const supabase = createAdminSupabase();
-    const { data } = await supabase
+    const { data, error: dataError } = await supabase
       .from('fitcircle_members')
       .select('user_id')
       .eq('fitcircle_id', circleId)
       .eq('status', 'active')
       .limit(200);
+    logIgnoredQueryError('ReferralService.circleMembers', dataError);
     const ids = ((data ?? []) as Array<{ user_id: string }>).map((m) => m.user_id);
     if (take === 0 || ids.length === 0) return { members: [], count: ids.length };
-    const { data: people } = await supabase
+    const { data: people, error: peopleError } = await supabase
       .from('profiles')
       .select('id, display_name, username, avatar_url')
       .in('id', ids.slice(0, take));
+    logIgnoredQueryError('ReferralService.circleMembers', peopleError);
     return { members: (people ?? []) as ProfileLite[], count: ids.length };
   }
 
   private static async referralFor(inviteeId: string): Promise<ReferralRow | null> {
     const supabase = createAdminSupabase();
-    const { data } = await supabase.from('referrals').select('*').eq('invitee_id', inviteeId).maybeSingle();
+    const { data, error: dataError } = await supabase.from('referrals').select('*').eq('invitee_id', inviteeId).maybeSingle();
+    logIgnoredQueryError('ReferralService.referralFor', dataError);
     return (data as ReferralRow | null) ?? null;
   }
 
   private static async referralById(id: string): Promise<ReferralRow | null> {
     const supabase = createAdminSupabase();
-    const { data } = await supabase.from('referrals').select('*').eq('id', id).maybeSingle();
+    const { data, error: dataError } = await supabase.from('referrals').select('*').eq('id', id).maybeSingle();
+    logIgnoredQueryError('ReferralService.referralById', dataError);
     return (data as ReferralRow | null) ?? null;
   }
 
   private static async profile(id: string | null): Promise<ProfileLite | null> {
     if (!id) return null;
     const supabase = createAdminSupabase();
-    const { data } = await supabase
+    const { data, error: dataError } = await supabase
       .from('profiles')
       .select('id, display_name, username, avatar_url')
       .eq('id', id)
       .maybeSingle();
+    logIgnoredQueryError('ReferralService.profile', dataError);
     return (data as ProfileLite | null) ?? null;
   }
 
