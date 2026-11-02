@@ -1,4 +1,6 @@
+import { isStepsChallenge, snapChallengeWindow } from '../circles/challenge-steps';
 import { getTemplateById } from '../data/challenge-templates';
+import { isValidTimezone } from '../streaks/streak-calculator';
 import { createAdminSupabase } from '../supabase-admin';
 import {
   type CircleChallenge,
@@ -15,6 +17,7 @@ import {
   DUPLICATE_DETECTION_WINDOW_MS,
 } from '../types/circle-challenge';
 
+import { ChallengeStepsSyncService, memberTimezone } from './challenge-steps-sync-service';
 import {
   MIN_STORABLE_LOG_AMOUNT,
   computeProgress,
@@ -73,12 +76,23 @@ export class ChallengeService {
 
   static async createChallenge(
     userId: string,
-    input: CreateCircleChallengeInput
+    input: CreateCircleChallengeInput,
+    clientTimezone?: string | null
   ): Promise<CircleChallengeWithDetails> {
     const supabaseAdmin = createAdminSupabase();
 
     // Verify user is a member of the circle
     await this.verifyCircleMembership(userId, input.fitcircle_id);
+
+    // Challenges run on whole local days. Apps sent the picker's time of day
+    // (a challenge created at 3 PM stayed "Upcoming" until 3 PM on its start day),
+    // so the window is snapped to local midnights: device zone, else the creator's
+    // profile zone, else the circle's.
+    const window = snapChallengeWindow(
+      input.starts_at,
+      input.ends_at,
+      await this.creationTimezone(userId, input.fitcircle_id, clientTimezone)
+    );
 
     // Sanitize inputs
     const name = input.name.trim().slice(0, 50);
@@ -102,9 +116,9 @@ export class ChallengeService {
         unit: input.unit.trim().slice(0, 20),
         logging_prompt: input.logging_prompt?.trim().slice(0, 60) || null,
         is_open: input.is_open ?? true,
-        status: new Date(input.starts_at) <= new Date() ? 'active' : 'scheduled',
-        starts_at: input.starts_at,
-        ends_at: input.ends_at,
+        status: new Date(window.starts_at) <= new Date() ? 'active' : 'scheduled',
+        starts_at: window.starts_at,
+        ends_at: window.ends_at,
         participant_count: 1,
       })
       .select()
@@ -141,6 +155,7 @@ export class ChallengeService {
 
     if (error) throw error;
 
+    await ChallengeStepsSyncService.refresh([challenge]);
     return this.enrichChallenge(challenge, userId);
   }
 
@@ -161,6 +176,9 @@ export class ChallengeService {
       .order('created_at', { ascending: false });
 
     if (error) throw error;
+
+    // Steps challenges count synced steps; refresh before presenting (safety net).
+    await ChallengeStepsSyncService.refresh(challenges || []);
 
     const enriched = await Promise.all(
       (challenges || []).map(c => this.enrichChallenge(c, userId))
@@ -504,6 +522,12 @@ export class ChallengeService {
 
     if (updateError) throw updateError;
 
+    // A steps challenge counts max(synced steps, manual logs) per local day.
+    if (isStepsChallenge(challenge)) {
+      const fresh = (await ChallengeStepsSyncService.syncChallenge(challenge, now)).get(participant.id);
+      if (fresh) Object.assign(progress, fresh);
+    }
+
     // Recalculate ranks for all participants
     const oldRank: number | null = participant.rank ?? null;
     const rankResults = await this.recalculateRanks(challengeId);
@@ -625,6 +649,7 @@ export class ChallengeService {
 
     if (updateError) throw updateError;
 
+    if (isStepsChallenge(challenge)) await ChallengeStepsSyncService.syncChallenge(challenge, now);
     await this.recalculateRanks(log.challenge_id);
   }
 
@@ -669,6 +694,12 @@ export class ChallengeService {
 
     const today = new Date().toISOString().split('T')[0];
 
+    // Steps challenges: re-derive from synced steps first. Their today_total is
+    // the member's LOCAL today (fresh from the refresh), so it is not reset by UTC date.
+    const { data: challengeRow } = await supabaseAdmin.from('challenges').select('*').eq('id', challengeId).maybeSingle();
+    const stepsChallenge = isStepsChallenge(challengeRow);
+    if (challengeRow) await ChallengeStepsSyncService.refresh([challengeRow]);
+
     // Get all active participants with profile data
     const { data: participants, error } = await supabaseAdmin
       .from('challenge_participants')
@@ -687,7 +718,7 @@ export class ChallengeService {
       const profile = p.profiles;
 
       // Reset today_total display if date doesn't match
-      const displayTodayTotal = p.today_date === today ? (p.today_total || 0) : 0;
+      const displayTodayTotal = stepsChallenge || p.today_date === today ? (p.today_total || 0) : 0;
 
       return {
         rank: p.rank || index + 1,
@@ -913,7 +944,7 @@ export class ChallengeService {
       .eq('id', challengeId);
   }
 
-  private static async recalculateRanks(
+  static async recalculateRanks(
     challengeId: string
   ): Promise<Array<{ user_id: string; rank: number; old_rank?: number }>> {
     const supabaseAdmin = createAdminSupabase();
@@ -1041,16 +1072,26 @@ export class ChallengeService {
    * sum; it is presented as 0 then, exactly like the leaderboard does.
    */
   private static presentParticipation(
-    participation: CircleChallengeParticipant | null | undefined
+    participation: CircleChallengeParticipant | null | undefined,
+    challenge?: { unit?: string | null }
   ): CircleChallengeParticipant | null {
     if (!participation) return null;
-    if (participation.today_date === utcDay()) return participation;
+    // Steps challenges keep the member's LOCAL today, refreshed on read.
+    if (participation.today_date === utcDay() || isStepsChallenge(challenge)) return participation;
     return { ...participation, today_total: 0 };
   }
 
   /** A log row as the clients decode it: `amount` is always a JSON number. */
   private static presentLog(row: CircleChallengeLog): CircleChallengeLog {
     return { ...row, amount: toNumber(row.amount) };
+  }
+
+  private static async creationTimezone(userId: string, circleId: string, clientTimezone?: string | null): Promise<string> {
+    if (isValidTimezone(clientTimezone)) return clientTimezone;
+    const supabaseAdmin = createAdminSupabase();
+    const { data: profile } = await supabaseAdmin.from('profiles').select('timezone').eq('id', userId).maybeSingle();
+    const { data: circle } = await supabaseAdmin.from('fitcircles').select('timezone').eq('id', circleId).maybeSingle();
+    return memberTimezone(profile?.timezone, circle?.timezone);
   }
 
   private static async enrichChallenge(
@@ -1092,7 +1133,7 @@ export class ChallengeService {
       category_raw: (challenge.category as string | null) ?? null,
       creator_name: creator?.display_name || 'Unknown',
       creator_avatar: creator?.avatar_url || undefined,
-      my_participation: this.presentParticipation(myParticipation),
+      my_participation: this.presentParticipation(myParticipation, challenge),
       duration_days: durationDays,
       days_remaining: daysRemaining,
       template: template || null,

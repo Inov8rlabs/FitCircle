@@ -39,6 +39,7 @@ import CircleQuestsSection from '@/components/CircleQuestsSection';
 import { CircleDetailSkeleton } from '@/components/circles/CircleDetailSkeleton';
 import { CircleStreakLiveCard } from '@/components/circles/CircleStreakLiveCard';
 import { LeaderboardRow } from '@/components/circles/LeaderboardRow';
+import { StepsLeaderboard } from '@/components/circles/StepsLeaderboard';
 import { circleTypeLabel, durationLabel } from '@/components/circles/types';
 import { useCircleStreak } from '@/components/circles/useCircleStreak';
 import DashboardNav from '@/components/DashboardNav';
@@ -67,6 +68,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useUnitPreference } from '@/hooks/useUnitPreference';
 import { AnalyticsEvents, analytics } from '@/lib/analytics';
 import { nutritionClient, type PrivacyTier } from '@/lib/api/nutrition-client';
+import { CIRCLE_TYPES, CIRCLE_TYPE_LABELS, type CircleTypeValue } from '@/lib/circles/circle-type';
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/stores/auth-store';
 
@@ -463,6 +465,27 @@ export default function FitCirclePage() {
   const handleCancelEditName = () => {
     setIsEditingName(false);
     setEditedName('');
+  };
+
+  const [isSavingType, setIsSavingType] = useState(false);
+  const handleChangeType = async (type: CircleTypeValue) => {
+    if (!fitCircle || type === fitCircle.type) return;
+    setIsSavingType(true);
+    try {
+      const response = await fetch(`/api/fitcircles/${circleId}/update`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type }),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || 'Failed to update circle type');
+      setFitCircle({ ...fitCircle, type });
+      toast.success(`Circle type set to ${CIRCLE_TYPE_LABELS[type]}`);
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to update circle type');
+    } finally {
+      setIsSavingType(false);
+    }
   };
 
   const handleSaveName = async () => {
@@ -1059,30 +1082,36 @@ export default function FitCirclePage() {
                         <span className="ml-auto text-caption text-fg-tertiary">{participants.length} members</span>
                       )}
                     </div>
-                    {participants.length === 0 ? (
-                      <GlassCard>
-                        <EmptyState
-                          icon={Trophy}
-                          tone="orange"
-                          title="No Rankings Yet"
-                          description="Check in daily to appear on the leaderboard"
-                        />
-                      </GlassCard>
-                    ) : (
-                      <ul className="space-y-2" data-testid="leaderboard">
-                        {participants.map((participant, index) => (
-                          <LeaderboardRow
-                            key={participant.id}
-                            rank={index + 1}
-                            entry={participant}
-                            isYou={participant.user_id === user?.id}
-                            isCreator={participant.user_id === fitCircle.creator_id}
-                            checkedInToday={isInToday(participant)}
-                            onClick={() => void handleParticipantClick(participant)}
-                          />
-                        ))}
-                      </ul>
-                    )}
+                    <StepsLeaderboard
+                      key={fitCircle.type}
+                      circleId={circleId}
+                      fallback={
+                        participants.length === 0 ? (
+                          <GlassCard>
+                            <EmptyState
+                              icon={Trophy}
+                              tone="orange"
+                              title="No Rankings Yet"
+                              description="Check in daily to appear on the leaderboard"
+                            />
+                          </GlassCard>
+                        ) : (
+                          <ul className="space-y-2" data-testid="leaderboard">
+                            {participants.map((participant, index) => (
+                              <LeaderboardRow
+                                key={participant.id}
+                                rank={index + 1}
+                                entry={participant}
+                                isYou={participant.user_id === user?.id}
+                                isCreator={participant.user_id === fitCircle.creator_id}
+                                checkedInToday={isInToday(participant)}
+                                onClick={() => void handleParticipantClick(participant)}
+                              />
+                            ))}
+                          </ul>
+                        )
+                      }
+                    />
                   </motion.section>
 
                   {/* Primary action */}
@@ -1111,7 +1140,31 @@ export default function FitCirclePage() {
                       value={fitCircle.max_participants ? `${participants.length}/${fitCircle.max_participants}` : participants.length}
                     />
                     <StatTile icon={Calendar} tone="orange" label="Days Left" value={getDaysRemaining(fitCircle.end_date)} />
-                    <StatTile icon={Target} tone="green" label="Challenge Type" value={<span className="text-headline">{circleTypeLabel(fitCircle.type)}</span>} />
+                    <StatTile
+                      icon={Target}
+                      tone="green"
+                      label="Challenge Type"
+                      value={
+                        fitCircle.is_creator ? (
+                          <select
+                            aria-label="Circle type"
+                            data-testid="circle-type-select"
+                            className="w-full rounded-md border border-glass bg-surface-raised/60 px-2 py-1 text-headline text-white"
+                            value={(CIRCLE_TYPES as readonly string[]).includes(fitCircle.type) ? fitCircle.type : 'custom'}
+                            disabled={isSavingType}
+                            onChange={(e) => void handleChangeType(e.target.value as CircleTypeValue)}
+                          >
+                            {CIRCLE_TYPES.map((t) => (
+                              <option key={t} value={t}>
+                                {CIRCLE_TYPE_LABELS[t]}
+                              </option>
+                            ))}
+                          </select>
+                        ) : (
+                          <span className="text-headline">{circleTypeLabel(fitCircle.type)}</span>
+                        )
+                      }
+                    />
                     <StatTile
                       icon={Clock}
                       tone="purple"

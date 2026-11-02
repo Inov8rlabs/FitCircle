@@ -59,12 +59,12 @@ describe('POST /api/fitcircles/[id]/challenges', () => {
     });
 
     expect(res.status).toBe(200);
-    expect(service.createChallenge).toHaveBeenCalledWith('user-1', { ...required, fitcircle_id: CIRCLE });
+    expect(service.createChallenge).toHaveBeenCalledWith('user-1', { ...required, fitcircle_id: CIRCLE }, null);
   });
 
   it('still accepts the shape iOS sends (optional keys omitted or filled)', async () => {
     expect((await post(create, { id: CIRCLE }, { ...required, is_open: true })).status).toBe(200);
-    expect(service.createChallenge).toHaveBeenLastCalledWith('user-1', { ...required, is_open: true, fitcircle_id: CIRCLE });
+    expect(service.createChallenge).toHaveBeenLastCalledWith('user-1', { ...required, is_open: true, fitcircle_id: CIRCLE }, null);
 
     const full = {
       ...required,
@@ -75,7 +75,7 @@ describe('POST /api/fitcircles/[id]/challenges', () => {
       invite_user_ids: [BEN],
     };
     expect((await post(create, { id: CIRCLE }, full)).status).toBe(200);
-    expect(service.createChallenge).toHaveBeenLastCalledWith('user-1', { ...full, fitcircle_id: CIRCLE });
+    expect(service.createChallenge).toHaveBeenLastCalledWith('user-1', { ...full, fitcircle_id: CIRCLE }, null);
   });
 
   it('returns the challenge untouched in the same envelope', async () => {
