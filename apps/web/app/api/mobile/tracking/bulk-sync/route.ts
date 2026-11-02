@@ -2,8 +2,10 @@ import { type NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
+import { ChallengeStepsSyncService } from '@/lib/services/challenge-steps-sync-service';
 import { MobileAPIService } from '@/lib/services/mobile-api-service';
 import type { BulkSyncResult } from '@/lib/types/tracking';
+import { runAfterResponse } from '@/lib/utils/after-response';
 import { parseLenient, validationMessage } from '@/lib/validation/lenient-parse';
 import { platformStepsSourceSchema } from '@/lib/validators/steps-source';
 
@@ -133,6 +135,9 @@ export async function POST(request: NextRequest) {
     const updatedCount = results.filter((r) => r.action === 'updated').length;
     const skippedCount = results.filter((r) => r.action === 'skipped').length;
     const failedCount = results.filter((r) => !r.success).length;
+
+    // Steps circle challenges count synced steps (after the response; never throws).
+    if (insertedCount + updatedCount > 0) runAfterResponse(() => ChallengeStepsSyncService.syncUser(user.id), 'challenge-steps-sync');
 
     console.log(
       `[Bulk Sync] Completed for user ${user.id}: inserted=${insertedCount}, updated=${updatedCount}, skipped=${skippedCount}, failed=${failedCount}`

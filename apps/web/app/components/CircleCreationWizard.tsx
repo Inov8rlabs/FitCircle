@@ -44,6 +44,7 @@ import { Label } from '@/components/ui/label';
 // import { Switch } from '@/components/ui/switch'; // Temporarily disabled
 import { Textarea } from '@/components/ui/textarea';
 import { AnalyticsEvents, analytics, isUpgradeRequired, toErrorKind } from '@/lib/analytics';
+import { CIRCLE_TYPE_LABELS, circleTypeForChallenge, type CircleTypeValue } from '@/lib/circles/circle-type';
 import { CHALLENGE_TEMPLATES } from '@/lib/data/challenge-templates';
 import { supabase } from '@/lib/supabase';
 import { type ChallengeCategory } from '@/lib/types/circle-challenge';
@@ -57,7 +58,7 @@ interface CircleCreationWizardProps {
   initialValues?: { name?: string; description?: string; startDate?: string; endDate?: string } | null;
 }
 
-type ChallengeType = 'weight_loss' | 'step_count' | 'workout_frequency' | 'custom';
+type ChallengeType = CircleTypeValue;
 
 /** What the user wants to do for the circle's challenge: pick a starter
  *  template, design their own, or skip and decide later. */
@@ -67,6 +68,8 @@ interface FormData {
   name: string;
   description: string;
   type: ChallengeType;
+  /** True once the creator chose a type by hand (it then stops following the challenge). */
+  typePicked: boolean;
   startDate: string;
   endDate: string;
   maxParticipants: string;
@@ -116,7 +119,8 @@ export default function CircleCreationWizard({ isOpen, onClose, onSuccess, initi
   const [formData, setFormData] = useState<FormData>({
     name: '',
     description: '',
-    type: 'custom', // legacy field — derived from challenge below; not user-picked
+    type: 'step_count', // shown as "Circle type" on step 2; follows the challenge until picked
+    typePicked: false,
     startDate: '',
     endDate: '',
     maxParticipants: '',
@@ -156,6 +160,15 @@ export default function CircleCreationWizard({ isOpen, onClose, onSuccess, initi
     ? CHALLENGE_TEMPLATES.find((t) => t.id === formData.selectedTemplateId) ?? null
     : null;
 
+  // The circle type follows the chosen challenge until the creator picks one.
+  const derivedType =
+    formData.challengeMode === 'template'
+      ? circleTypeForChallenge(selectedTemplate)
+      : formData.challengeMode === 'custom'
+        ? circleTypeForChallenge({ unit: formData.customChallengeUnit, category: formData.customChallengeCategory })
+        : null;
+  const circleType: ChallengeType = formData.typePicked ? formData.type : derivedType ?? formData.type;
+
   const filteredTemplates = formData.templateCategoryFilter
     ? CHALLENGE_TEMPLATES.filter((t) => t.category === formData.templateCategoryFilter)
     : CHALLENGE_TEMPLATES;
@@ -181,8 +194,8 @@ export default function CircleCreationWizard({ isOpen, onClose, onSuccess, initi
       color: 'from-indigo-500 to-indigo-600',
     },
     {
-      value: 'workout_frequency' as ChallengeType,
-      label: 'Workout Frequency',
+      value: 'workout_minutes' as ChallengeType,
+      label: 'Workout minutes',
       icon: Dumbbell,
       description: 'Complete workout sessions',
       color: 'from-orange-500 to-orange-600',
@@ -330,7 +343,7 @@ export default function CircleCreationWizard({ isOpen, onClose, onSuccess, initi
         creator_id: user.id,
         name: formData.name,
         description: formData.description || null,
-        type: formData.type,
+        type: circleType,
         status: 'upcoming' as const,
         visibility: formData.isPrivate ? ('invite_only' as const) : ('public' as const),
         start_date: formData.startDate,
@@ -913,6 +926,35 @@ export default function CircleCreationWizard({ isOpen, onClose, onSuccess, initi
                     )}
                   </div>
                 )}
+
+                {/* Circle type: follows the challenge, the creator can change it */}
+                <div className="space-y-2" data-testid="circle-type-picker">
+                  <Label className="text-white">Circle type</Label>
+                  <div role="radiogroup" aria-label="Circle type" className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                    {challengeTypes.map((t) => {
+                      const Icon = t.icon;
+                      const selected = circleType === t.value;
+                      return (
+                        <button
+                          key={t.value}
+                          type="button"
+                          role="radio"
+                          aria-checked={selected}
+                          onClick={() => setFormData({ ...formData, type: t.value, typePicked: true })}
+                          className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-left text-sm transition ${
+                            selected ? 'border-indigo-400 bg-indigo-500/20 text-white' : 'border-glass bg-white/5 text-gray-300 hover:border-white/20'
+                          }`}
+                        >
+                          <Icon className="h-4 w-4 shrink-0" aria-hidden />
+                          <span className="font-medium">{CIRCLE_TYPE_LABELS[t.value]}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <p className="text-xs text-gray-400">
+                    {formData.typePicked || !derivedType ? 'Decides what the leaderboard ranks.' : 'Set from your challenge. Tap to change.'}
+                  </p>
+                </div>
 
                 {/* Add Later card */}
                 {formData.challengeMode === 'none' && (

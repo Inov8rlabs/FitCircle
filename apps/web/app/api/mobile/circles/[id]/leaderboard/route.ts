@@ -2,6 +2,8 @@ import { type NextRequest, NextResponse } from 'next/server';
 
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { CircleService } from '@/lib/services/circle-service';
+import { CircleStepsLeaderboardService } from '@/lib/services/circle-steps-leaderboard-service';
+import { resolveClientTimezone } from '@/lib/streaks/client-timezone';
 
 /**
  * Helper function to format dates for iOS (ISO8601 compatible)
@@ -133,7 +135,15 @@ export async function GET(
     }
 
     // Get leaderboard data
-    const leaderboard = await CircleService.getLeaderboard(circleId);
+    let leaderboard = await CircleService.getLeaderboard(circleId);
+
+    // Steps circle: fill the goal fields shipped apps render from steps (docs/CIRCLE_STEPS_LEADERBOARD.md).
+    leaderboard = await CircleStepsLeaderboardService.withLegacyStepsOverlay(
+      leaderboard,
+      circleId,
+      user.id,
+      resolveClientTimezone(request)
+    );
 
     // Format dates for iOS compatibility
     const formattedLeaderboard = leaderboard.map((entry) => ({

@@ -23,6 +23,8 @@ export type ReferralAttributionSource = 'universal_link' | 'app_link' | 'play_re
 export type HomeFeedLayoutSource = 'server' | 'cache' | 'default';
 export type PromoLayout = 'hero' | 'banner' | 'compact';
 export type FitzyIntroSurface = 'post_meal_sheet' | 'feed' | 'push';
+export type LeaderboardMetric = 'today_steps' | 'total_steps' | 'goal_pct_today';
+export type CirclePhase = 'upcoming' | 'active' | 'completed';
 export type LogoutReason = 'user' | 'session_expired' | 'account_deleted';
 export type HealthPermissionsRespondedProvider = 'apple_health' | 'health_connect';
 export type HealthSyncCompletedProvider = 'apple_health' | 'health_connect';
@@ -158,6 +160,7 @@ export const ANALYTICS_EVENT_NAMES = [
   'FitCircle Viewed',
   'FitCircle Left',
   'Leaderboard Viewed',
+  'Leaderboard Metric Changed',
   'Invite Created',
   'Invite Shared',
   'Invite Link Opened',
@@ -379,6 +382,8 @@ export const AnalyticsEvents = {
   fitCircleLeft: (): AnalyticsEventPayload => ({ name: 'FitCircle Left', properties: {} }),
   /** A circle leaderboard was viewed. */
   leaderboardViewed: (): AnalyticsEventPayload => ({ name: 'Leaderboard Viewed', properties: {} }),
+  /** The circle steps leaderboard toggle was switched to another metric. */
+  leaderboardMetricChanged: (p: { metric: LeaderboardMetric; circle_phase?: CirclePhase }): AnalyticsEventPayload => ({ name: 'Leaderboard Metric Changed', properties: clean(p) }),
   /** An invite code/link was generated. */
   inviteCreated: (): AnalyticsEventPayload => ({ name: 'Invite Created', properties: {} }),
   /** Invite handed off. */

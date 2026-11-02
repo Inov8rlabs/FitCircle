@@ -4,6 +4,8 @@ import { z } from 'zod';
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { addAutoRefreshHeaders } from '@/lib/middleware/mobile-auto-refresh';
 import { CircleService } from '@/lib/services/circle-service';
+import { CircleStepsLeaderboardService } from '@/lib/services/circle-steps-leaderboard-service';
+import { resolveClientTimezone } from '@/lib/streaks/client-timezone';
 import { createAdminSupabase } from '@/lib/supabase-admin';
 import {
   isSameMoment,
@@ -35,7 +37,13 @@ export async function GET(
     const members = await CircleService.getCircleMembers(circleId);
 
     // Get leaderboard (contains recalculated progress)
-    const leaderboard = await CircleService.getLeaderboard(circleId);
+    // Steps circle: shipped apps render these goal fields; fill them from steps.
+    const leaderboard = await CircleStepsLeaderboardService.withLegacyStepsOverlay(
+      await CircleService.getLeaderboard(circleId),
+      circleId,
+      user.id,
+      resolveClientTimezone(request)
+    );
 
     // Get user's progress if they're a member - use recalculated value from leaderboard
     const userLeaderboardEntry = leaderboard.find((entry) => entry.user_id === user.id);
@@ -283,6 +291,7 @@ export async function PUT(
       .from('fitcircles')
       .update({
         ...(validatedData.name && { name: validatedData.name }),
+        ...(validatedData.type && { type: validatedData.type }),
         ...descriptionUpdate,
         ...(applyStart && { start_date: validatedData.start_date }),
         ...(endChanged && { end_date: validatedData.end_date }),
@@ -515,3 +524,6 @@ export async function DELETE(
     );
   }
 }
+
+/** PATCH = PUT: partial update (name, description, dates, type), creator only. */
+export const PATCH = PUT;

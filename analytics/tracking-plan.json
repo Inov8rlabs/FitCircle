@@ -108,6 +108,16 @@
       "post_meal_sheet",
       "feed",
       "push"
+    ],
+    "leaderboard_metric": [
+      "today_steps",
+      "total_steps",
+      "goal_pct_today"
+    ],
+    "circle_phase": [
+      "upcoming",
+      "active",
+      "completed"
     ]
   },
   "globalProperties": [
@@ -1501,6 +1511,30 @@
       ],
       "description": "A circle leaderboard was viewed.",
       "properties": []
+    },
+    {
+      "name": "Leaderboard Metric Changed",
+      "category": "circles",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "description": "The circle steps leaderboard toggle was switched to another metric.",
+      "properties": [
+        {
+          "name": "metric",
+          "type": "enum",
+          "enum": "leaderboard_metric",
+          "required": true
+        },
+        {
+          "name": "circle_phase",
+          "type": "enum",
+          "enum": "circle_phase",
+          "required": false
+        }
+      ]
     },
     {
       "name": "Invite Created",

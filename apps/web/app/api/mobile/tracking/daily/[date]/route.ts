@@ -2,10 +2,12 @@ import { type NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
+import { ChallengeStepsSyncService } from '@/lib/services/challenge-steps-sync-service';
 import { DailyTrackingClearService, splitTrackingClears } from '@/lib/services/daily-tracking-clear';
 import { MobileAPIService } from '@/lib/services/mobile-api-service';
 import { StreakClaimingService } from '@/lib/services/streak-claiming-service';
 import { createAdminSupabase } from '@/lib/supabase-admin';
+import { runAfterResponse } from '@/lib/utils/after-response';
 import { parseLenient, validationMessage } from '@/lib/validation/lenient-parse';
 
 // Validation schema for PUT.
@@ -179,6 +181,9 @@ export async function PUT(
       is_public: validatedData.isPublic, // Only changes when explicitly provided
       timezone: validatedData.timezone || request.headers.get('x-client-timezone') || undefined,
     });
+
+    // Steps circle challenges count synced steps (after the response; never throws).
+    if (validatedData.steps !== undefined && validatedData.steps !== null) runAfterResponse(() => ChallengeStepsSyncService.syncUser(user.id), 'challenge-steps-sync');
 
     if (clears.length > 0) {
       const cleared = await DailyTrackingClearService.clearMetrics(

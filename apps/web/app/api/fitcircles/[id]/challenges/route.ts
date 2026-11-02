@@ -3,6 +3,7 @@ import { z } from 'zod';
 
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { ChallengeService } from '@/lib/services/circle-challenge-service';
+import { resolveClientTimezone } from '@/lib/streaks/client-timezone';
 import { parseLenient, validationMessage } from '@/lib/validation/lenient-parse';
 
 const createChallengeSchema = z.object({
@@ -66,10 +67,11 @@ export async function POST(
     const body = await request.json();
     const validated = parseLenient(createChallengeSchema, body);
 
-    const challenge = await ChallengeService.createChallenge(user.id, {
-      ...validated,
-      fitcircle_id: circleId,
-    });
+    const challenge = await ChallengeService.createChallenge(
+      user.id,
+      { ...validated, fitcircle_id: circleId },
+      resolveClientTimezone(request)
+    );
 
     return NextResponse.json({
       success: true,

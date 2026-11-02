@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from 'next/server';
 
 import { createServerSupabase } from '@/lib/supabase-server';
+import { CIRCLE_TYPE_ALIASES } from '@/lib/validation/circle-validation';
 
 export async function PATCH(
   request: NextRequest,
@@ -35,11 +36,18 @@ export async function PATCH(
 
     // Parse request body
     const body = await request.json();
-    const { name, start_date, end_date } = body;
+    const { name, start_date, end_date, type } = body;
 
     // Build update object
     const updates: any = {};
     if (name !== undefined) updates.name = name;
+    if (type !== undefined) {
+      const circleType = typeof type === 'string' ? CIRCLE_TYPE_ALIASES[type] : undefined;
+      if (!circleType) {
+        return NextResponse.json({ error: 'type must be one of weight_loss, step_count, workout_minutes, custom' }, { status: 400 });
+      }
+      updates.type = circleType;
+    }
     if (start_date !== undefined) {
       // Ensure date is stored at noon UTC to avoid timezone issues
       // This prevents "Sept 1" from becoming "Aug 31" due to timezone shifts

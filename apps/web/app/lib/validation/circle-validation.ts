@@ -174,16 +174,18 @@ export function normalizeCreateCircleBody(body: unknown): unknown {
   return applyAliases(body, CREATE_CIRCLE_ALIASES);
 }
 
+/** A circle type in any accepted spelling, stored as the DB enum value. */
+const circleTypeSchema = z
+  .string()
+  .transform((value) => CIRCLE_TYPE_ALIASES[value])
+  .refine((value): value is CircleType => value !== undefined, {
+    message: 'type must be one of weight_loss, step_count, workout_minutes, custom',
+  });
+
 export const createCircleSchema = z.object({
   name: z.string().min(1, 'Circle name is required').max(100),
   description: z.string().optional(),
-  type: z
-    .string()
-    .transform((value) => CIRCLE_TYPE_ALIASES[value])
-    .refine((value): value is CircleType => value !== undefined, {
-      message: 'type must be one of weight_loss, step_count, workout_minutes, custom',
-    })
-    .optional(),
+  type: circleTypeSchema.optional(),
   startDate: flexibleDate('start date'),
   endDate: flexibleDate('end date'),
   allowLateJoin: z.boolean().optional(),
@@ -216,6 +218,8 @@ export const updateCircleSchema = z.object({
   description: z.string().max(500).optional(),
   start_date: flexibleDate('start date').optional(),
   end_date: flexibleDate('end date').optional(),
+  // The creator can change the circle type at any time (the leaderboard follows it).
+  type: circleTypeSchema.optional(),
 });
 
 export type UpdateCircleBody = z.infer<typeof updateCircleSchema>;

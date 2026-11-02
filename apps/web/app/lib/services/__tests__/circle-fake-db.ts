@@ -30,7 +30,26 @@ export const CIRCLE_TABLE_COLUMNS: Record<string, string[]> = {
     'id', 'circle_id', 'inviter_id', 'invite_code', 'email', 'status', 'created_at',
     'accepted_at', 'accepted_by', 'expires_at',
   ],
-  profiles: ['id', 'display_name', 'avatar_url', 'preferences', 'goals'],
+  profiles: ['id', 'display_name', 'avatar_url', 'preferences', 'goals', 'timezone'],
+  challenges: [
+    'id', 'fitcircle_id', 'creator_id', 'template_id', 'name', 'description', 'category', 'goal_amount',
+    'unit', 'logging_prompt', 'is_open', 'status', 'starts_at', 'ends_at', 'participant_count',
+    'created_at', 'updated_at', 'is_default', 'check_in_mode', 'winner_user_id', 'quest_type',
+    'collective_target', 'collective_progress',
+  ],
+  challenge_participants: [
+    'id', 'challenge_id', 'user_id', 'fitcircle_id', 'invited_by', 'status', 'cumulative_total', 'today_total',
+    'today_date', 'current_streak', 'longest_streak', 'last_logged_at', 'log_count', 'rank',
+    'goal_completion_pct', 'milestones_achieved', 'joined_at', 'created_at', 'updated_at',
+  ],
+  challenge_logs: [
+    'id', 'challenge_id', 'participant_id', 'user_id', 'fitcircle_id', 'amount', 'note', 'logged_at',
+    'log_date', 'created_at',
+  ],
+  daily_tracking: [
+    'id', 'user_id', 'tracking_date', 'weight_kg', 'steps', 'steps_source', 'steps_synced_at',
+    'created_at', 'updated_at',
+  ],
   circle_quests: [
     'id', 'fitcircle_id', 'challenge_id', 'template_id', 'quest_name', 'quest_description',
     'quest_type', 'goal_amount', 'unit', 'collective_target', 'collective_progress', 'starts_at',
@@ -54,6 +73,10 @@ export class CircleFakeDb {
     circle_quests: [],
     circle_quest_progress: [],
     share_cards: [],
+    challenges: [],
+    daily_tracking: [],
+    challenge_participants: [],
+    challenge_logs: [],
   };
 
   /** Every statement that reached the database, for assertions. */
@@ -149,6 +172,11 @@ class FakeQuery implements PromiseLike<any> {
   }
   in(column: string, values: any[]) {
     return this.where(column, (v) => values.includes(v));
+  }
+  /** Only `.not(column, 'is', null)` is modelled. */
+  not(column: string, operator: string, value: any) {
+    if (operator !== 'is' || value !== null) throw new Error(`CircleFakeDb: unsupported not(${operator})`);
+    return this.where(column, (v) => v !== null && v !== undefined);
   }
   gt(column: string, value: any) {
     return this.where(column, (v) => v > value);

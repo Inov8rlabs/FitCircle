@@ -14,7 +14,7 @@ vi.mock('@/lib/middleware/mobile-auto-refresh', () => ({
 }));
 vi.mock('@/lib/supabase-admin', () => ({ createAdminSupabase: () => getCircleDb().client() }));
 
-import { PUT } from '../route';
+import { PATCH, PUT } from '../route';
 
 const CIRCLE = '11111111-1111-4111-8111-111111111111';
 const CREATOR = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
@@ -281,6 +281,49 @@ describe('PUT /api/mobile/circles/[id]', () => {
       seed(5, 35);
       requireMobileAuth.mockRejectedValue(new Error('Unauthorized'));
       expect((await put({ name: 'Renamed' })).status).toBe(401);
+    });
+  });
+
+  describe('type', () => {
+    it('the creator can change it, even after the start (any accepted spelling)', async () => {
+      const circle = seed(-2, 26);
+      const res = await put({ type: 'step_count' });
+      expect(res.status).toBe(200);
+      expect(circle.type).toBe('step_count');
+      expect(iosFitCircleProblems((await res.json()).data)).toEqual([]);
+      await put({ type: 'weight' });
+      expect(circle.type).toBe('weight_loss');
+    });
+
+    it('rejects an unknown type and leaves it alone', async () => {
+      const circle = seed(5, 35);
+      const res = await put({ type: 'swimming' });
+      expect(res.status).toBe(400);
+      expect(circle.type).toBe('weight_loss');
+    });
+
+    it('only the creator, and PATCH works like PUT', async () => {
+      const circle = seed(5, 35);
+      requireMobileAuth.mockResolvedValue({ id: MEMBER });
+      expect((await put({ type: 'step_count' })).status).toBe(403);
+      expect(circle.type).toBe('weight_loss');
+      requireMobileAuth.mockResolvedValue({ id: CREATOR });
+      const res = await PATCH(
+        new Request(`http://localhost/api/mobile/circles/${CIRCLE}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ type: 'steps' }),
+        }) as any,
+        { params: Promise.resolve({ id: CIRCLE }) }
+      );
+      expect(res.status).toBe(200);
+      expect(circle.type).toBe('step_count');
+    });
+
+    it('omitting it changes nothing', async () => {
+      seed(5, 35);
+      await put({ name: 'Renamed' });
+      expect(Object.keys(lastUpdate())).not.toContain('type');
     });
   });
 });

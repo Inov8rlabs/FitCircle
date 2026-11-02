@@ -2,8 +2,10 @@ import { type NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
+import { ChallengeStepsSyncService } from '@/lib/services/challenge-steps-sync-service';
 import { DailyGoalService } from '@/lib/services/daily-goals';
 import { MobileAPIService } from '@/lib/services/mobile-api-service';
+import { runAfterResponse } from '@/lib/utils/after-response';
 import { parseLenient, validationMessage } from '@/lib/validation/lenient-parse';
 import { stepsSourceSchema } from '@/lib/validators/steps-source';
 
@@ -192,6 +194,9 @@ export async function POST(request: NextRequest) {
         is_public: validatedData.isPublic,
       }
     );
+
+    // Steps circle challenges count synced steps (after the response; never throws).
+    if (validatedData.steps !== undefined) runAfterResponse(() => ChallengeStepsSyncService.syncUser(user.id), 'challenge-steps-sync');
 
     // Update daily goal completion based on tracking data
     try {
