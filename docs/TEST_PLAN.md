@@ -115,6 +115,7 @@ Screen sizes to cover: small (360×640dp), normal (412×915dp), large or foldabl
 |---|---|---|
 | **`qa.automation@fitcircle.ai`** ("QA Automation", free tier, onboarding complete) with its private, invite-only **"QA Automation Circle"** | Maestro smoke and regression, the authenticated prod smoke, manual QA on prod | automation and the team |
 | `fitcircle.user@gmail.com` ("Taylor Reviewer", the App Review demo account) | App Store and Play review only, refreshed daily by `/api/cron/demo-account-refresh` | **App Review only. Never automation, never personal devices.** The seed script refuses its id and its circle |
+| **`smoke-test+prod@fitcircle.ai`** ("FitCircle Smoke Test", no password) with its invite-only **"FitCircle Smoke Circle"** (steps + kcal challenges) | the production smoke (`npm run smoke:prod`) only; created and kept up by the script itself | automation only |
 | Throwaway signups `qa+<date>-<n>@fitcircle.ai` | onboarding and deletion tests | created and deleted inside the test |
 | Local synthetic users (`Fitcircle-Android/scripts/qa`) | instrumented tests against a local Supabase in Docker | local only |
 | StoreKit config `FitCircle.storekit`, App Store sandbox testers, Play license testers, Stripe test mode | purchases | manual |
@@ -159,11 +160,14 @@ Roborazzi on Robolectric (`./gradlew verifyRoborazziDebug`; record with `recordR
 
 ### 6.4 Backend
 
-`vitest run` covers unit, route, and contract tests. `scripts/smoke/prod-smoke.mjs` is the post-deploy smoke:
+`vitest run` covers unit, route, and contract tests (including the DB contract test, `__tests__/unit/db-contract.test.ts`). `scripts/smoke/prod-smoke.mjs` (`npm run smoke:prod`) is the production smoke, run after every deploy and before every store submission (gate details: `docs/RELEASE_CHECKLIST.md`):
 
-- prod health check
+- prod health check and app-link files
 - unauthenticated endpoints (status codes, `no-store` on `/api`, 401 rather than 500 when auth is missing)
-- a read-only authenticated QA flow, when `QA_EMAIL`/`QA_PASSWORD` or `QA_ACCESS_TOKEN` are in env
+- a read-only authenticated pass over the endpoints behind every main mobile screen, signed in as the dedicated smoke account `smoke-test+prod@fitcircle.ai` (session minted with the service-role key via a magic link; no password exists). It asserts 2xx, `success: true`, and the fields the iOS/Android models require
+- `--writes`: a chat message post/delete round trip in the smoke circle
+
+Without the service-role key (the always-on runner) it falls back to the QA account's cached refresh token. `npm run release:preflight` runs the DB contract test plus the smoke.
 
 It writes JUnit output to `$FC_REPORT_DIR`.
 
@@ -179,11 +183,13 @@ All of these must be green on the commit being uploaded:
 2. Maestro **smoke** green on both CI devices against prod with the QA account.
 3. Build sanity: Release configuration builds. Android R8 release bundle builds, and `play-release.sh` preflight passes. iOS `asc-preflight.sh` passes.
 4. No new Sentry issue on the previous internal build with more than 5 users affected that isn't triaged.
-5. If the backend changed: prod smoke green after the Vercel deploy, and migrations applied and listed in the migration log.
+5. If the backend changed: prod smoke (`npm run smoke:prod`) green after the Vercel deploy, and migrations applied and listed in the migration log.
 
 ### 7.2 Before store submission (App Store review / Play production)
 
 Everything in 7.1, plus:
+
+0. `npm run release:preflight` (DB contract test + prod smoke) passes against the live backend. Android's `play-release.sh` enforces the smoke; for iOS it is a manual gate before submitting for review (`docs/RELEASE_CHECKLIST.md`).
 
 1. Nightly **regression** green on the two most recent nights (no quarantined P0 flows).
 2. Manual exploratory checklists §8 for every P0 area touched by the release, signed off in the release notes. The full P0 set is required for a major or minor version.
