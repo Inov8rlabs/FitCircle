@@ -111,9 +111,11 @@ export async function POST(request: NextRequest) {
           action,
           reason:
             action === 'skipped'
-              ? trackingEntry.is_override
-                ? 'manual override exists'
-                : 'manual entry exists'
+              ? trackingEntry.steps_synced_at && trackingEntry.steps_source !== 'manual'
+                ? 'higher synced count exists'
+                : trackingEntry.is_override
+                  ? 'manual override exists'
+                  : 'manual entry exists'
               : undefined,
         });
       } catch (error: any) {

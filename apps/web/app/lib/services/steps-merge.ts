@@ -4,7 +4,13 @@
  * Rules:
  *  1. A step count the user TYPED (or deliberately overrode) beats auto-sync.
  *  2. Auto-sync only replaces an earlier auto-sync when it is newer
- *     (steps_synced_at).
+ *     (steps_synced_at) AND not lower. A day's total only grows as the phone,
+ *     watch and source apps catch up, so a lower count is a partial read: an
+ *     iPad or second phone on the same account, a Health Connect writer that
+ *     has not finished syncing, or HealthKit read access that was revoked
+ *     (HealthKit then reads 0, indistinguishable from "no steps"). Prod
+ *     2026-11: 58 iOS days stored 0 from such reads. A user who needs to
+ *     correct a count downward types it (rule 3).
  *  3. A typed count over an auto-synced one is stored as a manual override.
  *
  * What counts as "typed": steps_source = 'manual' AND a non-null step count AND
@@ -47,6 +53,7 @@ export interface ResolvedSteps {
     | 'kept_manual_override'
     | 'kept_manual_entry'
     | 'kept_newer_sync'
+    | 'kept_higher_sync'
     | 'applied_sync'
     | 'manual_over_sync'
     | 'applied';
@@ -102,6 +109,9 @@ export function resolveStepsMerge(
     const existingAt = new Date(existing.steps_synced_at).getTime();
     const incomingAt = new Date(incoming.steps_synced_at).getTime();
     if (incomingAt <= existingAt) return keepExisting('kept_newer_sync');
+    if (existing.steps !== null && incoming.steps < existing.steps) {
+      return keepExisting('kept_higher_sync');
+    }
     return { ...base, reason: 'applied_sync' };
   }
   // 3. Typed steps over a platform-synced count: an explicit override.

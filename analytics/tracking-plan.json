@@ -1,6 +1,6 @@
 {
   "$schema": "./tracking-plan.schema.json",
-  "version": 17,
+  "version": 19,
   "updated": "2026-11-01",
   "conventions": {
     "eventNames": "Title Case, '<Object> <Past-tense verb>' (e.g. 'Meal Logged'). Names are frozen once shipped: rename in the analytics tool, never in code.",
@@ -615,6 +615,64 @@
           "type": "string",
           "required": false,
           "description": "onboarding, dashboard, settings."
+        }
+      ]
+    },
+    {
+      "name": "Health Sync Completed",
+      "category": "permissions",
+      "platforms": [
+        "ios",
+        "android"
+      ],
+      "description": "A steps sync from Apple Health / Health Connect into FitCircle finished (any result). Throttled on device: at most one event per trigger+result every 6 hours, except trigger=permission_granted which always fires. No step values are sent.",
+      "properties": [
+        {
+          "name": "provider",
+          "type": "enum",
+          "values": [
+            "apple_health",
+            "health_connect"
+          ],
+          "required": true
+        },
+        {
+          "name": "result",
+          "type": "enum",
+          "values": [
+            "synced",
+            "no_data",
+            "no_permission",
+            "unavailable",
+            "failed"
+          ],
+          "required": true,
+          "description": "synced = >=1 day sent; no_data = permission ok but every day in the window read 0 (iOS: possibly read access denied; Android: no app writes steps into Health Connect); no_permission = steps read not granted; unavailable = Health Connect missing / HealthKit unsupported; failed = network/auth/server error."
+        },
+        {
+          "name": "trigger",
+          "type": "enum",
+          "values": [
+            "launch",
+            "foreground",
+            "background",
+            "permission_granted",
+            "pull_to_refresh",
+            "manual"
+          ],
+          "required": true
+        },
+        {
+          "name": "days_synced",
+          "type": "int",
+          "required": false,
+          "description": "Days in the window with a non-zero count sent to the server."
+        },
+        {
+          "name": "window_days",
+          "type": "int",
+          "required": false,
+          "description": "Days read (7 normally; longer when backfilling a circle period)."
         }
       ]
     },

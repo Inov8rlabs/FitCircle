@@ -87,4 +87,29 @@ describe('resolveStepsMerge', () => {
     const r = resolveStepsMerge(row({ steps: 5000, steps_source: 'google_fit', steps_synced_at: SYNC_T1 }), {});
     expect(r.steps).toBeUndefined();
   });
+  // Prod 2026-11: 58 iOS days stored 0 (read access revoked / iPad on the same
+  // account / writer not caught up). A lower or zero re-read must not erase a
+  // day that already synced a real total.
+  it('a later sync never lowers an earlier synced count', () => {
+    const synced = row({ steps: 8000, steps_source: 'healthkit', steps_synced_at: SYNC_T1 });
+    expect(resolveStepsMerge(synced, { ...hcSync(0), steps_source: 'healthkit' as const })).toMatchObject({
+      steps: 8000,
+      reason: 'kept_higher_sync',
+    });
+    expect(resolveStepsMerge(synced, hcSync(5000))).toMatchObject({ steps: 8000, reason: 'kept_higher_sync' });
+  });
+
+  it('a later, higher sync still replaces the earlier one', () => {
+    const synced = row({ steps: 3000, steps_source: 'google_fit', steps_synced_at: SYNC_T1 });
+    expect(resolveStepsMerge(synced, hcSync(9100))).toMatchObject({ steps: 9100, reason: 'applied_sync' });
+  });
+
+  it('typed steps can still lower a synced count (explicit override)', () => {
+    const synced = row({ steps: 8000, steps_source: 'healthkit', steps_synced_at: SYNC_T1 });
+    expect(resolveStepsMerge(synced, { steps: 2000, steps_source: 'manual' })).toMatchObject({
+      steps: 2000,
+      is_override: true,
+      reason: 'manual_over_sync',
+    });
+  });
 });
