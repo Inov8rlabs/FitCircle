@@ -1,6 +1,6 @@
 {
   "$schema": "./tracking-plan.schema.json",
-  "version": 21,
+  "version": 22,
   "updated": "2026-11-02",
   "conventions": {
     "eventNames": "Title Case, '<Object> <Past-tense verb>' (e.g. 'Meal Logged'). Names are frozen once shipped: rename in the analytics tool, never in code.",
@@ -149,6 +149,17 @@
       "50_75",
       "75_100",
       "100_plus"
+    ],
+    "update_prompt_kind": [
+      "soft",
+      "force",
+      "restart"
+    ],
+    "update_method": [
+      "app_store_sheet",
+      "play_flexible",
+      "play_immediate",
+      "store_link"
     ]
   },
   "globalProperties": [
@@ -4288,6 +4299,91 @@
           "type": "enum",
           "enum": "meal_type",
           "required": true
+        }
+      ]
+    },
+    {
+      "name": "Update Prompt Shown",
+      "category": "engagement",
+      "platforms": [
+        "ios",
+        "android"
+      ],
+      "description": "An app-update prompt was shown (server policy GET /api/mobile/app-update). Soft prompts are frequency-capped per latest_version on device.",
+      "properties": [
+        {
+          "name": "kind",
+          "type": "enum",
+          "enum": "update_prompt_kind",
+          "required": true,
+          "description": "soft = dismissible sheet (below recommended_version); force = blocking screen (below min_supported_version); restart = Android 'Restart to update' card after a flexible download."
+        },
+        {
+          "name": "latest_version",
+          "type": "string",
+          "required": true,
+          "description": "Store version the prompt offers (policy latest_version)."
+        },
+        {
+          "name": "prompt_count",
+          "type": "int",
+          "required": false,
+          "description": "How many times a soft prompt has now been shown for this latest_version (1 = first)."
+        }
+      ]
+    },
+    {
+      "name": "Update Prompt Accepted",
+      "category": "engagement",
+      "platforms": [
+        "ios",
+        "android"
+      ],
+      "description": "User tapped Update (or Restart on Android). iOS opens the App Store page in-app (SKStoreProductViewController); Android starts a Play in-app update.",
+      "properties": [
+        {
+          "name": "kind",
+          "type": "enum",
+          "enum": "update_prompt_kind",
+          "required": true,
+          "description": "soft = dismissible sheet (below recommended_version); force = blocking screen (below min_supported_version); restart = Android 'Restart to update' card after a flexible download."
+        },
+        {
+          "name": "latest_version",
+          "type": "string",
+          "required": true,
+          "description": "Store version the prompt offers (policy latest_version)."
+        },
+        {
+          "name": "method",
+          "type": "enum",
+          "enum": "update_method",
+          "required": true,
+          "description": "app_store_sheet (iOS in-app store page), play_flexible / play_immediate (Play In-App Updates), store_link (fallback: store listing outside the app)."
+        }
+      ]
+    },
+    {
+      "name": "Update Prompt Dismissed",
+      "category": "engagement",
+      "platforms": [
+        "ios",
+        "android"
+      ],
+      "description": "User chose Later on a soft prompt. Closing the in-app App Store page without updating is not this event.",
+      "properties": [
+        {
+          "name": "kind",
+          "type": "enum",
+          "enum": "update_prompt_kind",
+          "required": true,
+          "description": "soft = dismissible sheet (below recommended_version); force = blocking screen (below min_supported_version); restart = Android 'Restart to update' card after a flexible download."
+        },
+        {
+          "name": "latest_version",
+          "type": "string",
+          "required": true,
+          "description": "Store version the prompt offers (policy latest_version)."
         }
       ]
     }
