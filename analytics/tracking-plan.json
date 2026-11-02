@@ -1,7 +1,7 @@
 {
   "$schema": "./tracking-plan.schema.json",
-  "version": 19,
-  "updated": "2026-11-01",
+  "version": 20,
+  "updated": "2026-11-02",
   "conventions": {
     "eventNames": "Title Case, '<Object> <Past-tense verb>' (e.g. 'Meal Logged'). Names are frozen once shipped: rename in the analytics tool, never in code.",
     "propertyNames": "snake_case. Enum values are lowercase snake_case.",
@@ -118,6 +118,13 @@
       "upcoming",
       "active",
       "completed"
+    ],
+    "chat_reaction_source": [
+      "long_press",
+      "double_tap",
+      "cheer_button",
+      "pills_sheet",
+      "emoji_picker"
     ]
   },
   "globalProperties": [
@@ -1628,12 +1635,56 @@
         "android",
         "web"
       ],
-      "description": "Member reacted to a chat item.",
+      "description": "Member set their reaction on a chat item (one per person per message; also fired when it replaces a previous one). reaction = the named kind, or \"custom\" for any other emoji (never the raw emoji). Chat Reactions v2 added circle_id/source/replaced (optional so pre-v2 call sites still compile).",
       "properties": [
         {
           "name": "reaction",
           "type": "string",
           "required": true
+        },
+        {
+          "name": "circle_id",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "source",
+          "type": "enum",
+          "enum": "chat_reaction_source",
+          "required": false
+        },
+        {
+          "name": "replaced",
+          "type": "bool",
+          "required": false
+        }
+      ]
+    },
+    {
+      "name": "Chat Reaction Removed",
+      "category": "social",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "description": "Member removed their reaction from a chat item (tapped their current reaction, or 'Tap to remove' in the reactors sheet). reaction = named kind or \"custom\".",
+      "properties": [
+        {
+          "name": "reaction",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "circle_id",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "source",
+          "type": "enum",
+          "enum": "chat_reaction_source",
+          "required": false
         }
       ]
     },

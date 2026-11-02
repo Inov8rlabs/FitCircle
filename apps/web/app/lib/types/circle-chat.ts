@@ -29,11 +29,32 @@ export type SystemEventType =
 export type MessagePriority = 'p0' | 'p1' | 'p2';
 
 // 'same' renders as 🙌 (high five). 'thumbs_up' added 2026-09-23 (migration 087).
+// ReactionKind / REACTION_KINDS are ALSO the food-log (`log_reactions`) vocabulary
+// (types/food-feed.ts re-exports them) — keep them at the 087 set. Chat-only kinds
+// live in ChatReactionKind below.
 export type ReactionKind = 'flame' | 'clap' | 'eyes' | 'same' | 'heart' | 'laugh' | 'thumbs_up';
 export const REACTION_KINDS: ReactionKind[] = ['thumbs_up', 'same', 'heart', 'flame', 'clap', 'laugh', 'eyes'];
 
-/** Emoji per reaction — the single source of truth for push copy; clients keep their own maps. */
-export const REACTION_EMOJI: Record<ReactionKind, string> = {
+// Chat Reactions v2 (migration 122, docs/CHAT_REACTIONS_V2.md): circle chat adds
+// 'muscle' (💪) and accepts any single emoji as a custom reaction. Named kinds are
+// canonical — a client sending "👏" is stored as 'clap'.
+export type ChatReactionKind = ReactionKind | 'muscle';
+export const CHAT_REACTION_KINDS: ChatReactionKind[] = [...REACTION_KINDS, 'muscle'];
+
+/** The quick-reaction bar order every client shows on long-press (then ＋). */
+export const CHAT_REACTION_BAR: ChatReactionKind[] = ['clap', 'same', 'muscle', 'flame', 'heart', 'laugh'];
+
+/** Kinds that read as a cheer in push copy ("Ani cheered your message 👏"). */
+export const CHEER_REACTION_KINDS: ReadonlySet<string> = new Set<ChatReactionKind>(['clap', 'same', 'muscle']);
+
+/**
+ * A stored chat reaction: a named kind, or a single custom emoji (the emoji
+ * itself, e.g. "🥳"). Always run client input through canonicalizeChatReaction.
+ */
+export type ChatReactionValue = ChatReactionKind | (string & {});
+
+/** Emoji per reaction — the single source of truth for push copy and summaries' `emoji`. */
+export const REACTION_EMOJI: Record<ChatReactionKind, string> = {
   thumbs_up: '👍',
   same: '🙌',
   heart: '❤️',
@@ -41,7 +62,11 @@ export const REACTION_EMOJI: Record<ReactionKind, string> = {
   clap: '👏',
   laugh: '😂',
   eyes: '👀',
+  muscle: '💪',
 };
+
+/** UTF-8 byte cap for a custom emoji reaction (DB CHECK caps at 16 characters). */
+export const CUSTOM_REACTION_MAX_BYTES = 16;
 
 export type RenderHint = 'text' | 'stat_card' | 'completion_card' | 'summary_card' | 'meal_card';
 
@@ -72,8 +97,10 @@ export interface CircleMessageRow {
 export interface CircleMessageReactionRow {
   message_id: string;
   user_id: string;
-  reaction: ReactionKind;
+  reaction: ChatReactionValue;
   created_at: string;
+  /** Generated column (migration 122): canonical emoji for `reaction`. Read-only. */
+  emoji?: string;
 }
 
 export interface CircleChatStateRow {
@@ -105,9 +132,22 @@ export interface MessageSender {
 }
 
 export interface MessageReactionSummary {
-  reaction: ReactionKind;
+  /** Named kind (`clap`, `muscle`, …) or the custom emoji itself. */
+  reaction: ChatReactionValue;
+  /** Always present: the canonical emoji for a named kind, else the custom emoji. */
+  emoji: string;
   count: number;
   reactedByMe: boolean;
+}
+
+/** GET /messages/:id/reactions row (snake_case per the v2 contract). */
+export interface MessageReactor {
+  user_id: string;
+  display_name: string;
+  avatar_url: string | null;
+  reaction: ChatReactionValue;
+  emoji: string;
+  reacted_at: string;
 }
 
 export interface MessageSystemBlock {
@@ -193,11 +233,19 @@ export const MESSAGE_EDIT_WINDOW_MS = 15 * 60 * 1000;
 //     // DELETE /messages/:id   (sender soft-delete -> tombstone; idempotent)
 //     static async deleteMessage(userId: string, messageId: string): Promise<ChatMessageDTO>
 //
-//     // POST /messages/:id/reactions   { reaction }
-//     static async addReaction(messageId: string, userId: string, reaction: ReactionKind): Promise<MessageReactionSummary[]>
+//     // PUT /messages/:id/reactions { reaction } (v2) and legacy POST — the viewer's
+//     // ONE reaction (replaces any previous). `reaction` is a kind or a single emoji.
+//     static async setReaction(messageId: string, userId: string, reaction: string): Promise<MessageReactionSummary[]>
+//     static async addReaction(messageId: string, userId: string, reaction: string): Promise<MessageReactionSummary[]>  // = setReaction
 //
-//     // DELETE /messages/:id/reactions/:reaction
-//     static async removeReaction(messageId: string, userId: string, reaction: ReactionKind): Promise<MessageReactionSummary[]>
+//     // DELETE /messages/:id/reactions (v2) — clear the viewer's reaction
+//     static async clearReaction(messageId: string, userId: string): Promise<MessageReactionSummary[]>
+//
+//     // DELETE /messages/:id/reactions/:reaction (legacy)
+//     static async removeReaction(messageId: string, userId: string, reaction: string): Promise<MessageReactionSummary[]>
+//
+//     // GET /messages/:id/reactions — who reacted with what (viewer first, then newest)
+//     static async listReactors(messageId: string, userId: string): Promise<MessageReactor[]>
 //
 //     // POST /circles/:id/read   (marks read up to now; upserts circle_chat_state)
 //     static async markRead(circleId: string, userId: string): Promise<{ lastReadAt: string }>
@@ -220,6 +268,7 @@ export const MESSAGE_EDIT_WINDOW_MS = 15 * 60 * 1000;
 //                            messages from non-members behind a 404)
 //   'EditWindowExpired'  -> 409   (edit attempted after the 15-minute window)
 //   'MessageDeleted'     -> 409   (edit/react attempted on a tombstone)
+//   'InvalidReaction'    -> 400   (not a named kind and not exactly one emoji)
 //   'InvalidMessageKind' -> 409   (edit non-user_text / delete system_event)
 //   ZodError       -> 400   (route-level input validation)
 //   else           -> 500

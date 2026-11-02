@@ -1,3 +1,4 @@
+import { canonicalizeChatReaction, isCheerReaction, reactionEmoji } from '../chat/reactions';
 import { createAdminSupabase } from '../supabase-admin';
 import {
   type ChatMessageDTO,
@@ -7,9 +8,9 @@ import {
   type ListMessagesResult,
   type MessagePriority,
   type MessageReactionSummary,
+  type MessageReactor,
   type MessageSender,
   type MessageSystemBlock,
-  type ReactionKind,
   type RenderHint,
   type ReportStatus,
   type SendMessageInput,
@@ -19,11 +20,44 @@ import {
   MESSAGE_EDIT_WINDOW_MS,
   MESSAGE_PAGE_DEFAULT_LIMIT,
   MESSAGE_PAGE_MAX_LIMIT,
-  REACTION_EMOJI,
 } from '../types/circle-chat';
 
 import { ChatNotificationService } from './chat-notification-service';
 import { ChatSafetyService } from './chat-safety-service';
+
+/** A replacement this soon after the reactor's previous reaction does not push. */
+export const REACTION_PUSH_QUIET_MS = 60_000;
+
+/**
+ * message+reactor -> when we last pushed for that reactor's reaction. Catches
+ * remove-then-re-add of a different emoji inside the quiet window (the removed
+ * row's created_at is gone by then). Process-local and best-effort, like the
+ * orchestrator's InProcessSendGuard; bounded by pruning expired entries.
+ */
+const recentReactionPushes = new Map<string, number>();
+
+function reactionPushKey(messageId: string, reactorId: string): string {
+  return `${messageId}:${reactorId}`;
+}
+
+function pushedRecently(messageId: string, reactorId: string, now: number): boolean {
+  const at = recentReactionPushes.get(reactionPushKey(messageId, reactorId));
+  return at !== undefined && now - at < REACTION_PUSH_QUIET_MS;
+}
+
+function rememberReactionPush(messageId: string, reactorId: string, now: number): void {
+  recentReactionPushes.set(reactionPushKey(messageId, reactorId), now);
+  if (recentReactionPushes.size > 5_000) {
+    for (const [key, at] of recentReactionPushes) {
+      if (now - at >= REACTION_PUSH_QUIET_MS) recentReactionPushes.delete(key);
+    }
+  }
+}
+
+/** Test hook: forget remembered reaction pushes. */
+export function resetReactionPushMemory(): void {
+  recentReactionPushes.clear();
+}
 
 // Columns selected for circle_messages rows mapped to ChatMessageDTO.
 const MESSAGE_COLUMNS =
@@ -116,7 +150,7 @@ export class CircleChatService {
     const hasMore = rows.length > limit;
     const pageRows = hasMore ? rows.slice(0, limit) : rows;
 
-    const messages = await this.mapRowsToDTOs(pageRows, userId);
+    const messages = await this.mapRowsToDTOs(pageRows, userId, hiddenIds);
 
     const nextBefore =
       hasMore && pageRows.length > 0 ? pageRows[pageRows.length - 1].created_at : null;
@@ -392,14 +426,19 @@ export class CircleChatService {
   // ============================================================================
 
   /**
-   * POST /messages/:id/reactions — add a reaction (idempotent on the PK).
+   * PUT /messages/:id/reactions (v2) — set the viewer's ONE reaction on a
+   * message, replacing any previous one (iMessage/WhatsApp rule). `reaction` is
+   * a named kind or a single emoji; a named kind's emoji is stored as the kind.
    * Returns the recomputed reaction summary for the message.
    */
-  static async addReaction(
+  static async setReaction(
     messageId: string,
     userId: string,
-    reaction: ReactionKind
+    reaction: string
   ): Promise<MessageReactionSummary[]> {
+    const value = canonicalizeChatReaction(reaction);
+    if (!value) throw new Error('InvalidReaction');
+
     const circleId = await this.getMessageCircleId(messageId);
     await this.assertActiveMember(circleId, userId);
 
@@ -415,29 +454,47 @@ export class CircleChatService {
     if (messageError) throw messageError;
     if (messageRow?.deleted_at) throw new Error('MessageDeleted');
 
-    // Was this reaction already there? A re-tap / retry must not re-notify.
-    const { data: priorRow, error: priorError } = await supabaseAdmin
+    // The viewer's current row(s). Pre-v2 data may hold several per user; the
+    // replace below collapses them to one.
+    const { data: priorData, error: priorError } = await supabaseAdmin
       .from('circle_message_reactions')
-      .select('message_id')
+      .select('reaction, created_at')
       .eq('message_id', messageId)
-      .eq('user_id', userId)
-      .eq('reaction', reaction)
-      .maybeSingle();
+      .eq('user_id', userId);
     if (priorError) throw priorError;
-    const isNew = !priorRow;
+    const prior = (priorData ?? []) as Array<{ reaction: string; created_at: string }>;
 
-    const { error } = await supabaseAdmin
-      .from('circle_message_reactions')
-      .upsert(
-        { message_id: messageId, user_id: userId, reaction },
-        { onConflict: 'message_id,user_id,reaction', ignoreDuplicates: true }
-      );
+    const alreadyHasValue = prior.some((r) => r.reaction === value);
+    const others = prior.filter((r) => r.reaction !== value);
 
-    if (error) throw error;
+    if (others.length > 0) {
+      const { error: deleteError } = await supabaseAdmin
+        .from('circle_message_reactions')
+        .delete()
+        .eq('message_id', messageId)
+        .eq('user_id', userId)
+        .neq('reaction', value);
+      if (deleteError) throw deleteError;
+    }
+
+    if (!alreadyHasValue) {
+      const { error } = await supabaseAdmin
+        .from('circle_message_reactions')
+        .upsert(
+          { message_id: messageId, user_id: userId, reaction: value },
+          { onConflict: 'message_id,user_id,reaction', ignoreDuplicates: true }
+        );
+      if (error) throw error;
+    }
 
     // Tell the author (fire-and-forget; never affects the reaction response).
-    if (isNew) {
-      void this.notifyReactionAuthor(circleId, messageId, userId, reaction).catch(() => {});
+    // A re-tap / retry never re-notifies, and neither does fiddling: a
+    // replacement within REACTION_PUSH_QUIET_MS of the previous reaction, or a
+    // remove-then-re-add within that window of the last push for this reactor.
+    const now = Date.now();
+    if (this.shouldNotifyReaction(prior, value, now) && !pushedRecently(messageId, userId, now)) {
+      rememberReactionPush(messageId, userId, now);
+      void this.notifyReactionAuthor(circleId, messageId, userId, value).catch(() => {});
     }
 
     // Re-check after the write: a concurrent delete may have tombstoned the
@@ -456,7 +513,7 @@ export class CircleChatService {
         .delete()
         .eq('message_id', messageId)
         .eq('user_id', userId)
-        .eq('reaction', reaction);
+        .eq('reaction', value);
       throw new Error('MessageDeleted');
     }
 
@@ -465,13 +522,24 @@ export class CircleChatService {
   }
 
   /**
-   * DELETE /messages/:id/reactions/:reaction — remove a reaction.
-   * Returns the recomputed reaction summary for the message.
+   * Legacy POST /messages/:id/reactions (shipped clients). Same replace
+   * semantics as PUT so old and new clients agree on one reaction per person.
    */
-  static async removeReaction(
+  static async addReaction(
     messageId: string,
     userId: string,
-    reaction: ReactionKind
+    reaction: string
+  ): Promise<MessageReactionSummary[]> {
+    return this.setReaction(messageId, userId, reaction);
+  }
+
+  /**
+   * DELETE /messages/:id/reactions (v2) — clear whatever the viewer reacted with.
+   * Idempotent. Never pushes.
+   */
+  static async clearReaction(
+    messageId: string,
+    userId: string
   ): Promise<MessageReactionSummary[]> {
     const circleId = await this.getMessageCircleId(messageId);
     await this.assertActiveMember(circleId, userId);
@@ -482,13 +550,114 @@ export class CircleChatService {
       .from('circle_message_reactions')
       .delete()
       .eq('message_id', messageId)
-      .eq('user_id', userId)
-      .eq('reaction', reaction);
+      .eq('user_id', userId);
 
     if (error) throw error;
 
     const summaries = await this.buildReactionSummaries([messageId], userId);
     return summaries.get(messageId) ?? [];
+  }
+
+  /**
+   * Legacy DELETE /messages/:id/reactions/:reaction — remove one specific
+   * reaction (a no-op when the viewer's reaction is something else).
+   * Returns the recomputed reaction summary for the message.
+   */
+  static async removeReaction(
+    messageId: string,
+    userId: string,
+    reaction: string
+  ): Promise<MessageReactionSummary[]> {
+    const value = canonicalizeChatReaction(reaction);
+    if (!value) throw new Error('InvalidReaction');
+
+    const circleId = await this.getMessageCircleId(messageId);
+    await this.assertActiveMember(circleId, userId);
+
+    const supabaseAdmin = createAdminSupabase();
+
+    const { error } = await supabaseAdmin
+      .from('circle_message_reactions')
+      .delete()
+      .eq('message_id', messageId)
+      .eq('user_id', userId)
+      .eq('reaction', value);
+
+    if (error) throw error;
+
+    const summaries = await this.buildReactionSummaries([messageId], userId);
+    return summaries.get(messageId) ?? [];
+  }
+
+  /**
+   * GET /messages/:id/reactions — who reacted with what. One row per member
+   * (their newest reaction), the viewer first, then newest first.
+   */
+  static async listReactors(messageId: string, userId: string): Promise<MessageReactor[]> {
+    const circleId = await this.getMessageCircleId(messageId);
+    await this.assertActiveMember(circleId, userId);
+
+    const supabaseAdmin = createAdminSupabase();
+
+    const { data, error } = await supabaseAdmin
+      .from('circle_message_reactions')
+      .select('user_id, reaction, created_at')
+      .eq('message_id', messageId);
+    if (error) throw error;
+
+    // Members the viewer blocked (or who blocked the viewer) are invisible here,
+    // matching the counts in buildReactionSummaries.
+    const hidden = new Set(await ChatSafetyService.getBlockedIdsFor(userId));
+    const newest = this.newestPerUser(
+      ((data ?? []) as Array<{ user_id: string; reaction: string; created_at: string }>)
+        .filter((r) => !hidden.has(r.user_id))
+        .map((r) => ({ ...r, message_id: messageId }))
+    );
+    if (newest.length === 0) return [];
+
+    const ids = Array.from(new Set(newest.map((r) => r.user_id)));
+    const { data: profiles, error: profileError } = await supabaseAdmin
+      .from('profiles')
+      .select('id, display_name, avatar_url')
+      .in('id', ids);
+    if (profileError) throw profileError;
+    const profileById = new Map(
+      ((profiles ?? []) as Array<{ id: string; display_name: string | null; avatar_url: string | null }>).map(
+        (p) => [p.id, p]
+      )
+    );
+
+    return newest
+      .map((r) => ({
+        user_id: r.user_id,
+        display_name: profileById.get(r.user_id)?.display_name ?? '',
+        avatar_url: profileById.get(r.user_id)?.avatar_url ?? null,
+        reaction: r.reaction,
+        emoji: reactionEmoji(r.reaction),
+        reacted_at: r.created_at,
+      }))
+      .sort((a, b) => {
+        if (a.user_id === userId) return -1;
+        if (b.user_id === userId) return 1;
+        return Date.parse(b.reacted_at) - Date.parse(a.reacted_at);
+      });
+  }
+
+  /**
+   * Push only for a reaction that is actually new for this reactor, and not
+   * when it replaces one they set less than REACTION_PUSH_QUIET_MS ago (no spam
+   * while someone fiddles with the picker). Removals never push. Pure.
+   */
+  static shouldNotifyReaction(
+    prior: ReadonlyArray<{ reaction: string; created_at: string }>,
+    value: string,
+    now: number = Date.now()
+  ): boolean {
+    if (prior.some((r) => r.reaction === value)) return false;
+    return !prior.some((r) => {
+      const at = Date.parse(r.created_at);
+      return Number.isFinite(at) && now - at < REACTION_PUSH_QUIET_MS;
+    });
   }
 
   /**
@@ -500,7 +669,7 @@ export class CircleChatService {
     circleId: string,
     messageId: string,
     reactorId: string,
-    reaction: ReactionKind
+    reaction: string
   ): Promise<void> {
     try {
       const supabaseAdmin = createAdminSupabase();
@@ -516,6 +685,8 @@ export class CircleChatService {
         reactorId
       );
       if (!recipientId) return;
+      // A blocked pair never hears about each other's reactions.
+      if ((await ChatSafetyService.getBlockedIdsFor(recipientId)).includes(reactorId)) return;
 
       const [{ data: reactor }, circleName] = await Promise.all([
         supabaseAdmin.from('profiles').select('display_name').eq('id', reactorId).maybeSingle(),
@@ -534,7 +705,9 @@ export class CircleChatService {
         recipientId,
         reactorId,
         reactorName: (reactor?.display_name as string | null) ?? 'Someone',
-        emoji: REACTION_EMOJI[reaction] ?? '',
+        emoji: reactionEmoji(reaction),
+        cheer: isCheerReaction(reaction),
+        subject: row.kind === 'user_photo' ? 'photo' : row.kind === 'system_event' ? 'post' : 'message',
         preview,
       });
     } catch (err) {
@@ -659,7 +832,8 @@ export class CircleChatService {
    */
   private static async mapRowsToDTOs(
     rows: CircleMessageRow[],
-    userId: string
+    userId: string,
+    hiddenIds?: readonly string[]
   ): Promise<ChatMessageDTO[]> {
     if (rows.length === 0) return [];
 
@@ -690,7 +864,7 @@ export class CircleChatService {
 
     // Batch reaction summaries for all message ids.
     const messageIds = rows.map((r) => r.id);
-    const reactionsByMessage = await this.buildReactionSummaries(messageIds, userId);
+    const reactionsByMessage = await this.buildReactionSummaries(messageIds, userId, hiddenIds);
 
     return rows.map((row) => {
       const sender = row.sender_id ? senderById.get(row.sender_id) ?? null : null;
@@ -769,42 +943,49 @@ export class CircleChatService {
   }
 
   /**
-   * Aggregate circle_message_reactions into MessageReactionSummary[] per message
-   * in a single query across all supplied message ids.
+   * The reaction that counts for each (message, user): their newest row. Pre-v2
+   * data can hold several rows per user (the PK includes `reaction`); the next
+   * PUT/POST from that user collapses them. Ties keep the first row seen. Pure.
    */
-  private static async buildReactionSummaries(
-    messageIds: string[],
-    userId: string
-  ): Promise<Map<string, MessageReactionSummary[]>> {
-    const result = new Map<string, MessageReactionSummary[]>();
-    if (messageIds.length === 0) return result;
-
-    const supabaseAdmin = createAdminSupabase();
-
-    const { data, error } = await supabaseAdmin
-      .from('circle_message_reactions')
-      .select('message_id, user_id, reaction')
-      .in('message_id', messageIds);
-
-    if (error) throw error;
-
-    const rows = (data ?? []) as Pick<
-      CircleMessageReactionRow,
-      'message_id' | 'user_id' | 'reaction'
-    >[];
-
-    // message_id -> reaction -> { count, reactedByMe }
-    const agg = new Map<string, Map<ReactionKind, { count: number; reactedByMe: boolean }>>();
-
+  static newestPerUser<T extends { message_id: string; user_id: string; created_at: string }>(
+    rows: readonly T[]
+  ): T[] {
+    const byKey = new Map<string, T>();
     for (const row of rows) {
+      const key = `${row.message_id}:${row.user_id}`;
+      const current = byKey.get(key);
+      if (!current || Date.parse(row.created_at) > Date.parse(current.created_at)) {
+        byKey.set(key, row);
+      }
+    }
+    return Array.from(byKey.values());
+  }
+
+  /**
+   * Fold reaction rows into MessageReactionSummary[] per message (newest row per
+   * user counts). Order: count desc, then the reaction that appeared first. Pure.
+   */
+  static summarizeReactions(
+    rows: ReadonlyArray<Pick<CircleMessageReactionRow, 'message_id' | 'user_id' | 'reaction' | 'created_at'>>,
+    messageIds: readonly string[],
+    userId: string
+  ): Map<string, MessageReactionSummary[]> {
+    const result = new Map<string, MessageReactionSummary[]>();
+
+    // message_id -> reaction -> { count, reactedByMe, firstAt }
+    const agg = new Map<string, Map<string, { count: number; reactedByMe: boolean; firstAt: number }>>();
+
+    for (const row of this.newestPerUser(rows)) {
       let perMessage = agg.get(row.message_id);
       if (!perMessage) {
         perMessage = new Map();
         agg.set(row.message_id, perMessage);
       }
-      const entry = perMessage.get(row.reaction) ?? { count: 0, reactedByMe: false };
+      const at = Date.parse(row.created_at);
+      const entry = perMessage.get(row.reaction) ?? { count: 0, reactedByMe: false, firstAt: at };
       entry.count += 1;
       if (row.user_id === userId) entry.reactedByMe = true;
+      if (at < entry.firstAt) entry.firstAt = at;
       perMessage.set(row.reaction, entry);
     }
 
@@ -814,13 +995,51 @@ export class CircleChatService {
         result.set(messageId, []);
         continue;
       }
-      const summaries: MessageReactionSummary[] = [];
-      for (const [reaction, { count, reactedByMe }] of perMessage) {
-        summaries.push({ reaction, count, reactedByMe });
-      }
+      const summaries = Array.from(perMessage, ([reaction, e]) => ({ reaction, ...e }))
+        .sort((a, b) => b.count - a.count || (a.firstAt || 0) - (b.firstAt || 0))
+        .map(({ reaction, count, reactedByMe }) => ({
+          reaction,
+          emoji: reactionEmoji(reaction),
+          count,
+          reactedByMe,
+        }));
       result.set(messageId, summaries);
     }
 
     return result;
+  }
+
+  /**
+   * Aggregate circle_message_reactions into MessageReactionSummary[] per message
+   * in a single query across all supplied message ids, as the viewer sees them
+   * (blocked members excluded).
+   */
+  private static async buildReactionSummaries(
+    messageIds: string[],
+    userId: string,
+    hiddenIds?: readonly string[]
+  ): Promise<Map<string, MessageReactionSummary[]>> {
+    if (messageIds.length === 0) return new Map();
+
+    // Reactions from members the viewer blocked / who blocked the viewer are
+    // left out of the counts (same rule as the hidden messages in listMessages).
+    // System writes pass userId '' — no viewer, nothing to hide.
+    const hidden = new Set(hiddenIds ?? (userId ? await ChatSafetyService.getBlockedIdsFor(userId) : []));
+
+    const supabaseAdmin = createAdminSupabase();
+
+    const { data, error } = await supabaseAdmin
+      .from('circle_message_reactions')
+      .select('message_id, user_id, reaction, created_at')
+      .in('message_id', messageIds);
+
+    if (error) throw error;
+
+    const rows = ((data ?? []) as Pick<
+      CircleMessageReactionRow,
+      'message_id' | 'user_id' | 'reaction' | 'created_at'
+    >[]).filter((r) => !hidden.has(r.user_id));
+
+    return this.summarizeReactions(rows, messageIds, userId);
   }
 }
