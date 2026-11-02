@@ -271,6 +271,8 @@ export const ANALYTICS_EVENT_NAMES = [
   'Update Prompt Shown',
   'Update Prompt Accepted',
   'Update Prompt Dismissed',
+  'Update Downloaded',
+  'Update Completed',
 ] as const;
 export type AnalyticsEventName = (typeof ANALYTICS_EVENT_NAMES)[number];
 
@@ -604,6 +606,10 @@ export const AnalyticsEvents = {
   updatePromptAccepted: (p: { kind: UpdatePromptKind; latest_version: string; method: UpdateMethod }): AnalyticsEventPayload => ({ name: 'Update Prompt Accepted', properties: clean(p) }),
   /** User chose Later on a soft prompt. Closing the in-app App Store page without updating is not this event. */
   updatePromptDismissed: (p: { kind: UpdatePromptKind; latest_version: string }): AnalyticsEventPayload => ({ name: 'Update Prompt Dismissed', properties: clean(p) }),
+  /** Android flexible update finished downloading; the Restart to update card is shown next. */
+  updateDownloaded: (p: { latest_version: string }): AnalyticsEventPayload => ({ name: 'Update Downloaded', properties: clean(p) }),
+  /** First launch of a newer app version than the last one seen on this device (sent once per upgrade, also when the user updated outside the prompt). */
+  updateCompleted: (p: { from_version: string; to_version: string; was_prompted: boolean }): AnalyticsEventPayload => ({ name: 'Update Completed', properties: clean(p) }),
 } as const;
 
 /** Canonical user properties. Keys in USER_PROPERTIES_SET_ONCE must be sent with setOnce. */

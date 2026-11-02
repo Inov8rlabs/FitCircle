@@ -4386,6 +4386,51 @@
           "description": "Store version the prompt offers (policy latest_version)."
         }
       ]
+    },
+    {
+      "name": "Update Downloaded",
+      "category": "engagement",
+      "platforms": [
+        "android"
+      ],
+      "description": "Android flexible update finished downloading; the Restart to update card is shown next.",
+      "properties": [
+        {
+          "name": "latest_version",
+          "type": "string",
+          "required": true,
+          "description": "Store version the prompt offers (policy latest_version)."
+        }
+      ]
+    },
+    {
+      "name": "Update Completed",
+      "category": "engagement",
+      "platforms": [
+        "ios",
+        "android"
+      ],
+      "description": "First launch of a newer app version than the last one seen on this device (sent once per upgrade, also when the user updated outside the prompt).",
+      "properties": [
+        {
+          "name": "from_version",
+          "type": "string",
+          "required": true,
+          "description": "Last app version seen on this device."
+        },
+        {
+          "name": "to_version",
+          "type": "string",
+          "required": true,
+          "description": "Version now running."
+        },
+        {
+          "name": "was_prompted",
+          "type": "bool",
+          "required": true,
+          "description": "An update prompt was accepted for this or an older target before the upgrade."
+        }
+      ]
     }
   ]
 }
