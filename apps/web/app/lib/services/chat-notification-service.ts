@@ -166,6 +166,10 @@ export class ChatNotificationService {
     reactorId: string;
     reactorName: string;
     emoji: string;
+    /** clap / same / muscle → "cheered your message 👏". */
+    cheer?: boolean;
+    /** What was reacted to, for the copy ("message" | "photo" | "post"). */
+    subject?: 'message' | 'photo' | 'post';
     preview: string;
   }): Promise<void> {
     try {
@@ -180,6 +184,8 @@ export class ChatNotificationService {
         senderId: params.reactorId,
         senderAvatarUrl: await this.avatarUrlOf(params.reactorId),
         emoji: params.emoji,
+        reactionVerb: params.cheer ? 'cheered' : 'reacted',
+        reactionSubject: params.subject ?? 'message',
         preview: this.truncatePreview(params.preview),
         deepLink: `fitcircle://circles/${params.circleId}/chat`,
         messageId: params.messageId,

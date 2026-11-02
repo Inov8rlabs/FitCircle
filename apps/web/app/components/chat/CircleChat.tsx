@@ -399,6 +399,7 @@ export function CircleChat({ circleId }: CircleChatProps) {
                   key={m.id}
                   message={m}
                   isMine={isMine}
+                  viewerId={user?.id ?? null}
                   groupedWithPrevious={groupedWithPrevious}
                   onReactionsChange={handleReactionsChange}
                   onReport={handleReport}

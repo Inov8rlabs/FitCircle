@@ -61,6 +61,8 @@ export interface NotificationData {
   // Circle Chat
   preview?: string;
   emoji?: string; // chat_reaction: the reaction glyph
+  reactionVerb?: 'cheered' | 'reacted'; // chat_reaction: cheer kinds (clap/same/muscle) vs any other
+  reactionSubject?: 'message' | 'photo' | 'post'; // chat_reaction: what was reacted to
   body?: string;
   senderName?: string;
   /** Chat sender (Communication Notifications on iOS: name + avatar). */
@@ -511,11 +513,23 @@ export const NOTIFICATION_TEMPLATES: Record<
           category: 'celebration',
         },
   // Someone reacted to a message you posted (or a meal/streak card about you).
-  chat_reaction: (data) => ({
-    title: `${data.friendName || 'Someone'} reacted ${data.emoji || ''}`.trim(),
-    body: data.preview ? `to "${data.preview}"` : 'to your message',
-    category: 'social',
-  }),
+  // Chat Reactions v2 copy: "Ani cheered your message 👏" for clap / high five /
+  // strong, "Ani reacted 🥳 to your message" for anything else.
+  chat_reaction: (data) => {
+    const name = data.friendName || 'Someone';
+    const subject = `your ${data.reactionSubject || 'message'}`;
+    const emoji = String(data.emoji || '');
+    const title =
+      data.reactionVerb === 'cheered'
+        ? `${name} cheered ${subject} ${emoji}`.trim()
+        : `${name} reacted ${emoji ? `${emoji} ` : ''}to ${subject}`;
+    const preview = data.preview && data.preview !== 'your photo' ? data.preview : '';
+    return {
+      title,
+      body: preview ? `"${preview}"` : `in ${data.circleName || 'your circle'}`,
+      category: 'social',
+    };
+  },
 
   // Copy is built per recipient by DailySummaryService.planSummaryPushes.
   circle_daily_summary: (data) => ({

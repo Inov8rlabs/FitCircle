@@ -39,15 +39,15 @@ describe('ChatNotificationService.reactionRecipient', () => {
 });
 
 describe('chat_reaction notification type', () => {
-  it('renders "<name> reacted <emoji>" with the message preview and lands in the circle chat', () => {
+  it('renders "<name> reacted <emoji> to your message" with the quoted preview and lands in the circle chat', () => {
     const content = NOTIFICATION_TEMPLATES.chat_reaction({
       friendName: 'Grace',
       emoji: '🙌',
       preview: 'Leg day done',
       circleId: 'c1',
     });
-    expect(content.title).toBe('Grace reacted 🙌');
-    expect(content.body).toBe('to "Leg day done"');
+    expect(content.title).toBe('Grace reacted 🙌 to your message');
+    expect(content.body).toBe('"Leg day done"');
     expect(content.category).toBe('social');
     expect(screenFor('chat_reaction', { circleId: 'c1' })).toBe('circle_chat');
     expect(screenFor('chat_reaction', {})).toBe('circles');

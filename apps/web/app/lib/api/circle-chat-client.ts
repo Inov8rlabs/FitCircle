@@ -1,3 +1,4 @@
+import type { ChatReactionValue, MessageReactor } from '@/lib/types/circle-chat';
 import { useAuthStore } from '@/stores/auth-store';
 
 // ---------------------------------------------------------------------------
@@ -9,19 +10,16 @@ import { useAuthStore } from '@/stores/auth-store';
 
 export type MessageKind = 'user_text' | 'user_photo' | 'system_event';
 
-export type RenderHint = 'text' | 'stat_card' | 'completion_card' | 'summary_card';
+export type RenderHint = 'text' | 'stat_card' | 'completion_card' | 'summary_card' | 'meal_card';
 
-export type ReactionKind = 'flame' | 'clap' | 'eyes' | 'same' | 'heart' | 'laugh' | 'thumbs_up';
-
-export const REACTION_KINDS: ReactionKind[] = [
-  'thumbs_up',
-  'same',
-  'heart',
-  'flame',
-  'clap',
-  'laugh',
-  'eyes',
-];
+// Chat Reactions v2 (docs/CHAT_REACTIONS_V2.md): a named kind or a single emoji.
+export {
+  CHAT_REACTION_BAR,
+  REACTION_EMOJI,
+  type ChatReactionKind as ReactionKind,
+  type ChatReactionValue,
+} from '@/lib/types/circle-chat';
+export type { MessageReactor };
 
 export interface MessageSender {
   id: string;
@@ -30,7 +28,10 @@ export interface MessageSender {
 }
 
 export interface MessageReactionSummary {
-  reaction: ReactionKind;
+  /** Named kind or the custom emoji itself. */
+  reaction: ChatReactionValue;
+  /** Always present: what to draw. */
+  emoji: string;
   count: number;
   reactedByMe: boolean;
 }
@@ -87,6 +88,8 @@ async function authedFetch<T>(path: string, init?: RequestInit): Promise<T> {
     headers: {
       Authorization: `Bearer ${token}`,
       'Content-Type': 'application/json',
+      // Same opt-in the v2 mobile clients send (custom-emoji reactions).
+      'X-Client-Features': 'reactions_v2',
       ...(init?.headers ?? {}),
     },
     credentials: 'include',
@@ -127,20 +130,26 @@ export const chatClient = {
       method: 'DELETE',
     }),
 
-  addReaction: (messageId: string, reaction: ReactionKind) =>
+  /** PUT — set the viewer's one reaction (replaces any previous). */
+  setReaction: (messageId: string, reaction: ChatReactionValue) =>
     authedFetch<{ reactions: MessageReactionSummary[] }>(
       `/api/mobile/messages/${messageId}/reactions`,
       {
-        method: 'POST',
+        method: 'PUT',
         body: JSON.stringify({ reaction }),
       }
     ),
 
-  removeReaction: (messageId: string, reaction: ReactionKind) =>
+  /** DELETE (no suffix) — clear the viewer's reaction. */
+  clearReaction: (messageId: string) =>
     authedFetch<{ reactions: MessageReactionSummary[] }>(
-      `/api/mobile/messages/${messageId}/reactions/${reaction}`,
+      `/api/mobile/messages/${messageId}/reactions`,
       { method: 'DELETE' }
     ),
+
+  /** GET — who reacted with what (viewer first, then newest). */
+  listReactors: (messageId: string) =>
+    authedFetch<{ reactors: MessageReactor[] }>(`/api/mobile/messages/${messageId}/reactions`),
 
   markRead: (circleId: string) =>
     authedFetch<{ lastReadAt: string }>(`/api/mobile/circles/${circleId}/read`, {

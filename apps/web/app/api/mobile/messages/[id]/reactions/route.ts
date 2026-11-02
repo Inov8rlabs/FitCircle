@@ -1,158 +1,81 @@
-import { type NextRequest, NextResponse } from 'next/server';
-import { z } from 'zod';
+import { type NextRequest } from 'next/server';
 
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { CircleChatService } from '@/lib/services/circle-chat-service';
-import { REACTION_KINDS, type ReactionKind } from '@/lib/types/circle-chat';
-import { parseLenient, validationMessage } from '@/lib/validation/lenient-parse';
+import { parseLenient } from '@/lib/validation/lenient-parse';
 
-// Validation schema for POST body
-const addReactionSchema = z.object({
-  reaction: z.enum(REACTION_KINDS as [string, ...string[]]),
-});
+import { mapChatReactionError, ok, reactionBodySchema } from './reaction-route-helpers';
+
+// Circle Chat Reactions v2 — docs/CHAT_REACTIONS_V2.md. One reaction per person
+// per message; `reaction` is a named kind or a single emoji.
+
+type Ctx = { params: Promise<{ id: string }> };
 
 /**
- * POST /api/mobile/messages/[id]/reactions
- * Add a reaction to a message
+ * PUT /api/mobile/messages/[id]/reactions  { reaction }
+ * Set the viewer's reaction (replaces any previous one).
+ * → { success, data: { reactions: ReactionSummary[] }, error, meta }
  */
-export async function POST(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
+export async function PUT(request: NextRequest, { params }: Ctx) {
   const startTime = Date.now();
-
   try {
-    // Verify authentication
     const user = await requireMobileAuth(request);
-
-    // Await params in Next.js 15
     const { id } = await params;
-
-    // Parse and validate request body
-    const body = await request.json();
-    const { reaction } = parseLenient(addReactionSchema, body);
-
-    // zod validated `reaction` against REACTION_KINDS at runtime; the enum cast above
-    // widens the static type to string, so narrow it back to ReactionKind here.
-    const summaries = await CircleChatService.addReaction(id, user.id, reaction as ReactionKind);
-
-    return NextResponse.json({
-      success: true,
-      data: {
-        reactions: summaries,
-      },
-      meta: {
-        requestTime: Date.now() - startTime,
-      },
-      error: null,
-    });
+    const { reaction } = parseLenient(reactionBodySchema, await request.json());
+    const reactions = await CircleChatService.setReaction(id, user.id, reaction);
+    return ok({ reactions }, startTime);
   } catch (error: any) {
-    console.error('[Mobile API] Add reaction error:', {
-      message: error.message,
-      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined,
-    });
+    return mapChatReactionError(error, 'Set reaction');
+  }
+}
 
-    if (error.message === 'Unauthorized') {
-      return NextResponse.json(
-        {
-          success: false,
-          data: null,
-          error: {
-            code: 'UNAUTHORIZED',
-            message: 'Invalid or expired token',
-            details: {},
-            timestamp: new Date().toISOString(),
-          },
-          meta: null,
-        },
-        { status: 401 }
-      );
-    }
+/**
+ * POST /api/mobile/messages/[id]/reactions  { reaction }
+ * Legacy (shipped clients). Same replace semantics as PUT.
+ */
+export async function POST(request: NextRequest, { params }: Ctx) {
+  const startTime = Date.now();
+  try {
+    const user = await requireMobileAuth(request);
+    const { id } = await params;
+    const { reaction } = parseLenient(reactionBodySchema, await request.json());
+    const reactions = await CircleChatService.addReaction(id, user.id, reaction);
+    return ok({ reactions }, startTime);
+  } catch (error: any) {
+    return mapChatReactionError(error, 'Add reaction');
+  }
+}
 
-    if (error.message === 'Forbidden') {
-      return NextResponse.json(
-        {
-          success: false,
-          data: null,
-          error: {
-            code: 'FORBIDDEN',
-            message: 'You are not a member of this circle',
-            details: {},
-            timestamp: new Date().toISOString(),
-          },
-          meta: null,
-        },
-        { status: 403 }
-      );
-    }
+/**
+ * DELETE /api/mobile/messages/[id]/reactions
+ * Clear the viewer's reaction (idempotent). Same response as PUT.
+ */
+export async function DELETE(request: NextRequest, { params }: Ctx) {
+  const startTime = Date.now();
+  try {
+    const user = await requireMobileAuth(request);
+    const { id } = await params;
+    const reactions = await CircleChatService.clearReaction(id, user.id);
+    return ok({ reactions }, startTime);
+  } catch (error: any) {
+    return mapChatReactionError(error, 'Clear reaction');
+  }
+}
 
-    if (error.message === 'NotFound') {
-      return NextResponse.json(
-        {
-          success: false,
-          data: null,
-          error: {
-            code: 'NOT_FOUND',
-            message: 'Message not found',
-            details: {},
-            timestamp: new Date().toISOString(),
-          },
-          meta: null,
-        },
-        { status: 404 }
-      );
-    }
-
-    if (error.message === 'MessageDeleted') {
-      return NextResponse.json(
-        {
-          success: false,
-          data: null,
-          error: {
-            code: 'MESSAGE_DELETED',
-            message: 'You cannot react to a deleted message',
-            details: {},
-            timestamp: new Date().toISOString(),
-          },
-          meta: null,
-        },
-        { status: 409 }
-      );
-    }
-
-    if (error instanceof z.ZodError) {
-      return NextResponse.json(
-        {
-          success: false,
-          data: null,
-          error: {
-            code: 'VALIDATION_ERROR',
-            message: validationMessage(error),
-            details: error.errors.reduce((acc: any, err) => {
-              acc[err.path.join('.')] = err.message;
-              return acc;
-            }, {}),
-            timestamp: new Date().toISOString(),
-          },
-          meta: null,
-        },
-        { status: 400 }
-      );
-    }
-
-    return NextResponse.json(
-      {
-        success: false,
-        data: null,
-        error: {
-          code: 'INTERNAL_SERVER_ERROR',
-          message: 'An unexpected error occurred',
-          details: {},
-          timestamp: new Date().toISOString(),
-        },
-        meta: null,
-      },
-      { status: 500 }
-    );
+/**
+ * GET /api/mobile/messages/[id]/reactions
+ * Who reacted with what — circle members only.
+ * → { success, data: { reactors: [{ user_id, display_name, avatar_url, reaction, emoji, reacted_at }] } }
+ *   viewer first, then newest.
+ */
+export async function GET(request: NextRequest, { params }: Ctx) {
+  const startTime = Date.now();
+  try {
+    const user = await requireMobileAuth(request);
+    const { id } = await params;
+    const reactors = await CircleChatService.listReactors(id, user.id);
+    return ok({ reactors }, startTime);
+  } catch (error: any) {
+    return mapChatReactionError(error, 'List reactors');
   }
 }

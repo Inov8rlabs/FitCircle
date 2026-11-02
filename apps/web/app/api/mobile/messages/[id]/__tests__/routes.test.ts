@@ -4,6 +4,9 @@ const service = vi.hoisted(() => ({
   editMessage: vi.fn(),
   deleteMessage: vi.fn(),
   addReaction: vi.fn(),
+  setReaction: vi.fn(),
+  clearReaction: vi.fn(),
+  listReactors: vi.fn(),
   removeReaction: vi.fn(),
   reportMessage: vi.fn(),
 }));
@@ -16,7 +19,13 @@ vi.mock('@/lib/middleware/mobile-auth', () => ({
   },
 }));
 
-import { POST as addReaction } from '../reactions/route';
+import { DELETE as removeOneReaction } from '../reactions/[reaction]/route';
+import {
+  POST as addReaction,
+  DELETE as clearReaction,
+  GET as listReactors,
+  PUT as setReaction,
+} from '../reactions/route';
 import { POST as report } from '../report/route';
 import { PATCH as editMessage } from '../route';
 
@@ -32,12 +41,19 @@ function request(method: string, body?: unknown, raw?: string) {
   }) as any;
 }
 
+const reactors = [
+  { user_id: 'user-1', display_name: 'Ani', avatar_url: null, reaction: 'clap', emoji: '👏', reacted_at: '2026-11-02T10:00:00.000Z' },
+];
 const message = { id: MESSAGE, kind: 'user_text', body: 'edited', editedAt: '2026-09-28T12:01:00.000Z' };
-const reactions = [{ reaction: 'thumbs_up', count: 1, reactedByMe: true }];
+const reactions = [{ reaction: 'thumbs_up', emoji: '👍', count: 1, reactedByMe: true }];
 
 beforeEach(() => {
   service.editMessage.mockReset().mockResolvedValue(message);
   service.addReaction.mockReset().mockResolvedValue(reactions);
+  service.setReaction.mockReset().mockResolvedValue(reactions);
+  service.clearReaction.mockReset().mockResolvedValue([]);
+  service.removeReaction.mockReset().mockResolvedValue([]);
+  service.listReactors.mockReset().mockResolvedValue(reactors);
   service.reportMessage.mockReset().mockResolvedValue({ reportId: 'r-1', status: 'open' });
   vi.spyOn(console, 'error').mockImplementation(() => {});
 });
@@ -128,5 +144,76 @@ describe('PATCH /api/mobile/messages/[id]', () => {
       expect(body.error.message).toMatch(/^body: /);
     }
     expect(service.editMessage).not.toHaveBeenCalled();
+  });
+});
+
+describe('Chat Reactions v2 routes', () => {
+  it('PUT sets the reaction, canonicalising a named-kind emoji to the kind', async () => {
+    const res = await setReaction(request('PUT', { reaction: '👏' }), ctx);
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(Object.keys(body).sort()).toEqual(['data', 'error', 'meta', 'success']);
+    expect(body.data).toEqual({ reactions });
+    expect(service.setReaction).toHaveBeenCalledWith(MESSAGE, 'user-1', 'clap');
+  });
+
+  it('PUT accepts the new muscle kind and a single custom emoji', async () => {
+    expect((await setReaction(request('PUT', { reaction: 'muscle' }), ctx)).status).toBe(200);
+    expect((await setReaction(request('PUT', { reaction: '🥳' }), ctx)).status).toBe(200);
+    expect(service.setReaction).toHaveBeenLastCalledWith(MESSAGE, 'user-1', '🥳');
+  });
+
+  it('PUT rejects text and multiple emoji with VALIDATION_ERROR', async () => {
+    for (const bad of [{ reaction: 'party' }, { reaction: '👏👏' }, { reaction: 7 }, {}]) {
+      const res = await setReaction(request('PUT', bad), ctx);
+      expect(res.status).toBe(400);
+      const body = await res.json();
+      expect(body.error.code).toBe('VALIDATION_ERROR');
+      expect(body.error.details.reaction).toBeTruthy();
+    }
+    expect(service.setReaction).not.toHaveBeenCalled();
+  });
+
+  it('legacy POST accepts custom emoji too (replace semantics live in the service)', async () => {
+    const res = await addReaction(request('POST', { reaction: '🔥' }), ctx);
+    expect(res.status).toBe(200);
+    expect(service.addReaction).toHaveBeenCalledWith(MESSAGE, 'user-1', 'flame');
+  });
+
+  it('DELETE (no suffix) clears the viewer reaction', async () => {
+    const res = await clearReaction(request('DELETE'), ctx);
+    expect(res.status).toBe(200);
+    expect((await res.json()).data).toEqual({ reactions: [] });
+    expect(service.clearReaction).toHaveBeenCalledWith(MESSAGE, 'user-1');
+  });
+
+  it('GET returns reactors', async () => {
+    const res = await listReactors(request('GET'), ctx);
+    expect(res.status).toBe(200);
+    expect((await res.json()).data).toEqual({ reactors });
+    expect(service.listReactors).toHaveBeenCalledWith(MESSAGE, 'user-1');
+  });
+
+  it('maps service errors: 401 / 403 / 404 / 409', async () => {
+    expect((await listReactors(new Request('http://x', { method: 'GET' }) as any, ctx)).status).toBe(401);
+    service.listReactors.mockRejectedValueOnce(new Error('Forbidden'));
+    expect((await listReactors(request('GET'), ctx)).status).toBe(403);
+    service.clearReaction.mockRejectedValueOnce(new Error('NotFound'));
+    expect((await clearReaction(request('DELETE'), ctx)).status).toBe(404);
+    service.setReaction.mockRejectedValueOnce(new Error('MessageDeleted'));
+    const res = await setReaction(request('PUT', { reaction: 'clap' }), ctx);
+    expect(res.status).toBe(409);
+    expect((await res.json()).error.code).toBe('MESSAGE_DELETED');
+  });
+
+  it('legacy DELETE /[reaction] accepts kinds and (encoded) emoji, rejects text', async () => {
+    const at = (reaction: string) => ({ params: Promise.resolve({ id: MESSAGE, reaction }) });
+    expect((await removeOneReaction(request('DELETE'), at('heart'))).status).toBe(200);
+    expect(service.removeReaction).toHaveBeenLastCalledWith(MESSAGE, 'user-1', 'heart');
+    expect((await removeOneReaction(request('DELETE'), at(encodeURIComponent('🥳')))).status).toBe(200);
+    expect(service.removeReaction).toHaveBeenLastCalledWith(MESSAGE, 'user-1', '🥳');
+    const bad = await removeOneReaction(request('DELETE'), at('party'));
+    expect(bad.status).toBe(400);
+    expect((await bad.json()).error.code).toBe('VALIDATION_ERROR');
   });
 });
