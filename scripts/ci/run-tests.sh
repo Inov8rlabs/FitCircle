@@ -6,7 +6,9 @@
 #
 # Env:
 #   FC_REPORT_DIR   where reports go (default: ./.ci-reports/<suite>)
-#   FC_QA_ENV_FILE  QA credentials file for smoke (default ~/FitCircleCI/secrets.env)
+#   SMOKE_ENV_FILE  env file with prod NEXT_PUBLIC_SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY / JWT_SECRET for the
+#                   authenticated smoke (default apps/web/.env.local). Without it smoke falls back to the QA
+#                   account's cached refresh token, or runs unauthenticated checks only. See docs/RELEASE_CHECKLIST.md.
 #   SMOKE_BASE_URL  smoke target (default https://www.fitcircle.ai)
 #   FC_SKIP_INSTALL=1  don't run `bun install` even if node_modules is missing
 #
