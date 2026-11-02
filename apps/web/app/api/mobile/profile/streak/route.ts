@@ -73,9 +73,9 @@ export async function GET(request: NextRequest) {
     const { data: activeCircles } = await supabaseAdmin
       .from('fitcircle_members')
       .select(`
-        challenge_id,
+        fitcircle_id,
         streak_days,
-        fitcircles!fitcircle_members_fitcircle_id_fkey (
+        fitcircles!fitcircle_id (
           name
         )
       `)
@@ -84,8 +84,8 @@ export async function GET(request: NextRequest) {
       .order('streak_days', { ascending: false });
 
     const circleStreaks = (activeCircles || []).map((circle: any) => ({
-      circle_id: circle.challenge_id,
-      circle_name: circle.challenges?.name || 'Unknown Circle',
+      circle_id: circle.fitcircle_id,
+      circle_name: circle.fitcircles?.name || 'Unknown Circle',
       streak_days: circle.streak_days || 0,
     }));
 

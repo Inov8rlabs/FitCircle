@@ -29,9 +29,11 @@ export async function GET(
         { status: 401 }
       );
     }
+    // Logged so a broken query shows up in Vercel/Sentry, not only on a user's screen.
+    console.error('[ChallengeLeaderboard] failed:', error);
     return NextResponse.json(
-      { success: false, data: null, error: { code: 'ERROR', message: error.message } },
-      { status: 400 }
+      { success: false, data: null, error: { code: 'ERROR', message: "The leaderboard couldn't be loaded" } },
+      { status: 500 }
     );
   }
 }

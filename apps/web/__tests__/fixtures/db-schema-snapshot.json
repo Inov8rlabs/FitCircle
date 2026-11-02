@@ -1,0 +1,3511 @@
+{
+  "foreign_keys": [
+    {
+      "columns": [
+        "challenge_id"
+      ],
+      "name": "achievements_challenge_id_fkey",
+      "ref": "fitcircles",
+      "table": "achievements"
+    },
+    {
+      "columns": [
+        "user_id"
+      ],
+      "name": "achievements_user_id_fkey",
+      "ref": "profiles",
+      "table": "achievements"
+    },
+    {
+      "columns": [
+        "actor_user_id"
+      ],
+      "name": "ad_change_log_actor_user_id_fkey",
+      "ref": "profiles",
+      "table": "ad_change_log"
+    },
+    {
+      "columns": [
+        "user_id"
+      ],
+      "name": "apple_auth_tokens_user_id_fkey",
+      "ref": "profiles",
+      "table": "apple_auth_tokens"
+    },
+    {
+      "columns": [
+        "beverage_log_id"
+      ],
+      "name": "beverage_log_images_beverage_log_id_fkey",
+      "ref": "beverage_logs",
+      "table": "beverage_log_images"
+    },
+    {
+      "columns": [
+        "user_id"
+      ],
+      "name": "beverage_log_images_user_id_fkey",
+      "ref": "profiles",
+      "table": "beverage_log_images"
+    },
+    {
+      "columns": [
+        "user_id"
+      ],
+      "name": "beverage_logs_user_id_fkey",
+      "ref": "profiles",
+      "table": "beverage_logs"
+    },
+    {
+      "columns": [
+        "user_id"
+      ],
+      "name": "body_comp_import_tombstones_user_id_fkey",
+      "ref": "profiles",
+      "table": "body_comp_import_tombstones"
+    },
+    {
+      "columns": [
+        "user_id"
+      ],
+      "name": "body_comp_parse_log_user_id_fkey",
+      "ref": "profiles",
+      "table": "body_comp_parse_log"
+    },
+    {
+      "columns": [
+        "user_id"
+      ],
+      "name": "body_composition_logs_user_id_fkey",
+      "ref": "profiles",
+      "table": "body_composition_logs"
+    },
+    {
+      "columns": [
+        "campaign_id"
+      ],
+      "name": "campaign_deliveries_campaign_id_fkey",
+      "ref": "campaigns",
+      "table": "campaign_deliveries"
+    },
+    {
+      "columns": [
+        "user_id"
+      ],
+      "name": "campaign_deliveries_user_id_fkey",
+      "ref": "profiles",
+      "table": "campaign_deliveries"
+    },
+    {
+      "columns": [
+        "campaign_id"
+      ],
+      "name": "campaign_participants_campaign_id_fkey",
+      "ref": "campaigns",
+      "table": "campaign_participants"
+    },
+    {
+      "columns": [
+        "user_id"
+      ],
+      "name": "campaign_participants_user_id_fkey",
+      "ref": "profiles",
+      "table": "campaign_participants"
+    },
+    {
+      "columns": [
+        "created_by"
+      ],
+      "name": "campaigns_created_by_fkey",
+      "ref": "profiles",
+      "table": "campaigns"
+    },
+    {
+      "columns": [
+        "updated_by"
+      ],
+      "name": "campaigns_updated_by_fkey",
+      "ref": "profiles",
+      "table": "campaigns"
+    },
+    {
+      "columns": [
+        "challenge_id"
+      ],
+      "name": "challenge_invitations_challenge_id_fkey",
+      "ref": "fitcircles",
+      "table": "challenge_invitations"
+    },
+    {
+      "columns": [
+        "invited_by"
+      ],
+      "name": "challenge_invitations_invited_by_fkey",
+      "ref": "profiles",
+      "table": "challenge_invitations"
+    },
+    {
+      "columns": [
+        "invited_user_id"
+      ],
+      "name": "challenge_invitations_invited_user_id_fkey",
+      "ref": "profiles",
+      "table": "challenge_invitations"
+    },
+    {
+      "columns": [
+        "fitcircle_id"
+      ],
+      "name": "challenge_participants_challenge_id_fkey",
+      "ref": "fitcircles",
+      "table": "fitcircle_members"
+    },
+    {
+      "columns": [
+        "invited_by"
+      ],
+      "name": "challenge_participants_invited_by_fkey",
+      "ref": "profiles",
+      "table": "fitcircle_members"
+    },
+    {
+      "columns": [
+        "team_id"
+      ],
+      "name": "challenge_participants_team_id_fkey",
+      "ref": "teams",
+      "table": "fitcircle_members"
+    },
+    {
+      "columns": [
+        "user_id"
+      ],
+      "name": "challenge_participants_user_id_fkey",
+      "ref": "profiles",
+      "table": "fitcircle_members"
+    },
+    {
+      "columns": [
+        "creator_id"
+      ],
+      "name": "challenges_creator_id_fkey",
+      "ref": "profiles",
+      "table": "fitcircles"
+    },
+    {
+      "columns": [
+        "challenge_id"
+      ],
+      "name": "check_ins_challenge_id_fkey",
+      "ref": "fitcircles",
+      "table": "check_ins"
+    },
+    {
+      "columns": [
+        "participant_id"
+      ],
+      "name": "check_ins_participant_id_fkey",
+      "ref": "fitcircle_members",
+      "table": "check_ins"
+    },
+    {
+      "columns": [
+        "team_id"
+      ],
+      "name": "check_ins_team_id_fkey",
+      "ref": "teams",
+      "table": "check_ins"
+    },
+    {
+      "columns": [
+        "user_id"
+      ],
+      "name": "check_ins_user_id_fkey",
+      "ref": "profiles",
+      "table": "check_ins"
+    },
+    {
+      "columns": [
+        "verified_by"
+      ],
+      "name": "check_ins_verified_by_fkey",
+      "ref": "profiles",
+      "table": "check_ins"
+    },
+    {
+      "columns": [
+        "challenge_id"
+      ],
+      "name": "circle_challenge_invites_challenge_id_fkey",
+      "ref": "challenges",
+      "table": "challenge_invites"
+    },
+    {
+      "columns": [
+        "invitee_id"
+      ],
+      "name": "circle_challenge_invites_invitee_id_fkey",
+      "ref": "profiles",
+      "table": "challenge_invites"
+    },
+    {
+      "columns": [
+        "inviter_id"
+      ],
+      "name": "circle_challenge_invites_inviter_id_fkey",
+      "ref": "profiles",
+      "table": "challenge_invites"
+    },
+    {
+      "columns": [
+        "challenge_id"
+      ],
+      "name": "circle_challenge_logs_challenge_id_fkey",
+      "ref": "challenges",
+      "table": "challenge_logs"
+    },
+    {
+      "columns": [
+        "fitcircle_id"
+      ],
+      "name": "circle_challenge_logs_circle_id_fkey",
+      "ref": "fitcircles",
+      "table": "challenge_logs"
+    },
+    {
+      "columns": [
+        "participant_id"
+      ],
+      "name": "circle_challenge_logs_participant_id_fkey",
+      "ref": "challenge_participants",
+      "table": "challenge_logs"
+    },
+    {
+      "columns": [
+        "user_id"
+      ],
+      "name": "circle_challenge_logs_user_id_fkey",
+      "ref": "profiles",
+      "table": "challenge_logs"
+    },
+    {
+      "columns": [
+        "challenge_id"
+      ],
+      "name": "circle_challenge_participants_challenge_id_fkey",
+      "ref": "challenges",
+      "table": "challenge_participants"
+    },
+    {
+      "columns": [
+        "fitcircle_id"
+      ],
+      "name": "circle_challenge_participants_circle_id_fkey",
+      "ref": "fitcircles",
+      "table": "challenge_participants"
+    },
+    {
+      "columns": [
+        "invited_by"
+      ],
+      "name": "circle_challenge_participants_invited_by_fkey",
+      "ref": "profiles",
+      "table": "challenge_participants"
+    },
+    {
+      "columns": [
+        "user_id"
+      ],
+      "name": "circle_challenge_participants_user_id_fkey",
+      "ref": "profiles",
+      "table": "challenge_participants"
+    },
+    {
+      "columns": [
+        "fitcircle_id"
+      ],
+      "name": "circle_challenges_circle_id_fkey",
+      "ref": "fitcircles",
+      "table": "challenges"
+    },
+    {
+      "columns": [
+        "creator_id"
+      ],
+      "name": "circle_challenges_creator_id_fkey",
+      "ref": "profiles",
+      "table": "challenges"
+    },
+    {
+      "columns": [
+        "winner_user_id"
+      ],
+      "name": "circle_challenges_winner_user_id_fkey",
+      "ref": "profiles",
+      "table": "challenges"
+    },
+    {
+      "columns": [
+        "fitcircle_id"
+      ],
+      "name": "circle_chat_state_fitcircle_id_fkey",
+      "ref": "fitcircles",
+      "table": "circle_chat_state"
+    },
+    {
+      "columns": [
+        "user_id"
+      ],
+      "name": "circle_chat_state_user_id_fkey",
+      "ref": "profiles",
+      "table": "circle_chat_state"
+    },
+    {
+      "columns": [
+        "circle_id"
+      ],
+      "name": "circle_check_ins_circle_id_fkey",
+      "ref": "fitcircles",
+      "table": "circle_check_ins"
+    },
+    {
+      "columns": [
+        "user_id"
+      ],
+      "name": "circle_check_ins_user_id_fkey",
+      "ref": "profiles",
+      "table": "circle_check_ins"
+    },
+    {
+      "columns": [
+        "fitcircle_id"
+      ],
+      "name": "circle_daily_boosts_fitcircle_id_fkey",
+      "ref": "fitcircles",
+      "table": "circle_daily_boosts"
+    },
+    {
+      "columns": [
+        "circle_id"
+      ],
+      "name": "circle_encouragements_circle_id_fkey",
+      "ref": "fitcircles",
+      "table": "circle_encouragements"
+    },
+    {
+      "columns": [
+        "from_user_id"
+      ],
+      "name": "circle_encouragements_from_user_id_fkey",
+      "ref": "profiles",
+      "table": "circle_encouragements"
+    },
+    {
+      "columns": [
+        "to_user_id"
+      ],
+      "name": "circle_encouragements_to_user_id_fkey",
+      "ref": "profiles",
+      "table": "circle_encouragements"
+    },
+    {
+      "columns": [
+        "fitcircle_id"
+      ],
+      "name": "circle_food_privacy_fitcircle_id_fkey",
+      "ref": "fitcircles",
+      "table": "circle_food_privacy"
+    },
+    {
+      "columns": [
+        "user_id"
+      ],
+      "name": "circle_food_privacy_user_id_fkey",
+      "ref": "profiles",
+      "table": "circle_food_privacy"
+    },
+    {
+      "columns": [
+        "accepted_by"
+      ],
+      "name": "circle_invites_accepted_by_fkey",
+      "ref": "profiles",
+      "table": "circle_invites"
+    },
+    {
+      "columns": [
+        "circle_id"
+      ],
+      "name": "circle_invites_circle_id_fkey",
+      "ref": "fitcircles",
+      "table": "circle_invites"
+    },
+    {
+      "columns": [
+        "inviter_id"
+      ],
+      "name": "circle_invites_inviter_id_fkey",
+      "ref": "profiles",
+      "table": "circle_invites"
+    },
+    {
+      "columns": [
+        "blocked_id"
+      ],
+      "name": "circle_member_blocks_blocked_id_fkey",
+      "ref": "profiles",
+      "table": "circle_member_blocks"
+    },
+    {
+      "columns": [
+        "blocker_id"
+      ],
+      "name": "circle_member_blocks_blocker_id_fkey",
+      "ref": "profiles",
+      "table": "circle_member_blocks"
+    },
+    {
+      "columns": [
+        "message_id"
+      ],
+      "name": "circle_message_reactions_message_id_fkey",
+      "ref": "circle_messages",
+      "table": "circle_message_reactions"
+    },
+    {
+      "columns": [
+        "user_id"
+      ],
+      "name": "circle_message_reactions_user_id_fkey",
+      "ref": "profiles",
+      "table": "circle_message_reactions"
+    },
+    {
+      "columns": [
+        "message_id"
+      ],
+      "name": "circle_message_reports_message_id_fkey",
+      "ref": "circle_messages",
+      "table": "circle_message_reports"
+    },
+    {
+      "columns": [
+        "reporter_id"
+      ],
+      "name": "circle_message_reports_reporter_id_fkey",
+      "ref": "profiles",
+      "table": "circle_message_reports"
+    },
+    {
+      "columns": [
+        "fitcircle_id"
+      ],
+      "name": "circle_messages_fitcircle_id_fkey",
+      "ref": "fitcircles",
+      "table": "circle_messages"
+    },
+    {
+      "columns": [
+        "sender_id"
+      ],
+      "name": "circle_messages_sender_id_fkey",
+      "ref": "profiles",
+      "table": "circle_messages"
+    },
+    {
+      "columns": [
+        "quest_id"
+      ],
+      "name": "circle_quest_progress_quest_id_fkey",
+      "ref": "circle_quests",
+      "table": "circle_quest_progress"
+    },
+    {
+      "columns": [
+        "user_id"
+      ],
+      "name": "circle_quest_progress_user_id_fkey",
+      "ref": "profiles",
+      "table": "circle_quest_progress"
+    },
+    {
+      "columns": [
+        "challenge_id"
+      ],
+      "name": "circle_quests_challenge_id_fkey",
+      "ref": "challenges",
+      "table": "circle_quests"
+    },
+    {
+      "columns": [
+        "created_by"
+      ],
+      "name": "circle_quests_created_by_fkey",
+      "ref": "profiles",
+      "table": "circle_quests"
+    },
+    {
+      "columns": [
+        "fitcircle_id"
+      ],
+      "name": "circle_quests_fitcircle_id_fkey",
+      "ref": "fitcircles",
+      "table": "circle_quests"
+    },
+    {
+      "columns": [
+        "template_id"
+      ],
+      "name": "circle_quests_template_id_fkey",
+      "ref": "challenge_templates",
+      "table": "circle_quests"
+    },
+    {
+      "columns": [
+        "covered_user_id"
+      ],
+      "name": "circle_streak_saves_covered_user_id_fkey",
+      "ref": "profiles",
+      "table": "circle_streak_saves"
+    },
+    {
+      "columns": [
+        "fitcircle_id"
+      ],
+      "name": "circle_streak_saves_fitcircle_id_fkey",
+      "ref": "fitcircles",
+      "table": "circle_streak_saves"
+    },
+    {
+      "columns": [
+        "saver_user_id"
+      ],
+      "name": "circle_streak_saves_saver_user_id_fkey",
+      "ref": "profiles",
+      "table": "circle_streak_saves"
+    },
+    {
+      "columns": [
+        "circle_id"
+      ],
+      "name": "circle_streak_tracking_circle_id_fkey",
+      "ref": "fitcircles",
+      "table": "circle_streak_tracking"
+    },
+    {
+      "columns": [
+        "fitcircle_id"
+      ],
+      "name": "circle_streaks_fitcircle_id_fkey",
+      "ref": "fitcircles",
+      "table": "circle_streaks"
+    },
+    {
+      "columns": [
+        "deleted_by"
+      ],
+      "name": "comments_deleted_by_fkey",
+      "ref": "profiles",
+      "table": "comments"
+    },
+    {
+      "columns": [
+        "parent_id"
+      ],
+      "name": "comments_parent_id_fkey",
+      "ref": "comments",
+      "table": "comments"
+    },
+    {
+      "columns": [
+        "user_id"
+      ],
+      "name": "comments_user_id_fkey",
+      "ref": "profiles",
+      "table": "comments"
+    },
+    {
+      "columns": [
+        "user_id"
+      ],
+      "name": "complimentary_grants_user_id_fkey",
+      "ref": "profiles",
+      "table": "complimentary_grants"
+    },
+    {
+      "columns": [
+        "daily_challenge_id"
+      ],
+      "name": "daily_challenge_participants_daily_challenge_id_fkey",
+      "ref": "daily_challenges",
+      "table": "daily_challenge_participants"
+    },
+    {
+      "columns": [
+        "user_id"
+      ],
+      "name": "daily_challenge_participants_user_id_fkey",
+      "ref": "profiles",
+      "table": "daily_challenge_participants"
+    },
+    {
+      "columns": [
+        "template_id"
+      ],
+      "name": "daily_challenges_template_id_fkey",
+      "ref": "challenge_templates",
+      "table": "daily_challenges"
+    },
+    {
+      "columns": [
+        "challenge_id"
+      ],
+      "name": "daily_goals_challenge_id_fkey",
+      "ref": "fitcircles",
+      "table": "daily_goals"
+    },
+    {
+      "columns": [
+        "user_id"
+      ],
+      "name": "daily_goals_user_id_fkey",
+      "ref": "profiles",
+      "table": "daily_goals"
+    },
+    {
+      "columns": [
+        "circle_id"
+      ],
+      "name": "daily_high_five_limits_circle_id_fkey",
+      "ref": "fitcircles",
+      "table": "daily_high_five_limits"
+    },
+    {
+      "columns": [
+        "user_id"
+      ],
+      "name": "daily_high_five_limits_user_id_fkey",
+      "ref": "profiles",
+      "table": "daily_high_five_limits"
+    },
+    {
+      "columns": [
+        "user_id"
+      ],
+      "name": "daily_tracking_user_id_fkey",
+      "ref": "profiles",
+      "table": "daily_tracking"
+    },
+    {
+      "columns": [
+        "user_id"
+      ],
+      "name": "dietary_preferences_user_id_fkey",
+      "ref": "profiles",
+      "table": "dietary_preferences"
+    },
+    {
+      "columns": [
+        "user_id"
+      ],
+      "name": "engagement_activities_user_id_fkey",
+      "ref": "profiles",
+      "table": "engagement_activities"
+    },
+    {
+      "columns": [
+        "user_id"
+      ],
+      "name": "engagement_streaks_user_id_fkey",
+      "ref": "profiles",
+      "table": "engagement_streaks"
+    },
+    {
+      "columns": [
+        "user_id"
+      ],
+      "name": "exercise_logs_user_id_fkey",
+      "ref": "profiles",
+      "table": "exercise_logs"
+    },
+    {
+      "columns": [
+        "workout_exercise_id"
+      ],
+      "name": "exercise_sets_workout_exercise_id_fkey",
+      "ref": "workout_exercises",
+      "table": "exercise_sets"
+    },
+    {
+      "columns": [
+        "created_by"
+      ],
+      "name": "exercises_created_by_fkey",
+      "ref": "profiles",
+      "table": "exercises"
+    },
+    {
+      "columns": [
+        "experiment_key"
+      ],
+      "name": "experiment_assignments_experiment_key_fkey",
+      "ref": "experiments",
+      "table": "experiment_assignments"
+    },
+    {
+      "columns": [
+        "experiment_key"
+      ],
+      "name": "experiment_overrides_experiment_key_fkey",
+      "ref": "experiments",
+      "table": "experiment_overrides"
+    },
+    {
+      "columns": [
+        "layer_key"
+      ],
+      "name": "experiments_layer_key_fkey",
+      "ref": "experiment_layers",
+      "table": "experiments"
+    },
+    {
+      "columns": [
+        "fitcircle_id"
+      ],
+      "name": "fitcircle_data_submissions_fitcircle_id_fkey",
+      "ref": "fitcircles",
+      "table": "fitcircle_data_submissions"
+    },
+    {
+      "columns": [
+        "user_id"
+      ],
+      "name": "fitcircle_data_submissions_user_id_fkey",
+      "ref": "profiles",
+      "table": "fitcircle_data_submissions"
+    },
+    {
+      "columns": [
+        "fitcircle_id"
+      ],
+      "name": "fitcircle_leaderboard_entries_fitcircle_id_fkey",
+      "ref": "fitcircles",
+      "table": "fitcircle_leaderboard_entries"
+    },
+    {
+      "columns": [
+        "user_id"
+      ],
+      "name": "fitcircle_leaderboard_entries_user_id_fkey",
+      "ref": "profiles",
+      "table": "fitcircle_leaderboard_entries"
+    },
+    {
+      "columns": [
+        "user_id"
+      ],
+      "name": "fitzy_conversations_user_id_fkey",
+      "ref": "profiles",
+      "table": "fitzy_conversations"
+    },
+    {
+      "columns": [
+        "user_id"
+      ],
+      "name": "fitzy_daily_user_id_fkey",
+      "ref": "profiles",
+      "table": "fitzy_daily"
+    },
+    {
+      "columns": [
+        "user_id"
+      ],
+      "name": "fitzy_memory_user_id_fkey",
+      "ref": "profiles",
+      "table": "fitzy_memory"
+    },
+    {
+      "columns": [
+        "user_id"
+      ],
+      "name": "fitzy_message_log_user_id_fkey",
+      "ref": "profiles",
+      "table": "fitzy_message_log"
+    },
+    {
+      "columns": [
+        "conversation_id"
+      ],
+      "name": "fitzy_messages_conversation_id_fkey",
+      "ref": "fitzy_conversations",
+      "table": "fitzy_messages"
+    },
+    {
+      "columns": [
+        "user_id"
+      ],
+      "name": "fitzy_messages_user_id_fkey",
+      "ref": "profiles",
+      "table": "fitzy_messages"
+    },
+    {
+      "columns": [
+        "user_id"
+      ],
+      "name": "fitzy_plans_user_id_fkey",
+      "ref": "profiles",
+      "table": "fitzy_plans"
+    },
+    {
+      "columns": [
+        "user_id"
+      ],
+      "name": "fitzy_push_deliveries_user_id_fkey",
+      "ref": "profiles",
+      "table": "fitzy_push_deliveries"
+    },
+    {
+      "columns": [
+        "actor_id"
+      ],
+      "name": "food_log_audit_actor_id_fkey",
+      "ref": "profiles",
+      "table": "food_log_audit"
+    },
+    {
+      "columns": [
+        "food_log_entry_id"
+      ],
+      "name": "food_log_audit_food_log_entry_id_fkey",
+      "ref": "food_log_entries",
+      "table": "food_log_audit"
+    },
+    {
+      "columns": [
+        "user_id"
+      ],
+      "name": "food_log_audit_user_id_fkey",
+      "ref": "profiles",
+      "table": "food_log_audit"
+    },
+    {
+      "columns": [
+        "food_id"
+      ],
+      "name": "food_log_entries_food_id_fkey",
+      "ref": "foods",
+      "table": "food_log_entries"
+    },
+    {
+      "columns": [
+        "user_id"
+      ],
+      "name": "food_log_entries_user_id_fkey",
+      "ref": "profiles",
+      "table": "food_log_entries"
+    },
+    {
+      "columns": [
+        "food_log_entry_id"
+      ],
+      "name": "food_log_images_food_log_entry_id_fkey",
+      "ref": "food_log_entries",
+      "table": "food_log_images"
+    },
+    {
+      "columns": [
+        "user_id"
+      ],
+      "name": "food_log_images_user_id_fkey",
+      "ref": "profiles",
+      "table": "food_log_images"
+    },
+    {
+      "columns": [
+        "food_log_entry_id"
+      ],
+      "name": "food_log_shares_food_log_entry_id_fkey",
+      "ref": "food_log_entries",
+      "table": "food_log_shares"
+    },
+    {
+      "columns": [
+        "owner_id"
+      ],
+      "name": "food_log_shares_owner_id_fkey",
+      "ref": "profiles",
+      "table": "food_log_shares"
+    },
+    {
+      "columns": [
+        "shared_with_circle_id"
+      ],
+      "name": "food_log_shares_shared_with_circle_id_fkey",
+      "ref": "fitcircles",
+      "table": "food_log_shares"
+    },
+    {
+      "columns": [
+        "shared_with_user_id"
+      ],
+      "name": "food_log_shares_shared_with_user_id_fkey",
+      "ref": "profiles",
+      "table": "food_log_shares"
+    },
+    {
+      "columns": [
+        "food_id"
+      ],
+      "name": "food_portions_food_id_fkey",
+      "ref": "foods",
+      "table": "food_portions"
+    },
+    {
+      "columns": [
+        "owner_id"
+      ],
+      "name": "foods_owner_id_fkey",
+      "ref": "profiles",
+      "table": "foods"
+    },
+    {
+      "columns": [
+        "daily_goal_id"
+      ],
+      "name": "goal_completion_history_daily_goal_id_fkey",
+      "ref": "daily_goals",
+      "table": "goal_completion_history"
+    },
+    {
+      "columns": [
+        "user_id"
+      ],
+      "name": "goal_completion_history_user_id_fkey",
+      "ref": "profiles",
+      "table": "goal_completion_history"
+    },
+    {
+      "columns": [
+        "accepted_food_log_entry_id"
+      ],
+      "name": "group_meal_tags_accepted_food_log_entry_id_fkey",
+      "ref": "food_log_entries",
+      "table": "group_meal_tags"
+    },
+    {
+      "columns": [
+        "group_meal_id"
+      ],
+      "name": "group_meal_tags_group_meal_id_fkey",
+      "ref": "group_meals",
+      "table": "group_meal_tags"
+    },
+    {
+      "columns": [
+        "tagged_user_id"
+      ],
+      "name": "group_meal_tags_tagged_user_id_fkey",
+      "ref": "profiles",
+      "table": "group_meal_tags"
+    },
+    {
+      "columns": [
+        "creator_id"
+      ],
+      "name": "group_meals_creator_id_fkey",
+      "ref": "profiles",
+      "table": "group_meals"
+    },
+    {
+      "columns": [
+        "fitcircle_id"
+      ],
+      "name": "group_meals_fitcircle_id_fkey",
+      "ref": "fitcircles",
+      "table": "group_meals"
+    },
+    {
+      "columns": [
+        "user_id"
+      ],
+      "name": "health_nutrition_sync_user_id_fkey",
+      "ref": "profiles",
+      "table": "health_nutrition_sync"
+    },
+    {
+      "columns": [
+        "user_id"
+      ],
+      "name": "home_feed_decisions_user_id_fkey",
+      "ref": "profiles",
+      "table": "home_feed_decisions"
+    },
+    {
+      "columns": [
+        "user_id"
+      ],
+      "name": "home_feed_events_user_id_fkey",
+      "ref": "profiles",
+      "table": "home_feed_events"
+    },
+    {
+      "columns": [
+        "updated_by"
+      ],
+      "name": "home_feed_rules_updated_by_fkey",
+      "ref": "profiles",
+      "table": "home_feed_rules"
+    },
+    {
+      "columns": [
+        "challenge_id"
+      ],
+      "name": "leaderboard_challenge_id_fkey",
+      "ref": "fitcircles",
+      "table": "leaderboard"
+    },
+    {
+      "columns": [
+        "food_log_entry_id"
+      ],
+      "name": "log_reactions_food_log_entry_id_fkey",
+      "ref": "food_log_entries",
+      "table": "log_reactions"
+    },
+    {
+      "columns": [
+        "user_id"
+      ],
+      "name": "log_reactions_user_id_fkey",
+      "ref": "profiles",
+      "table": "log_reactions"
+    },
+    {
+      "columns": [
+        "user_id"
+      ],
+      "name": "metric_streaks_user_id_fkey",
+      "ref": "profiles",
+      "table": "metric_streaks"
+    },
+    {
+      "columns": [
+        "user_id"
+      ],
+      "name": "notification_log_user_id_fkey",
+      "ref": "profiles",
+      "table": "notification_log"
+    },
+    {
+      "columns": [
+        "user_id"
+      ],
+      "name": "notification_preferences_user_id_fkey",
+      "ref": "profiles",
+      "table": "notification_preferences"
+    },
+    {
+      "columns": [
+        "related_challenge_id"
+      ],
+      "name": "notifications_related_challenge_id_fkey",
+      "ref": "fitcircles",
+      "table": "notifications"
+    },
+    {
+      "columns": [
+        "related_team_id"
+      ],
+      "name": "notifications_related_team_id_fkey",
+      "ref": "teams",
+      "table": "notifications"
+    },
+    {
+      "columns": [
+        "related_user_id"
+      ],
+      "name": "notifications_related_user_id_fkey",
+      "ref": "profiles",
+      "table": "notifications"
+    },
+    {
+      "columns": [
+        "sender_id"
+      ],
+      "name": "notifications_sender_id_fkey",
+      "ref": "profiles",
+      "table": "notifications"
+    },
+    {
+      "columns": [
+        "user_id"
+      ],
+      "name": "notifications_user_id_fkey",
+      "ref": "profiles",
+      "table": "notifications"
+    },
+    {
+      "columns": [
+        "fitcircle_id"
+      ],
+      "name": "nutrition_challenge_config_fitcircle_id_fkey",
+      "ref": "fitcircles",
+      "table": "nutrition_challenge_config"
+    },
+    {
+      "columns": [
+        "user_id"
+      ],
+      "name": "nutrition_parse_log_user_id_fkey",
+      "ref": "profiles",
+      "table": "nutrition_parse_log"
+    },
+    {
+      "columns": [
+        "entry_id"
+      ],
+      "name": "nutrition_training_samples_entry_id_fkey",
+      "ref": "food_log_entries",
+      "table": "nutrition_training_samples"
+    },
+    {
+      "columns": [
+        "user_id"
+      ],
+      "name": "nutrition_training_samples_user_id_fkey",
+      "ref": "profiles",
+      "table": "nutrition_training_samples"
+    },
+    {
+      "columns": [
+        "user_id"
+      ],
+      "name": "onboarding_progress_user_id_fkey",
+      "ref": "profiles",
+      "table": "onboarding_progress"
+    },
+    {
+      "columns": [
+        "user_id"
+      ],
+      "name": "onboarding_responses_user_id_fkey",
+      "ref": "profiles",
+      "table": "onboarding_responses"
+    },
+    {
+      "columns": [
+        "challenge_id"
+      ],
+      "name": "payments_challenge_id_fkey",
+      "ref": "fitcircles",
+      "table": "payments"
+    },
+    {
+      "columns": [
+        "user_id"
+      ],
+      "name": "payments_user_id_fkey",
+      "ref": "profiles",
+      "table": "payments"
+    },
+    {
+      "columns": [
+        "user_id"
+      ],
+      "name": "plate_scores_user_id_fkey",
+      "ref": "profiles",
+      "table": "plate_scores"
+    },
+    {
+      "columns": [
+        "user_id"
+      ],
+      "name": "privacy_settings_user_id_fkey",
+      "ref": "profiles",
+      "table": "privacy_settings"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "name": "profiles_id_fkey",
+      "ref": "auth.users",
+      "table": "profiles"
+    },
+    {
+      "columns": [
+        "challenge_id"
+      ],
+      "name": "progress_entries_challenge_id_fkey",
+      "ref": "fitcircles",
+      "table": "progress_entries"
+    },
+    {
+      "columns": [
+        "user_id"
+      ],
+      "name": "progress_entries_user_id_fkey",
+      "ref": "auth.users",
+      "table": "progress_entries"
+    },
+    {
+      "columns": [
+        "promo_key"
+      ],
+      "name": "promo_user_state_promo_key_fkey",
+      "ref": "promos",
+      "table": "promo_user_state"
+    },
+    {
+      "columns": [
+        "user_id"
+      ],
+      "name": "promo_user_state_user_id_fkey",
+      "ref": "profiles",
+      "table": "promo_user_state"
+    },
+    {
+      "columns": [
+        "campaign_id"
+      ],
+      "name": "promos_campaign_id_fkey",
+      "ref": "campaigns",
+      "table": "promos"
+    },
+    {
+      "columns": [
+        "created_by"
+      ],
+      "name": "promos_created_by_fkey",
+      "ref": "profiles",
+      "table": "promos"
+    },
+    {
+      "columns": [
+        "updated_by"
+      ],
+      "name": "promos_updated_by_fkey",
+      "ref": "profiles",
+      "table": "promos"
+    },
+    {
+      "columns": [
+        "user_id"
+      ],
+      "name": "push_tokens_user_id_fkey",
+      "ref": "profiles",
+      "table": "push_tokens"
+    },
+    {
+      "columns": [
+        "user_id"
+      ],
+      "name": "reactions_user_id_fkey",
+      "ref": "profiles",
+      "table": "reactions"
+    },
+    {
+      "columns": [
+        "user_id"
+      ],
+      "name": "referral_codes_user_id_fkey",
+      "ref": "profiles",
+      "table": "referral_codes"
+    },
+    {
+      "columns": [
+        "user_id"
+      ],
+      "name": "referral_devices_user_id_fkey",
+      "ref": "profiles",
+      "table": "referral_devices"
+    },
+    {
+      "columns": [
+        "circle_id"
+      ],
+      "name": "referral_invites_circle_id_fkey",
+      "ref": "fitcircles",
+      "table": "referral_invites"
+    },
+    {
+      "columns": [
+        "inviter_id"
+      ],
+      "name": "referral_invites_inviter_id_fkey",
+      "ref": "profiles",
+      "table": "referral_invites"
+    },
+    {
+      "columns": [
+        "referral_id"
+      ],
+      "name": "referral_invites_referral_id_fkey",
+      "ref": "referrals",
+      "table": "referral_invites"
+    },
+    {
+      "columns": [
+        "referral_id"
+      ],
+      "name": "referral_rewards_referral_id_fkey",
+      "ref": "referrals",
+      "table": "referral_rewards"
+    },
+    {
+      "columns": [
+        "user_id"
+      ],
+      "name": "referral_rewards_user_id_fkey",
+      "ref": "profiles",
+      "table": "referral_rewards"
+    },
+    {
+      "columns": [
+        "circle_id"
+      ],
+      "name": "referrals_circle_id_fkey",
+      "ref": "fitcircles",
+      "table": "referrals"
+    },
+    {
+      "columns": [
+        "invitee_id"
+      ],
+      "name": "referrals_invitee_id_fkey",
+      "ref": "profiles",
+      "table": "referrals"
+    },
+    {
+      "columns": [
+        "inviter_id"
+      ],
+      "name": "referrals_inviter_id_fkey",
+      "ref": "profiles",
+      "table": "referrals"
+    },
+    {
+      "columns": [
+        "release_id"
+      ],
+      "name": "release_events_release_id_fkey",
+      "ref": "releases",
+      "table": "release_events"
+    },
+    {
+      "columns": [
+        "user_id"
+      ],
+      "name": "share_cards_user_id_fkey",
+      "ref": "profiles",
+      "table": "share_cards"
+    },
+    {
+      "columns": [
+        "user_id"
+      ],
+      "name": "streak_claims_user_id_fkey",
+      "ref": "profiles",
+      "table": "streak_claims"
+    },
+    {
+      "columns": [
+        "user_id"
+      ],
+      "name": "streak_recoveries_user_id_fkey",
+      "ref": "profiles",
+      "table": "streak_recoveries"
+    },
+    {
+      "columns": [
+        "user_id"
+      ],
+      "name": "streak_shields_user_id_fkey",
+      "ref": "profiles",
+      "table": "streak_shields"
+    },
+    {
+      "columns": [
+        "user_id"
+      ],
+      "name": "subscription_events_user_id_fkey",
+      "ref": "profiles",
+      "table": "subscription_events"
+    },
+    {
+      "columns": [
+        "removed_by"
+      ],
+      "name": "team_members_removed_by_fkey",
+      "ref": "profiles",
+      "table": "team_members"
+    },
+    {
+      "columns": [
+        "team_id"
+      ],
+      "name": "team_members_team_id_fkey",
+      "ref": "teams",
+      "table": "team_members"
+    },
+    {
+      "columns": [
+        "user_id"
+      ],
+      "name": "team_members_user_id_fkey",
+      "ref": "profiles",
+      "table": "team_members"
+    },
+    {
+      "columns": [
+        "challenge_id"
+      ],
+      "name": "teams_challenge_id_fkey",
+      "ref": "fitcircles",
+      "table": "teams"
+    },
+    {
+      "columns": [
+        "user_id"
+      ],
+      "name": "token_blacklist_user_id_fkey",
+      "ref": "profiles",
+      "table": "token_blacklist"
+    },
+    {
+      "columns": [
+        "user_id"
+      ],
+      "name": "user_achievements_user_id_fkey",
+      "ref": "profiles",
+      "table": "user_achievements"
+    },
+    {
+      "columns": [
+        "user_id"
+      ],
+      "name": "user_attribution_user_id_fkey",
+      "ref": "profiles",
+      "table": "user_attribution"
+    },
+    {
+      "columns": [
+        "user_id"
+      ],
+      "name": "user_consent_user_id_fkey",
+      "ref": "profiles",
+      "table": "user_consent"
+    },
+    {
+      "columns": [
+        "user_id"
+      ],
+      "name": "user_goals_user_id_fkey",
+      "ref": "profiles",
+      "table": "user_goals"
+    },
+    {
+      "columns": [
+        "fitcircle_id"
+      ],
+      "name": "weekly_goals_fitcircle_id_fkey",
+      "ref": "fitcircles",
+      "table": "weekly_goals"
+    },
+    {
+      "columns": [
+        "user_id"
+      ],
+      "name": "weekly_goals_user_id_fkey",
+      "ref": "profiles",
+      "table": "weekly_goals"
+    },
+    {
+      "columns": [
+        "exercise_id"
+      ],
+      "name": "workout_exercises_exercise_id_fkey",
+      "ref": "exercises",
+      "table": "workout_exercises"
+    },
+    {
+      "columns": [
+        "exercise_log_id"
+      ],
+      "name": "workout_exercises_exercise_log_id_fkey",
+      "ref": "exercise_logs",
+      "table": "workout_exercises"
+    }
+  ],
+  "functions": [
+    "gin_extract_query_trgm",
+    "gin_extract_value_trgm",
+    "gin_trgm_consistent",
+    "gin_trgm_triconsistent",
+    "gtrgm_compress",
+    "gtrgm_consistent",
+    "gtrgm_decompress",
+    "gtrgm_distance",
+    "gtrgm_in",
+    "gtrgm_options",
+    "gtrgm_out",
+    "gtrgm_penalty",
+    "gtrgm_picksplit",
+    "gtrgm_same",
+    "gtrgm_union",
+    "set_limit",
+    "show_limit",
+    "show_trgm",
+    "similarity",
+    "similarity_dist",
+    "similarity_op",
+    "strict_word_similarity",
+    "strict_word_similarity_commutator_op",
+    "strict_word_similarity_dist_commutator_op",
+    "strict_word_similarity_dist_op",
+    "strict_word_similarity_op",
+    "update_circle_streak_tracking_updated_at",
+    "update_daily_tracking_updated_at",
+    "update_engagement_streaks_updated_at",
+    "update_metric_streaks_updated_at",
+    "update_onboarding_progress_timestamp",
+    "update_privacy_settings_updated_at",
+    "update_streak_recoveries_timestamp",
+    "update_streak_shields_timestamp",
+    "update_updated_at",
+    "update_updated_at_column",
+    "update_user_goals_timestamp",
+    "word_similarity",
+    "word_similarity_commutator_op",
+    "word_similarity_dist_commutator_op",
+    "word_similarity_dist_op",
+    "word_similarity_op"
+  ],
+  "relations": {
+    "achievements": [
+      "id",
+      "user_id",
+      "challenge_id",
+      "type",
+      "name",
+      "description",
+      "icon_url",
+      "badge_url",
+      "points",
+      "level",
+      "unlocked_at",
+      "progress",
+      "criteria",
+      "metadata",
+      "shared",
+      "shared_at",
+      "created_at",
+      "updated_at"
+    ],
+    "ad_change_log": [
+      "id",
+      "actor_user_id",
+      "actor_email",
+      "channel",
+      "level",
+      "external_id",
+      "campaign_external_id",
+      "entity_name",
+      "field",
+      "old_value",
+      "new_value",
+      "requested_value",
+      "outcome",
+      "forced",
+      "error",
+      "checks",
+      "created_at"
+    ],
+    "ad_conversions_daily": [
+      "channel",
+      "level",
+      "external_id",
+      "campaign_external_id",
+      "date",
+      "conversion_action_id",
+      "conversion_action_name",
+      "category",
+      "kind",
+      "conversions",
+      "all_conversions",
+      "synced_at"
+    ],
+    "ad_entities": [
+      "id",
+      "channel",
+      "platform",
+      "level",
+      "external_id",
+      "parent_external_id",
+      "campaign_external_id",
+      "name",
+      "status",
+      "serving_status",
+      "bid_strategy",
+      "bid_amount",
+      "bid_currency",
+      "daily_budget",
+      "total_budget",
+      "match_type",
+      "countries",
+      "start_at",
+      "end_at",
+      "creative",
+      "raw",
+      "synced_at"
+    ],
+    "ad_metrics_daily": [
+      "channel",
+      "level",
+      "external_id",
+      "campaign_external_id",
+      "date",
+      "spend",
+      "currency",
+      "impressions",
+      "taps",
+      "installs",
+      "new_downloads",
+      "redownloads",
+      "synced_at"
+    ],
+    "ad_sync_runs": [
+      "id",
+      "channel",
+      "trigger",
+      "range_start",
+      "range_end",
+      "started_at",
+      "finished_at",
+      "ok",
+      "rows_entities",
+      "rows_metrics",
+      "error"
+    ],
+    "apple_auth_tokens": [
+      "user_id",
+      "refresh_token",
+      "created_at",
+      "updated_at"
+    ],
+    "beverage_log_images": [
+      "id",
+      "beverage_log_id",
+      "user_id",
+      "storage_path",
+      "storage_bucket",
+      "file_name",
+      "file_size_bytes",
+      "mime_type",
+      "width",
+      "height",
+      "thumbnail_path",
+      "display_order",
+      "upload_ip",
+      "upload_user_agent",
+      "metadata",
+      "created_at",
+      "updated_at",
+      "deleted_at"
+    ],
+    "beverage_logs": [
+      "id",
+      "user_id",
+      "category",
+      "beverage_type",
+      "customizations",
+      "volume_ml",
+      "calories",
+      "caffeine_mg",
+      "sugar_g",
+      "notes",
+      "is_favorite",
+      "favorite_name",
+      "is_private",
+      "logged_at",
+      "entry_date",
+      "source",
+      "metadata",
+      "created_at",
+      "updated_at",
+      "deleted_at"
+    ],
+    "body_comp_import_tombstones": [
+      "id",
+      "user_id",
+      "source",
+      "source_external_id",
+      "measured_at",
+      "deleted_at"
+    ],
+    "body_comp_parse_cache": [
+      "image_hash",
+      "result",
+      "created_at"
+    ],
+    "body_comp_parse_log": [
+      "id",
+      "user_id",
+      "image_hash",
+      "created_at"
+    ],
+    "body_composition_logs": [
+      "id",
+      "user_id",
+      "measured_at",
+      "weight_kg",
+      "body_fat_pct",
+      "fat_mass_kg",
+      "skeletal_muscle_mass_kg",
+      "lean_body_mass_kg",
+      "body_water_kg",
+      "bone_mass_kg",
+      "visceral_fat_level",
+      "bmr_kcal",
+      "segmental",
+      "source",
+      "source_external_id",
+      "photo_urls",
+      "notes",
+      "created_at",
+      "updated_at"
+    ],
+    "campaign_deliveries": [
+      "id",
+      "campaign_id",
+      "user_id",
+      "delivery_key",
+      "channel",
+      "sent_at"
+    ],
+    "campaign_participants": [
+      "campaign_id",
+      "user_id",
+      "joined_at",
+      "reminders"
+    ],
+    "campaigns": [
+      "id",
+      "slug",
+      "template",
+      "published",
+      "published_at",
+      "archived_at",
+      "title",
+      "emoji",
+      "tagline",
+      "description",
+      "cta_label",
+      "accent",
+      "palette",
+      "glyph",
+      "featured_from",
+      "starts_at",
+      "ends_at",
+      "priority",
+      "cta",
+      "circle_template",
+      "calendar",
+      "marks",
+      "art",
+      "notifications",
+      "emails",
+      "app_store",
+      "play",
+      "legacy_season_key",
+      "preview_user_ids",
+      "created_by",
+      "updated_by",
+      "created_at",
+      "updated_at",
+      "version",
+      "icon"
+    ],
+    "challenge_invitations": [
+      "id",
+      "challenge_id",
+      "invited_by",
+      "invited_email",
+      "invited_user_id",
+      "status",
+      "invited_at",
+      "responded_at",
+      "expires_at"
+    ],
+    "challenge_invites": [
+      "id",
+      "challenge_id",
+      "inviter_id",
+      "invitee_id",
+      "status",
+      "created_at",
+      "responded_at",
+      "expires_at"
+    ],
+    "challenge_logs": [
+      "id",
+      "challenge_id",
+      "participant_id",
+      "user_id",
+      "fitcircle_id",
+      "amount",
+      "note",
+      "logged_at",
+      "log_date",
+      "created_at"
+    ],
+    "challenge_participants": [
+      "id",
+      "challenge_id",
+      "user_id",
+      "fitcircle_id",
+      "invited_by",
+      "status",
+      "cumulative_total",
+      "today_total",
+      "today_date",
+      "current_streak",
+      "longest_streak",
+      "last_logged_at",
+      "log_count",
+      "rank",
+      "goal_completion_pct",
+      "milestones_achieved",
+      "joined_at",
+      "created_at",
+      "updated_at"
+    ],
+    "challenge_templates": [
+      "id",
+      "name",
+      "description",
+      "category",
+      "challenge_category",
+      "goal_amount",
+      "unit",
+      "duration_days",
+      "logging_prompt",
+      "difficulty",
+      "icon_name",
+      "sort_order",
+      "is_active",
+      "completions_count",
+      "metadata",
+      "created_at",
+      "icon_key"
+    ],
+    "challenge_with_participants": [
+      "id",
+      "creator_id",
+      "name",
+      "description",
+      "type",
+      "status",
+      "visibility",
+      "rules",
+      "scoring_system",
+      "start_date",
+      "end_date",
+      "registration_deadline",
+      "entry_fee",
+      "prize_pool",
+      "prize_distribution",
+      "min_participants",
+      "max_participants",
+      "min_team_size",
+      "max_team_size",
+      "allow_late_join",
+      "late_join_penalty",
+      "cover_image_url",
+      "badge_image_url",
+      "tags",
+      "location",
+      "location_name",
+      "is_featured",
+      "sponsor_info",
+      "custom_fields",
+      "participant_count",
+      "team_count",
+      "total_check_ins",
+      "avg_progress",
+      "completion_rate",
+      "engagement_score",
+      "metadata",
+      "created_at",
+      "updated_at",
+      "invite_code",
+      "active_participants",
+      "pending_invitations"
+    ],
+    "challenges": [
+      "id",
+      "fitcircle_id",
+      "creator_id",
+      "template_id",
+      "name",
+      "description",
+      "category",
+      "goal_amount",
+      "unit",
+      "logging_prompt",
+      "is_open",
+      "status",
+      "starts_at",
+      "ends_at",
+      "participant_count",
+      "winner_user_id",
+      "created_at",
+      "updated_at",
+      "is_default",
+      "check_in_mode",
+      "quest_type",
+      "collective_target",
+      "collective_progress"
+    ],
+    "check_ins": [
+      "id",
+      "user_id",
+      "challenge_id",
+      "participant_id",
+      "team_id",
+      "check_in_date",
+      "weight_kg",
+      "body_fat_percentage",
+      "muscle_mass_kg",
+      "water_percentage",
+      "steps",
+      "active_minutes",
+      "calories_burned",
+      "distance_km",
+      "floors_climbed",
+      "sleep_hours",
+      "water_intake_ml",
+      "mood_score",
+      "energy_level",
+      "notes",
+      "photo_urls",
+      "measurements",
+      "workouts",
+      "nutrition",
+      "custom_metrics",
+      "points_earned",
+      "verification_status",
+      "verified_by",
+      "verified_at",
+      "verification_notes",
+      "is_valid",
+      "source",
+      "device_data",
+      "metadata",
+      "created_at",
+      "updated_at"
+    ],
+    "circle_chat_state": [
+      "fitcircle_id",
+      "user_id",
+      "last_read_at",
+      "muted",
+      "updated_at"
+    ],
+    "circle_check_ins": [
+      "id",
+      "member_id",
+      "circle_id",
+      "user_id",
+      "check_in_date",
+      "check_in_value",
+      "progress_percentage",
+      "mood_score",
+      "energy_level",
+      "note",
+      "created_at"
+    ],
+    "circle_daily_boosts": [
+      "id",
+      "fitcircle_id",
+      "boost_date",
+      "total_members",
+      "checked_in_members",
+      "boost_multiplier",
+      "is_perfect_day",
+      "created_at",
+      "updated_at"
+    ],
+    "circle_encouragements": [
+      "id",
+      "circle_id",
+      "from_user_id",
+      "to_user_id",
+      "type",
+      "content",
+      "milestone_type",
+      "created_at"
+    ],
+    "circle_food_privacy": [
+      "fitcircle_id",
+      "user_id",
+      "tier",
+      "created_at",
+      "updated_at"
+    ],
+    "circle_invites": [
+      "id",
+      "circle_id",
+      "inviter_id",
+      "invite_code",
+      "email",
+      "status",
+      "created_at",
+      "accepted_at",
+      "accepted_by",
+      "expires_at"
+    ],
+    "circle_member_blocks": [
+      "id",
+      "blocker_id",
+      "blocked_id",
+      "created_at"
+    ],
+    "circle_message_reactions": [
+      "message_id",
+      "user_id",
+      "reaction",
+      "created_at",
+      "emoji"
+    ],
+    "circle_message_reports": [
+      "id",
+      "message_id",
+      "reporter_id",
+      "reason",
+      "status",
+      "created_at"
+    ],
+    "circle_messages": [
+      "id",
+      "fitcircle_id",
+      "sender_id",
+      "kind",
+      "body",
+      "photo_url",
+      "client_id",
+      "system_event_type",
+      "system_event_ref",
+      "system_payload",
+      "priority",
+      "created_at",
+      "updated_at",
+      "edited_at",
+      "deleted_at"
+    ],
+    "circle_quest_progress": [
+      "id",
+      "quest_id",
+      "user_id",
+      "individual_progress",
+      "is_completed",
+      "completed_at",
+      "updated_at"
+    ],
+    "circle_quests": [
+      "id",
+      "fitcircle_id",
+      "challenge_id",
+      "template_id",
+      "quest_name",
+      "quest_description",
+      "quest_type",
+      "goal_amount",
+      "unit",
+      "collective_target",
+      "collective_progress",
+      "starts_at",
+      "ends_at",
+      "status",
+      "created_by",
+      "metadata",
+      "created_at"
+    ],
+    "circle_streak_saves": [
+      "id",
+      "fitcircle_id",
+      "saver_user_id",
+      "covered_user_id",
+      "save_date",
+      "created_at"
+    ],
+    "circle_streak_tracking": [
+      "id",
+      "circle_id",
+      "team_collective_streak",
+      "longest_team_streak",
+      "last_full_team_checkin_date",
+      "grace_days_available",
+      "created_at",
+      "updated_at"
+    ],
+    "circle_streaks": [
+      "fitcircle_id",
+      "current_streak",
+      "longest_streak",
+      "last_active_date",
+      "updated_at"
+    ],
+    "comments": [
+      "id",
+      "user_id",
+      "parent_id",
+      "entity_type",
+      "entity_id",
+      "content",
+      "mentions",
+      "is_edited",
+      "edited_at",
+      "is_deleted",
+      "deleted_at",
+      "deleted_by",
+      "reactions_count",
+      "replies_count",
+      "metadata",
+      "created_at",
+      "updated_at"
+    ],
+    "complimentary_grants": [
+      "id",
+      "user_id",
+      "granted_by",
+      "note",
+      "expires_at",
+      "revoked_at",
+      "revoked_by",
+      "created_at"
+    ],
+    "current_weekly_goals": [
+      "id",
+      "user_id",
+      "week_start",
+      "goal_type",
+      "target_value",
+      "actual_value",
+      "daily_breakdown",
+      "completed",
+      "fitcircle_id",
+      "created_at",
+      "updated_at"
+    ],
+    "daily_challenge_participants": [
+      "id",
+      "daily_challenge_id",
+      "user_id",
+      "progress",
+      "is_completed",
+      "completed_at",
+      "joined_at"
+    ],
+    "daily_challenges": [
+      "id",
+      "challenge_date",
+      "template_id",
+      "custom_name",
+      "custom_description",
+      "custom_goal_amount",
+      "custom_unit",
+      "is_custom",
+      "participant_count",
+      "completion_count",
+      "created_at"
+    ],
+    "daily_goals": [
+      "id",
+      "user_id",
+      "challenge_id",
+      "goal_type",
+      "target_value",
+      "unit",
+      "start_date",
+      "end_date",
+      "frequency",
+      "custom_schedule",
+      "is_active",
+      "is_primary",
+      "auto_adjust_enabled",
+      "baseline_value",
+      "adjustment_algorithm",
+      "last_adjusted_at",
+      "created_at",
+      "updated_at"
+    ],
+    "daily_high_five_limits": [
+      "id",
+      "user_id",
+      "circle_id",
+      "date",
+      "count",
+      "created_at"
+    ],
+    "daily_tracking": [
+      "id",
+      "user_id",
+      "tracking_date",
+      "weight_kg",
+      "steps",
+      "mood_score",
+      "energy_level",
+      "notes",
+      "created_at",
+      "updated_at",
+      "steps_source",
+      "steps_synced_at",
+      "is_override",
+      "is_public",
+      "daily_goal_steps",
+      "daily_goal_weight_kg",
+      "goal_completion_status",
+      "previous_day_sentiment",
+      "previous_day_steps",
+      "streak_day",
+      "submitted_to_fitcircles",
+      "submission_timestamp"
+    ],
+    "dietary_preferences": [
+      "user_id",
+      "diet",
+      "allergens",
+      "units",
+      "created_at",
+      "updated_at"
+    ],
+    "engagement_activities": [
+      "id",
+      "user_id",
+      "activity_date",
+      "activity_type",
+      "reference_id",
+      "created_at",
+      "metadata"
+    ],
+    "engagement_streaks": [
+      "id",
+      "user_id",
+      "current_streak",
+      "longest_streak",
+      "last_engagement_date",
+      "streak_freezes_available",
+      "streak_freezes_used_this_week",
+      "auto_freeze_reset_date",
+      "paused",
+      "pause_start_date",
+      "pause_end_date",
+      "created_at",
+      "updated_at",
+      "total_points",
+      "last_freeze_earned_at",
+      "last_claim_date",
+      "total_claims",
+      "shields_available",
+      "shields_used",
+      "last_shield_reset",
+      "best_momentum",
+      "momentum_flame_level",
+      "last_decay_applied_at",
+      "grace_day_used_this_week",
+      "grace_day_week_start",
+      "points_spent"
+    ],
+    "exercise_logs": [
+      "id",
+      "user_id",
+      "exercise_type",
+      "category",
+      "duration_minutes",
+      "calories_burned",
+      "calories_estimated",
+      "exercise_date",
+      "started_at",
+      "source",
+      "distance_meters",
+      "avg_heart_rate",
+      "effort_level",
+      "location_type",
+      "workout_companion",
+      "body_areas",
+      "is_indoor",
+      "notes",
+      "healthkit_workout_id",
+      "source_device_name",
+      "is_public",
+      "is_deleted",
+      "created_at",
+      "updated_at",
+      "counts_as_checkin",
+      "brand",
+      "verified_source",
+      "exercise_count",
+      "total_sets",
+      "total_volume_kg",
+      "has_exercise_log",
+      "source_platform"
+    ],
+    "exercise_sets": [
+      "id",
+      "workout_exercise_id",
+      "set_number",
+      "set_type",
+      "reps",
+      "weight_kg",
+      "duration_seconds",
+      "distance_meters",
+      "rpe",
+      "is_completed",
+      "created_at"
+    ],
+    "exercises": [
+      "id",
+      "name",
+      "slug",
+      "aliases",
+      "primary_muscle",
+      "secondary_muscles",
+      "equipment",
+      "movement",
+      "tracking_type",
+      "is_custom",
+      "created_by",
+      "is_public",
+      "is_deleted",
+      "created_at",
+      "updated_at"
+    ],
+    "experiment_assignments": [
+      "experiment_key",
+      "user_id",
+      "arm",
+      "assigned_at",
+      "first_exposed_at",
+      "exposure_surface",
+      "platform",
+      "app_version",
+      "country",
+      "reason",
+      "user_deleted_at"
+    ],
+    "experiment_audit_log": [
+      "id",
+      "experiment_key",
+      "actor",
+      "action",
+      "before",
+      "after",
+      "at"
+    ],
+    "experiment_layers": [
+      "key",
+      "name",
+      "description",
+      "salt",
+      "created_at",
+      "updated_at"
+    ],
+    "experiment_overrides": [
+      "experiment_key",
+      "user_id",
+      "arm",
+      "note",
+      "created_by",
+      "created_at"
+    ],
+    "experiments": [
+      "key",
+      "name",
+      "description",
+      "status",
+      "salt",
+      "arms",
+      "traffic_pct",
+      "audience",
+      "fallback_arm",
+      "winner_arm",
+      "started_at",
+      "ended_at",
+      "created_by",
+      "created_at",
+      "updated_at",
+      "layer_key",
+      "layer_start",
+      "layer_end"
+    ],
+    "feature_flags": [
+      "id",
+      "name",
+      "description",
+      "is_enabled",
+      "rollout_percentage",
+      "allowed_user_ids",
+      "allowed_tiers",
+      "metadata",
+      "created_at",
+      "updated_at"
+    ],
+    "feature_gates": [
+      "feature_key",
+      "required_tier",
+      "updated_at"
+    ],
+    "fitcircle_data_submissions": [
+      "id",
+      "fitcircle_id",
+      "user_id",
+      "submission_date",
+      "steps",
+      "weight",
+      "submitted_at",
+      "rank_after_submission",
+      "rank_change",
+      "created_at"
+    ],
+    "fitcircle_leaderboard_entries": [
+      "id",
+      "fitcircle_id",
+      "user_id",
+      "period",
+      "period_start",
+      "metric_type",
+      "metric_value",
+      "rank",
+      "rank_change",
+      "last_updated",
+      "created_at"
+    ],
+    "fitcircle_members": [
+      "id",
+      "fitcircle_id",
+      "user_id",
+      "team_id",
+      "status",
+      "joined_at",
+      "completed_at",
+      "dropped_at",
+      "disqualified_at",
+      "disqualification_reason",
+      "current_value",
+      "progress_percentage",
+      "total_points",
+      "rank",
+      "check_ins_count",
+      "streak_days",
+      "missed_check_ins",
+      "last_check_in_at",
+      "achievements",
+      "stats",
+      "metadata",
+      "created_at",
+      "updated_at",
+      "goal_type",
+      "goal_start_value",
+      "goal_target_value",
+      "goal_unit",
+      "goal_description",
+      "goal_locked_at",
+      "longest_streak",
+      "invited_by",
+      "total_high_fives_received",
+      "role"
+    ],
+    "fitcircles": [
+      "id",
+      "creator_id",
+      "name",
+      "description",
+      "type",
+      "status",
+      "visibility",
+      "rules",
+      "scoring_system",
+      "start_date",
+      "end_date",
+      "registration_deadline",
+      "entry_fee",
+      "prize_pool",
+      "prize_distribution",
+      "min_participants",
+      "max_participants",
+      "min_team_size",
+      "max_team_size",
+      "allow_late_join",
+      "late_join_penalty",
+      "cover_image_url",
+      "badge_image_url",
+      "tags",
+      "location",
+      "location_name",
+      "is_featured",
+      "sponsor_info",
+      "custom_fields",
+      "participant_count",
+      "team_count",
+      "total_check_ins",
+      "avg_progress",
+      "completion_rate",
+      "engagement_score",
+      "metadata",
+      "created_at",
+      "updated_at",
+      "invite_code",
+      "privacy_mode",
+      "auto_accept_invites",
+      "late_join_deadline",
+      "timezone",
+      "min_members",
+      "max_members",
+      "is_official"
+    ],
+    "fitzy_conversations": [
+      "id",
+      "user_id",
+      "title",
+      "created_at",
+      "updated_at",
+      "archived_at"
+    ],
+    "fitzy_daily": [
+      "user_id",
+      "date",
+      "payload",
+      "created_at"
+    ],
+    "fitzy_memory": [
+      "user_id",
+      "items",
+      "last_growth_nudge_at",
+      "updated_at"
+    ],
+    "fitzy_message_log": [
+      "id",
+      "user_id",
+      "created_at"
+    ],
+    "fitzy_messages": [
+      "id",
+      "conversation_id",
+      "user_id",
+      "role",
+      "content",
+      "suggestions",
+      "actions",
+      "model",
+      "input_tokens",
+      "output_tokens",
+      "guard_tripped",
+      "created_at"
+    ],
+    "fitzy_plans": [
+      "id",
+      "user_id",
+      "week_of",
+      "goal",
+      "commitments",
+      "note",
+      "model",
+      "is_preview",
+      "created_at",
+      "updated_at"
+    ],
+    "fitzy_push_deliveries": [
+      "user_id",
+      "delivery_key",
+      "kind",
+      "local_date",
+      "status",
+      "created_at",
+      "updated_at"
+    ],
+    "food_log_audit": [
+      "id",
+      "food_log_entry_id",
+      "user_id",
+      "action",
+      "actor_id",
+      "ip_address",
+      "user_agent",
+      "changes",
+      "metadata",
+      "created_at"
+    ],
+    "food_log_entries": [
+      "id",
+      "user_id",
+      "entry_type",
+      "logged_at",
+      "entry_date",
+      "meal_type",
+      "title",
+      "description",
+      "notes",
+      "nutrition_data",
+      "water_ml",
+      "supplement_name",
+      "supplement_dosage",
+      "is_private",
+      "visibility",
+      "has_images",
+      "image_count",
+      "tags",
+      "location",
+      "ai_analyzed",
+      "ai_analysis",
+      "ai_analyzed_at",
+      "source",
+      "metadata",
+      "created_at",
+      "updated_at",
+      "deleted_at",
+      "food_id",
+      "servings",
+      "calories",
+      "protein_g",
+      "carbs_g",
+      "fat_g",
+      "input_method",
+      "nutrition_source",
+      "llm_confidence",
+      "source_external_id"
+    ],
+    "food_log_images": [
+      "id",
+      "food_log_entry_id",
+      "user_id",
+      "storage_path",
+      "storage_bucket",
+      "file_name",
+      "file_size_bytes",
+      "mime_type",
+      "width",
+      "height",
+      "thumbnail_path",
+      "display_order",
+      "ai_analyzed",
+      "ai_tags",
+      "ai_detected_foods",
+      "ai_analysis",
+      "upload_ip",
+      "upload_user_agent",
+      "metadata",
+      "created_at",
+      "updated_at",
+      "deleted_at"
+    ],
+    "food_log_shares": [
+      "id",
+      "food_log_entry_id",
+      "owner_id",
+      "shared_with_user_id",
+      "shared_with_circle_id",
+      "can_view",
+      "can_comment",
+      "share_message",
+      "expires_at",
+      "viewed_at",
+      "view_count",
+      "created_at",
+      "updated_at"
+    ],
+    "food_portions": [
+      "id",
+      "food_id",
+      "source_portion_id",
+      "seq_num",
+      "amount",
+      "unit",
+      "description",
+      "gram_weight",
+      "created_at"
+    ],
+    "foods": [
+      "id",
+      "source",
+      "source_id",
+      "owner_id",
+      "name",
+      "brand",
+      "barcode",
+      "serving_size_g",
+      "serving_unit",
+      "calories_per_100g",
+      "protein_per_100g",
+      "carbs_per_100g",
+      "fat_per_100g",
+      "fiber_per_100g",
+      "sugar_per_100g",
+      "locale",
+      "recipe_ingredients",
+      "recipe_servings",
+      "search_vector",
+      "created_at",
+      "updated_at",
+      "image_url",
+      "data_type",
+      "category",
+      "sodium_per_100g"
+    ],
+    "goal_completion_history": [
+      "id",
+      "user_id",
+      "daily_goal_id",
+      "completion_date",
+      "target_value",
+      "actual_value",
+      "completion_percentage",
+      "is_completed",
+      "completed_at",
+      "logged_at",
+      "notes",
+      "created_at"
+    ],
+    "group_meal_tags": [
+      "id",
+      "group_meal_id",
+      "tagged_user_id",
+      "status",
+      "accepted_food_log_entry_id",
+      "created_at",
+      "updated_at"
+    ],
+    "group_meals": [
+      "id",
+      "fitcircle_id",
+      "creator_id",
+      "name",
+      "restaurant_name",
+      "logged_at",
+      "meal_type",
+      "calories",
+      "protein_g",
+      "carbs_g",
+      "fat_g",
+      "photo_url",
+      "created_at",
+      "updated_at"
+    ],
+    "health_nutrition_sync": [
+      "user_id",
+      "platform",
+      "enabled",
+      "last_sync_at",
+      "last_cursor",
+      "updated_at",
+      "created_at"
+    ],
+    "home_feed_decisions": [
+      "id",
+      "user_id",
+      "layout_key",
+      "experiment_key",
+      "experiment_arm",
+      "cards",
+      "applied_rules",
+      "context",
+      "platform",
+      "app_version",
+      "server_ms",
+      "created_at"
+    ],
+    "home_feed_events": [
+      "id",
+      "decision_id",
+      "user_id",
+      "card_id",
+      "card_type",
+      "position",
+      "event",
+      "occurred_at",
+      "created_at",
+      "promo_key",
+      "creative_id",
+      "button"
+    ],
+    "home_feed_rules": [
+      "id",
+      "key",
+      "enabled",
+      "priority",
+      "definition",
+      "created_at",
+      "updated_at",
+      "updated_by"
+    ],
+    "leaderboard": [
+      "id",
+      "challenge_id",
+      "entity_id",
+      "entity_type",
+      "rank",
+      "previous_rank",
+      "points",
+      "progress_percentage",
+      "weight_lost_kg",
+      "weight_lost_percentage",
+      "total_steps",
+      "total_minutes",
+      "check_ins_count",
+      "streak_days",
+      "last_check_in_at",
+      "trend",
+      "stats",
+      "calculated_at",
+      "created_at",
+      "updated_at"
+    ],
+    "log_reactions": [
+      "food_log_entry_id",
+      "user_id",
+      "reaction",
+      "created_at"
+    ],
+    "metric_streaks": [
+      "id",
+      "user_id",
+      "metric_type",
+      "current_streak",
+      "longest_streak",
+      "last_log_date",
+      "grace_days_available",
+      "created_at",
+      "updated_at"
+    ],
+    "notification_log": [
+      "id",
+      "user_id",
+      "notification_type",
+      "notification_category",
+      "title",
+      "body",
+      "data",
+      "sent_at",
+      "delivered_at",
+      "opened_at",
+      "suppressed",
+      "suppression_reason"
+    ],
+    "notification_preferences": [
+      "id",
+      "user_id",
+      "journey_enabled",
+      "momentum_enabled",
+      "circle_enabled",
+      "challenge_enabled",
+      "social_enabled",
+      "celebration_enabled",
+      "quiet_hours_start",
+      "quiet_hours_end",
+      "quiet_hours_timezone",
+      "updated_at",
+      "coach_enabled"
+    ],
+    "notifications": [
+      "id",
+      "user_id",
+      "type",
+      "channel",
+      "title",
+      "body",
+      "action_url",
+      "action_data",
+      "priority",
+      "sender_id",
+      "related_challenge_id",
+      "related_team_id",
+      "related_user_id",
+      "is_read",
+      "read_at",
+      "is_archived",
+      "archived_at",
+      "sent_at",
+      "delivered_at",
+      "clicked_at",
+      "error_message",
+      "retry_count",
+      "metadata",
+      "created_at",
+      "updated_at"
+    ],
+    "nutrition_challenge_config": [
+      "id",
+      "fitcircle_id",
+      "metric_type",
+      "target_value",
+      "created_at",
+      "updated_at"
+    ],
+    "nutrition_parse_cache": [
+      "image_hash",
+      "result",
+      "created_at"
+    ],
+    "nutrition_parse_log": [
+      "id",
+      "user_id",
+      "image_hash",
+      "created_at"
+    ],
+    "nutrition_training_samples": [
+      "id",
+      "user_id",
+      "created_at",
+      "input_method",
+      "model",
+      "overall_confidence",
+      "was_edited",
+      "parsed_items",
+      "final_items",
+      "image_path",
+      "parse_hash",
+      "entry_id",
+      "reconciled_at",
+      "link_basis",
+      "draft_totals",
+      "final_totals",
+      "items_added",
+      "items_removed",
+      "items_renamed",
+      "items_matched",
+      "kcal_delta_pct",
+      "grams_delta_pct",
+      "latency_ms",
+      "cached",
+      "image_count",
+      "user_rating",
+      "user_comment",
+      "rated_at",
+      "refined_from_hash",
+      "correction"
+    ],
+    "onboarding_progress": [
+      "id",
+      "user_id",
+      "current_step",
+      "completed_steps",
+      "is_complete",
+      "questionnaire_answers",
+      "persona_scores",
+      "detected_persona",
+      "detected_persona_secondary",
+      "goals_data",
+      "first_checkin_data",
+      "created_at",
+      "updated_at",
+      "completed_at",
+      "flow",
+      "step",
+      "data"
+    ],
+    "onboarding_responses": [
+      "id",
+      "user_id",
+      "question_key",
+      "response_value",
+      "created_at"
+    ],
+    "payments": [
+      "id",
+      "user_id",
+      "challenge_id",
+      "amount",
+      "currency",
+      "status",
+      "type",
+      "stripe_payment_intent_id",
+      "stripe_charge_id",
+      "stripe_refund_id",
+      "payment_method",
+      "payment_method_details",
+      "description",
+      "receipt_url",
+      "failure_reason",
+      "refunded_amount",
+      "fee_amount",
+      "net_amount",
+      "tax_amount",
+      "processed_at",
+      "failed_at",
+      "refunded_at",
+      "metadata",
+      "created_at",
+      "updated_at"
+    ],
+    "plate_scores": [
+      "id",
+      "user_id",
+      "score_date",
+      "score",
+      "adherence_component",
+      "balance_component",
+      "goalfit_component",
+      "breakdown",
+      "created_at",
+      "updated_at"
+    ],
+    "privacy_settings": [
+      "id",
+      "user_id",
+      "analytics_enabled",
+      "marketing_enabled",
+      "functional_enabled",
+      "data_retention_preference",
+      "do_not_sell",
+      "gpc_honored",
+      "gpc_detected_at",
+      "updated_at",
+      "created_at"
+    ],
+    "profiles": [
+      "id",
+      "username",
+      "display_name",
+      "email",
+      "avatar_url",
+      "bio",
+      "date_of_birth",
+      "height_cm",
+      "weight_kg",
+      "timezone",
+      "country_code",
+      "phone_number",
+      "phone_verified",
+      "onboarding_completed",
+      "fitness_level",
+      "goals",
+      "preferences",
+      "health_data_sync",
+      "stripe_customer_id",
+      "subscription_tier",
+      "subscription_status",
+      "subscription_expires_at",
+      "total_points",
+      "current_streak",
+      "longest_streak",
+      "challenges_completed",
+      "challenges_won",
+      "metadata",
+      "is_active",
+      "last_active_at",
+      "created_at",
+      "updated_at",
+      "persona",
+      "persona_secondary",
+      "time_commitment",
+      "onboarding_completed_at",
+      "onboarding_current_step",
+      "total_xp",
+      "current_level",
+      "preferred_workout_types",
+      "has_completed_assessment",
+      "subscription_platform",
+      "subscription_product_id",
+      "subscription_will_renew",
+      "subscription_synced_at",
+      "weight_unit_preference",
+      "gender",
+      "is_admin",
+      "fitzy_opened_at",
+      "fitzy_intro_seen_at",
+      "paywall_auto_last_at",
+      "paywall_aha_shown_at",
+      "trial_started_at",
+      "trial_ends_at",
+      "trial_converted_at",
+      "trial_reminder_sent_at",
+      "onboarding_flow",
+      "onboarding_gate",
+      "onboarding_paywall_at",
+      "paywall_last_opened_at"
+    ],
+    "progress_entries": [
+      "id",
+      "user_id",
+      "challenge_id",
+      "value",
+      "date",
+      "is_public",
+      "created_at",
+      "updated_at"
+    ],
+    "promo_user_state": [
+      "user_id",
+      "promo_key",
+      "creative_id",
+      "first_seen_at",
+      "last_seen_at",
+      "impressions_total",
+      "impressions_day",
+      "day",
+      "seen_days",
+      "dismissed_at",
+      "tapped_at",
+      "tapped_button",
+      "converted_at",
+      "updated_at"
+    ],
+    "promos": [
+      "id",
+      "key",
+      "name",
+      "system",
+      "campaign_id",
+      "status",
+      "placement",
+      "starts_at",
+      "ends_at",
+      "phases",
+      "priority",
+      "audience",
+      "platforms",
+      "min_app_version",
+      "max_app_version",
+      "caps",
+      "creatives",
+      "experiment_key",
+      "created_by",
+      "updated_by",
+      "created_at",
+      "updated_at",
+      "version"
+    ],
+    "public_profiles": [
+      "id",
+      "username",
+      "display_name",
+      "avatar_url"
+    ],
+    "push_tokens": [
+      "id",
+      "user_id",
+      "token",
+      "platform",
+      "device_name",
+      "is_active",
+      "last_used_at",
+      "created_at",
+      "client_features"
+    ],
+    "reactions": [
+      "id",
+      "user_id",
+      "entity_type",
+      "entity_id",
+      "type",
+      "created_at"
+    ],
+    "referral_codes": [
+      "user_id",
+      "code",
+      "created_at"
+    ],
+    "referral_devices": [
+      "device_hash",
+      "user_id",
+      "first_seen_at",
+      "last_seen_at"
+    ],
+    "referral_email_optouts": [
+      "email_hash",
+      "created_at"
+    ],
+    "referral_invites": [
+      "id",
+      "inviter_id",
+      "channel",
+      "contact_hash",
+      "email",
+      "contact_display",
+      "name",
+      "circle_id",
+      "status",
+      "referral_id",
+      "nudge_count",
+      "last_nudged_at",
+      "sent_at",
+      "joined_at",
+      "created_at"
+    ],
+    "referral_rewards": [
+      "id",
+      "user_id",
+      "referral_id",
+      "kind",
+      "days",
+      "status",
+      "applied_at",
+      "seen_at",
+      "created_at",
+      "notified_at",
+      "emailed_at"
+    ],
+    "referrals": [
+      "id",
+      "invitee_id",
+      "inviter_id",
+      "code",
+      "circle_id",
+      "source",
+      "status",
+      "status_reason",
+      "invitee_device_hash",
+      "attributed_at",
+      "qualified_at",
+      "reviewed_by",
+      "created_at",
+      "nudge_count",
+      "last_nudged_at",
+      "inviter_notified_at",
+      "progress_days",
+      "progress_notified_days"
+    ],
+    "release_events": [
+      "id",
+      "release_id",
+      "from_status",
+      "to_status",
+      "store_status",
+      "occurred_at",
+      "source",
+      "actor",
+      "note",
+      "created_at"
+    ],
+    "release_sync_runs": [
+      "id",
+      "source",
+      "trigger",
+      "started_at",
+      "finished_at",
+      "ok",
+      "rows_releases",
+      "rows_events",
+      "error"
+    ],
+    "releases": [
+      "id",
+      "release_key",
+      "platform",
+      "track",
+      "version",
+      "build",
+      "status",
+      "store_status",
+      "release_type",
+      "rollout_fraction",
+      "countries",
+      "whats_new",
+      "internal_notes",
+      "known_issues",
+      "commits",
+      "migrations",
+      "links",
+      "source",
+      "source_id",
+      "store_created_at",
+      "uploaded_at",
+      "submitted_at",
+      "approved_at",
+      "released_at",
+      "superseded_at",
+      "raw",
+      "synced_at",
+      "notes_updated_by",
+      "notes_updated_at",
+      "created_at",
+      "updated_at"
+    ],
+    "share_cards": [
+      "id",
+      "user_id",
+      "card_type",
+      "template_name",
+      "card_data",
+      "image_url",
+      "shared_count",
+      "created_at",
+      "expires_at"
+    ],
+    "streak_claims": [
+      "id",
+      "user_id",
+      "claim_date",
+      "claimed_at",
+      "claim_method",
+      "timezone",
+      "health_data_synced",
+      "metadata",
+      "created_at"
+    ],
+    "streak_recoveries": [
+      "id",
+      "user_id",
+      "broken_date",
+      "recovery_type",
+      "recovery_status",
+      "actions_required",
+      "actions_completed",
+      "expires_at",
+      "completed_at",
+      "metadata",
+      "created_at",
+      "updated_at"
+    ],
+    "streak_shields": [
+      "id",
+      "user_id",
+      "shield_type",
+      "available_count",
+      "last_reset_at",
+      "metadata",
+      "created_at",
+      "updated_at"
+    ],
+    "subscription_events": [
+      "id",
+      "user_id",
+      "type",
+      "store",
+      "environment",
+      "event_timestamp",
+      "raw",
+      "processed_at"
+    ],
+    "team_members": [
+      "id",
+      "team_id",
+      "user_id",
+      "role",
+      "joined_at",
+      "points_contributed",
+      "check_ins_count",
+      "last_check_in_at",
+      "is_active",
+      "removed_at",
+      "removed_by",
+      "removal_reason",
+      "metadata",
+      "created_at",
+      "updated_at"
+    ],
+    "teams": [
+      "id",
+      "challenge_id",
+      "name",
+      "motto",
+      "avatar_url",
+      "is_public",
+      "max_members",
+      "member_count",
+      "total_points",
+      "rank",
+      "invite_code",
+      "settings",
+      "stats",
+      "metadata",
+      "created_at",
+      "updated_at"
+    ],
+    "token_blacklist": [
+      "id",
+      "user_id",
+      "token_hash",
+      "blacklisted_at",
+      "expires_at",
+      "reason",
+      "created_at"
+    ],
+    "user_achievements": [
+      "id",
+      "user_id",
+      "achievement_type",
+      "achievement_name",
+      "achievement_description",
+      "achievement_icon",
+      "xp_awarded",
+      "badge_url",
+      "metadata",
+      "earned_at"
+    ],
+    "user_attribution": [
+      "user_id",
+      "channel",
+      "platform",
+      "source",
+      "campaign_external_id",
+      "ad_group_external_id",
+      "keyword_external_id",
+      "ad_external_id",
+      "click_at",
+      "country",
+      "is_test",
+      "raw",
+      "reported_at",
+      "app_instance_id"
+    ],
+    "user_consent": [
+      "id",
+      "user_id",
+      "consent_type",
+      "consent_given",
+      "consent_version",
+      "consent_text",
+      "consent_method",
+      "ip_address",
+      "user_agent",
+      "gpc_signal",
+      "consent_timestamp",
+      "withdrawn_at",
+      "expires_at",
+      "metadata",
+      "created_at"
+    ],
+    "user_goals": [
+      "id",
+      "user_id",
+      "goal_type",
+      "goal_name",
+      "goal_description",
+      "current_value",
+      "target_value",
+      "start_value",
+      "target_date",
+      "created_date",
+      "status",
+      "progress_percentage",
+      "metadata",
+      "created_at",
+      "updated_at",
+      "completed_at"
+    ],
+    "weekly_goals": [
+      "id",
+      "user_id",
+      "week_start",
+      "goal_type",
+      "target_value",
+      "actual_value",
+      "daily_breakdown",
+      "completed",
+      "fitcircle_id",
+      "created_at",
+      "updated_at"
+    ],
+    "workout_exercises": [
+      "id",
+      "exercise_log_id",
+      "exercise_id",
+      "position",
+      "superset_group",
+      "notes",
+      "rest_seconds",
+      "created_at"
+    ]
+  }
+}

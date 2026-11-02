@@ -131,51 +131,6 @@ self.addEventListener('fetch', (event) => {
   );
 });
 
-// Background sync for offline check-ins
-self.addEventListener('sync', (event) => {
-  if (event.tag === 'sync-checkins') {
-    event.waitUntil(syncCheckIns());
-  }
-});
-
-async function syncCheckIns() {
-  try {
-    const cache = await caches.open('fitcircle-offline-checkins');
-    const requests = await cache.keys();
-
-    for (const request of requests) {
-      const response = await cache.match(request);
-      const data = await response.json();
-
-      // Send to server
-      const serverResponse = await fetch('/api/checkins', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(data),
-      });
-
-      if (serverResponse.ok) {
-        // Remove from cache if successful
-        await cache.delete(request);
-
-        // Notify client
-        self.clients.matchAll().then(clients => {
-          clients.forEach(client => {
-            client.postMessage({
-              type: 'CHECKIN_SYNCED',
-              data: data,
-            });
-          });
-        });
-      }
-    }
-  } catch (error) {
-    console.error('Error syncing check-ins:', error);
-  }
-}
-
 // Push notifications
 self.addEventListener('push', (event) => {
   const options = {
@@ -219,13 +174,5 @@ self.addEventListener('notificationclick', (event) => {
 self.addEventListener('message', (event) => {
   if (event.data && event.data.type === 'SKIP_WAITING') {
     self.skipWaiting();
-  }
-
-  if (event.data && event.data.type === 'CACHE_CHECKIN') {
-    caches.open('fitcircle-offline-checkins').then(cache => {
-      const request = new Request(`/offline-checkin-${Date.now()}`);
-      const response = new Response(JSON.stringify(event.data.payload));
-      cache.put(request, response);
-    });
   }
 });

@@ -289,16 +289,17 @@ export class PlateScoreService {
     const supabase = createAdminSupabase();
 
     // Active challenge participation with a calorie-style nutrition goal.
-    const { data } = await supabase
-      .from('circle_challenge_participants')
-      .select('circle_challenges!inner(unit, goal_amount, status, starts_at, ends_at, category)')
+    const { data, error } = await supabase
+      .from('challenge_participants')
+      .select('challenges!inner(unit, goal_amount, status, starts_at, ends_at, category)')
       .eq('user_id', userId)
       .eq('status', 'active')
       .limit(10);
+    if (error) console.error('[PlateScore] challenge target query failed:', error.message);
 
     const rows = (data ?? []) as any[];
     for (const r of rows) {
-      const ch = r.circle_challenges;
+      const ch = r.challenges;
       if (!ch || ch.status !== 'active') continue;
       const unit = String(ch.unit ?? '').toLowerCase();
       // Only honor calorie/kcal-denominated goals for goal-fit (other challenge

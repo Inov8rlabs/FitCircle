@@ -76,22 +76,26 @@ export class GoalRecommendationService {
   ): Promise<Challenge[]> {
     const today = new Date().toISOString();
 
-    // Get challenges through circle_participants
-    const { data: participantData } = await supabase
-      .from('circle_participants')
+    // The user's active circles (fitcircles.type is the challenge type)
+    const { data: participantData, error } = await supabase
+      .from('fitcircle_members')
       .select(`
-        circles!inner (
+        fitcircles!inner (
           id,
           name,
-          challenge_type,
-          target_value,
-          duration_days,
+          type,
+          start_date,
           end_date
         )
       `)
       .eq('user_id', userId)
       .eq('status', 'active')
-      .gt('circles.end_date', today);
+      .gt('fitcircles.end_date', today);
+
+    if (error) {
+      console.error('[GoalRecommendationService] active circles query failed:', error.message);
+      return [];
+    }
 
     if (!participantData || participantData.length === 0) {
       return [];
@@ -100,15 +104,18 @@ export class GoalRecommendationService {
     // Transform to Challenge array
     return participantData
       .map(p => {
-        const circle = (p as any).circles;
+        const circle = (p as any).fitcircles;
         if (!circle) return null;
 
+        const days = circle.start_date && circle.end_date
+          ? Math.max(1, Math.round((Date.parse(circle.end_date) - Date.parse(circle.start_date)) / 86_400_000))
+          : 0;
         return {
           id: circle.id,
           name: circle.name,
-          challenge_type: circle.challenge_type,
-          target_value: circle.target_value,
-          duration_days: circle.duration_days,
+          challenge_type: circle.type,
+          target_value: null as number | null,
+          duration_days: days,
           end_date: circle.end_date,
         };
       })
