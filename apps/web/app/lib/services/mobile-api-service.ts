@@ -7,6 +7,7 @@ import { MetricStreakService } from './metric-streak-service';
 import { toMobileProfile } from './mobile-profile-response';
 import { StreakClaimingService } from './streak-claiming-service';
 import { isValidUsername } from './username-service';
+import { resolveStepsMerge } from './steps-merge';
 
 /**
  * True when PostgREST / Postgres rejected a statement because `column` does not
@@ -572,71 +573,22 @@ export class MobileAPIService {
       .eq('tracking_date', trackingDate)
       .single();
 
-    // ============================================================================
-    // HEALTHKIT CONFLICT RESOLUTION LOGIC
-    // ============================================================================
-    // Rules:
-    // 1. Manual entry always wins over auto-sync (unless user explicitly sets is_override=false)
-    // 2. If existing entry has is_override=true, never overwrite with auto-sync
-    // 3. Only update if incoming data is newer than existing steps_synced_at
-    // ============================================================================
-
-    let finalSteps = data.steps;
-    let finalStepsSource = data.steps_source || 'manual';
-    let finalStepsSyncedAt = data.steps_synced_at;
-    let finalIsOverride = data.is_override !== undefined ? data.is_override : false;
-
-    if (existing && data.steps !== undefined) {
-      const isIncomingAutoSync = data.steps_source === 'healthkit' || data.steps_source === 'google_fit';
-      const isExistingManual = existing.steps_source === 'manual';
-      const isExistingOverride = existing.is_override === true;
-
-      // Case 1: Existing entry is a manual override - never overwrite with auto-sync
-      if (isExistingOverride && isIncomingAutoSync) {
-        console.log(
-          `[upsertDailyTracking] Preserving manual override for user ${userId} on ${trackingDate}`
-        );
-        finalSteps = existing.steps;
-        finalStepsSource = 'manual';
-        finalStepsSyncedAt = existing.steps_synced_at;
-        finalIsOverride = true;
-      }
-      // Case 2: Existing manual entry + new auto-sync (no override flag) - keep manual
-      else if (isExistingManual && isIncomingAutoSync && !data.is_override) {
-        console.log(
-          `[upsertDailyTracking] Preserving manual entry over auto-sync for user ${userId} on ${trackingDate}`
-        );
-        finalSteps = existing.steps;
-        finalStepsSource = 'manual';
-        finalStepsSyncedAt = existing.steps_synced_at;
-        finalIsOverride = false;
-      }
-      // Case 3: Auto-sync update - only if newer than existing
-      else if (isIncomingAutoSync && existing.steps_synced_at && data.steps_synced_at) {
-        const existingSyncTime = new Date(existing.steps_synced_at).getTime();
-        const incomingSyncTime = new Date(data.steps_synced_at).getTime();
-
-        if (incomingSyncTime <= existingSyncTime) {
-          console.log(
-            `[upsertDailyTracking] Skipping stale auto-sync for user ${userId} on ${trackingDate} (existing: ${existing.steps_synced_at}, incoming: ${data.steps_synced_at})`
-          );
-          finalSteps = existing.steps;
-          finalStepsSource = existing.steps_source;
-          finalStepsSyncedAt = existing.steps_synced_at;
-          finalIsOverride = existing.is_override;
-        }
-        // Otherwise use incoming data (implicitly set above)
-      }
-      // Case 4: Manual entry overriding auto-sync - mark as override
-      else if (!isIncomingAutoSync && (existing.steps_source === 'healthkit' || existing.steps_source === 'google_fit')) {
-        console.log(
-          `[upsertDailyTracking] User manually overriding auto-synced data for ${trackingDate}`
-        );
-        finalIsOverride = true;
-        finalStepsSource = 'manual';
-        finalStepsSyncedAt = undefined;
-      }
+    // Step conflict resolution (manual vs platform auto-sync): see steps-merge.ts.
+    // A weight/mood-only row (steps NULL, steps_source defaulted to 'manual') is
+    // NOT a manual step entry and must not block a later Health Connect sync.
+    const merged = resolveStepsMerge(existing ?? null, {
+      steps: data.steps,
+      steps_source: data.steps_source,
+      steps_synced_at: data.steps_synced_at,
+      is_override: data.is_override,
+    });
+    if (merged.reason.startsWith('kept_') || merged.reason === 'manual_over_sync') {
+      console.log(`[upsertDailyTracking] ${merged.reason} for user ${userId} on ${trackingDate}`);
     }
+    const finalSteps = merged.steps;
+    const finalStepsSource = merged.steps_source;
+    const finalStepsSyncedAt = merged.steps_synced_at;
+    const finalIsOverride = merged.is_override;
 
     let result: any;
 
