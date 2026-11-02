@@ -7,8 +7,10 @@
  */
 import type { SupabaseClient } from '@supabase/supabase-js';
 
-import { deriveUsernameBase, ensureUniqueUsername } from './username-service';
 import { logIgnoredQueryError } from '@/lib/api/route-errors';
+import { coerceDisplayName } from '@/lib/validation/display-name';
+
+import { deriveUsernameBase, ensureUniqueUsername } from './username-service';
 
 export type SocialProvider = 'apple' | 'google';
 
@@ -141,8 +143,10 @@ export async function findOrCreateSocialUser(
     return !!data;
   };
   const username = await ensureUniqueUsername(deriveUsernameBase(email), usernameTaken);
-  const displayName =
-    [input.firstName, input.lastName].map((s) => s?.trim()).filter(Boolean).join(' ') || username;
+  const displayName = coerceDisplayName(
+    [input.firstName, input.lastName].map((s) => s?.trim()).filter(Boolean).join(' '),
+    username
+  );
   const now = new Date().toISOString();
 
   const { data: profile, error: profileError } = await supabase

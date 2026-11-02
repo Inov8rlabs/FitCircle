@@ -898,7 +898,10 @@ export class CircleChatService {
     // failed to decode whole pages when `name` was absent.
     const senderIds = rows.map((r) => r.sender_id).filter((id): id is string => !!id);
     const actorIds = rows.flatMap((r) => this.actorIdsOf(r));
-    const profileIds = Array.from(new Set([...senderIds, ...actorIds]));
+    // Cheer recipients too: `to_display_name` is a copy taken when the cheer
+    // was sent; the live name wins so a rename shows everywhere.
+    const cheerIds = rows.map((r) => this.cheerOf(r)?.to_user_id).filter((id): id is string => !!id);
+    const profileIds = Array.from(new Set([...senderIds, ...actorIds, ...cheerIds]));
     const senderById = new Map<string, MessageSender>();
     if (profileIds.length > 0) {
       const { data: profiles, error } = await supabaseAdmin
@@ -939,9 +942,22 @@ export class CircleChatService {
         createdAt: row.created_at,
         editedAt: row.edited_at ?? null,
         deletedAt: row.deleted_at ?? null,
-        cheer: this.cheerOf(row),
+        cheer: this.withLiveRecipientName(this.cheerOf(row), senderById),
       };
     });
+  }
+
+  /**
+   * A cheer whose `to_display_name` is the recipient's CURRENT name when their
+   * profile is known, else the copy stored at send time. Pure.
+   */
+  static withLiveRecipientName(
+    cheer: MessageCheer | null,
+    nameById: ReadonlyMap<string, { name: string }>
+  ): MessageCheer | null {
+    if (!cheer) return null;
+    const live = nameById.get(cheer.to_user_id)?.name?.trim();
+    return live ? { ...cheer, to_display_name: live } : cheer;
   }
 
   /** Actor ids referenced by a system post's payload (for the profile batch). */
@@ -956,8 +972,11 @@ export class CircleChatService {
 
   /**
    * Normalize stored actors to the `{ id, name }` wire shape. Names come from
-   * the payload when present, else the batched profile lookup, else ''. Entries
-   * without a usable id are dropped rather than sent malformed.
+   * the batched profile lookup (the person's CURRENT name, so a rename shows on
+   * old posts' chips too), else the name stored in the payload (non-member
+   * actors such as a challenge), else ''. Entries without a usable id are
+   * dropped rather than sent malformed. The pre-rendered `body` text is history
+   * and keeps the name as written.
    */
   static normalizeActors(
     raw: unknown,
@@ -971,7 +990,7 @@ export class CircleChatService {
       if (typeof id !== 'string' || id.length === 0) continue;
       out.push({
         id,
-        name: typeof name === 'string' && name.length > 0 ? name : nameById.get(id)?.name ?? '',
+        name: nameById.get(id)?.name || (typeof name === 'string' && name.length > 0 ? name : ''),
       });
     }
     return out;

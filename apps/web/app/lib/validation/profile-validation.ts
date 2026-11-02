@@ -29,7 +29,10 @@ export function isProfileGender(value: unknown): value is ProfileGender {
 const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
 
 export const updateProfileSchema = z.object({
-  displayName: z.string().min(1).max(100).optional(),
+  // Shape only here; the name rule (display-name.ts: normalize, 1–40
+  // characters) runs in the route, which must let an unchanged legacy name
+  // through so clients that echo the whole profile can still save other fields.
+  displayName: z.string().max(1000).optional(),
   // The register rule (username-service.ts): 3–30 letters, digits, underscores
   // and periods, no leading/trailing period, surrounding whitespace trimmed.
   // It is a superset of the previous rule here (3–30 of [a-zA-Z0-9_]).

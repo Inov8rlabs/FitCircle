@@ -438,6 +438,22 @@ export class SystemPostEngine {
       }
     }
 
+    // Stored actors are `{ id }` only (the name is baked into the body), so a
+    // bundled copy would render blank names. Resolve the CURRENT display name
+    // of each actor (also right after a rename).
+    const missing = Array.from(new Set(recentSameTypeInWindow.map((s) => s.actorUserId)));
+    if (missing.length > 0) {
+      const { data: profiles, error } = await supabaseAdmin.from('profiles').select('id, display_name').in('id', missing);
+      if (!error) {
+        const nameById = new Map(
+          ((profiles ?? []) as Array<{ id: string; display_name: string | null }>).map((p) => [p.id, (p.display_name ?? '').trim()])
+        );
+        for (const s of recentSameTypeInWindow) {
+          s.actorName = nameById.get(s.actorUserId) || s.actorName || 'Someone';
+        }
+      }
+    }
+
     return { perMemberRoutineToday, circlePostsThisHour, recentSameTypeInWindow };
   }
 

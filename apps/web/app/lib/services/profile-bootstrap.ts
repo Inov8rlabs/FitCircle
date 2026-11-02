@@ -1,4 +1,5 @@
 import { createAdminSupabase } from '../supabase-admin';
+import { coerceDisplayName } from '../validation/display-name';
 
 import { USERNAME_PATTERN, deriveUsernameBase, ensureUniqueUsername } from './username-service';
 
@@ -51,7 +52,7 @@ export async function ensureProfileRow(userId: string): Promise<boolean> {
       id: userId,
       email,
       username,
-      display_name: displayName ?? username, // NOT NULL
+      display_name: coerceDisplayName(displayName, username), // NOT NULL
       onboarding_completed: false,
       created_at: now,
       updated_at: now,

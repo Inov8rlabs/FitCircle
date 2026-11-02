@@ -2,7 +2,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const state = {
   authed: true,
-  user: { id: 'u1', email: 'a@b.com', date_of_birth: null as string | null },
+  user: { id: 'u1', email: 'a@b.com', date_of_birth: null as string | null } as Record<string, any>,
+  authSync: [] as Array<[string, string]>,
   row: {} as Record<string, any>,
   updates: [] as Array<Record<string, any>>,
   updateError: null as null | { code: string; message: string },
@@ -24,6 +25,9 @@ vi.mock('@/lib/services/mobile-api-service', () => ({
       return { ...state.row };
     },
     getUserProfileWithStats: async () => ({ ...state.row }),
+    syncAuthMetadataName: async (userId: string, name: string) => {
+      state.authSync.push([userId, name]);
+    },
   },
 }));
 
@@ -52,6 +56,7 @@ beforeEach(() => {
   };
   state.updates = [];
   state.updateError = null;
+  state.authSync = [];
 });
 
 describe('PUT /api/mobile/profile', () => {
@@ -189,5 +194,53 @@ describe('PUT /api/mobile/profile', () => {
     const res = await put({ displayName: 'Ani' });
     expect(res.status).toBe(401);
     expect((await res.json()).error.code).toBe('UNAUTHORIZED');
+  });
+
+  describe('display name rule (validation/display-name.ts)', () => {
+    beforeEach(() => {
+      state.user = { ...state.user, display_name: 'Ani' };
+    });
+
+    it('stores the normalized name and mirrors it to auth metadata', async () => {
+      const res = await put({ displayName: '  José   Rao ' });
+      expect(res.status).toBe(200);
+      expect(state.updates).toEqual([{ display_name: 'José Rao' }]);
+      expect((await res.json()).data.user.display_name).toBe('José Rao');
+      await Promise.resolve();
+      expect(state.authSync).toEqual([['u1', 'José Rao']]);
+    });
+
+    it('rejects a name over 40 characters with a field message', async () => {
+      const res = await put({ displayName: 'a'.repeat(41) });
+      expect(res.status).toBe(400);
+      const body = await res.json();
+      expect(body.error.code).toBe('VALIDATION_ERROR');
+      expect(body.error.details.displayName).toBe('Names can be up to 40 characters');
+      expect(state.updates).toHaveLength(0);
+    });
+
+    it('rejects whitespace-only and zero-width-only names', async () => {
+      for (const name of ['   ', '\u200B\u200B']) {
+        const res = await put({ displayName: name });
+        expect(res.status).toBe(400);
+        expect((await res.json()).error.details.displayName).toBe('Enter a name');
+      }
+      expect(state.updates).toHaveLength(0);
+    });
+
+    it('an unchanged name (even a legacy one over the limit) never blocks other fields', async () => {
+      state.user.display_name = 'L'.repeat(60);
+      const res = await put({ displayName: 'L'.repeat(60), bio: 'hello' });
+      expect(res.status).toBe(200);
+      expect(state.updates).toEqual([{ bio: 'hello' }]);
+      expect(state.authSync).toEqual([]);
+    });
+
+    it('a resent name differing only in whitespace is treated as unchanged', async () => {
+      const res = await put({ displayName: ' Ani ' });
+      expect(res.status).toBe(200);
+      expect(state.updates).toEqual([{}]);
+      expect(state.authSync).toEqual([]);
+    });
   });
 });

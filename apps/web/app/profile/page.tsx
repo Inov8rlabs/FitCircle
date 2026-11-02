@@ -19,6 +19,7 @@ import {
   Lock,
   LogOut,
   Mail,
+  Pencil,
   Ruler,
   Scale,
   Settings,
@@ -48,11 +49,15 @@ import {
 } from '@/components/ui/sheet';
 import { UnitToggle } from '@/components/ui/unit-toggle';
 import { useUnitPreference } from '@/hooks/useUnitPreference';
+import { AnalyticsEvents, analytics } from '@/lib/analytics';
+import { ProfileApiError, updateProfileName } from '@/lib/api/profile-client';
 import { supabase } from '@/lib/supabase';
 import { parseWeightToKg, weightKgToDisplay, getWeightUnit } from '@/lib/utils/units';
+import { DISPLAY_NAME_MAX_LENGTH, cleanDisplayName, displayNameLength, validateDisplayName } from '@/lib/validation/display-name';
 import { useAuthStore } from '@/stores/auth-store';
 
-type ProfileSheet = 'edit' | 'goal-weight' | 'steps' | null;
+type ProfileSheet = 'name' | 'edit' | 'goal-weight' | 'steps' | null;
+type NameEntryPoint = 'profile_header' | 'edit_profile';
 
 function StatCell({ icon, tone, value, label }: { icon: typeof Flame; tone: Tone; value: React.ReactNode; label: string }) {
   return (
@@ -66,7 +71,7 @@ function StatCell({ icon, tone, value, label }: { icon: typeof Flame; tone: Tone
 
 export default function ProfilePage() {
   const router = useRouter();
-  const { user, logout } = useAuthStore();
+  const { user, logout, updateUser } = useAuthStore();
   const { unitSystem, setUnitSystem, isLoading: isLoadingUnits } = useUnitPreference();
   const [sheet, setSheet] = useState<ProfileSheet>(null);
   const [goalWeight, setGoalWeight] = useState('');
@@ -78,6 +83,82 @@ export default function ProfilePage() {
     email: user?.email || '',
     username: user?.username || '',
   });
+  const [nameDraft, setNameDraft] = useState('');
+  const [nameError, setNameError] = useState<string | null>(null);
+  const [usernameError, setUsernameError] = useState<string | null>(null);
+  const [isSavingProfile, setIsSavingProfile] = useState(false);
+
+  const openNameSheet = () => {
+    setNameDraft(user?.name || '');
+    setNameError(null);
+    setSheet('name');
+  };
+
+  const openEditSheet = () => {
+    setFormData({ name: user?.name || '', email: user?.email || '', username: user?.username || '' });
+    setNameError(null);
+    setUsernameError(null);
+    setSheet('edit');
+  };
+
+  /**
+   * Save name and/or username. The header, avatar and every screen reading the
+   * auth store update optimistically; a failure rolls them back.
+   */
+  const saveProfileName = async (
+    changes: { displayName?: string; username?: string },
+    entryPoint: NameEntryPoint
+  ): Promise<boolean> => {
+    if (!user) return false;
+    const previous = { name: user.name, username: user.username };
+    setIsSavingProfile(true);
+    setNameError(null);
+    setUsernameError(null);
+    updateUser({
+      ...(changes.displayName !== undefined ? { name: changes.displayName } : {}),
+      ...(changes.username !== undefined ? { username: changes.username } : {}),
+    });
+    try {
+      const saved = await updateProfileName(changes);
+      updateUser({ name: saved.displayName || previous.name, username: saved.username || previous.username });
+      if (changes.displayName !== undefined) {
+        analytics.track(AnalyticsEvents.profileNameChanged({ entry_point: entryPoint }));
+      }
+      toast.success(
+        changes.displayName !== undefined
+          ? `Name updated. Your circles now see "${saved.displayName}".`
+          : 'Profile updated'
+      );
+      return true;
+    } catch (error) {
+      updateUser(previous);
+      if (error instanceof ProfileApiError && error.code === 'USERNAME_TAKEN') {
+        setUsernameError('That username is taken');
+      } else if (error instanceof ProfileApiError && error.details.displayName) {
+        setNameError(error.details.displayName);
+      } else if (error instanceof ProfileApiError && error.details.username) {
+        setUsernameError(error.details.username);
+      } else {
+        toast.error("Couldn't save your changes. Try again.");
+      }
+      return false;
+    } finally {
+      setIsSavingProfile(false);
+    }
+  };
+
+  const nameCheck = validateDisplayName(nameDraft);
+  const nameUnchanged = cleanDisplayName(nameDraft) === cleanDisplayName(user?.name);
+  const nameDraftLength = displayNameLength(cleanDisplayName(nameDraft));
+
+  const handleSaveName = async () => {
+    if (!nameCheck.ok) {
+      setNameError(nameCheck.message);
+      return;
+    }
+    if (nameUnchanged) return;
+    if (await saveProfileName({ displayName: nameCheck.value }, 'profile_header')) setSheet(null);
+  };
 
   // Fetch current goal weight
   useEffect(() => {
@@ -207,10 +288,24 @@ export default function ProfilePage() {
     }
   };
 
+  // Edit Profile: name + username (email changes are not supported here).
   const handleSave = async () => {
-    // TODO: Implement profile update
-    toast.success('Profile updated successfully!');
-    setSheet(null);
+    const changes: { displayName?: string; username?: string } = {};
+    if (cleanDisplayName(formData.name) !== cleanDisplayName(user?.name)) {
+      const check = validateDisplayName(formData.name);
+      if (!check.ok) {
+        setNameError(check.message);
+        return;
+      }
+      changes.displayName = check.value;
+    }
+    const username = formData.username.trim();
+    if (username && username !== user?.username) changes.username = username;
+    if (Object.keys(changes).length === 0) {
+      setSheet(null);
+      return;
+    }
+    if (await saveProfileName(changes, 'edit_profile')) setSheet(null);
   };
 
   const handleLogout = async () => {
@@ -227,10 +322,27 @@ export default function ProfilePage() {
       <div className="space-y-4">
         {/* Header card */}
         <GlassCard className="flex flex-col items-center text-center sm:flex-row sm:text-left" data-testid="profile-header">
-          <AvatarCircle name={user?.name || 'User'} src={user?.avatar} size={76} className="ring-4 ring-brand-purple/30" />
+          <button
+            type="button"
+            onClick={openNameSheet}
+            aria-label="Change your name"
+            className="rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-purple"
+            data-testid="profile-avatar-edit-name"
+          >
+            <AvatarCircle name={user?.name || 'User'} src={user?.avatar} size={76} className="ring-4 ring-brand-purple/30" />
+          </button>
           <div className="mt-3 min-w-0 flex-1 sm:ml-4 sm:mt-0">
             <p className="flex items-center justify-center gap-2 text-title2 text-white sm:justify-start">
-              <span className="truncate">{user?.name || 'User'}</span>
+              <button
+                type="button"
+                onClick={openNameSheet}
+                className="group inline-flex min-w-0 items-center gap-1.5 rounded-lg text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-purple"
+                aria-label={`Name: ${user?.name || 'User'}. Change your name`}
+                data-testid="edit-name"
+              >
+                <span className="truncate">{user?.name || 'User'}</span>
+                <Pencil aria-hidden className="h-4 w-4 shrink-0 text-fg-secondary transition-colors group-hover:text-white" />
+              </button>
               {user?.isPremium && <ProBadge />}
             </p>
             {user?.username && <p className="text-subhead text-fg-secondary">@{user.username}</p>}
@@ -239,7 +351,7 @@ export default function ProfilePage() {
             variant="outline"
             size="sm"
             className="mt-4 rounded-full px-4 sm:mt-0"
-            onClick={() => setSheet('edit')}
+            onClick={openEditSheet}
             data-testid="edit-profile"
           >
             Edit Profile
@@ -256,7 +368,7 @@ export default function ProfilePage() {
 
       <div className="mt-6">
         <ListGroup title="Account">
-          <ListRow icon={User} tone="purple" title="Name" value={user?.name || 'Not set'} />
+          <ListRow icon={User} tone="purple" title="Name" value={user?.name || 'Not set'} onClick={openNameSheet} chevron testId="row-name" />
           <ListRow icon={Mail} tone="indigo" title="Email" value={<span className="block max-w-[180px] truncate sm:max-w-none">{user?.email || 'Not set'}</span>} />
           <ListRow icon={Calendar} tone="slate" title="Member since" value={memberSinceLabel} />
         </ListGroup>
@@ -326,21 +438,91 @@ export default function ProfilePage() {
           <div className="space-y-4">
             <div>
               <Label htmlFor="name" className="mb-1.5 block text-subhead text-fg-secondary">Full Name</Label>
-              <Input id="name" value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} />
+              <Input
+                id="name"
+                value={formData.name}
+                maxLength={DISPLAY_NAME_MAX_LENGTH * 4}
+                aria-invalid={!!nameError}
+                onChange={(e) => {
+                  setFormData({ ...formData, name: e.target.value });
+                  setNameError(null);
+                }}
+              />
+              {nameError && <p className="mt-1.5 text-footnote text-red-400" role="alert">{nameError}</p>}
             </div>
             <div>
               <Label htmlFor="username" className="mb-1.5 block text-subhead text-fg-secondary">Username</Label>
-              <Input id="username" value={formData.username} onChange={(e) => setFormData({ ...formData, username: e.target.value })} />
+              <Input
+                id="username"
+                value={formData.username}
+                aria-invalid={!!usernameError}
+                onChange={(e) => {
+                  setFormData({ ...formData, username: e.target.value });
+                  setUsernameError(null);
+                }}
+              />
+              {usernameError && <p className="mt-1.5 text-footnote text-red-400" role="alert">{usernameError}</p>}
             </div>
             <div>
               <Label htmlFor="email" className="mb-1.5 block text-subhead text-fg-secondary">Email</Label>
-              <Input id="email" type="email" value={formData.email} onChange={(e) => setFormData({ ...formData, email: e.target.value })} />
+              <Input id="email" type="email" value={formData.email} readOnly disabled />
             </div>
           </div>
           <SheetFooter>
             <Button variant="ghost" onClick={() => setSheet(null)}>Cancel</Button>
-            <Button onClick={() => void handleSave()}>Save changes</Button>
+            <Button onClick={() => void handleSave()} disabled={isSavingProfile}>
+              {isSavingProfile ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Saving...</> : 'Save changes'}
+            </Button>
           </SheetFooter>
+        </SheetContent>
+      </Sheet>
+
+      {/* Change name (from the header, avatar or the Name row) */}
+      <Sheet open={sheet === 'name'} onOpenChange={(o) => setSheet(o ? 'name' : null)}>
+        <SheetContent>
+          <SheetHeader>
+            <SheetTitle>Your name</SheetTitle>
+            <SheetDescription>This is how you appear in your circles, chats and leaderboards.</SheetDescription>
+          </SheetHeader>
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              void handleSaveName();
+            }}
+          >
+            <Label htmlFor="display-name" className="mb-1.5 block text-subhead text-fg-secondary">Display name</Label>
+            <Input
+              id="display-name"
+              autoFocus
+              autoComplete="name"
+              value={nameDraft}
+              maxLength={DISPLAY_NAME_MAX_LENGTH * 4}
+              aria-invalid={!!nameError || (!nameCheck.ok && nameDraft.length > 0)}
+              aria-describedby="display-name-help"
+              onChange={(e) => {
+                setNameDraft(e.target.value);
+                setNameError(null);
+              }}
+              data-testid="display-name-input"
+            />
+            <div id="display-name-help" className="mt-1.5 flex items-start justify-between gap-3 text-footnote">
+              <span className={nameError || (!nameCheck.ok && nameDraft.length > 0) ? 'text-red-400' : 'text-fg-secondary'} role={nameError ? 'alert' : undefined}>
+                {nameError ?? (!nameCheck.ok && nameDraft.length > 0 ? nameCheck.message : 'Your circles see this right away.')}
+              </span>
+              <span
+                className={nameDraftLength > DISPLAY_NAME_MAX_LENGTH ? 'tabular-nums text-red-400' : 'tabular-nums text-fg-secondary'}
+                data-testid="display-name-count"
+              >
+                {nameDraftLength}/{DISPLAY_NAME_MAX_LENGTH}
+              </span>
+            </div>
+            <SheetFooter className="mt-4">
+              <Button type="button" variant="ghost" onClick={() => setSheet(null)}>Cancel</Button>
+              <Button type="submit" disabled={!nameCheck.ok || nameUnchanged || isSavingProfile} data-testid="save-name">
+                {isSavingProfile ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Saving...</> : 'Save'}
+              </Button>
+            </SheetFooter>
+          </form>
         </SheetContent>
       </Sheet>
 
