@@ -350,7 +350,7 @@ export class ChallengeService {
         challenges!inner (
           id, name, category, goal_amount, unit, starts_at, ends_at, status, fitcircle_id
         ),
-        profiles!challenge_invites_inviter_id_fkey (display_name, avatar_url)
+        profiles!inviter_id (display_name, avatar_url)
       `)
       .eq('invitee_id', userId)
       .eq('status', 'pending');
@@ -705,7 +705,7 @@ export class ChallengeService {
       .from('challenge_participants')
       .select(`
         *,
-        profiles!challenge_participants_user_id_fkey (display_name, avatar_url)
+        profiles!user_id (display_name, avatar_url)
       `)
       .eq('challenge_id', challengeId)
       .eq('status', 'active')
