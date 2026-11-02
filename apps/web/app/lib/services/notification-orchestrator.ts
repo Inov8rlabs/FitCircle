@@ -3,6 +3,7 @@ import { createHash } from 'crypto';
 import { createAdminSupabase } from '../supabase-admin';
 import { stripEmoji } from '../text/strip-emoji';
 
+import { ChatInboxService } from './chat-inbox-service';
 import {
   NotificationPreferencesService,
   type NotificationCategory,
@@ -68,6 +69,18 @@ export interface NotificationData {
   /** Chat sender (Communication Notifications on iOS: name + avatar). */
   senderId?: string;
   senderAvatarUrl?: string | null;
+  /**
+   * Chat burst etiquette (docs/CHAT_NAV_NOTIFICATIONS_CHEERS.md §2.1): a
+   * follow-up inside the circle's 2-minute window, delivered passive + silent.
+   * Decided by send() for chat_message; callers never set it.
+   */
+  quiet?: boolean;
+  /** A member's own chat message: never dropped by burst control (follow-ups go quiet instead). */
+  conversation?: boolean;
+  /** iOS app badge (= the recipient's unread chat total). Computed by send() for chat when absent. */
+  badge?: number;
+  /** chat_cheer: the cheer's optional text. */
+  cheerMessage?: string;
 
   /** Optional https image the iOS service extension attaches (`image_url`). */
   imageUrl?: string;
@@ -145,6 +158,8 @@ export type NotificationType =
   | 'chat_mention'
   | 'chat_rally'
   | 'chat_reaction'
+  // A leaderboard cheer, to the member cheered (wire type chat_mention + subtype=cheer).
+  | 'chat_cheer'
   // One bundled push per recipient per night covering all their circles' summaries.
   | 'circle_daily_summary'
   // Referrals ("Better Together" — docs/REFERRALS_SPEC.md)
@@ -241,6 +256,7 @@ export const TYPE_SCREEN_MAP: Record<NotificationType, NotificationScreen> = {
   chat_mention: 'circle_chat',
   chat_rally: 'circle_chat',
   chat_reaction: 'circle_chat',
+  chat_cheer: 'circle_chat',
   // Single circle → that chat; several circles → no circleId → the circles list.
   circle_daily_summary: 'circle_chat',
   // Referrals
@@ -531,6 +547,19 @@ export const NOTIFICATION_TEMPLATES: Record<
     };
   },
 
+  // A leaderboard cheer addressed to the recipient: "Ani cheered you 👏" /
+  // "Keep going! · Nov steps challenge" (docs/CHAT_NAV_NOTIFICATIONS_CHEERS.md §2.4).
+  chat_cheer: (data) => {
+    const circle = data.circleName || 'your circle';
+    const message = String(data.cheerMessage ?? '').trim();
+    return {
+      // The emoji is the sender's chosen reaction (user content, like chat_reaction).
+      title: `${data.friendName || 'Someone'} cheered you ${String(data.emoji || '')}`.trim(),
+      body: message ? `${message} · ${circle}` : `in ${circle}`,
+      category: 'social',
+    };
+  },
+
   // Copy is built per recipient by DailySummaryService.planSummaryPushes.
   circle_daily_summary: (data) => ({
     title: String(data.title || 'Your circles today'),
@@ -677,7 +706,22 @@ const CHAT_NOTIFICATION_TYPES: NotificationType[] = [
   'chat_mention',
   'chat_rally',
   'chat_reaction',
+  'chat_cheer',
 ];
+
+/**
+ * The `type` the apps see. A cheer rides the chat_mention wire type that every
+ * shipped client already renders as a chat conversation (plus subtype=cheer).
+ */
+export const WIRE_TYPE: Partial<Record<NotificationType, { type: NotificationType; subtype: string }>> = {
+  chat_cheer: { type: 'chat_mention', subtype: 'cheer' },
+};
+
+/**
+ * Chat "alert once" window: a chat_message to a user for a circle that already
+ * got a chat push in the last CHAT_QUIET_WINDOW_MINUTES is delivered quietly.
+ */
+export const CHAT_QUIET_WINDOW_MINUTES = 2;
 
 // ============================================================================
 // DUPLICATE + BURST GUARDS (docs/PUSH_NOTIFICATIONS.md §3–§4)
@@ -741,6 +785,7 @@ export function threadIdFor(type: NotificationType, category: string, data: Noti
 class InProcessSendGuard {
   private readonly claims = new Map<string, number>(); // key -> expiresAt
   private readonly bursts = new Map<string, number[]>(); // userId -> reservation times
+  private readonly chatPushes = new Map<string, number>(); // user:circle -> last chat push at
 
   claim(key: string, ttlMs: number, now: number): boolean {
     const expiresAt = this.claims.get(key);
@@ -770,9 +815,31 @@ class InProcessSendGuard {
     if (i >= 0) times.splice(i, 1);
   }
 
+  lastChatPush(userId: string, circleId: string): number | undefined {
+    return this.chatPushes.get(`${userId}:${circleId}`);
+  }
+
+  /** Mark a chat push in flight; returns the previous value so a non-delivery can restore it. */
+  markChatPush(userId: string, circleId: string, now: number): number | undefined {
+    const key = `${userId}:${circleId}`;
+    const previous = this.chatPushes.get(key);
+    this.chatPushes.set(key, now);
+    if (this.chatPushes.size > 10_000) {
+      for (const [k, at] of this.chatPushes) if (now - at > 60 * 60 * 1000) this.chatPushes.delete(k);
+    }
+    return previous;
+  }
+
+  restoreChatPush(userId: string, circleId: string, previous: number | undefined): void {
+    const key = `${userId}:${circleId}`;
+    if (previous === undefined) this.chatPushes.delete(key);
+    else this.chatPushes.set(key, previous);
+  }
+
   reset(): void {
     this.claims.clear();
     this.bursts.clear();
+    this.chatPushes.clear();
   }
 
   private prune(now: number): void {
@@ -913,6 +980,8 @@ export class NotificationOrchestrator {
 
     let burstReservation: number | null = null;
     let delivered = false;
+    const chatCircleId = CHAT_NOTIFICATION_TYPES.includes(type) && data.circleId ? String(data.circleId) : null;
+    let chatMark: { previous: number | undefined } | null = null;
     try {
       if (await this.isDuplicate(userId, type, content, dedupeKey)) {
         await this.logNotification(userId, type, content, data, true, 'duplicate');
@@ -958,19 +1027,43 @@ export class NotificationOrchestrator {
 
       // 4b. Burst control: the 4th+ ambient social/celebration push inside
       //     2 minutes is dropped (the in-app timeline still has everything).
+      //     A member's own chat message in a burst still goes to devices that
+      //     declared chat_quiet (quietly — 4c); other devices keep the drop
+      //     (PushService.forDevice decides per token).
+      let burstFollowUp = false;
       if (BURST_TYPES.has(type)) {
+        const conversation = type === 'chat_message' && data.conversation === true;
         if (await this.isBurst(userId, now)) {
-          await this.logNotification(userId, type, content, data, true, 'burst');
-          return { sent: false, reason: 'burst' };
+          if (!conversation) {
+            await this.logNotification(userId, type, content, data, true, 'burst');
+            return { sent: false, reason: 'burst' };
+          }
+          burstFollowUp = true;
+          data = { ...data, burstFollowUp: true }; // recorded in notification_log.data
         }
         sendGuard.reserveBurst(userId, now);
         burstReservation = now;
       }
 
-      const sentCount = await PushService.sendPush(
-        userId,
-        await this.buildPushNotification(userId, type, data, content, dedupeKey)
-      );
+      // 4c. Chat "alert once" per (user, circle) + the unread badge.
+      if (chatCircleId) {
+        if (type === 'chat_message') {
+          data = { ...data, quiet: await this.isChatFollowUp(userId, chatCircleId, now) };
+        }
+        if (typeof data.badge !== 'number') {
+          const badge = (await ChatInboxService.unreadTotals([userId])).get(userId);
+          if (typeof badge === 'number') data = { ...data, badge };
+        }
+        chatMark = { previous: sendGuard.markChatPush(userId, chatCircleId, now) };
+      }
+
+      // The base notification is the legacy (non-quiet) one; chat_quiet devices
+      // get the quiet variant / burst delivery from PushService.forDevice.
+      const notification = await this.buildPushNotification(userId, type, { ...data, quiet: false }, content, dedupeKey);
+      if (type === 'chat_message' && chatCircleId) {
+        notification.chatDelivery = { quiet: data.quiet === true, burstFollowUp };
+      }
+      const sentCount = await PushService.sendPush(userId, notification);
 
       // 6. Log the notification — truthfully. With no registered device (or
       //    no FCM credentials) nothing was delivered, and a "sent" log row
@@ -983,12 +1076,15 @@ export class NotificationOrchestrator {
         );
         return { sent: true };
       }
-      await this.logNotification(userId, type, content, data, true, 'no_delivery');
-      return { sent: false, reason: 'no_delivery' };
+      // A burst follow-up with no chat_quiet device is the old drop, as before.
+      const reason = burstFollowUp ? 'burst' : 'no_delivery';
+      await this.logNotification(userId, type, content, data, true, reason);
+      return { sent: false, reason };
     } finally {
       if (!delivered) {
         for (const key of claimKeys) sendGuard.release(key);
         if (burstReservation !== null) sendGuard.releaseBurst(userId, burstReservation);
+        if (chatMark && chatCircleId) sendGuard.restoreChatPush(userId, chatCircleId, chatMark.previous);
       }
     }
   }
@@ -1073,6 +1169,34 @@ export class NotificationOrchestrator {
     }
   }
 
+  /**
+   * Did this user get a chat push for this circle inside the quiet window?
+   * In-process marker first (sends racing in one instance), notification_log
+   * second (durable, cross-instance). Fails open to "alert".
+   */
+  static async isChatFollowUp(userId: string, circleId: string, now: number = Date.now()): Promise<boolean> {
+    const windowMs = CHAT_QUIET_WINDOW_MINUTES * 60_000;
+    const local = sendGuard.lastChatPush(userId, circleId);
+    if (local !== undefined && now - local < windowMs) return true;
+    try {
+      const { count, error } = await createAdminSupabase()
+        .from('notification_log')
+        .select('id', { count: 'exact', head: true })
+        .eq('user_id', userId)
+        .eq('suppressed', false)
+        .in('notification_type', CHAT_NOTIFICATION_TYPES)
+        .eq('data->>circleId', circleId)
+        .gte('sent_at', new Date(now - windowMs).toISOString());
+      if (error) {
+        console.error('[NotificationOrchestrator.isChatFollowUp] Error:', error);
+        return false;
+      }
+      return (count || 0) > 0;
+    } catch {
+      return false;
+    }
+  }
+
   /** The wire-level PushNotification for a send that passed every guard. */
   private static async buildPushNotification(
     userId: string,
@@ -1083,8 +1207,9 @@ export class NotificationOrchestrator {
   ): Promise<PushNotification> {
     const isChatType = CHAT_NOTIFICATION_TYPES.includes(type);
     // All data values must be strings (FCM v1 requirement); absent keys are omitted.
+    const wire = WIRE_TYPE[type];
     const pushData: Record<string, string> = {
-      type,
+      type: wire?.type ?? type,
       category: content.category,
       screen: screenFor(type, data),
     };
@@ -1112,6 +1237,9 @@ export class NotificationOrchestrator {
         if (data.senderId) pushData.senderId = String(data.senderId);
         if (isHttpsUrl(data.senderAvatarUrl)) pushData.senderAvatarUrl = data.senderAvatarUrl;
       }
+      if (wire) pushData.subtype = wire.subtype;
+      if (data.quiet === true) pushData.quiet = 'true';
+      if (typeof data.badge === 'number') pushData.unreadTotal = String(data.badge);
     }
     if (isHttpsUrl(data.imageUrl)) pushData.image_url = data.imageUrl;
 
@@ -1143,11 +1271,14 @@ export class NotificationOrchestrator {
       ...(isChatType ? { chat: { threadId } } : { threadId }),
       ...(collapseId ? { collapseId } : {}),
       ...(content.category === 'coach' ? { androidChannelId: ANDROID_COACH_CHANNEL_ID } : {}),
+      ...(isChatType && data.quiet === true ? { silent: true } : {}),
+      ...(isChatType && typeof data.badge === 'number' ? { badge: data.badge } : {}),
       apns: {
         category: presentation.category,
         mutableContent: presentation.mutableContent,
         interruptionLevel: presentation.interruptionLevel,
         relevanceScore: presentation.relevanceScore,
+        ...(isChatType && data.circleName ? { summaryArg: String(data.circleName) } : {}),
         ...(Object.keys(custom).length ? { custom } : {}),
       },
     };

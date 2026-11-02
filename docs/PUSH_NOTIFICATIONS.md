@@ -113,6 +113,8 @@ We chose dropping over a bundled "3 more updates in your circles" push:
 
 `chat_mention`, outcomes (rewards, streak loss, shields) and reminders are never dropped for a burst.
 
+Since 2026-11-02, on devices that registered with the client feature `chat_quiet`, a member's own chat message (`data.conversation`) is never dropped either: inside a circle's 2-minute window it is delivered **quietly** instead (passive, no sound, `data.quiet`). Devices without `chat_quiet` (every shipped build) keep the rule above unchanged; `PushService.forDevice` applies it per token. See `docs/CHAT_NAV_NOTIFICATIONS_CHEERS.md` §2 for the alert-once rule, `summary-arg`, the unread badge and the cheer push.
+
 ## 5. Wire grouping
 
 | | iOS (APNs, via FCM `apns`) | Android (FCM) |

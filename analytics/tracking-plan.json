@@ -1,6 +1,6 @@
 {
   "$schema": "./tracking-plan.schema.json",
-  "version": 20,
+  "version": 21,
   "updated": "2026-11-02",
   "conventions": {
     "eventNames": "Title Case, '<Object> <Past-tense verb>' (e.g. 'Meal Logged'). Names are frozen once shipped: rename in the analytics tool, never in code.",
@@ -125,6 +125,30 @@
       "cheer_button",
       "pills_sheet",
       "emoji_picker"
+    ],
+    "chat_entry": [
+      "circle_detail",
+      "top_nav",
+      "home_feed",
+      "notification",
+      "switcher",
+      "cheer_toast"
+    ],
+    "chat_switcher_source": [
+      "header",
+      "long_press"
+    ],
+    "cheer_source": [
+      "leaderboard_long_press",
+      "member_sheet"
+    ],
+    "goal_pct_bucket": [
+      "unknown",
+      "lt_25",
+      "25_50",
+      "50_75",
+      "75_100",
+      "100_plus"
     ]
   },
   "globalProperties": [
@@ -1602,8 +1626,20 @@
         "android",
         "web"
       ],
-      "description": "Circle chat opened.",
-      "properties": []
+      "description": "Circle chat opened. entry = where from (chat-nav 2026-11-02; optional so older call sites still compile); circle_id = the chat shown.",
+      "properties": [
+        {
+          "name": "entry",
+          "type": "enum",
+          "enum": "chat_entry",
+          "required": false
+        },
+        {
+          "name": "circle_id",
+          "type": "string",
+          "required": false
+        }
+      ]
     },
     {
       "name": "Chat Message Sent",
@@ -1685,6 +1721,90 @@
           "type": "enum",
           "enum": "chat_reaction_source",
           "required": false
+        }
+      ]
+    },
+    {
+      "name": "Chat Switcher Opened",
+      "category": "social",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "description": "The circle switcher in the chat header (or the top-nav chat button's long-press list) opened. circle_count = circles listed.",
+      "properties": [
+        {
+          "name": "source",
+          "type": "enum",
+          "enum": "chat_switcher_source",
+          "required": false
+        },
+        {
+          "name": "circle_count",
+          "type": "int",
+          "required": false
+        }
+      ]
+    },
+    {
+      "name": "Chat Circle Switched",
+      "category": "social",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "description": "Member picked another circle in the chat switcher; the chat swapped in place.",
+      "properties": [
+        {
+          "name": "from_circle_id",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "to_circle_id",
+          "type": "string",
+          "required": true
+        }
+      ]
+    },
+    {
+      "name": "Member Cheer Sent",
+      "category": "social",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "description": "Member cheered another member from the leaderboard (POST /circles/{id}/cheers succeeded). reaction = named kind or \"custom\" (never the raw emoji); has_message = typed or chip text sent; recipient_goal_pct_bucket from the row the sender saw (unknown when hidden / no steps). Never send the message text or step counts.",
+      "properties": [
+        {
+          "name": "circle_id",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "reaction",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "has_message",
+          "type": "bool",
+          "required": true
+        },
+        {
+          "name": "source",
+          "type": "enum",
+          "enum": "cheer_source",
+          "required": true
+        },
+        {
+          "name": "recipient_goal_pct_bucket",
+          "type": "enum",
+          "enum": "goal_pct_bucket",
+          "required": true
         }
       ]
     },

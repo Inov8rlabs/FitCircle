@@ -158,6 +158,38 @@ export interface MessageSystemBlock {
   payload: Record<string, unknown>;
 }
 
+// Leaderboard cheers (docs/CHAT_NAV_NOTIFICATIONS_CHEERS.md §3): a user_text
+// row whose system_payload carries { cheer }. Shipped clients ignore the
+// top-level `cheer` key and show `body` ("👏 @Raveesh Keep going!") as text.
+export type CheerSource = 'leaderboard_long_press' | 'member_sheet';
+export const CHEER_SOURCES: CheerSource[] = ['leaderboard_long_press', 'member_sheet'];
+export const CHEER_MESSAGE_MAX_LENGTH = 280;
+/** Same sender → same recipient at most once per this window. */
+export const CHEER_PAIR_COOLDOWN_MS = 60_000;
+/** Cheers per sender per circle per rolling 24 h. */
+export const CHEER_DAILY_LIMIT = 20;
+
+/** The recipient's steps today, snapshotted server-side when the cheer was sent. */
+export interface CheerStatSnapshot {
+  metric: 'steps';
+  /** The recipient's local day. */
+  date: string;
+  today_steps: number;
+  daily_goal_steps: number;
+  /** Rounded, uncapped (115 = 115 %). */
+  goal_pct_today: number | null;
+}
+
+export interface MessageCheer {
+  to_user_id: string;
+  to_display_name: string;
+  reaction: ChatReactionValue;
+  emoji: string;
+  message: string | null;
+  source: CheerSource;
+  stat_snapshot: CheerStatSnapshot | null;
+}
+
 export interface ChatMessageDTO {
   id: string;
   circleId: string;
@@ -171,6 +203,8 @@ export interface ChatMessageDTO {
   createdAt: string;
   editedAt: string | null; // ISO — set when the sender edited the message
   deletedAt: string | null; // ISO — set = tombstone (body/photoUrl are always null)
+  /** Present (non-null) only on a leaderboard cheer that isn't deleted. Always sent by the service. */
+  cheer?: MessageCheer | null;
 }
 
 // ============================================================================

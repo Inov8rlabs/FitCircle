@@ -52,6 +52,13 @@ export const CATALOG: Readonly<Record<string, CatalogEntry>> = Object.freeze({
   offline_banner: entry('offline_banner', 'chrome'),
   header: entry('header', 'chrome'),
   health_sync_banner: entry('health_sync_banner', 'utility', true),
+  /**
+   * Unread circle chat (docs/CHAT_NAV_NOTIFICATIONS_CHEERS.md §4). Only for
+   * clients that declare circle_chat@1; dropped when the server knows nothing
+   * is unread; props carry the chat to open. Not in DEFAULT_ORDER (that is the
+   * shipped clients' fallback): placed right after `after` via EXTRA_CARDS.
+   */
+  circle_chat: entry('circle_chat', 'utility', true),
   campaign: entry('campaign', 'promo', true),
   hydration: entry('hydration', 'utility'),
   referral: entry('referral', 'promo', true),
@@ -74,6 +81,14 @@ export const CATALOG: Readonly<Record<string, CatalogEntry>> = Object.freeze({
    */
   promo: entry('promo', 'promo', true),
 });
+
+/**
+ * Catalog cards outside DEFAULT_ORDER that the server adds for clients that
+ * declare them, slotted just below `after` in the default scoring.
+ */
+export const EXTRA_CARDS: ReadonlyArray<{ type: CardType; after: CardType }> = [
+  { type: 'circle_chat', after: 'health_sync_banner' },
+];
 
 /**
  * Promo cards that are utility, not marketing (ACTIVATION_JOURNEY_SPEC §3):

@@ -1,4 +1,5 @@
-import type { ChatReactionValue, MessageReactor } from '@/lib/types/circle-chat';
+import type { ChatInbox, InboxChat, InboxLastMessage } from '@/lib/services/chat-inbox-service';
+import type { ChatReactionValue, CheerSource, MessageCheer, MessageReactor } from '@/lib/types/circle-chat';
 import { useAuthStore } from '@/stores/auth-store';
 
 // ---------------------------------------------------------------------------
@@ -19,7 +20,7 @@ export {
   type ChatReactionKind as ReactionKind,
   type ChatReactionValue,
 } from '@/lib/types/circle-chat';
-export type { MessageReactor };
+export type { MessageReactor, MessageCheer, CheerSource, ChatInbox, InboxChat, InboxLastMessage };
 
 export interface MessageSender {
   id: string;
@@ -57,6 +58,29 @@ export interface ChatMessage {
   createdAt: string;
   editedAt: string | null; // ISO — set when the sender edited the message
   deletedAt: string | null; // ISO — set = tombstone (body/photoUrl always null)
+  /** Leaderboard cheer (docs/CHAT_NAV_NOTIFICATIONS_CHEERS.md §3); null/absent otherwise. */
+  cheer?: MessageCheer | null;
+}
+
+export interface SendCheerInput {
+  to_user_id: string;
+  reaction?: ChatReactionValue;
+  message?: string;
+  source: CheerSource;
+  client_id?: string;
+}
+
+/** A failed chat API call; `code` / `details` come from the envelope when present. */
+export class ChatApiError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+    readonly code: string | null,
+    readonly details: Record<string, unknown> = {}
+  ) {
+    super(message);
+    this.name = 'ChatApiError';
+  }
 }
 
 export interface ListMessagesResult {
@@ -76,7 +100,7 @@ export interface SendMessageInput {
 interface ApiEnvelope<T> {
   success: boolean;
   data: T | null;
-  error: { code: string; message: string } | null;
+  error: { code: string; message: string; details?: Record<string, unknown> } | null;
   meta: unknown;
 }
 
@@ -97,7 +121,12 @@ async function authedFetch<T>(path: string, init?: RequestInit): Promise<T> {
   const json = (await res.json().catch(() => ({}))) as ApiEnvelope<T>;
   if (!res.ok || json?.success === false) {
     const msg = json?.error?.message ?? `Request failed (${res.status})`;
-    throw new Error(typeof msg === 'string' ? msg : 'Request failed');
+    throw new ChatApiError(
+      typeof msg === 'string' ? msg : 'Request failed',
+      res.status,
+      json?.error?.code ?? null,
+      json?.error?.details ?? {}
+    );
   }
   return json.data as T;
 }
@@ -150,6 +179,16 @@ export const chatClient = {
   /** GET — who reacted with what (viewer first, then newest). */
   listReactors: (messageId: string) =>
     authedFetch<{ reactors: MessageReactor[] }>(`/api/mobile/messages/${messageId}/reactions`),
+
+  /** GET /api/mobile/chats — every circle chat with unread counts + the top-nav target. */
+  listChats: () => authedFetch<ChatInbox>('/api/mobile/chats'),
+
+  /** POST — cheer a member from the leaderboard; returns the cheer message. */
+  sendCheer: (circleId: string, input: SendCheerInput) =>
+    authedFetch<{ message: ChatMessage }>(`/api/mobile/circles/${circleId}/cheers`, {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
 
   markRead: (circleId: string) =>
     authedFetch<{ lastReadAt: string }>(`/api/mobile/circles/${circleId}/read`, {

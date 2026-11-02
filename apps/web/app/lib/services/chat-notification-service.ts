@@ -15,10 +15,18 @@
 //
 // Every fan-out is fire-and-forget and failure-isolated: a notification failure
 // must never break a message send or a post write.
+//
+// Since 2026-11-02 (docs/CHAT_NAV_NOTIFICATIONS_CHEERS.md §2): no chat push
+// between a blocked pair (either direction), every push carries the
+// recipient's unread badge (batched per fan-out), member messages are never
+// burst-dropped (the orchestrator makes follow-ups quiet instead), and a
+// leaderboard cheer always alerts the member cheered (notifyCheer).
 
 import { createAdminSupabase } from '../supabase-admin';
 import { stripEmoji } from '../text/strip-emoji';
 
+import { ChatInboxService } from './chat-inbox-service';
+import { ChatSafetyService } from './chat-safety-service';
 import {
   NotificationOrchestrator,
   type NotificationData,
@@ -71,7 +79,9 @@ export class ChatNotificationService {
   /**
    * Notify active circle members (except the sender) of a new member message.
    * Muted members are skipped, except when they are @mentioned — a mention
-   * upgrades to 'chat_mention' and pierces the mute. Never throws.
+   * upgrades to 'chat_mention' and pierces the mute. Members in a blocked pair
+   * with the sender (either direction) and `excludeUserIds` (e.g. the member a
+   * cheer is addressed to, who gets notifyCheer instead) are skipped. Never throws.
    */
   static async notifyNewMessage(
     circleId: string,
@@ -79,11 +89,16 @@ export class ChatNotificationService {
     senderName: string,
     circleName: string,
     messageId: string,
-    preview: string
+    preview: string,
+    opts: { excludeUserIds?: string[] } = {}
   ): Promise<void> {
     try {
       const members = await this.getActiveMembers(circleId);
-      const recipients = members.filter((m) => m.userId !== senderId);
+      const blocked = new Set(await ChatSafetyService.getBlockedIdsFor(senderId));
+      const excluded = new Set(opts.excludeUserIds ?? []);
+      const recipients = members.filter(
+        (m) => m.userId !== senderId && !blocked.has(m.userId) && !excluded.has(m.userId)
+      );
       if (recipients.length === 0) return;
 
       const truncatedPreview = this.truncatePreview(preview);
@@ -96,11 +111,13 @@ export class ChatNotificationService {
         recipients.map((r) => r.userId)
       );
 
-      for (const member of recipients) {
-        const isMentioned = mentionedIds.has(member.userId);
+      // Muted members only hear about mentions (which pierce the mute).
+      const pushed = recipients.filter((m) => !m.muted || mentionedIds.has(m.userId));
+      const badges = await ChatInboxService.unreadTotals(pushed.map((m) => m.userId));
 
-        // Muted members only hear about mentions (which pierce the mute).
-        if (member.muted && !isMentioned) continue;
+      for (const member of pushed) {
+        const isMentioned = mentionedIds.has(member.userId);
+        const badge = badges.get(member.userId);
 
         const type = isMentioned ? 'chat_mention' : 'chat_message';
 
@@ -118,6 +135,8 @@ export class ChatNotificationService {
           messageId,
           circleId,
           dedupeKey: `msg:${messageId}`,
+          conversation: true,
+          ...(typeof badge === 'number' ? { badge } : {}),
         }).catch((err) => {
           console.error(
             `[ChatNotificationService.notifyNewMessage] Failed for member ${member.userId}:`,
@@ -201,6 +220,48 @@ export class ChatNotificationService {
   }
 
   /**
+   * A leaderboard cheer: push the member cheered. Always alerts (never a quiet
+   * burst follow-up) and, like a mention, pierces their mute for the circle.
+   * The caller has already checked membership and blocks. Never throws.
+   */
+  static async notifyCheer(params: {
+    circleId: string;
+    circleName: string;
+    messageId: string;
+    senderId: string;
+    senderName: string;
+    recipientId: string;
+    emoji: string;
+    message: string | null;
+  }): Promise<void> {
+    try {
+      const message = (params.message ?? '').trim();
+      const [avatar, badges] = await Promise.all([
+        this.avatarUrlOf(params.senderId),
+        ChatInboxService.unreadTotals([params.recipientId]),
+      ]);
+      const badge = badges.get(params.recipientId);
+      await NotificationOrchestrator.send(params.recipientId, 'chat_cheer', {
+        circleName: params.circleName,
+        friendName: params.senderName,
+        senderName: params.senderName,
+        senderId: params.senderId,
+        senderAvatarUrl: avatar,
+        emoji: params.emoji,
+        cheerMessage: message,
+        preview: this.truncatePreview(`cheered you ${params.emoji}${message ? ` · ${message}` : ''}`),
+        deepLink: `fitcircle://circles/${params.circleId}/chat`,
+        messageId: params.messageId,
+        circleId: params.circleId,
+        dedupeKey: `cheer:${params.messageId}`,
+        ...(typeof badge === 'number' ? { badge } : {}),
+      });
+    } catch (err) {
+      console.error(`[ChatNotificationService.notifyCheer] Failed for message ${params.messageId}:`, err);
+    }
+  }
+
+  /**
    * Single-circle convenience wrapper: an ordinary (non-rally) system post.
    * Skips the actor and muted members. Never throws.
    */
@@ -268,7 +329,7 @@ export class ChatNotificationService {
       const avatars = new Map<string, string | null>();
       await Promise.all(senderIds.map(async (id) => avatars.set(id, await this.avatarUrlOf(id))));
 
-      const planned = this.planEventPushes(intents, membersByCircle, avatars);
+      const planned = await this.withBlocksAndBadges(this.planEventPushes(intents, membersByCircle, avatars));
       for (const push of planned) {
         // Fire-and-forget per member; a single failure never affects others.
         void NotificationOrchestrator.send(push.userId, push.type, push.data).catch((err) => {
@@ -358,6 +419,31 @@ export class ChatNotificationService {
       }
     }
     return out;
+  }
+
+  /**
+   * Drop pushes about a member to anyone in a blocked pair with them, and stamp
+   * each remaining push with the recipient's unread badge. Both lookups are
+   * batched; a failed block lookup keeps the pushes (fail open, like dedupe),
+   * a failed badge lookup just leaves the badge off.
+   */
+  static async withBlocksAndBadges(planned: PlannedPush[]): Promise<PlannedPush[]> {
+    if (planned.length === 0) return planned;
+    let kept = planned;
+    const senders = [...new Set(planned.map((p) => p.data.senderId).filter((id): id is string => typeof id === 'string' && !!id))];
+    if (senders.length > 0) {
+      try {
+        const blocked = await ChatInboxService.blockedIdsFor(senders);
+        kept = planned.filter((p) => !(p.data.senderId && blocked.get(String(p.data.senderId))?.has(p.userId)));
+      } catch (err) {
+        console.error('[ChatNotificationService.withBlocksAndBadges] block lookup failed:', err);
+      }
+    }
+    const badges = await ChatInboxService.unreadTotals(kept.map((p) => p.userId));
+    return kept.map((p) => {
+      const badge = badges.get(p.userId);
+      return typeof badge === 'number' ? { ...p, data: { ...p.data, badge } } : p;
+    });
   }
 
   /** "Ani's on a 7-day streak — nice" → "Ani's on a 7-day streak" (title use). */

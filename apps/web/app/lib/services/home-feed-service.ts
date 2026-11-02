@@ -250,7 +250,7 @@ export class HomeFeedService {
     const promoClient = opts.promoClient ?? defaultPromoClient(support);
     const promoRound = this.promoRound(profile, info, promoClient, now, opts.promoLoaders);
     const [ctx, rules, promoData] = await Promise.all([
-      buildFeedContext(profile, info, { loaders: opts.loaders, now }),
+      buildFeedContext(profile, info, { loaders: opts.loaders, now, wantChat: support.has('circle_chat') }),
       areRulesEnabled() ? softly(() => this.loadRules(), RULES_LOAD_TIMEOUT_MS) : Promise.resolve([] as FeedRule[]),
       promoRound,
     ]);
@@ -435,7 +435,7 @@ export class HomeFeedService {
     const now = opts.now ?? new Date();
     const enabled = isFeedEnabled(info.platform);
 
-    const ctx = await buildFeedContext(profile as FeedProfile, info, { loaders: opts.loaders, now });
+    const ctx = await buildFeedContext(profile as FeedProfile, info, { loaders: opts.loaders, now, wantChat: support.has('circle_chat') });
     const rules = areRulesEnabled() ? await this.loadRules({ includeDisabled, fresh: true }) : [];
     // promo@1 preview: pass cards=…,promo@1&actions=…&promoLayouts=… like a client would.
     const promoClient = parsePromoClient({

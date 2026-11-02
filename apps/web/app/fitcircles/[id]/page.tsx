@@ -36,6 +36,7 @@ import CircleChallengesSection from '@/components/challenges/CircleChallengesSec
 import { CircleChat } from '@/components/chat/CircleChat';
 import { CheckInCard } from '@/components/check-ins';
 import CircleQuestsSection from '@/components/CircleQuestsSection';
+import { CheerSheet, type CheerTarget } from '@/components/circles/CheerSheet';
 import { CircleDetailSkeleton } from '@/components/circles/CircleDetailSkeleton';
 import { CircleStreakLiveCard } from '@/components/circles/CircleStreakLiveCard';
 import { LeaderboardRow } from '@/components/circles/LeaderboardRow';
@@ -170,12 +171,25 @@ export default function FitCirclePage() {
   // CircleChat marks read when the tab opens, so opening the tab clears it.
   const [activeTab, setActiveTab] = useState('overview');
   const [chatUnread, setChatUnread] = useState(0);
+  // Legacy (goal) leaderboard cheers; the steps board owns its own sheet.
+  const [cheerTarget, setCheerTarget] = useState<CheerTarget | null>(null);
+  const [cheerBursts, setCheerBursts] = useState<Record<string, number>>({});
   const activeTabRef = useRef(activeTab);
   activeTabRef.current = activeTab;
   // FitCircle Viewed fires once per circle, after the member list loads.
   const viewedCircleRef = useRef<string | null>(null);
 
   const circleId = params.id as string;
+
+  // Deep link from the top-nav chat button / switcher / cheer toast:
+  // /fitcircles/<id>?tab=chat opens the Chat tab (they track Chat Opened).
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (new URLSearchParams(window.location.search).get('tab') === 'chat') {
+      setActiveTab('chat');
+      setChatUnread(0);
+    }
+  }, [circleId]);
 
   useEffect(() => {
     if (circleId && user) {
@@ -909,6 +923,13 @@ export default function FitCirclePage() {
     return (
       <>
         <DashboardNav />
+      <CheerSheet
+        circleId={circleId}
+        target={cheerTarget}
+        source="leaderboard_long_press"
+        onClose={() => setCheerTarget(null)}
+        onSent={(id) => setCheerBursts((b) => ({ ...b, [id]: (b[id] ?? 0) + 1 }))}
+      />
         <div className="min-h-screen bg-canvas">
           <Screen size="wide" className="max-w-5xl">
             <CircleDetailSkeleton />
@@ -963,7 +984,7 @@ export default function FitCirclePage() {
     setActiveTab(tab);
     if (tab === 'chat') {
       setChatUnread(0);
-      analytics.track(AnalyticsEvents.chatOpened());
+      analytics.track(AnalyticsEvents.chatOpened({ entry: 'circle_detail', circle_id: circleId }));
     }
     if (tab === 'nutrition') analytics.track(AnalyticsEvents.fitzyOpened({ surface: 'circle_nutrition' }));
   };
@@ -1106,6 +1127,15 @@ export default function FitCirclePage() {
                                 isCreator={participant.user_id === fitCircle.creator_id}
                                 checkedInToday={isInToday(participant)}
                                 onClick={() => void handleParticipantClick(participant)}
+                                onCheer={() =>
+                                  setCheerTarget({
+                                    user_id: participant.user_id,
+                                    display_name: participant.display_name,
+                                    avatar_url: participant.avatar_url,
+                                    goalPct: participant.progress,
+                                  })
+                                }
+                                cheerBurst={cheerBursts[participant.user_id] ?? 0}
                               />
                             ))}
                           </ul>
@@ -1214,7 +1244,11 @@ export default function FitCirclePage() {
 
             <TabsContent value="chat" className="mt-0">
               <GlassCard className="mx-auto max-w-3xl p-3 sm:p-4">
-                <CircleChat circleId={circleId} />
+                <CircleChat
+                  circleId={circleId}
+                  circleName={fitCircle.name}
+                  onSwitchCircle={(id) => router.replace(`/fitcircles/${id}?tab=chat`)}
+                />
               </GlassCard>
             </TabsContent>
 

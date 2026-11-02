@@ -19,7 +19,7 @@ import { ReactorsDialog } from '@/components/chat/ReactorsDialog';
 import { useChatReaction, type ReactionSource } from '@/components/chat/useChatReaction';
 import { useMessageGestures } from '@/components/chat/useMessageGestures';
 import { Avatar } from '@/components/ui/avatar';
-import type { ChatMessage, MessageReactionSummary } from '@/lib/api/circle-chat-client';
+import type { ChatMessage, MessageCheer, MessageReactionSummary } from '@/lib/api/circle-chat-client';
 import { cn } from '@/lib/utils';
 
 interface MessageBubbleProps {
@@ -44,6 +44,28 @@ function formatTime(iso: string): string {
     hour: 'numeric',
     minute: '2-digit',
   });
+}
+
+/** "Ani cheered Raveesh" from the viewer's point of view. Pure. */
+export function cheerHeadline(
+  cheer: Pick<MessageCheer, 'to_user_id' | 'to_display_name'>,
+  senderName: string,
+  isMine: boolean,
+  viewerId: string | null | undefined
+): { actor: string; target: string } {
+  const toMe = !!viewerId && cheer.to_user_id === viewerId;
+  return {
+    actor: isMine ? 'You' : senderName || 'Someone',
+    target: toMe ? 'you' : cheer.to_display_name || 'a member',
+  };
+}
+
+/** "2,732 steps · 34%" (null when the snapshot is missing). Pure. */
+export function cheerStatChip(cheer: Pick<MessageCheer, 'stat_snapshot'>): string | null {
+  const s = cheer.stat_snapshot;
+  if (!s) return null;
+  const steps = `${s.today_steps.toLocaleString('en-US')} steps`;
+  return typeof s.goal_pct_today === 'number' ? `${steps} · ${s.goal_pct_today}%` : steps;
 }
 
 function copyText(text: string) {
@@ -167,6 +189,7 @@ function UserBubble({
     isMine &&
     !!onEdit &&
     message.kind === 'user_text' &&
+    !message.cheer && // a cheer's text is generated from its data; the server refuses edits
     Date.now() - new Date(message.createdAt).getTime() < EDIT_WINDOW_MS;
 
   const actions: FocusMenuAction[] = [];
@@ -177,8 +200,11 @@ function UserBubble({
 
   const hasPills = message.reactions.some((r) => r.count > 0);
   const senderName = isMine ? 'You' : message.sender?.name || 'Member';
+  const cheer = message.cheer ?? null;
 
-  const bubble = (
+  const bubble = cheer ? (
+    <CheerBubbleBody cheer={cheer} isMine={isMine} senderName={message.sender?.name ?? ''} viewerId={viewerId} />
+  ) : (
     <div
       className={cn(
         'rounded-2xl px-3.5 py-2 text-sm shadow-sm',
@@ -409,6 +435,52 @@ function SystemPost({
           void ui.clear('pills_sheet');
         }}
       />
+    </div>
+  );
+}
+
+/**
+ * A leaderboard cheer in the timeline: "👏 Ani cheered Raveesh", the optional
+ * message, and the server's stat snapshot chip. Highlighted for the member
+ * cheered. (Shipped clients show the plain `body` instead.)
+ */
+function CheerBubbleBody({
+  cheer,
+  isMine,
+  senderName,
+  viewerId,
+}: {
+  cheer: MessageCheer;
+  isMine: boolean;
+  senderName: string;
+  viewerId?: string | null;
+}) {
+  const { actor, target } = cheerHeadline(cheer, senderName, isMine, viewerId);
+  const toMe = !!viewerId && cheer.to_user_id === viewerId;
+  const stat = cheerStatChip(cheer);
+  return (
+    <div
+      data-testid="cheer-bubble"
+      className={cn(
+        'rounded-2xl border px-3.5 py-2.5 text-sm shadow-sm',
+        isMine ? 'rounded-br-md' : 'rounded-bl-md',
+        toMe
+          ? 'border-amber-400/50 bg-gradient-to-br from-amber-500/25 to-orange-500/15 text-white ring-1 ring-amber-400/40'
+          : 'border-indigo-400/30 bg-gradient-to-br from-indigo-600/30 to-purple-600/20 text-white'
+      )}
+    >
+      <p className="flex items-center gap-1.5 font-medium">
+        <span aria-hidden className="text-lg leading-none">{cheer.emoji}</span>
+        <span>
+          {actor} cheered <strong className="font-semibold">{target}</strong>
+        </span>
+      </p>
+      {cheer.message && <p className="mt-1 whitespace-pre-wrap break-words text-gray-100">{cheer.message}</p>}
+      {stat && (
+        <span className="mt-2 inline-flex items-center rounded-full bg-white/10 px-2 py-0.5 text-[11px] font-medium tabular-nums text-gray-200">
+          {stat}
+        </span>
+      )}
     </div>
   );
 }

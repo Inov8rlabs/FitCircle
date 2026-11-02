@@ -8,6 +8,7 @@
  */
 import type { CampaignRow } from '@/lib/campaigns/model';
 import { CampaignService, featuredCampaign, viewerToday } from '@/lib/services/campaign-service';
+import { ChatInboxService, type ChatInbox } from '@/lib/services/chat-inbox-service';
 import { normalizeTier } from '@/lib/services/entitlement-service';
 import { FeatureFlagService } from '@/lib/services/feature-flag-service';
 import { VitalsService } from '@/lib/services/vitals-service';
@@ -15,7 +16,7 @@ import { isValidTimezone } from '@/lib/streaks/streak-calculator';
 import { createAdminSupabase } from '@/lib/supabase-admin';
 
 import { swrCache } from './cache';
-import type { AppPlatform, FeedContext } from './types';
+import type { AppPlatform, ChatUnreadHint, FeedContext } from './types';
 
 /**
  * Context budget. The loaders run in one parallel round; anything slower than
@@ -85,6 +86,23 @@ export interface ContextLoaders {
   activeCircleCount(userId: string): Promise<number>;
   checkedIn(userId: string, localDate: string): Promise<boolean>;
   waterTodayMl(userId: string, timezone: string, profile: FeedProfile): Promise<number>;
+  /** Unread chat summary (only called for clients that declare circle_chat). */
+  chatUnread?(userId: string): Promise<ChatUnreadHint>;
+}
+
+/** /chats inbox → the circle_chat card hint. Pure. */
+export function chatUnreadHint(inbox: ChatInbox): ChatUnreadHint {
+  const target = inbox.chats.find((c) => c.circle_id === inbox.default_circle_id) ?? null;
+  const unreadTarget = target && !target.muted && target.unread_count > 0 ? target : null;
+  return {
+    total_unread: inbox.total_unread,
+    circles_with_unread: inbox.chats.filter((c) => !c.muted && c.unread_count > 0).length,
+    circle_id: unreadTarget?.circle_id ?? null,
+    circle_name: unreadTarget?.circle_name ?? null,
+    unread_count: unreadTarget?.unread_count ?? 0,
+    sender_display_name: unreadTarget?.last_message?.sender_display_name ?? null,
+    preview: unreadTarget?.last_message?.preview ?? null,
+  };
 }
 
 export const defaultContextLoaders: ContextLoaders = {
@@ -122,6 +140,9 @@ export const defaultContextLoaders: ContextLoaders = {
   async waterTodayMl(userId, timezone, profile) {
     const today = await VitalsService.getHydrationToday(userId, { timezone, profile: profile as { timezone?: string | null; preferences?: unknown } });
     return today.todayMl ?? 0;
+  },
+  async chatUnread(userId) {
+    return chatUnreadHint(await ChatInboxService.listChats(userId));
   },
 };
 
@@ -221,7 +242,7 @@ export function proFromProfile(profile: FeedProfile): boolean | null {
 export async function buildFeedContext(
   profile: FeedProfile,
   info: FeedRequestInfo,
-  opts: { loaders?: ContextLoaders; now?: Date; timeoutMs?: number } = {}
+  opts: { loaders?: ContextLoaders; now?: Date; timeoutMs?: number; wantChat?: boolean } = {}
 ): Promise<FeedContext> {
   const loaders = opts.loaders ?? defaultContextLoaders;
   const now = opts.now ?? new Date();
@@ -230,13 +251,15 @@ export async function buildFeedContext(
   const t = opts.timeoutMs;
   const userId = profile.id;
 
-  const [campaign, referralProgramEnabled, subscriptionsEnabled, circleCount, checkedInToday, waterMl] = await Promise.all([
+  const chatLoader = loaders.chatUnread;
+  const [campaign, referralProgramEnabled, subscriptionsEnabled, circleCount, checkedInToday, waterMl, chatUnread] = await Promise.all([
     softly(() => loaders.campaign(profile, timezone), t),
     softly(() => loaders.referralProgramEnabled(profile), t),
     softly(() => loaders.subscriptionsEnabled(profile), t),
     softly(() => loaders.activeCircleCount(userId), t),
     softly(() => loaders.checkedIn(userId, local.date), t),
     softly(() => loaders.waterTodayMl(userId, timezone, profile), t),
+    opts.wantChat && chatLoader ? softly(() => chatLoader.call(loaders, userId), t) : Promise.resolve(null),
   ]);
 
   const isPro = proFromProfile(profile);
@@ -261,5 +284,6 @@ export async function buildFeedContext(
     streakAtRisk: checkedInToday === false && local.hour >= STREAK_AT_RISK_HOUR,
     waterLoggedToday: waterMl === null ? null : waterMl > 0,
     adsEligible: isPro === null ? null : !isPro,
+    ...(opts.wantChat ? { chatUnread } : {}),
   };
 }

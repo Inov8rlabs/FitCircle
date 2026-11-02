@@ -2,6 +2,9 @@
 
 import { CheckCircle2, Crown, Lock, Medal, Trophy } from 'lucide-react';
 
+import { ClapBurst } from '@/components/chat/ReactionBar';
+import { CheerHoverButton } from '@/components/circles/CheerHoverButton';
+import { useCheerGesture } from '@/components/circles/useCheerGesture';
 import { AvatarCircle, ProgressBar } from '@/components/ui/ios';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
@@ -51,6 +54,8 @@ export function LeaderboardRow({
   isYou,
   unit = 'kg',
   onClick,
+  onCheer,
+  cheerBurst = 0,
 }: {
   rank: number;
   entry: LeaderboardRowData;
@@ -59,8 +64,14 @@ export function LeaderboardRow({
   isYou: boolean;
   unit?: string;
   onClick?: () => void;
+  /** Long-press / right-click / hover button → cheer sheet (never on your own row). */
+  onCheer?: () => void;
+  /** Bump to play the clap burst after a cheer was sent. */
+  cheerBurst?: number;
 }) {
   const locked = !isYou && entry.is_public === false;
+  const canCheer = !isYou && !!onCheer;
+  const gesture = useCheerGesture(canCheer, () => onCheer?.());
   const goal =
     entry.current_value && entry.target_value
       ? `${entry.current_value.toFixed(1)} ${unit} → ${entry.target_value.toFixed(1)} ${unit} goal`
@@ -75,14 +86,20 @@ export function LeaderboardRow({
       : null;
 
   return (
-    <li>
+    <li className="group relative">
       <button
         type="button"
-        onClick={onClick}
+        onClick={() => gesture.shouldHandleClick() && onClick?.()}
         disabled={locked}
+        onPointerDown={gesture.onPointerDown}
+        onPointerMove={gesture.onPointerMove}
+        onPointerUp={gesture.onPointerUp}
+        onPointerCancel={gesture.onPointerCancel}
+        onPointerLeave={gesture.onPointerLeave}
+        onContextMenu={gesture.onContextMenu}
         data-testid="leaderboard-row"
         className={cn(
-          'flex w-full items-center gap-3 rounded-xl border p-3 text-left transition duration-200 ease-ios sm:gap-4 sm:p-4',
+          'flex w-full touch-manipulation select-none items-center gap-3 rounded-xl border p-3 text-left transition duration-200 ease-ios sm:gap-4 sm:p-4',
           isYou ? 'border-brand-indigo/30 bg-brand-indigo/10' : 'border-glass bg-surface-raised/50',
           locked ? 'cursor-not-allowed opacity-60' : 'hover:border-white/20 hover:bg-surface-raised/70'
         )}
@@ -109,6 +126,8 @@ export function LeaderboardRow({
           {detail && <span className="w-full truncate text-right text-[11px] text-fg-tertiary">{detail}</span>}
         </span>
       </button>
+      {canCheer && <CheerHoverButton name={entry.display_name} onCheer={() => onCheer?.()} className="right-[100px] sm:right-[112px]" />}
+      {cheerBurst > 0 && <ClapBurst burstKey={cheerBurst} />}
     </li>
   );
 }
