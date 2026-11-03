@@ -2,15 +2,19 @@ import { type NextRequest } from 'next/server';
 
 import { requireAdmin } from '@/lib/campaigns/admin-auth';
 import { feedFailFrom, ok, readJson } from '@/lib/home-feed/http';
+import { HomeFeedAdminService } from '@/lib/services/home-feed-admin-service';
 import { HomeFeedService } from '@/lib/services/home-feed-service';
 
 export const dynamic = 'force-dynamic';
 
-/** GET /api/admin/home-feed/rules → { rules: AdminRule[] } (all rows, with validation status). */
+/**
+ * GET /api/admin/home-feed/rules → { rules: AdminRule[] (all rows, with validation status), version (ruleset version for
+ * publish's baseVersion), lastChange, killSwitch, catalog, propagation }.
+ */
 export async function GET(request: NextRequest) {
   try {
     await requireAdmin(request);
-    return ok({ rules: await HomeFeedService.listRules() });
+    return ok(await HomeFeedAdminService.state());
   } catch (error) {
     return feedFailFrom(error, 'admin-rules-list');
   }

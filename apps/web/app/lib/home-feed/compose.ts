@@ -30,6 +30,8 @@ export interface ComposeInput {
   replacedTypes?: ReadonlySet<CardType>;
   /** The client declared promo@1 → promo guardrails G7–G9 apply. */
   promoV1?: boolean;
+  /** Admin preview: also report the ranker's order before guardrails (trace.ranked). */
+  traceRanked?: boolean;
 }
 
 export interface ComposeTrace {
@@ -41,6 +43,8 @@ export interface ComposeTrace {
   promos?: Array<{ key: string; outcome: string; creativeId?: string }>;
   /** Cards a ranker produced that the client can't render (always 0 unless a ranker misbehaves). */
   droppedUnsupported: string[];
+  /** Card ids in ranker order, before guardrails (only with `traceRanked`; admin preview). */
+  ranked?: string[];
 }
 
 export interface ComposeResult {
@@ -91,6 +95,7 @@ export function composeFeed(input: ComposeInput): ComposeResult {
       suppressed: candidates.suppressed.map((c) => c.id),
       guardrailAdjustments: guarded.adjustments,
       droppedUnsupported,
+      ...(input.traceRanked ? { ranked: renderable.map((c) => c.id) } : {}),
     },
   };
 }

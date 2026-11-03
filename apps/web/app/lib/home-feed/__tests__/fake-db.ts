@@ -11,6 +11,8 @@ export class HomeFeedFakeDb {
     home_feed_rules: [],
     home_feed_decisions: [],
     home_feed_events: [],
+    // home feed editor audit log (migration 125)
+    home_feed_rule_changes: [],
     fitcircle_members: [],
     streak_claims: [],
     feature_flags: [],
@@ -24,6 +26,10 @@ export class HomeFeedFakeDb {
   };
   /** Tables whose next query errors (simulate outages). */
   failing = new Set<string>();
+  /** One-shot failures: the next `op` on `table` errors once (rollback tests). */
+  failNext: Array<{ table: string; op: 'select' | 'insert' | 'update' | 'upsert' | 'delete' }> = [];
+  /** UNIQUE columns per table (insert → 23505 on a clash). */
+  unique: Record<string, string[]> = { home_feed_rules: ['key'], home_feed_rule_changes: ['seq'] };
   /** Queries run per table (latency tests: warm requests must not re-read shared tables). */
   queries: Record<string, number> = {};
   private seq = 0;
@@ -44,7 +50,7 @@ export class HomeFeedFakeDb {
 }
 
 class FakeQuery implements PromiseLike<any> {
-  private op: 'select' | 'insert' | 'update' | 'upsert' = 'select';
+  private op: 'select' | 'insert' | 'update' | 'upsert' | 'delete' = 'select';
   private conflictCols: string[] = [];
   private orderBy: { col: string; asc: boolean } | null = null;
   private limitN: number | null = null;
@@ -77,6 +83,14 @@ class FakeQuery implements PromiseLike<any> {
   }
   gt(col: string, val: any) {
     this.preds.push((r) => r[col] !== null && r[col] !== undefined && r[col] > val);
+    return this;
+  }
+  delete() {
+    this.op = 'delete';
+    return this;
+  }
+  lt(col: string, val: any) {
+    this.preds.push((r) => r[col] !== null && r[col] !== undefined && r[col] < val);
     return this;
   }
   gte(col: string, val: any) {
@@ -120,12 +134,23 @@ class FakeQuery implements PromiseLike<any> {
   private run(): { data: any; error: any; count?: number } {
     this.db.queries[this.table] = (this.db.queries[this.table] ?? 0) + 1;
     if (this.db.failing.has(this.table)) return { data: null, error: { message: `${this.table} unavailable` } };
+    const failAt = this.db.failNext.findIndex((f) => f.table === this.table && f.op === this.op);
+    if (failAt !== -1) {
+      this.db.failNext.splice(failAt, 1);
+      return { data: null, error: { message: `${this.table} ${this.op} failed (injected)` } };
+    }
     const rows = this.db.rows(this.table);
+    if (this.op === 'delete') {
+      const keep = rows.filter((r) => !this.matches(r));
+      const removed = rows.length - keep.length;
+      rows.splice(0, rows.length, ...keep);
+      return { data: null, error: null, count: removed };
+    }
     if (this.op === 'insert') {
       const list = (Array.isArray(this.payload) ? this.payload : [this.payload]) as Row[];
       const inserted: Row[] = [];
       for (const r of list) {
-        if (this.table === 'home_feed_rules' && rows.some((x) => x.key === r.key)) {
+        if ((this.db.unique[this.table] ?? []).some((col) => r[col] !== undefined && rows.some((x) => x[col] === r[col]))) {
           return { data: null, error: { code: '23505', message: 'duplicate key value violates unique constraint' } };
         }
         const now = new Date().toISOString();
@@ -141,7 +166,7 @@ class FakeQuery implements PromiseLike<any> {
       for (const r of list) {
         const hit = rows.find((x) => this.conflictCols.every((c) => x[c] === r[c]));
         if (hit) Object.assign(hit, r);
-        else rows.push({ ...r });
+        else rows.push(this.table === 'home_feed_rules' ? { id: this.db.nextId(), created_at: new Date().toISOString(), ...r } : { ...r });
         out.push(hit ?? r);
       }
       return { data: this.returning ? out : null, error: null };
@@ -157,7 +182,8 @@ class FakeQuery implements PromiseLike<any> {
       hit = [...hit].sort((a, b) => (a[col] === b[col] ? 0 : (a[col] < b[col] ? -1 : 1) * (asc ? 1 : -1)));
     }
     if (this.limitN !== null) hit = hit.slice(0, this.limitN);
-    return this.countMode ? { data: null, error: null, count: hit.length } : { data: hit, error: null };
+    // Copies, like a real client: callers must never hold live references to stored rows.
+    return this.countMode ? { data: null, error: null, count: hit.length } : { data: hit.map((r) => ({ ...r })), error: null };
   }
 
   async maybeSingle() {

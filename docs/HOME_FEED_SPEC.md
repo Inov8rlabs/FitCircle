@@ -143,7 +143,9 @@ Clarifications made while building the server. All are backward compatible with 
 | `HOME_FEED_PLATFORMS` | unset (all) | e.g. `ios` → only iOS gets the server-driven layout; others (and requests with no platform header) get the static default. |
 | `HOME_FEED_RULES_ENABLED` | on | `false` → context-aware default ranking, but every DB rule is ignored (use when a bad rule ships). |
 
-Per rule: set `"enabled": false` (PATCH below), or gate with `minAppVersion` / `maxAppVersion` / `platforms`. Rules are cached per server instance for 60 s.
+| `HOME_FEED_PUBLISH_ENABLED` | on | `false` → the editor's publish / revert routes answer `503 PUBLISH_DISABLED` (previews still work). Freeze switch for incidents and read-only local runs. |
+
+Per rule: set `"enabled": false` (PATCH below), or gate with `minAppVersion` / `maxAppVersion` / `platforms`. Rules are cached per server instance: fresh for 30 s, then refreshed in the background (a request may get the previous rules once while the refresh runs). An admin write clears the cache on the instance that handled it.
 
 ### Rule format
 
@@ -233,6 +235,37 @@ curl -H "Authorization: Bearer $ADMIN_API_SECRET" \
 ```
 
 Preview query: `userId` (required), `cards` (default: the full v1 catalog), `platform`, `version`, `build`, `timezone`, `includeDisabled=true` (evaluate disabled rules too — test a rule before enabling it). Response: `{ feed, killSwitch, context, trace: { ranker, appliedRules, suppressed, guardrailAdjustments, droppedUnsupported }, rulesEvaluated }`.
+
+### Editor (Admin Tools → FitCircle → Home feed)
+
+`https://admintools.inov8rlabs.com/apps/fitcircle/home-feed` is the owner-facing way to change the feed. It edits the same `home_feed_rules` rows, but every change goes through **draft → preview → confirm → publish → audit**:
+
+- **Draft**: the editor loads the published ruleset and its `version`, and keeps unpublished edits in the browser (per admin). *Simple mode* reorders/hides cards for one audience in a single managed rule (`admin_layout_<audience>`) made of `move`/`hide` actions; *Rules mode* edits any rule with form controls (or validated JSON).
+- **Preview**: `POST /api/admin/home-feed/preview` resolves the feed twice from one context — `before` with the published rules, `after` with the draft — through the production path (context loaders, RulesRanker, guardrails, kill switches, promo engine), and returns the ranker's pre-guardrail order (`trace.ranked`) so the editor can say *why* a card didn't land where it was dragged (e.g. G4).
+- **Publish**: `POST /api/admin/home-feed/publish` applies the whole changeset atomically, only if the ruleset still has the draft's `baseVersion`, and writes a `home_feed_rule_changes` row (actor = `X-Admin-Actor`). **Revert** re-publishes a change's `rules_before` as a new change.
+- **History**: `GET /api/admin/home-feed/changes`; Admin Tools' `/audit` page shows these next to ad changes.
+
+Endpoints (admin auth as above; Admin Tools calls them server-to-server with `Authorization: Bearer $ADMIN_API_SECRET` + `X-Admin-Actor: <google email>`; publish/revert with the secret **require** `X-Admin-Actor` → else `400 missing_actor`):
+
+| Route | Body / query | Response `data` |
+|---|---|---|
+| `GET /rules` | — | `{ rules: AdminRule[], version, lastChange, killSwitch: { feedEnabled, feedEnabledIos, feedEnabledAndroid, rulesEnabled, publishEnabled }, catalog: { defaultOrder, extraCards, cards[{type,version,kind,dismissible}] }, propagation }` (additive to the old `{ rules }`) |
+| `POST /preview` | `{ userId? \| actorAsUser? \| persona?: "typical", platform, version, build?, timezone?, cards?, actions?, promoLayouts?, draft?: { rules: FlatRule[] } \| { changes: RuleChange[] } \| { revertOf: changeId } }` | `{ subject, request, killSwitch, context, before, after, draft: { baseVersion, afterVersion, valid, issues[{key,path,message}], changes, revertOf, rules[{key,enabledBefore,enabledAfter,appliedBefore,appliedAfter}] }, render: { user, campaign } }`; `before`/`after` = `{ feed, trace (incl. ranked), order }` |
+| `POST /publish` | `{ baseVersion, changes: RuleChange[], summary, note?, descriptions?, snapshotVersion? }` | `{ change: ChangeEntry, version, rules, propagation }` |
+| `POST /revert` | `{ changeId, baseVersion, summary?, note?, descriptions?, snapshotVersion? }` | same as publish (`change.action = "revert"`, `revertsChangeId`) |
+| `GET /changes` | `?limit=50&before=<seq>` | `{ changes: ChangeEntry[], nextBefore }` newest first, including `rolled_back` attempts |
+
+- **Subject**: default = the FitCircle admin whose email equals `X-Admin-Actor` (`400 USER_REQUIRED` if none); `userId` = any test user; `persona: "typical"` = a synthetic free member (60 days in, one circle, not checked in, no water yet, 2 unread chats; real campaign + flags; no promo cards since those depend on a real user's journey). `cards`/`actions`/`promoLayouts` default to what that platform + version declares (1.0.8–1.0.9: §2 lists, Android adds `missing_days`; 1.1.0+: also `promo@1` (+ actions/layouts) and `circle_chat@1`).
+- **Privacy**: the preview strips `circle_chat` names/messages (other members' data); `render` carries only the previewed user's display name / Pro state and the featured campaign's public creative.
+- **RuleChange**: `{op:"create", rule}` · `{op:"update", key, rule}` (full replacement, no renames) · `{op:"enable"|"disable"|"delete", key}`. Every created/updated rule is validated with `ruleInputSchema`; enabling a stored rule that no longer validates is refused. Max 100 changes / 200 rules.
+- **Version**: `r1-` + first 16 hex of sha256 of the canonical ruleset (rules sorted by key, JSON keys sorted). Content-based, so edits made through the legacy `POST/PATCH /rules` routes also invalidate open drafts.
+- **Errors**: `400 VALIDATION_ERROR` (message lists the first issues; `data.issues`), `400 NO_CHANGES`, `400 NOT_REVERTIBLE` / `NOTHING_TO_REVERT`, `404 NOT_FOUND`, `409 STALE_DRAFT` (rules changed since `baseVersion`, or another publish claimed the same revision), `409 PUBLISH_IN_PROGRESS` (a `pending` change < 2 min old), `502 PUBLISH_ROLLED_BACK` (write failed, everything restored), `500 PUBLISH_FAILED` (rollback incomplete — check the rules), `503 PUBLISH_DISABLED` / `AUDIT_LOG_MISSING` (migration 125 not applied).
+
+**Publish algorithm** (no stored procedures, `HomeFeedAdminService.commit`): (1) read the latest change — refuse while one is `pending`; (2) recompute the ruleset version — `409` if ≠ `baseVersion`; (3) validate the changeset and compute the effective diff; (4) compute typical-user layouts for iOS + Android (`snapshotVersion`, default 1.1.0) before/after; (5) insert the change row as `pending` with `seq = last + 1` (`UNIQUE(seq)` = the lock: a racing publish gets `409`); (6) one multi-row `upsert … on conflict (key)` for creates/updates/enables/disables, then one `delete … where key in (…)` — each a single atomic statement; if either fails, every touched key is restored to its before-row (created keys deleted) and the row is marked `rolled_back`; (7) read back, mark `applied` with the read-back ruleset, clear this instance's rules cache.
+
+**Propagation**: this instance immediately; other server instances within ~30 s (rules cache); the apps on their next feed fetch — they reuse a layout for up to `ttl_seconds` (15 min) and apply a new one on the next Home appearance (§6), so allow ~15 min before judging a change on a device.
+
+**Audit table** `home_feed_rule_changes` (migration 125, service role only): `id, seq (unique), created_at, applied_at, actor_email, actor_user_id, action (publish|revert), status (pending|applied|rolled_back|failed), summary, note, base_version, version_after, rules_before, rules_after, diff {changes, descriptions}, layout_before / layout_after {appVersion, persona, ios[], android[]}, reverts_change_id, request_id (x-vercel-id), error`.
 
 ### Data
 

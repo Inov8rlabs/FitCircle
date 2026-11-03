@@ -22,7 +22,10 @@ const relations = snapshot.relations as Record<string, string[]>;
 const foreignKeys = snapshot.foreign_keys as ForeignKey[];
 
 /** Tables created by migrations not yet applied when the snapshot was taken. */
-const PENDING_RELATIONS: string[] = [];
+const PENDING_RELATIONS: string[] = [
+  // 125_home_feed_rule_changes.sql (home feed editor audit log) — remove after applying + refreshing the snapshot.
+  'home_feed_rule_changes',
+];
 
 const APP_DIR = join(__dirname, '..', '..', 'app');
 

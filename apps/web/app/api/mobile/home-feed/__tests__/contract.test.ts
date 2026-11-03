@@ -445,6 +445,15 @@ describe('additivity (spec §7: new endpoint only, no existing route changes)', 
       .map((p) => relative(apiRoot, p).split('\\').join('/'))
       .filter((p) => p.includes('home-feed/') && p.endsWith('route.ts'))
       .sort();
-    expect(routes).toEqual(['admin/home-feed/preview/route.ts', 'admin/home-feed/rules/route.ts', 'mobile/home-feed/events/route.ts', 'mobile/home-feed/route.ts']);
+    // Admin editor routes (HOME_FEED_SPEC §9 "Editor") are admin-only; the mobile surface is unchanged.
+    expect(routes).toEqual([
+      'admin/home-feed/changes/route.ts',
+      'admin/home-feed/preview/route.ts',
+      'admin/home-feed/publish/route.ts',
+      'admin/home-feed/revert/route.ts',
+      'admin/home-feed/rules/route.ts',
+      'mobile/home-feed/events/route.ts',
+      'mobile/home-feed/route.ts',
+    ]);
   });
 });

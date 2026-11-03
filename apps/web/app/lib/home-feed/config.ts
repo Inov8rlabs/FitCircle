@@ -9,6 +9,9 @@
  *                       requests without a platform header get the default.
  *  HOME_FEED_RULES_ENABLED  default on; off = context-aware default ranking
  *                       but ignore every DB rule (rules incident switch).
+ *  HOME_FEED_PUBLISH_ENABLED  default on; off = the admin editor's publish /
+ *                       revert routes answer 503 (previews still work). Freeze
+ *                       switch for incidents / read-only local runs.
  */
 import type { AppPlatform } from './types';
 
@@ -29,4 +32,8 @@ export function isFeedEnabled(platform: AppPlatform | null, env: Env = process.e
 
 export function areRulesEnabled(env: Env = process.env): boolean {
   return !isOff(env.HOME_FEED_RULES_ENABLED);
+}
+
+export function isPublishEnabled(env: Env = process.env): boolean {
+  return !isOff(env.HOME_FEED_PUBLISH_ENABLED);
 }
