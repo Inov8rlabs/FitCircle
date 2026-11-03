@@ -1050,6 +1050,22 @@
     },
     {
       "columns": [
+        "actor_user_id"
+      ],
+      "name": "home_feed_rule_changes_actor_user_id_fkey",
+      "ref": "profiles",
+      "table": "home_feed_rule_changes"
+    },
+    {
+      "columns": [
+        "reverts_change_id"
+      ],
+      "name": "home_feed_rule_changes_reverts_change_id_fkey",
+      "ref": "home_feed_rule_changes",
+      "table": "home_feed_rule_changes"
+    },
+    {
+      "columns": [
         "updated_by"
       ],
       "name": "home_feed_rules_updated_by_fkey",
@@ -2827,6 +2843,28 @@
       "promo_key",
       "creative_id",
       "button"
+    ],
+    "home_feed_rule_changes": [
+      "id",
+      "seq",
+      "created_at",
+      "applied_at",
+      "actor_email",
+      "actor_user_id",
+      "action",
+      "status",
+      "summary",
+      "note",
+      "base_version",
+      "version_after",
+      "rules_before",
+      "rules_after",
+      "diff",
+      "layout_before",
+      "layout_after",
+      "reverts_change_id",
+      "request_id",
+      "error"
     ],
     "home_feed_rules": [
       "id",
