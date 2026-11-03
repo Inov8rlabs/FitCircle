@@ -15,6 +15,9 @@ import {
   overlayLegacySteps,
   calendarDay,
   challengeDailyStepGoal,
+  exclusiveEndDay,
+  goalDaysElapsed,
+  localDayFraction,
   stepsPeriod,
   type StepsMemberInput,
   type StepsMemberRow,
@@ -42,7 +45,8 @@ export interface StepsLeaderboard extends StepsPeriod {
 }
 
 export type StepsLeaderboardResult =
-  | { ok: true; board: StepsLeaderboard }
+  /** goal_days: goal-days elapsed per member id (lowercase), for the shipped-app overlay only (not serialised). */
+  | { ok: true; board: StepsLeaderboard; goal_days: Map<string, number> }
   | { ok: false; code: 'CIRCLE_NOT_FOUND' | 'FORBIDDEN' };
 
 type Row = Record<string, any>;
@@ -105,7 +109,7 @@ export class CircleStepsLeaderboardService {
     const circleTz = isValidTimezone(circle.timezone) ? circle.timezone : 'UTC';
     const viewerTz = isValidTimezone(clientTimezone) ? clientTimezone : circleTz;
     const today = getTodayInTimezone(viewerTz);
-    const period = stepsPeriod(calendarDay(circle.start_date), calendarDay(circle.end_date), today);
+    const period = stepsPeriod(calendarDay(circle.start_date), exclusiveEndDay(String(circle.end_date)), today);
 
     const { data: challengeRows, error: challengeRowsError } = await db
       .from('challenges')
@@ -132,9 +136,12 @@ export class CircleStepsLeaderboardService {
     // Members up to a day ahead of the viewer are on the next date.
     const tracking = await this.readSteps(userIds, from, addDays(today, 1));
 
+    const now = new Date();
+    const goalDays = new Map<string, number>();
     const inputs: StepsMemberInput[] = members.map((m) => {
       const profile = profiles.get(m.user_id) ?? {};
       const memberTz = isValidTimezone(profile.timezone) && profile.timezone !== 'UTC' ? profile.timezone : viewerTz;
+      goalDays.set(lower(m.user_id), goalDaysElapsed(period, getTodayInTimezone(memberTz), localDayFraction(now, memberTz)));
       const ownGoal = savedTargets(profile).steps;
       const rows = tracking.get(m.user_id) ?? [];
       const stepsByDate = new Map<string, number>();
@@ -165,6 +172,7 @@ export class CircleStepsLeaderboardService {
 
     return {
       ok: true,
+      goal_days: goalDays,
       board: {
         circle_id: circle.id,
         is_steps_circle: circle.type === 'step_count' || challenge !== null,
@@ -182,7 +190,7 @@ export class CircleStepsLeaderboardService {
   }
 
   /**
-   * Steps circle: shipped apps (≤ 1.1.1) only render the goal leaderboard
+   * Steps circle: shipped apps (iOS ≤ 1.1.0, Android ≤ vc42) only render the goal leaderboard
    * (GET …/leaderboard and the `leaderboard` inside GET /api/mobile/circles/[id]),
    * which reads "No goal set" / 0% there. Fill its existing fields from steps.
    * Best-effort: any failure returns the goal board unchanged.
@@ -195,7 +203,9 @@ export class CircleStepsLeaderboardService {
   ): Promise<T[]> {
     try {
       const steps = await this.build(circleId, viewerId, clientTimezone);
-      return steps.ok && steps.board.is_steps_circle ? overlayLegacySteps(leaderboard, steps.board) : leaderboard;
+      return steps.ok && steps.board.is_steps_circle
+        ? overlayLegacySteps(leaderboard, steps.board, steps.goal_days)
+        : leaderboard;
     } catch (err: any) {
       console.warn('[StepsLeaderboard] legacy overlay skipped:', err?.message ?? err);
       return leaderboard;

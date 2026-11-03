@@ -10,7 +10,8 @@ member's circle *goal* (weight). A steps circle — e.g. one created with the
 ranks by the steps HealthKit / Health Connect already sync into `daily_tracking`,
 for **every active circle member** (challenge enrollment is not required).
 
-The old endpoint is unchanged, so shipped (≤ 1.1.0) clients are unaffected.
+Shipped clients that only know the goal board (iOS ≤ 1.1.0, Android ≤ 1.1.1 vc42) get
+steps on it too: see "Shipped clients (goal board overlay)" below.
 
 ## Endpoint
 
@@ -84,3 +85,51 @@ member and not the creator), 404 `CIRCLE_NOT_FOUND`. `Cache-Control: private, no
   empty; clients show "Starts tomorrow" / "Starts in N days", the member list, and
   a per-member "steps syncing" marker from `steps_synced_recently`.
 - **Completed**: "today" is the last circle day.
+
+## Shipped clients (goal board overlay)
+
+`GET /api/mobile/circles/{id}/leaderboard` and the `leaderboard` inside
+`GET /api/mobile/circles/{id}` keep their shape. For a steps circle
+(`is_steps_circle`) the server fills the goal fields from this board
+(`overlayLegacySteps`) with the **running total since the circle started**:
+the same ranking as the new board's **Total** tab. Today's steps alone are never shown.
+
+Shipped rows render (iOS 1.1.0 `CircleDetailFeature.LeaderboardRow`, Android
+`LeaderboardRowText.goalDescription`): `"%.1f <goal_unit> → %.1f <goal_unit> goal"`
+when `current_value > 0`, else `"No data → %.1f <goal_unit> goal"`; then
+`"<progress_percentage>%"` with a bar capped at 100. The "x of y" line only shows
+when `starting_value` is set.
+
+| field | value |
+|---|---|
+| `current_value` | total steps since the start, thousands, one decimal (`21.9`) |
+| `target_value` | daily goal × goal-days elapsed, thousands (`11.8`) |
+| `goal_unit` | `"k steps"` → "21.9 k steps → 11.8 k steps goal" |
+| `progress_percentage` | round(total ÷ target × 100), uncapped |
+| `starting_value` | null |
+| `rank` | 1..n by total steps (ties: today's steps) |
+
+**Goal-days elapsed** (`goalDaysElapsed`) = completed circle days + the share of
+today that has passed on the member's clock (profile timezone), at least 1;
+every day once the circle is over. The expected total grows at the goal's pace
+through the day, so there is no drop at midnight (whole-day counting would knock
+everyone down by a day's goal each morning), and members in one timezone share
+the denominator, so % order is the same as the total order. The new board has no
+"% of total" figure to match (its % Goal tab is today-only), so this is the
+consistent choice with its Total tab.
+
+Example (prod, Nov steps challenge, 2026-11-03 11:23 Toronto, day 2): goal-days
+1 + 683/1440 = 1.474, target 8,000 × 1.474 = 11,794. Raveesh "21.9 k steps →
+11.8 k steps goal", 185%, #1; Ani "16.4 k steps → 11.8 k steps goal", 139%, #2.
+
+History: 2026-11-01 shipped an average per day (`k steps/day`), which was
+dominated by earlier days and looked frozen on iOS 1.1.0 next to the live board.
+
+## Circle days
+
+`fitcircles.start_date` is midnight UTC of the first day. `end_date` is either
+midnight UTC of the day after the last day (exclusive, current circles) or 23:59
+UTC on the last day (older circles); `exclusiveEndDay` handles both. A circle
+stored 2026-11-02 → 2026-11-30 00:00 runs Nov 2–29: day 2 of 28 on Nov 3. Clients
+must read these as calendar dates (their UTC date), not as instants in the
+device zone: Nov 2 00:00 UTC is Nov 1 19:00 in Toronto.

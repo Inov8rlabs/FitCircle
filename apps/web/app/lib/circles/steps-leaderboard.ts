@@ -91,6 +91,28 @@ export function calendarDay(value: string): string {
 }
 
 /**
+ * fitcircles.end_date as the exclusive end day stepsPeriod expects. Circles store
+ * either midnight UTC of the day AFTER the last day (exclusive, '2026-11-30 00:00')
+ * or 23:59 UTC ON the last day (older circles, '2026-10-31 23:59:59'); the latter's
+ * exclusive end is the next day, or the board would drop the last day.
+ */
+export function exclusiveEndDay(value: string): string {
+  const day = calendarDay(value);
+  const time = /[T ](\d{2}):(\d{2})(?::(\d{2}))?/.exec(value);
+  const atMidnight = !time || (time[1] === '00' && time[2] === '00' && (time[3] ?? '00') === '00');
+  return atMidnight ? day : addDays(day, 1);
+}
+
+/** Fraction of the local day that has passed at `now` in `timezone` (0 at midnight, ~1 at 23:59). */
+export function localDayFraction(now: Date, timezone: string): number {
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone: timezone, hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23',
+  }).formatToParts(now);
+  const get = (type: string) => Number(parts.find((p) => p.type === type)?.value ?? 0);
+  return Math.min(1, Math.max(0, (get('hour') * 3600 + get('minute') * 60 + get('second')) / 86400));
+}
+
+/**
  * Where the viewer's today falls in the circle. `endExclusive` is fitcircles.end_date;
  * a circle whose end is not after its start still counts its first day.
  */
@@ -233,42 +255,76 @@ export interface LegacyLeaderboardEntry {
   goal_unit?: string | null;
 }
 
-/** goal_unit shown by shipped apps as "<value> <unit>" with one decimal: "6.0 k steps/day". */
-export const LEGACY_STEPS_UNIT = 'k steps/day';
+/** goal_unit shown by shipped apps as "<value> <unit>" with one decimal: "21.9 k steps". */
+export const LEGACY_STEPS_UNIT = 'k steps';
 
 const thousands = (n: number) => Math.round(n / 100) / 10;
 
 /**
- * Shipped apps (≤ 1.1.1) only know the goal leaderboard: progress_percentage and the
- * line "<current> <unit> → <target> <unit> goal" (current/target printed "%.1f").
- * For a steps circle, fill those fields from the steps board so the row reads
- * "6.0 k steps/day → 8.0 k steps/day goal" with % = average daily steps vs the
- * daily goal, and re-rank by it (ties: total steps). starting_value is cleared so
- * the weight-only "x of y" line stays hidden. Members not on the board, or hidden,
- * keep 0% and no numbers; before the start every row reads "No data → goal".
+ * Goal-days a member has had so far, the denominator of the old board's %:
+ * completed circle days + the share of today that has passed on the member's
+ * clock. So the expected total grows at the goal's pace through the day instead
+ * of jumping a whole day's goal at midnight (no morning dip), and members in one
+ * zone share the denominator, so % order == total order (the new Total tab).
+ * Day 1 counts as at least one full day (no 300% at 00:10 on the first morning;
+ * continuous at the first midnight). A completed circle counts every day.
+ *
+ * `localToday` is the member's own date; `dayFraction` the share of it that has passed.
  */
-export function overlayLegacySteps<T extends { rank: number; user_id: string; progress_percentage: number }>(entries: T[], board: { members: StepsMemberRow[] }): T[] {
+export function goalDaysElapsed(period: StepsPeriod, localToday: string, dayFraction: number): number {
+  if (period.phase === 'upcoming' || localToday < period.start_date) return 0;
+  if (localToday > period.end_date) return period.total_days;
+  const completed = daysBetween(period.start_date, localToday);
+  return Math.max(1, completed + Math.min(1, Math.max(0, dayFraction)));
+}
+
+/**
+ * Shipped apps (iOS <= 1.1.0, Android <= 1.1.1 vc42, and any client whose steps
+ * board failed to load) only know the goal leaderboard. Their row prints
+ *   "<current %.1f> <goal_unit> -> <target %.1f> <goal_unit> goal"  (when current > 0)
+ *   "No data -> <target %.1f> <goal_unit> goal"                       (otherwise)
+ * plus "<progress_percentage>%" and a bar capped at 100 (iOS 1.1.0
+ * CircleDetailFeature.LeaderboardRow, Android LeaderboardRowText.goalDescription).
+ * A "x of y" line appears only when starting_value is set, so it stays null.
+ *
+ * For a steps circle that row shows the RUNNING TOTAL since the circle started:
+ *   current_value = total steps (thousands)          "21.9 k steps"
+ *   target_value  = daily goal x goal-days elapsed    "-> 11.8 k steps goal"
+ *   progress_percentage = total / target (rounded, uncapped)
+ *   rank 1..n by total steps (ties: today's steps) = the new board's Total tab.
+ * Never today's steps alone. Members not on the board, or hidden, keep 0% and no
+ * numbers; before the start every row reads "No data -> goal" with a one-day target.
+ *
+ * `goalDays` = goalDaysElapsed per member id (lowercase); missing = 1.
+ */
+export function overlayLegacySteps<T extends { rank: number; user_id: string; progress_percentage: number }>(
+  entries: T[],
+  board: { members: StepsMemberRow[] },
+  goalDays: Map<string, number> = new Map()
+): T[] {
   const byId = new Map(board.members.map((m) => [m.user_id.toLowerCase(), m]));
   const scored = entries.map((entry) => {
-    const m = byId.get(String(entry.user_id).toLowerCase());
+    const id = String(entry.user_id).toLowerCase();
+    const m = byId.get(id);
     if (!m || !m.steps_visible) {
-      return { entry: { ...entry, progress_percentage: 0, current_value: null, starting_value: null, target_value: null, goal_unit: null }, total: -1 };
+      return { entry: { ...entry, progress_percentage: 0, current_value: null, starting_value: null, target_value: null, goal_unit: null }, total: -1, today: -1 };
     }
-    const elapsed = m.days.length;
-    const avg = m.total_steps !== null && elapsed > 0 ? m.total_steps / elapsed : null;
+    const days = goalDays.get(id) ?? 1;
+    const target = m.daily_goal_steps * Math.max(1, days);
     return {
       entry: {
         ...entry,
-        progress_percentage: avg === null ? 0 : goalPercent(avg, m.daily_goal_steps),
-        current_value: avg === null ? null : thousands(avg),
+        progress_percentage: m.total_steps === null ? 0 : goalPercent(m.total_steps, target),
+        current_value: m.total_steps === null ? null : thousands(m.total_steps),
         starting_value: null,
-        target_value: thousands(m.daily_goal_steps),
+        target_value: thousands(target),
         goal_unit: LEGACY_STEPS_UNIT,
       },
       total: m.total_steps ?? 0,
+      today: m.today_steps ?? 0,
     };
   });
-  scored.sort((a, b) => b.entry.progress_percentage - a.entry.progress_percentage || b.total - a.total);
+  scored.sort((a, b) => b.total - a.total || b.today - a.today);
   // Nullable numbers are what the legacy route serialises anyway (`x || null`).
   return scored.map((s, i) => ({ ...s.entry, rank: i + 1 })) as unknown as T[];
 }
