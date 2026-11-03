@@ -54,7 +54,7 @@ describe('resolveStepsMerge', () => {
 
   it('an override-flagged platform sync does not freeze the day for later syncs', () => {
     const first = resolveStepsMerge(null, hcSync(100, SYNC_T1, true));
-    expect(first).toMatchObject({ steps_source: 'google_fit', is_override: true });
+    expect(first).toMatchObject({ steps_source: 'google_fit', is_override: false });
     const later = resolveStepsMerge(
       row({ steps: 100, steps_source: 'google_fit', is_override: true, steps_synced_at: SYNC_T1 }),
       hcSync(6200, SYNC_T2)
@@ -111,5 +111,28 @@ describe('resolveStepsMerge', () => {
       is_override: true,
       reason: 'manual_over_sync',
     });
+  });
+  // Prod 2026-11-02: Android 1.1.0 posted a Health Connect pull with is_override=true,
+  // then read the flagged row as typed and never synced that day again (home 10,844,
+  // leaderboard 8,285). Platform counts are never stored as overrides.
+  it('a platform count sent with is_override=true is stored without the override flag', () => {
+    expect(resolveStepsMerge(null, hcSync(8285, SYNC_T1, true))).toMatchObject({ steps: 8285, is_override: false });
+    const weightRow = row({ steps: null, steps_source: 'manual' });
+    expect(resolveStepsMerge(weightRow, hcSync(8285, SYNC_T1, true))).toMatchObject({ is_override: false });
+  });
+
+  it('an existing platform row flagged as override is unflagged on the next sync, kept or applied', () => {
+    const stuck = row({ steps: 8285, steps_source: 'google_fit', is_override: true, steps_synced_at: SYNC_T2 });
+    expect(resolveStepsMerge(stuck, hcSync(10844, '2026-10-30T20:00:00.000Z'))).toMatchObject({
+      steps: 10844,
+      is_override: false,
+      reason: 'applied_sync',
+    });
+    expect(resolveStepsMerge(stuck, hcSync(8000, SYNC_T1))).toMatchObject({ steps: 8285, is_override: false });
+  });
+
+  it('a typed override keeps its flag against auto-sync', () => {
+    const typed = row({ steps: 4000, steps_source: 'manual', is_override: true });
+    expect(resolveStepsMerge(typed, hcSync(9000))).toMatchObject({ steps: 4000, is_override: true });
   });
 });

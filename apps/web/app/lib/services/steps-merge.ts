@@ -77,22 +77,33 @@ export function resolveStepsMerge(
   existing: ExistingStepsRow | null,
   incoming: IncomingSteps
 ): ResolvedSteps {
+  const incomingAuto = isPlatformSource(incoming.steps_source);
   const base: ResolvedSteps = {
     steps: incoming.steps,
     steps_source: incoming.steps_source || 'manual',
     steps_synced_at: incoming.steps_synced_at,
-    is_override: incoming.is_override !== undefined ? incoming.is_override : false,
+    // A platform count is never stored as an override, whatever the client sent.
+    // Android <= 1.1.0 posts "pull from Health Connect" with is_override=true and
+    // then treats the flagged row as typed, so it stops syncing that day for good
+    // (prod 2026-11-02: home 10,844 steps, leaderboard frozen at 8,285).
+    is_override:
+      incomingAuto && incoming.steps !== undefined
+        ? existing?.is_override === true &&
+          !existing.steps_synced_at &&
+          !isPlatformSource(existing.steps_source)
+        : incoming.is_override !== undefined
+          ? incoming.is_override
+          : false,
     reason: existing ? 'applied' : 'insert',
   };
   if (!existing || incoming.steps === undefined) return base;
 
-  const incomingAuto = isPlatformSource(incoming.steps_source);
   const existingTyped = isTypedManualSteps(existing);
   const keepExisting = (reason: ResolvedSteps['reason']): ResolvedSteps => ({
     steps: existing.steps,
     steps_source: existing.steps_source || 'manual',
     steps_synced_at: existing.steps_synced_at,
-    is_override: existing.is_override === true,
+    is_override: existing.is_override === true && !isPlatformSource(existing.steps_source),
     reason,
   });
 
