@@ -14,11 +14,11 @@ const deleteSchema = z.object({
  */
 export async function DELETE(request: NextRequest) {
   try {
-    await requireMobileAuth(request);
+    const user = await requireMobileAuth(request);
     const body = await request.json();
     const validated = deleteSchema.parse(body);
 
-    await PushService.removeToken(validated.token);
+    await PushService.removeToken(user.id, validated.token);
 
     return NextResponse.json({
       success: true,

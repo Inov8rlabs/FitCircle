@@ -1,148 +1,43 @@
 import { type NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
-
-import { sendInvitationEmail, sendBatchInvitationEmails } from '@/lib/email/email-service';
+import { readBoundedBody } from '@inov8r/engage-adapters';
+import { ReferralInviteService, ReferralDeliveryUnknownError, INVITE_LIMITS } from '@/lib/services/referral-invite-service';
+import { ReferralService } from '@/lib/services/referral-service';
 import { createServerSupabase } from '@/lib/supabase-server';
 
-// Validation schema for single invite
-const inviteSchema = z.object({
-  email: z.string().email('Invalid email address'),
-});
+const inputSchema=z.union([
+  z.object({email:z.string().email().max(254)}).strict(),
+  z.object({emails:z.array(z.string().email().max(254)).min(1).max(INVITE_LIMITS.perRequest)}).strict(),
+]);
 
-// Validation schema for batch invites
-const batchInviteSchema = z.object({
-  emails: z.array(z.string().email('Invalid email address')).min(1).max(50),
-});
-
-/**
- * POST /api/fitcircles/[id]/invite
- * Send invitation email(s) to join a FitCircle
- */
-export async function POST(
-  request: NextRequest,
-  context: { params: Promise<{ id: string }> }
-) {
+/** Circle invitations use the same guest opt-out, occurrence and quota ledger as referrals. */
+export async function POST(request:NextRequest,context:{params:Promise<{id:string}>}) {
   try {
-    const supabase = await createServerSupabase();
-    const { id: challengeId } = await context.params;
-
-    // Get authenticated user
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-
-    if (authError || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    // Parse request body
-    const body = await request.json();
-
-    // Determine if single or batch invite
-    const isBatch = Array.isArray(body.emails);
-    let emails: string[];
-
-    if (isBatch) {
-      const validated = batchInviteSchema.parse(body);
-      emails = validated.emails;
-    } else {
-      const validated = inviteSchema.parse(body);
-      emails = [validated.email];
-    }
-
-    // Get challenge details
-    const { data: challenge, error: challengeError } = await supabase
-      .from('fitcircles')
-      .select(`
-        id,
-        name,
-        type,
-        start_date,
-        end_date,
-        invite_code,
-        creator_id,
-        profiles:creator_id (
-          display_name
-        )
-      `)
-      .eq('id', challengeId)
-      .single();
-
-    if (challengeError || !challenge) {
-      return NextResponse.json({ error: 'Challenge not found' }, { status: 404 });
-    }
-
-    // Cast to any for type flexibility with Supabase joins
-    const challengeData = challenge as any;
-
-    // Get current participant count
-    const { count: participantCount } = await supabase
-      .from('fitcircle_members')
-      .select('*', { count: 'exact', head: true })
-      .eq('fitcircle_id', challengeId)
-      .eq('status', 'active');
-
-    // Get inviter's name
-    const inviterName = challengeData.profiles?.display_name || user.email?.split('@')[0] || 'A friend';
-
-    // Send invitations
-    if (isBatch) {
-      // Send batch invitations
-      const invitations = emails.map((email) => ({
-        to: email,
-        invitedByName: inviterName,
-        circleName: challengeData.name,
-        circleType: challengeData.type as 'weight_loss' | 'step_count' | 'workout_frequency' | 'custom',
-        startDate: challengeData.start_date,
-        endDate: challengeData.end_date,
-        participantCount: participantCount || 1,
-        inviteCode: challengeData.invite_code,
-      }));
-
-      const results = await sendBatchInvitationEmails(invitations);
-
-      return NextResponse.json({
-        success: true,
-        sent: results.success,
-        failed: results.failed,
-        errors: results.errors.length > 0 ? results.errors : undefined,
-      });
-    } else {
-      // Send single invitation
-      const result = await sendInvitationEmail({
-        to: emails[0],
-        invitedByName: inviterName,
-        circleName: challengeData.name,
-        circleType: challengeData.type as 'weight_loss' | 'step_count' | 'workout_frequency' | 'custom',
-        startDate: challengeData.start_date,
-        endDate: challengeData.end_date,
-        participantCount: participantCount || 1,
-        inviteCode: challengeData.invite_code,
-      });
-
-      if (!result.success) {
-        return NextResponse.json(
-          { error: result.error || 'Failed to send invitation' },
-          { status: 500 }
-        );
-      }
-
-      return NextResponse.json({
-        success: true,
-        message: `Invitation sent to ${emails[0]}`,
-      });
-    }
-  } catch (error) {
-    console.error('Error in invite API:', error);
-
-    if (error instanceof z.ZodError) {
-      return NextResponse.json(
-        { error: 'Invalid input', details: error.errors },
-        { status: 400 }
-      );
-    }
-
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    );
+    if(request.headers.get('origin')!==new URL(request.url).origin) return NextResponse.json({error:'Request origin is not allowed'},{status:403});
+    if(request.headers.get('content-type')?.split(';')[0]!=='application/json') return NextResponse.json({error:'JSON request required'},{status:415});
+    const supabase=await createServerSupabase();
+    const {data:{user},error:authError}=await supabase.auth.getUser();
+    if(authError || !user) return NextResponse.json({error:'Unauthorized'},{status:401});
+    const {id}=await context.params;
+    if(!z.string().uuid().safeParse(id).success) return NextResponse.json({error:'Invalid circle'},{status:400});
+    const {data:membership,error:membershipError}=await supabase.from('fitcircle_members').select('id').eq('fitcircle_id',id).eq('user_id',user.id).eq('status','active').maybeSingle();
+    if(membershipError) return NextResponse.json({error:'Membership verification is temporarily unavailable'},{status:503});
+    if(!membership) return NextResponse.json({error:'Active circle membership is required'},{status:403});
+    let body:unknown;
+    try {body=JSON.parse((await readBoundedBody(request,16384)).toString('utf8'));}
+    catch {return NextResponse.json({error:'Invalid or oversized request'},{status:400});}
+    const input=inputSchema.parse(body),batch='emails' in input,emails=batch?input.emails:[input.email];
+    const result=await ReferralInviteService.inviteContacts(user.id,{circleId:id,contacts:emails.map(email=>({email}))},uid=>ReferralService.getOrCreateCode(uid));
+    const sent=result.results.filter(r=>r.status==='sent').length;
+    const failed=result.results.length-sent;
+    if(batch) return NextResponse.json({success:failed===0,sent,failed,results:result.results.map(r=>({status:r.status,inviteId:r.inviteId}))});
+    const status=result.results[0]?.status;
+    if(status==='sent') return NextResponse.json({success:true,message:'Invitation sent'});
+    if(status==='already_invited') return NextResponse.json({success:true,message:'This invitation was already recorded'});
+    return NextResponse.json({error:status==='rate_limited'?'Invitation limit reached':'Invitation could not be sent',code:status},{status:status==='rate_limited'?429:409});
+  } catch(error) {
+    if(error instanceof z.ZodError) return NextResponse.json({error:'Invalid input',details:error.issues},{status:400});
+    if(error instanceof ReferralDeliveryUnknownError) return NextResponse.json({error:'Delivery could not be confirmed. The invitation is retained to prevent duplicate sending.',code:'DELIVERY_UNKNOWN'},{status:503});
+    return NextResponse.json({error:'Invitation service is temporarily unavailable'},{status:503});
   }
 }

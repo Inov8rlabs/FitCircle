@@ -3,11 +3,13 @@ import { z } from 'zod';
 
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { PushService } from '@/lib/services/push-service';
+import { getFitCircleEngage } from '@/lib/engage/server';
 
 const registerSchema = z.object({
   token: z.string().min(1),
   platform: z.enum(['ios', 'android', 'web']),
   device_name: z.string().optional(),
+  install_id: z.string().uuid().optional(),
 });
 
 /**
@@ -26,6 +28,10 @@ export async function POST(request: NextRequest) {
       validated.platform,
       validated.device_name
     );
+    if (validated.install_id) {
+      const engage = getFitCircleEngage();
+      if (engage) await engage.bindInstallation(user.id, validated.install_id, tokenRecord.id);
+    }
 
     return NextResponse.json({
       success: true,

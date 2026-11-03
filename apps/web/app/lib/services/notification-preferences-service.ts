@@ -1,4 +1,5 @@
 import { createAdminSupabase } from '../supabase-admin';
+import { getFitCircleEngage } from '../engage/server';
 
 // ============================================================================
 // TYPES
@@ -151,6 +152,10 @@ export class NotificationPreferencesService {
   ): Promise<NotificationPreferences> {
     const supabaseAdmin = createAdminSupabase();
 
+    if (process.env.ENGAGE_LEGACY_BRIDGE_ENABLED === 'true') {
+      const connector=getFitCircleEngage();if(!connector)throw new Error('Engage connector required');
+      return await connector.patchPreferences(userId,updates,true) as NotificationPreferences;
+    }
     // Ensure record exists
     await this.getPreferences(userId);
 

@@ -21,24 +21,35 @@
     "design:check": "node design/codegen.mjs --check --only web"
   },
   "devDependencies": {
-    "@types/node": "^20.11.0",
-    "eslint": "^8.56.0",
-    "pg": "^8.11.3",
-    "prettier": "^3.2.4",
-    "typescript": "^5.6.0"
+    "@types/node": "^20.19.43",
+    "eslint": "^8.57.1",
+    "pg": "^8.23.1",
+    "prettier": "^3.9.10",
+    "typescript": "^5.9.3"
   },
   "engines": {
     "node": ">=20.0.0"
   },
   "packageManager": "bun@1.0.0",
   "dependencies": {
-    "@amplitude/analytics-browser": "^2.25.4",
-    "@amplitude/plugin-session-replay-browser": "^1.22.21"
+    "@amplitude/analytics-browser": "^2.49.0",
+    "@amplitude/plugin-session-replay-browser": "^1.36.6",
+    "@inov8r/engage-adapters": "file:./vendor/engage/engage-adapters-957d8692c11e30eb.tgz",
+    "@inov8r/engage-protocol": "file:./vendor/engage/engage-protocol-86508b4c3c87a0b9.tgz",
+    "@inov8r/engage-server": "file:./vendor/engage/engage-server-64923560e569a242.tgz",
+    "@inov8r/engage-web": "file:./vendor/engage/engage-web-9ba959accf624823.tgz",
+    "@inov8r/engage-connector": "file:./vendor/engage/engage-connector-8de52b94c4872c19.tgz"
   },
   "overrides": {
     "flatted": "^3.4.0",
     "postcss": "^8.5.10",
     "mdast-util-to-hast": "^13.2.1",
-    "ws": "^8.20.1"
+    "ws": "^8.20.1",
+    "@inov8r/engage-protocol": "file:./vendor/engage/engage-protocol-86508b4c3c87a0b9.tgz",
+    "@inov8r/engage-server": "file:./vendor/engage/engage-server-64923560e569a242.tgz",
+    "@inov8r/engage-adapters": "file:./vendor/engage/engage-adapters-957d8692c11e30eb.tgz",
+    "@inov8r/engage-web": "file:./vendor/engage/engage-web-9ba959accf624823.tgz",
+    "sharp": "0.35.5",
+    "@inov8r/engage-connector": "file:./vendor/engage/engage-connector-8de52b94c4872c19.tgz"
   }
 }

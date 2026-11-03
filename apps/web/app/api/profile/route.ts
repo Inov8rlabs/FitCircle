@@ -2,6 +2,8 @@ import { createClient } from '@supabase/supabase-js';
 import { cookies } from 'next/headers';
 import { type NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
+import { AccountDeletionService } from '@/lib/services/account-deletion-service';
+import { getFitCircleEngage } from '@/lib/engage/server';
 
 // Validation schema
 const profileUpdateSchema = z.object({
@@ -146,6 +148,18 @@ export async function PATCH(request: NextRequest) {
       process.env.SUPABASE_SERVICE_ROLE_KEY!
     );
 
+    if (process.env.ENGAGE_LEGACY_BRIDGE_ENABLED === 'true' && validatedData.preferences) {
+      const p = validatedData.preferences;
+      const patch = {
+        ...(p.notifications !== undefined ? {notifications:{push:p.notifications,email:p.notifications}} : {}),
+        ...(p.units ? {display:{units:p.units}} : {}),
+        ...(p.privacy ? {privacy:{profile_visibility:p.privacy}} : {}),
+      };
+      const connector=getFitCircleEngage();if(!connector)throw new Error('Engage connector required');
+      await connector.patchPreferences(user.id,patch);
+      delete validatedData.preferences;
+    }
+
     // Update profile
     const { data, error } = await supabase
       .from('profiles')
@@ -204,42 +218,7 @@ export async function DELETE(request: NextRequest) {
       process.env.SUPABASE_SERVICE_ROLE_KEY!
     );
 
-    // Delete user data in order (to respect foreign key constraints)
-
-    // 1. Delete check-ins
-    await supabase
-      .from('checkins')
-      .delete()
-      .eq('user_id', user.id);
-
-    // 2. Delete challenge participations
-    await supabase
-      .from('fitcircle_members')
-      .delete()
-      .eq('user_id', user.id);
-
-    // 3. Delete team memberships
-    await supabase
-      .from('team_members')
-      .delete()
-      .eq('user_id', user.id);
-
-    // 4. Delete profile
-    await supabase
-      .from('profiles')
-      .delete()
-      .eq('id', user.id);
-
-    // 5. Delete auth user
-    const { error: authError } = await supabase.auth.admin.deleteUser(user.id);
-
-    if (authError) {
-      console.error('Delete auth user error:', authError);
-      return NextResponse.json(
-        { error: 'Failed to delete account' },
-        { status: 500 }
-      );
-    }
+    await AccountDeletionService.deleteAccount(user.id, {userEmail:user.email});
 
     // Clear cookies
     const response = NextResponse.json({

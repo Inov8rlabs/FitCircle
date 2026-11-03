@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: vi.fn(), push: vi.fn() }) }));
 vi.mock('@/lib/supabase', () => ({ supabase: {} }));
-vi.mock('@/lib/services/food-log-service', () => ({ FoodLogService: { deleteEntry: vi.fn() } }));
+vi.mock('@/lib/actions/delete-food-log', () => ({ deleteFoodLogEntry: vi.fn().mockResolvedValue({ success: true }) }));
 vi.mock('@/lib/services/beverage-log-service', () => ({ BeverageLogService: { deleteEntry: vi.fn() } }));
 vi.mock('@/components/ui/use-toast', () => ({ useToast: () => ({ toast: vi.fn() }) }));
 vi.mock('@/components/nutrition/FitzyLauncher', () => ({ FitzyLauncher: () => null }));

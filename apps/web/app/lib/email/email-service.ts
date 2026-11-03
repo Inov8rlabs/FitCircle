@@ -5,6 +5,8 @@
  */
 
 import { Resend } from 'resend';
+import { deliverLegacyEmail } from '../engage/legacy-email';
+import {nativeBridgeActive} from '../engage/server';
 
 import { generateWelcomeEmail, generateInvitationEmail } from './templates';
 
@@ -22,6 +24,7 @@ const REPLY_TO = 'team@fitcircle.ai';
 export interface SendWelcomeEmailParams {
   to: string;
   userName: string;
+  userId?: string;
 }
 
 export interface SendInvitationEmailParams {
@@ -41,6 +44,7 @@ export interface SendInvitationEmailParams {
 export async function sendWelcomeEmail({
   to,
   userName,
+  userId,
 }: SendWelcomeEmailParams): Promise<{ success: boolean; error?: string }> {
   try {
     if (!process.env.RESEND_API_KEY) {
@@ -52,6 +56,11 @@ export async function sendWelcomeEmail({
       userName,
       userEmail: to,
     });
+    if (await nativeBridgeActive()) {
+      if (!userId) return {success:false,error:'Welcome email requires an account identity'};
+      const success=await deliverLegacyEmail(userId,{key:`welcome:${userId}`,category:'lifecycle',lifecycle_category:'journey'},{to,subject:`Welcome to FitCircle, ${userName}!`,html});
+      return {success,...(!success ? {error:'Email not accepted by delivery policy'} : {})};
+    }
 
     const resend = getResend();
     if (!resend) {

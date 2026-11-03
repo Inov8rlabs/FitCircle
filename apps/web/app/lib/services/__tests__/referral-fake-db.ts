@@ -32,6 +32,8 @@ let seq = 0;
 const nextId = () => `00000000-0000-4000-8000-${String(++seq).padStart(12, '0')}`;
 
 export class ReferralFakeDb {
+  failReads=new Set<string>();
+  failInserts=new Map<string,{code:string;message:string}>();
   tables: Record<string, Row[]> = {
     profiles: [],
     referral_codes: [],
@@ -159,7 +161,10 @@ class Query implements PromiseLike<any> {
     return this;
   }
   ilike(col: string, val: string) {
-    this.filters.push((r) => String(r[col] ?? '').toLowerCase() === String(val).toLowerCase());
+    let pattern='';
+    for(let i=0;i<val.length;i++) {let c=val[i]!;if(c==='\\' && i+1<val.length) {c=val[++i]!;pattern+=c.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');} else pattern+=c==='%'?'.*':c==='_'?'.':c.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');}
+    const match=new RegExp(`^${pattern}$`,'i');
+    this.filters.push((r)=>match.test(String(r[col] ?? '')));
     return this;
   }
   order(col: string, opts?: { ascending?: boolean }) { this.orderBy = { col, asc: opts?.ascending !== false }; return this; }
@@ -198,6 +203,8 @@ class Query implements PromiseLike<any> {
   }
 
   private run(): any {
+    if(this.op==='insert' && this.db.failInserts.has(this.table)) return {data:null,error:this.db.failInserts.get(this.table)!};
+    if(this.op==='select' && this.db.failReads.has(this.table)) return {data:null,error:{code:'unavailable',message:'Synthetic database failure'}};
     switch (this.op) {
       case 'select': {
         const rows = this.matched();

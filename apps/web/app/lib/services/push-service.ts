@@ -1,4 +1,7 @@
 import * as jwt from 'jsonwebtoken';
+import type { HostNotificationInput } from '@inov8r/engage-server';
+import {nativeBridgeActive} from '../engage/server';
+import { readBoundedBody } from '@inov8r/engage-adapters/bounded-body';
 
 import { createAdminSupabase } from '../supabase-admin';
 
@@ -7,6 +10,8 @@ import { createAdminSupabase } from '../supabase-admin';
 // ============================================================================
 
 export interface PushNotification {
+  /** Server-only policy/identity; never copied into the provider payload. */
+  engage?: Omit<HostNotificationInput, 'channel'>;
   title: string;
   body: string;
   data?: Record<string, string>;
@@ -117,6 +122,8 @@ interface FCMMessage {
 }
 
 interface FCMSendResult {
+  providerId?: string;
+  outcome?: 'accepted' | 'retryable' | 'failed_permanent' | 'unknown';
   success: boolean;
   token: string;
   error?: string;
@@ -129,7 +136,7 @@ interface FCMSendResult {
 
 let cachedAccessToken: { token: string; expiresAt: number } | null = null;
 
-async function getFCMAccessToken(): Promise<string> {
+async function getFCMAccessToken(signal?: AbortSignal): Promise<string> {
   // Return cached token if still valid (with 5-min buffer)
   if (cachedAccessToken && cachedAccessToken.expiresAt > Date.now() + 5 * 60 * 1000) {
     return cachedAccessToken.token;
@@ -155,6 +162,8 @@ async function getFCMAccessToken(): Promise<string> {
 
   const response = await fetch('https://oauth2.googleapis.com/token', {
     method: 'POST',
+    signal: signal ?? AbortSignal.timeout(10000),
+    redirect: 'error',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({
       grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer',
@@ -163,11 +172,12 @@ async function getFCMAccessToken(): Promise<string> {
   });
 
   if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`Failed to get FCM access token: ${response.status} ${errorText}`);
+    await response.body?.cancel();
+    throw new Error('FCM authentication failed');
   }
 
-  const data = await response.json();
+  const data = JSON.parse((await readBoundedBody(response,16384)).toString('utf8'));
+  if (typeof data.access_token!=='string' || !/^[A-Za-z0-9._~+/-]{1,8192}$/.test(data.access_token) || !Number.isFinite(data.expires_in) || data.expires_in<60 || data.expires_in>7200) throw new Error('Invalid FCM credential response');
   cachedAccessToken = {
     token: data.access_token,
     expiresAt: Date.now() + (data.expires_in - 60) * 1000,
@@ -304,13 +314,14 @@ export class PushService {
   /**
    * Deactivate a push token.
    */
-  static async removeToken(token: string): Promise<void> {
+  static async removeToken(userId: string, token: string): Promise<void> {
     const supabaseAdmin = createAdminSupabase();
 
     const { error } = await supabaseAdmin
       .from('push_tokens')
       .update({ is_active: false })
-      .eq('token', token);
+      .eq('token', token)
+      .eq('user_id', userId);
 
     if (error) {
       console.error('[PushService.removeToken] Error:', error);
@@ -349,6 +360,7 @@ export class PushService {
    * Returns the number of successfully sent messages.
    */
   static async sendPush(userId: string, notification: PushNotification): Promise<number> {
+    const bridge=await nativeBridgeActive();
     const tokens = await this.getActiveTokens(userId);
 
     if (tokens.length === 0) {
@@ -356,6 +368,16 @@ export class PushService {
       return 0;
     }
 
+    if (bridge) {
+      const { deliverLegacyPush } = await import('../engage/legacy-push');
+      return deliverLegacyPush(userId, notification.engage, tokens, async (token, signal) => {
+        const result = await this.sendToToken(token, notification, signal);
+        if (result.invalidToken) await this.deactivateTokensById([token.id]);
+        return result.success && result.providerId ? {status:'accepted',provider_id:result.providerId} : {
+          status:result.outcome === 'retryable' ? 'retryable' : result.outcome === 'failed_permanent' ? 'failed_permanent' : 'unknown',reason:'legacy_push_transport',
+        };
+      });
+    }
     let successCount = 0;
     const invalidTokenIds: string[] = [];
 
@@ -439,23 +461,35 @@ export class PushService {
    */
   private static async sendToToken(
     tokenRecord: PushToken,
-    notification: PushNotification
+    notification: PushNotification,
+    signal?: AbortSignal,
   ): Promise<FCMSendResult> {
     const projectId = process.env.FCM_PROJECT_ID;
     if (!projectId) {
       console.error('[PushService.sendToToken] FCM_PROJECT_ID not configured');
-      return { success: false, token: tokenRecord.token, error: 'FCM_PROJECT_ID not configured' };
+      return { success: false, token: tokenRecord.token, error: 'FCM_PROJECT_ID not configured', outcome: 'failed_permanent' };
     }
 
+    let started = false;
     try {
-      const accessToken = await getFCMAccessToken();
+      const accessToken = await getFCMAccessToken(signal);
+      // Re-resolve ownership AFTER credential acquisition and before provider I/O.
+      if (process.env.ENGAGE_LEGACY_BRIDGE_ENABLED === 'true') {
+        const { data, error } = await createAdminSupabase().from('push_tokens').select('id,token').eq('id',tokenRecord.id).eq('user_id',tokenRecord.user_id).eq('is_active',true).maybeSingle();
+        if (error) throw new Error('Token ownership unavailable');
+        if (!data || data.token !== tokenRecord.token) return {success:false,token:tokenRecord.token,outcome:'failed_permanent',error:'binding_changed'};
+      }
+      if (signal?.aborted) return {success:false,token:tokenRecord.token,outcome:'retryable',error:'aborted_before_transport'};
 
       const message = buildFCMMessage(tokenRecord.token, notification);
 
+      started = true;
       const response = await fetch(
         `https://fcm.googleapis.com/v1/projects/${projectId}/messages:send`,
         {
           method: 'POST',
+          signal: signal ?? AbortSignal.timeout(10000),
+          redirect: 'error',
           headers: {
             Authorization: `Bearer ${accessToken}`,
             'Content-Type': 'application/json',
@@ -465,6 +499,8 @@ export class PushService {
       );
 
       if (response.ok) {
+        const payload=JSON.parse((await readBoundedBody(response,16384)).toString('utf8'));
+        if(typeof payload.name!=='string' || !payload.name.startsWith(`projects/${projectId}/messages/`) || !/^[A-Za-z0-9._:/-]{1,512}$/.test(payload.name)) throw new Error('Invalid FCM acceptance response');
         // Update last_used_at
         const supabaseAdmin = createAdminSupabase();
         await supabaseAdmin
@@ -472,36 +508,36 @@ export class PushService {
           .update({ last_used_at: new Date().toISOString() })
           .eq('id', tokenRecord.id);
 
-        return { success: true, token: tokenRecord.token };
+        return { success: true, token: tokenRecord.token, outcome: 'accepted',providerId:payload.name };
       }
 
-      const errorData = await response.json();
+      const errorData = JSON.parse((await readBoundedBody(response,16384)).toString('utf8'));
       const errorCode = errorData?.error?.details?.[0]?.errorCode || errorData?.error?.code;
 
       // Check if token is invalid/unregistered
       const isInvalidToken =
-        errorCode === 'UNREGISTERED' ||
-        errorCode === 'INVALID_ARGUMENT' ||
-        response.status === 404;
+        errorCode === 'UNREGISTERED';
 
       if (isInvalidToken) {
         console.warn(`[PushService.sendToToken] Invalid token detected, will deactivate`);
       } else {
-        console.error(`[PushService.sendToToken] FCM error:`, errorData);
+        console.error('[PushService.sendToToken] Provider rejection', response.status);
       }
 
       return {
         success: false,
         token: tokenRecord.token,
-        error: errorData?.error?.message || `HTTP ${response.status}`,
+        error: isInvalidToken ? 'token_unregistered' : `provider_http_${response.status}`,
         invalidToken: isInvalidToken,
+        outcome: response.status >= 500 ? 'unknown' : response.status === 429 ? 'retryable' : 'failed_permanent',
       };
     } catch (error: any) {
-      console.error(`[PushService.sendToToken] Exception:`, error);
+      console.error('[PushService.sendToToken] Transport failed', {started});
       return {
         success: false,
         token: tokenRecord.token,
-        error: error.message,
+        error: 'push_transport_failed',
+        outcome: started ? 'unknown' : 'retryable',
       };
     }
   }

@@ -116,7 +116,7 @@ describe('claim (attribution)', () => {
     expect(result).toMatchObject({ status: 'pending', inviter: { firstName: 'Maya' }, circle: null, inviteeRewardDays: 7 });
     expect(referralOf(SAM)).toMatchObject({ inviter_id: MAYA, status: 'pending', source: 'typed' });
     await flush();
-    expect(sent).toContainEqual({ userId: MAYA, type: 'referral_friend_joined', data: { friendName: 'Sam' } });
+    expect(sent).toContainEqual({ userId: MAYA, type: 'referral_friend_joined', data: { friendName: 'Sam', dedupeKey: `friend_joined:${referralOf(SAM).id}` } });
   });
 
   it('attributes circle codes to the creator, or to the sharing member via ref', async () => {
@@ -216,7 +216,7 @@ describe('qualification + rewards', () => {
     await flush();
     expect(referralOf(SAM).progress_days).toBe(2);
     expect(sent.filter((s) => s.type === 'referral_progress')).toEqual([
-      { userId: SAM, type: 'referral_progress', data: { inviterName: 'Maya' } },
+      { userId: SAM, type: 'referral_progress', data: { inviterName: 'Maya', dedupeKey: `referral_progress:${referralOf(SAM).id}` } },
     ]);
     const samHub = await ReferralService.getHub(SAM);
     expect(samHub.myReward).toMatchObject({ days: 2, required: 3, status: 'in_progress', rewardDays: 7, inviterFirstName: 'Maya' });
@@ -390,7 +390,7 @@ describe('qualification + rewards', () => {
 
     expect(await ReferralService.revoke(referralOf(SAM).id, 'admin', 'farm')).toBe(true);
     expect(referralOf(SAM).status).toBe('revoked');
-    expect(daysLeft(grantsOf(MAYA)[0].expires_at)).toBe(0);
+    expect(new Date(grantsOf(MAYA)[0].expires_at).getTime()).toBeLessThanOrEqual(Date.now());
     expect(db.rows('referral_rewards').every((r) => r.status === 'revoked')).toBe(true);
   });
 

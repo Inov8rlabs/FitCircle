@@ -378,7 +378,7 @@ export class FitzyPushService {
       fitzyTip: copy.tip,
       fitzySource: copy.source,
       localDate: today,
-      ...(kind === 'fitzy_intro' ? { dedupeKey: introDedupeKey(u.userId) } : {}),
+      dedupeKey: kind === 'fitzy_intro' ? introDedupeKey(u.userId) : `fitzy:${kind}:${today}`,
     });
     await supabase
       .from('fitzy_push_deliveries')

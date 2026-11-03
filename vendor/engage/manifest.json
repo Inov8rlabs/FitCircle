@@ -1,0 +1,35 @@
+{
+  "purpose": "Local pre-release integration snapshot; replace with versioned registry packages for release",
+  "packages": [
+    {
+      "name": "@inov8r/engage-protocol",
+      "version": "0.0.0",
+      "file": "engage-protocol-86508b4c3c87a0b9.tgz",
+      "sha256": "86508b4c3c87a0b9b585565816d2261a157aab7c71004cbd4b9be68372559de6"
+    },
+    {
+      "name": "@inov8r/engage-server",
+      "version": "0.0.0",
+      "file": "engage-server-64923560e569a242.tgz",
+      "sha256": "64923560e569a24299a67954eb2695731b38c571af2c258d2e7a66d662f71e1d"
+    },
+    {
+      "name": "@inov8r/engage-adapters",
+      "version": "0.0.0",
+      "file": "engage-adapters-957d8692c11e30eb.tgz",
+      "sha256": "957d8692c11e30eb77baa52fdd239813e7824832dff49e6bff7fdba3d0a87d32"
+    },
+    {
+      "name": "@inov8r/engage-connector",
+      "version": "0.0.0",
+      "file": "engage-connector-8de52b94c4872c19.tgz",
+      "sha256": "8de52b94c4872c19e6c0ef3f81b2e5263f4de7c0868fadf339bcce0e90e095fd"
+    },
+    {
+      "name": "@inov8r/engage-web",
+      "version": "0.0.0",
+      "file": "engage-web-9ba959accf624823.tgz",
+      "sha256": "9ba959accf624823349d36bf1865cc271e543428ed4f0a6d782d5439b1dbc006"
+    }
+  ]
+}

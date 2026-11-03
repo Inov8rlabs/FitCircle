@@ -10,6 +10,7 @@ import {
   type LogoutReason,
 } from '@/lib/analytics';
 import { supabase } from '@/lib/supabase';
+import { logoutEngageSession } from '@/lib/engage/browser-session';
 
 export interface User {
   id: string;
@@ -385,6 +386,7 @@ export const useAuthStore = create<AuthState>()(
         }
         void (async () => {
         try {
+          await logoutEngageSession();
           await supabase.auth.signOut();
           set({
             user: null,

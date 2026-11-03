@@ -23,7 +23,7 @@ import { DayHeader, MetricPill, ToneDisc, type Tone } from '@/components/ui/ios'
 import { useToast } from '@/components/ui/use-toast';
 import { AnalyticsEvents, analytics } from '@/lib/analytics';
 import { BeverageLogService } from '@/lib/services/beverage-log-service';
-import { FoodLogService } from '@/lib/services/food-log-service';
+import { deleteFoodLogEntry } from '@/lib/actions/delete-food-log';
 import { supabase } from '@/lib/supabase';
 import { cn } from '@/lib/utils';
 
@@ -72,7 +72,7 @@ export function FoodLogFeed({ entries, userId, summary, nutrition }: FoodLogFeed
       if (isBeverageRow) {
         await BeverageLogService.deleteEntry(id, userId, supabase as any);
       } else {
-        await FoodLogService.deleteEntry(id, userId, supabase as any);
+        if (!(await deleteFoodLogEntry(id)).success) throw new Error('Deletion failed');
         if (kind === 'food') analytics.track(AnalyticsEvents.mealDeleted());
       }
       setList((prev) => prev.filter((e) => e.id !== id));

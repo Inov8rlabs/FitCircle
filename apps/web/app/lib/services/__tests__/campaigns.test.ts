@@ -67,6 +67,7 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.useRealTimers();
+  vi.unstubAllEnvs();
 });
 
 // ---------------------------------------------------------------------------
@@ -357,6 +358,18 @@ describe('delivery cron', () => {
     for (const [user, reminders] of [[ME, true], [B, true], [D, false], [E, true]] as const) {
       db.rows('campaign_participants').push({ campaign_id: db.rows('campaigns')[0].id, user_id: user, reminders });
     }
+  });
+
+  it('reports ownership-fenced native claims as skipped without calling either provider', async () => {
+    vi.stubEnv('RESEND_API_KEY','synthetic-test-key');
+    db.failInserts.set('campaign_deliveries',{code:'P0103',message:'Owned by Engage'});
+    db.rows('campaigns')[0].emails = [{ key:'kickoff',kind:'launch',localHour:7,subject:'Hello',preheader:'Welcome',heading:'Hi',body:'Welcome',ctaLabel:'Open',audience:'participants',enabled:true }];
+    const result=await CampaignDeliveryService.runCron(new Date('2026-12-01T16:00:00Z'));
+    expect(result.push.skippedOwnership).toBeGreaterThan(0);
+    expect(result.email.skippedOwnership).toBeGreaterThan(0);
+    expect(result.push.failed).toBe(0);
+    expect(result.email.failed).toBe(0);
+    expect(pushes).toHaveLength(0);expect(mails).toHaveLength(0);
   });
 
   it('targets local hour, audience reminders, skips opened, dedupes', async () => {

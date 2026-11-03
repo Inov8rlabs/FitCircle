@@ -77,6 +77,7 @@ export async function sendJourneyNotifications(): Promise<{
       const journeyMatch = journeyDayMap.find((j) => j.day === accountAge);
       if (journeyMatch) {
         const data: NotificationData = {
+          dedupeKey: `journey:${journeyMatch.type}:${user.created_at}`,
           userName: user.display_name,
           currentMomentum: streak?.current_streak || 0,
           streakDays: streak?.current_streak || 0,
@@ -104,6 +105,7 @@ export async function sendJourneyNotifications(): Promise<{
         const dormantMatch = dormantMap.find((d) => d.days === daysSinceEngagement);
         if (dormantMatch) {
           const result = await NotificationOrchestrator.send(user.id, dormantMatch.type, {
+            dedupeKey: `dormant:${dormantMatch.type}:${streak.last_engagement_date}`,
             userName: user.display_name,
           });
           if (result.sent) sent++;
@@ -173,6 +175,7 @@ export async function sendDailyDrop(): Promise<{
     try {
       processed++;
       const result = await NotificationOrchestrator.send(user.user_id, 'daily_drop', {
+        dedupeKey: `daily_drop:${challenge.id}`,
         challengeTitle: challenge.title,
         deepLink: '/challenges/daily',
       });
@@ -239,6 +242,7 @@ export async function sendWeeklySummary(): Promise<{
         .gte('logged_at', monday.toISOString());
 
       const result = await NotificationOrchestrator.send(user.user_id, 'weekly_summary', {
+        dedupeKey: `weekly_summary:${monday.toISOString().slice(0,10)}`,
         workoutsThisWeek: workoutCount || 0,
         streakDays: user.current_streak || 0,
       });

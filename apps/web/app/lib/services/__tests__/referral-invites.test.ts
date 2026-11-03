@@ -18,18 +18,7 @@ vi.mock('../notification-orchestrator', () => ({
     },
   },
 }));
-const mail = vi.hoisted(() => ({ sent: [] as Array<any>, fail: false }));
-vi.mock('resend', () => ({
-  Resend: class {
-    emails = {
-      send: async (msg: any) => {
-        if (mail.fail) return { error: { message: 'boom' } };
-        mail.sent.push(msg);
-        return { data: { id: 'm' }, error: null };
-      },
-    };
-  },
-}));
+const mail = vi.hoisted(() => ({ sent: [] as Array<any>, fail: false,unknown:false }));
 
 import {
   ReferralInviteService,
@@ -58,6 +47,12 @@ beforeEach(() => {
   push.outcome = { sent: true };
   mail.sent.length = 0;
   mail.fail = false;
+  mail.unknown=false;
+  vi.stubGlobal('fetch',vi.fn(async(_url,init)=>{
+    if(mail.fail) return Response.json({name:'validation_error'},{status:422});
+    mail.sent.push(JSON.parse(init.body));
+    return mail.unknown ? Response.json({name:'internal_server_error'},{status:500}) : Response.json({id:'m'});
+  }));
   db.addProfile({ id: MAYA, display_name: 'Maya Rao', email: 'maya@example.com', created_at: new Date(Date.now() - 90 * DAY).toISOString() });
   db.rows('fitcircles').push({ id: CIRCLE, name: 'Morning Movers', invite_code: 'FITAB12CD', creator_id: MAYA, type: 'step_count', status: 'active', end_date: null, created_at: new Date().toISOString() });
   db.rows('fitcircle_members').push({ id: 'm1', fitcircle_id: CIRCLE, user_id: MAYA, status: 'active' });
@@ -83,6 +78,22 @@ describe('contact helpers', () => {
 });
 
 describe('inviteContacts', () => {
+  it('preserves an uncertain provider handoff and never reissues its invitation',async()=>{
+    mail.unknown=true;
+    await expect(ReferralService.inviteContacts(MAYA,{contacts:[{email:'sam@example.com'}]})).rejects.toThrow('outcome is unknown');
+    expect(db.rows('referral_invites')).toHaveLength(1);
+    mail.unknown=false;
+    expect((await ReferralService.inviteContacts(MAYA,{contacts:[{email:'sam@example.com'}]})).results[0].status).toBe('already_invited');
+    expect(mail.sent).toHaveLength(1);
+  });
+  it('treats wildcard characters as literal email characters and fails closed on unavailable opt-outs',async()=>{
+    db.addProfile({id:SAM,email:'sam@example.com'});
+    const out=await ReferralService.inviteContacts(MAYA,{contacts:[{email:'s_m@example.com'}]});
+    expect(out.results[0].status).toBe('sent');
+    db.failReads.add('referral_email_optouts');
+    await expect(ReferralService.inviteContacts(MAYA,{contacts:[{email:'other@example.com'}]})).rejects.toThrow('preferences are temporarily unavailable');
+    expect(mail.sent).toHaveLength(1);
+  });
   it('emails a friend from the inviter, with circle, reward line and unsubscribe', async () => {
     const out = await ReferralService.inviteContacts(MAYA, { contacts: [{ email: 'Sam@Example.com', name: 'Sam' }] });
     expect(out).toMatchObject({ sentCount: 1, results: [{ contact: 'sa•••@example.com', channel: 'email', name: 'Sam', status: 'sent' }] });
@@ -141,6 +152,15 @@ describe('inviteContacts', () => {
 });
 
 describe('nudges', () => {
+  it('keeps the claimed reminder after uncertain acceptance and blocks an immediate replay',async()=>{
+    await ReferralService.inviteContacts(MAYA,{contacts:[{email:'sam@example.com'}]});
+    const row=db.rows('referral_invites')[0];row.sent_at=new Date(Date.now()-4*DAY).toISOString();
+    mail.unknown=true;
+    await expect(ReferralInviteService.nudgeInvite(MAYA,row.id,async()=> 'MAYA')).rejects.toThrow('outcome is unknown');
+    expect(row.nudge_count).toBe(1);
+    expect(await ReferralInviteService.nudgeInvite(MAYA,row.id,async()=> 'MAYA')).toMatchObject({status:'too_soon'});
+    expect(mail.sent).toHaveLength(2);
+  });
   it('lets an email invite be reminded twice, 72h apart', async () => {
     await ReferralService.inviteContacts(MAYA, { contacts: [{ email: 'sam@example.com', name: 'Sam' }] });
     const invite = db.rows('referral_invites')[0];

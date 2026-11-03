@@ -114,6 +114,7 @@ export async function POST(request: NextRequest) {
 
     // Send welcome email (don't wait for it, send async)
     sendWelcomeEmail({
+      userId: authData.user.id,
       to: validatedData.email,
       userName: validatedData.fullName,
     }).catch((error) => {

@@ -5,6 +5,7 @@ import { stripEmoji } from '../text/strip-emoji';
 
 import {
   NotificationPreferencesService,
+  TRANSACTIONAL_TYPES,
   type NotificationCategory,
 } from './notification-preferences-service';
 import {
@@ -955,7 +956,17 @@ export class NotificationOrchestrator {
 
       const sentCount = await PushService.sendPush(
         userId,
-        await this.buildPushNotification(userId, type, data, content, dedupeKey)
+        {
+          ...await this.buildPushNotification(userId, type, data, content, dedupeKey),
+          ...(process.env.ENGAGE_LEGACY_BRIDGE_ENABLED === 'true' ? {engage:{
+            key: dedupeKey ? `push:${dedupeKey}` : '',
+            ...(type === 'campaign' ? {campaign_key: typeof data.campaignId === 'string' ? data.campaignId : ''} : {}),
+            category: TRANSACTIONAL_TYPES.has(type) ? 'transactional' as const : type === 'campaign' ? 'marketing' as const : 'lifecycle' as const,
+            lifecycle_category: content.category,
+            respect_global_caps: isCapChecked(type),
+            counts_global: !isCapExempt(type),
+          }} : {}),
+        }
       );
 
       // 6. Log the notification — truthfully. With no registered device (or

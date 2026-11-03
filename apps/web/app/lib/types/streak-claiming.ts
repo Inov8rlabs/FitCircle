@@ -116,6 +116,8 @@ export interface MilestoneInfo {
 
 /** Result of the nightly protect-or-break check for one user. */
 export interface StreakBreakOutcome {
+  /** Local date of the domain transition, stable across notification retries. */
+  occurrenceDate?: string;
   broken: boolean;
   shieldApplied: boolean;
   paywallEligible: boolean;

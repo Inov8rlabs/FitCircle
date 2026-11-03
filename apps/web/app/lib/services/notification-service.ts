@@ -1,4 +1,6 @@
 import { Resend } from 'resend';
+import { deliverLegacyEmail } from '../engage/legacy-email';
+import { NotificationPreferencesService, TRANSACTIONAL_TYPES } from './notification-preferences-service';
 
 import { generateGenericNotificationEmail } from '../email/templates';
 
@@ -12,6 +14,7 @@ const FROM_EMAIL = 'FitCircle <team@fitcircle.ai>';
 const REPLY_TO = 'team@fitcircle.ai';
 
 export interface NotificationPayload {
+    occurrenceKey?: string;
     userId: string;
     userEmail: string;
     userName?: string;
@@ -42,6 +45,14 @@ export class NotificationService {
                 userName: payload.userName,
                 footerText: `You received this email because you have ${payload.type.replace(/_/g, ' ')} notifications enabled.`,
             });
+            const {nativeBridgeActive}=await import('../engage/server');
+            if (await nativeBridgeActive()) {
+                if (!payload.occurrenceKey) throw new Error('Notification email requires a stable occurrence key');
+                const category=NotificationPreferencesService.getCategoryForType(payload.type);
+                const transactional=TRANSACTIONAL_TYPES.has(payload.type);
+                if (!transactional && !category) throw new Error('Unknown notification email category');
+                return deliverLegacyEmail(payload.userId,{key:`email:${payload.occurrenceKey}`,category:transactional ? 'transactional':'lifecycle',lifecycle_category:category ?? undefined,counts_global:!transactional,respect_global_caps:!transactional},{to:payload.userEmail,subject:payload.title,html});
+            }
 
             const resend = getResend();
             if (!resend) return false;

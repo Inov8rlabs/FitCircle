@@ -68,6 +68,7 @@ export async function runDailyStreakCheck(request: NextRequest) {
               // Tell them what happened and how to start again. The
               // orchestrator handles quiet hours / caps / preferences.
               const sent = await NotificationOrchestrator.send(user.user_id, 'streak_lost', {
+                dedupeKey: result.occurrenceDate ? `streak_lost:${result.occurrenceDate}` : undefined,
                 lostStreak: result.lostStreak,
                 paywallEligible: result.paywallEligible,
                 zombieGuard: result.zombieGuard === true,
@@ -77,6 +78,7 @@ export async function runDailyStreakCheck(request: NextRequest) {
             } else if (result.shieldApplied) {
               shieldsApplied++;
               const sent = await NotificationOrchestrator.send(user.user_id, 'shield_applied', {
+                dedupeKey: result.occurrenceDate ? `shield_applied:${result.occurrenceDate}` : undefined,
                 streakDays: result.currentStreak,
                 shieldsRemaining: result.shieldsRemaining,
                 unlimited: result.unlimited,

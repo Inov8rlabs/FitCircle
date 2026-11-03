@@ -37,6 +37,7 @@ import { useUnitPreference } from '@/hooks/useUnitPreference';
 import { defaultLayout, fetchHomeFeed, type HomeCardType, type HomeFeedLayout } from '@/lib/home-feed/feed-layout';
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/stores/auth-store';
+import { EngageDashboard } from '@/components/engage/EngageDashboard';
 
 /** Server layout if it arrives in time, else the built-in default (never reorders after first paint). */
 function useHomeLayout(): HomeFeedLayout {
@@ -197,6 +198,7 @@ export default function DashboardPage() {
           data-layout-source={layout.source}
           data-layout-key={layout.layoutKey}
         >
+          <EngageDashboard />
           {layout.cards
             .filter((c) => c.type !== 'header')
             .map((c) => {

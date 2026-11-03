@@ -14,6 +14,7 @@
  * (`email:{key}:{date}` for daily items). Skips marketingEmails === false.
  */
 import { Resend } from 'resend';
+import { deliverLegacyEmail } from '../engage/legacy-email';
 
 import { CampaignError } from '../campaigns/http';
 import { dateOfDay, totalDaysOf, type CampaignRow } from '../campaigns/model';
@@ -47,8 +48,8 @@ interface Recipient {
 
 export interface CronSummary {
   campaigns: number;
-  push: { due: number; sent: number; skippedOpened: number; skippedDuplicate: number; failed: number };
-  email: { due: number; sent: number; skippedConsent: number; failed: number };
+  push: { due: number; sent: number; skippedOpened: number; skippedDuplicate: number; skippedOwnership: number; failed: number };
+  email: { due: number; sent: number; skippedConsent: number; skippedOwnership: number; failed: number };
   errors: string[];
 }
 
@@ -128,7 +129,12 @@ const emailKey = (item: CampaignEmail, date: string) => (item.kind === 'daily' ?
 let resend: Resend | null = null;
 
 /** Resend transport for campaign mail. False when unconfigured or rejected. */
-export async function sendCampaignEmail(to: string, email: RenderedEmail, unsubscribeUrl: string): Promise<boolean> {
+export async function sendCampaignEmail(to: string, email: RenderedEmail, unsubscribeUrl: string, identity?: {userId:string;occurrenceKey:string;campaignId:string}): Promise<boolean> {
+  const {nativeBridgeActive}=await import('../engage/server');
+  if (await nativeBridgeActive()) {
+    if (!identity) throw new Error('Campaign email requires an account and stable occurrence key');
+    return deliverLegacyEmail(identity.userId,{key:identity.occurrenceKey,category:'marketing',campaign_key:identity.campaignId},{to,...email});
+  }
   const key = process.env.RESEND_API_KEY;
   if (!key) {
     console.warn('[CampaignDelivery] RESEND_API_KEY not configured; email skipped');
@@ -170,8 +176,8 @@ export class CampaignDeliveryService {
   static async runCron(now: Date = new Date()): Promise<CronSummary> {
     const summary: CronSummary = {
       campaigns: 0,
-      push: { due: 0, sent: 0, skippedOpened: 0, skippedDuplicate: 0, failed: 0 },
-      email: { due: 0, sent: 0, skippedConsent: 0, failed: 0 },
+      push: { due: 0, sent: 0, skippedOpened: 0, skippedDuplicate: 0, skippedOwnership: 0, failed: 0 },
+      email: { due: 0, sent: 0, skippedConsent: 0, skippedOwnership: 0, failed: 0 },
       errors: [],
     };
     const utcToday = now.toISOString().slice(0, 10);
@@ -264,15 +270,17 @@ export class CampaignDeliveryService {
       // Claim first: the UNIQUE index makes concurrent runs send once.
       const { error: claimError } = await supabase
         .from('campaign_deliveries')
-        .insert({ campaign_id: row.id, user_id: person.id, delivery_key: key, channel: 'push' });
+        .insert({ campaign_id: row.id, user_id: person.id, delivery_key: key, channel: 'push', engage_bridge_protocol: process.env.ENGAGE_LEGACY_BRIDGE_ENABLED==='true'?1:null });
       if (claimError) {
-        if ((claimError as any).code === '23505') summary.push.skippedDuplicate++;
+        if ((claimError as any).code === 'P0103') summary.push.skippedOwnership++;
+        else if ((claimError as any).code === '23505') summary.push.skippedDuplicate++;
         else summary.push.failed++;
         continue;
       }
       const { title, body } = renderPush(item, row, date, person);
       try {
         const res = await NotificationOrchestrator.send(person.id, 'campaign', {
+          dedupeKey: `campaign:${row.id}:${pushKey(item.key, date)}`,
           title,
           body,
           campaignSlug: row.slug,
@@ -316,17 +324,21 @@ export class CampaignDeliveryService {
         summary.email.due++;
         const { error: claimError } = await supabase
           .from('campaign_deliveries')
-          .insert({ campaign_id: row.id, user_id: person.id, delivery_key: key, channel: 'email' });
-        if (claimError) return false;
+          .insert({ campaign_id: row.id, user_id: person.id, delivery_key: key, channel: 'email', engage_bridge_protocol: process.env.ENGAGE_LEGACY_BRIDGE_ENABLED==='true'?1:null });
+        if (claimError) {
+          if (claimError.code === 'P0103') summary.email.skippedOwnership++;
+          else if (claimError.code !== '23505') summary.email.failed++;
+          return false;
+        }
         const unsubscribe = campaignUnsubscribeUrl(person.id);
-        const ok = await sendCampaignEmail(person.email, renderEmail(item, row, date, person, person.id), unsubscribe);
+        const ok = await sendCampaignEmail(person.email, renderEmail(item, row, date, person, person.id), unsubscribe, {userId:person.id,campaignId:row.id,occurrenceKey:`legacy_campaign:${row.id}:${key}`});
         if (ok) {
           summary.email.sent++;
           return true;
         }
         summary.email.failed++;
-        // Release the claim so the next run retries.
-        await supabase.from('campaign_deliveries').delete().eq('campaign_id', row.id).eq('user_id', person.id).eq('delivery_key', key);
+        // The Engage ledger owns ambiguous outcomes. Never free an already authorized occurrence.
+        if (process.env.ENGAGE_LEGACY_BRIDGE_ENABLED !== 'true') await supabase.from('campaign_deliveries').delete().eq('campaign_id', row.id).eq('user_id', person.id).eq('delivery_key', key);
         return true; // counts against the budget either way
       };
 
@@ -360,6 +372,12 @@ export class CampaignDeliveryService {
   /** Marketing opt-out from an email unsubscribe link (preferences.marketingEmails = false). */
   static async optOut(userId: string): Promise<boolean> {
     const supabase = createAdminSupabase();
+    if (process.env.ENGAGE_LEGACY_BRIDGE_ENABLED === 'true') {
+      const {getFitCircleEngage}=await import('../engage/server');
+      const connector=getFitCircleEngage();if(!connector)throw new Error('Engage connector required');
+      await connector.patchPreferences(userId,{marketingEmails:false});
+      return true;
+    }
     const { data, error } = await supabase.from('profiles').select('preferences').eq('id', userId).maybeSingle();
     if (error) throw error;
     if (!data) return false;
@@ -381,6 +399,7 @@ export class CampaignDeliveryService {
   }
 
   static async sendTestPush(campaignId: string, profile: Record<string, any>, key: string): Promise<{ sent: boolean; devices: number; title: string; body: string }> {
+    if (process.env.ENGAGE_LEGACY_BRIDGE_ENABLED === 'true') throw new CampaignError(409,'ENGAGE_TEST_FLOW_REQUIRED','Use Engage test delivery with a recipient-acknowledged installation');
     const row = await CampaignService.fetchById(campaignId);
     const item = (row.notifications ?? []).find((n) => n.key === key);
     if (!item) throw new CampaignError(404, 'NOT_FOUND', `No push message with key "${key}"`);
@@ -394,6 +413,7 @@ export class CampaignDeliveryService {
   }
 
   static async sendTestEmail(campaignId: string, profile: Record<string, any>, key: string): Promise<{ sent: boolean; to: string | null; subject: string }> {
+    if (process.env.ENGAGE_LEGACY_BRIDGE_ENABLED === 'true') throw new CampaignError(409,'ENGAGE_TEST_FLOW_REQUIRED','Use Engage test delivery with a recipient-acknowledged installation');
     const row = await CampaignService.fetchById(campaignId);
     const item = (row.emails ?? []).find((e) => e.key === key);
     if (!item) throw new CampaignError(404, 'NOT_FOUND', `No email with key "${key}"`);

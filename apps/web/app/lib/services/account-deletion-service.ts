@@ -1,5 +1,6 @@
 import { ExperimentService } from '../experiments/service';
 import { createAdminSupabase } from '../supabase-admin';
+import { getFitCircleEngage } from '../engage/server';
 
 import { AppleTokenService } from './apple-token-service';
 import { recalculateLeaderboard } from './leaderboard-service-v2';
@@ -251,6 +252,10 @@ export class AccountDeletionService {
     }
 
     const db = createAdminSupabase();
+
+    // Stop queued Engage work and retain its deletion tombstone before removing host identity.
+    const engage = getFitCircleEngage();
+    if (engage) await engage.deleteSubject(userId);
 
     console.log(`[AccountDeletionService] Starting account deletion for user: ${userId}`);
 

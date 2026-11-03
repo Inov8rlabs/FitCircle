@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { addAutoRefreshHeaders } from '@/lib/middleware/mobile-auto-refresh';
 import { createAdminSupabase } from '@/lib/supabase-admin';
+import { getFitCircleEngage } from '@/lib/engage/server';
 import { parseLenient, validationMessage } from '@/lib/validation/lenient-parse';
 
 /**
@@ -218,6 +219,12 @@ export async function PUT(request: NextRequest) {
     const validatedData = parseLenient(preferencesSchema, body);
 
     const supabaseAdmin = createAdminSupabase();
+
+    if (process.env.ENGAGE_LEGACY_BRIDGE_ENABLED === 'true') {
+      const connector=getFitCircleEngage();if(!connector)throw new Error('Engage connector required');
+      const data=await connector.patchPreferences(user.id,validatedData);
+      return await addAutoRefreshHeaders(request, NextResponse.json({success:true,data,error:null,meta:null}),user);
+    }
 
     // Get current preferences
     const { data: profile, error: fetchError } = await supabaseAdmin

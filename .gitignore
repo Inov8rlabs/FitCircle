@@ -107,3 +107,6 @@ apps/web/.fitzy-eval/
 
 # Local test reports (scripts/ci/run-tests.sh)
 .ci-reports/
+
+# Generated from the pinned Engage worker package during each web build.
+/apps/web/public/engage-worker.js

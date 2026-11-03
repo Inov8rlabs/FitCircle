@@ -738,6 +738,7 @@ export class StreakClaimingService {
         await this.syncStreakRecord(userId, current, null, null);
         return quiet({
           shieldApplied: true,
+          occurrenceDate: yesterdayStr,
           currentStreak: current,
           shieldsRemaining: protection.unlimited ? null : protection.remaining,
           unlimited: protection.unlimited,
@@ -767,6 +768,7 @@ export class StreakClaimingService {
     const unlimited = outOfShields ? false : await StreakShieldService.hasUnlimitedShields(userId);
     return {
       broken: true,
+      occurrenceDate: yesterdayStr,
       shieldApplied: false,
       paywallEligible: !unlimited,
       lostStreak: interruptedRun,

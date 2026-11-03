@@ -37,7 +37,7 @@ import { useToast } from '@/components/ui/use-toast';
 import { NutritionDetailDialog } from './nutrition-detail-dialog';
 import { AnalyticsEvents, analytics } from '@/lib/analytics';
 import { BeverageLogService } from '@/lib/services/beverage-log-service';
-import { FoodLogService } from '@/lib/services/food-log-service';
+import { deleteFoodLogEntry } from '@/lib/actions/delete-food-log';
 import { supabase } from '@/lib/supabase';
 import { cn } from '@/lib/utils';
 
@@ -279,7 +279,7 @@ export function FoodLogList({ entries, userId }: FoodLogListProps) {
             if (type === 'beverage') {
                 await BeverageLogService.deleteEntry(id, userId, supabase as any);
             } else {
-                await FoodLogService.deleteEntry(id, userId, supabase as any);
+                if (!(await deleteFoodLogEntry(id)).success) throw new Error('Deletion failed');
                 if (type === 'food') analytics.track(AnalyticsEvents.mealDeleted());
             }
 

@@ -576,6 +576,7 @@ export class ReferralService {
             ? 'referral_reward_banked'
             : 'referral_reward_earned';
     const handled = await deliver(target, type, {
+      dedupeKey: `reward:${referral.id}:${kind}`,
       friendName: firstNameOf(invitee),
       inviterName: firstNameOf(inviter),
       days: kind === 'invitee_welcome' ? inviteeRewardDays() : REFERRAL_POLICY.inviterRewardDays,
@@ -590,7 +591,7 @@ export class ReferralService {
   }
 
   private static async notifyFriendJoined(referralId: string, inviterId: string, friendName: string): Promise<void> {
-    const handled = await deliver(inviterId, 'referral_friend_joined', { friendName });
+    const handled = await deliver(inviterId, 'referral_friend_joined', { friendName, dedupeKey: `friend_joined:${referralId}` });
     if (handled) {
       await createAdminSupabase()
         .from('referrals')
@@ -627,7 +628,7 @@ export class ReferralService {
         role: isInviter ? 'inviter' : 'invitee',
         banked: isInviter ? inviterBanked : false,
         inviteLink: personalInviteUrl(code),
-      });
+      }, {userId:row.user_id,rewardId:row.id});
       if (sent) await supabase.from('referral_rewards').update({ emailed_at: new Date().toISOString() }).eq('id', row.id);
     }
   }
@@ -704,7 +705,7 @@ export class ReferralService {
       .select('id');
     if ((claimed ?? []).length !== 1) return { status: 'too_soon', nextAt: null, remaining: state.remaining, smsBody: null };
     const inviter = await this.profile(userId);
-    notify(referral.invitee_id, 'referral_nudge', { inviterName: firstNameOf(inviter) });
+    notify(referral.invitee_id, 'referral_nudge', { inviterName: firstNameOf(inviter), dedupeKey: `referral_nudge:${referral.id}:${count+1}` });
     const after = joinedNudgeState({ status: 'pending', nudge_count: count + 1, last_nudged_at: now });
     return { status: 'sent', nextAt: after.nextAt, remaining: after.remaining, smsBody: null };
   }
@@ -773,7 +774,7 @@ export class ReferralService {
         .select('id');
       if ((claimed ?? []).length === 1) {
         const inviter = await this.profile(referral.inviter_id);
-        notify(referral.invitee_id, 'referral_progress', { inviterName: firstNameOf(inviter) });
+        notify(referral.invitee_id, 'referral_progress', { inviterName: firstNameOf(inviter), dedupeKey: `referral_progress:${referral.id}` });
       }
     }
   }

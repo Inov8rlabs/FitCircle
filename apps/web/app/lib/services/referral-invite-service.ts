@@ -11,7 +11,8 @@
  */
 import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
 
-import { Resend } from 'resend';
+import { readBoundedBody } from '@inov8r/engage-adapters/bounded-body';
+import { deliverLegacyEmail } from '../engage/legacy-email';
 
 import {
   inviteEmail,
@@ -115,11 +116,9 @@ function cleanName(name: string | null | undefined): string | null {
 // ---------------------------------------------------------------------------
 
 function tokenSecret(): string {
-  return (
-    process.env.REFERRAL_UNSUBSCRIBE_SECRET ||
-    process.env.SUPABASE_SERVICE_ROLE_KEY ||
-    'fitcircle-referrals-dev-secret'
-  );
+  const secret=process.env.REFERRAL_UNSUBSCRIBE_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if(process.env.NODE_ENV==='production' && (!secret || Buffer.byteLength(secret)<32)) throw new Error('Referral unsubscribe signing is not configured');
+  return secret || 'fitcircle-referrals-dev-secret';
 }
 
 export function unsubscribeToken(emailHash: string): string {
@@ -128,7 +127,9 @@ export function unsubscribeToken(emailHash: string): string {
 }
 
 export function verifyUnsubscribeToken(token: string): string | null {
-  const [hash, sig] = (token ?? '').split('.');
+  const parts=(token ?? '').split('.');
+  if(parts.length!==2) return null;
+  const [hash, sig] = parts;
   if (!hash || !sig || !/^[a-f0-9]{64}$/.test(hash)) return null;
   const expected = createHmac('sha256', tokenSecret()).update(hash).digest('base64url');
   const a = Buffer.from(sig);
@@ -144,24 +145,26 @@ export function unsubscribeUrl(emailHash: string): string {
 // Mail transport (Resend). Returns false when unconfigured or rejected.
 // ---------------------------------------------------------------------------
 
-let resend: Resend | null = null;
+export class ReferralDeliveryUnknownError extends Error {
+  constructor(){super('Email outcome is unknown; its durable invitation or reminder claim is retained');this.name='ReferralDeliveryUnknownError';}
+}
 
 export async function sendReferralEmail(
   to: string,
   email: RenderedEmail,
-  opts: { fromName?: string; unsubscribe?: string } = {}
+  opts: { fromName?: string; unsubscribe?: string; key?: string } = {}
 ): Promise<boolean> {
   const key = process.env.RESEND_API_KEY;
   if (!key) {
     console.warn('[ReferralInviteService] RESEND_API_KEY not configured; email skipped');
     return false;
   }
-  resend ??= new Resend(key);
-  const fromName = (opts.fromName ?? 'FitCircle').replace(/[<>"]/g, '').slice(0, 40);
+  if(!opts.key || !/^[A-Za-z0-9:_-]{1,160}$/.test(opts.key)) throw new Error('Stable referral occurrence key required');
+  const fromName = (opts.fromName ?? 'FitCircle').replace(/[<>"\r\n]/g, '').slice(0, 40);
   try {
-    const { error } = await resend.emails.send({
+    const response=await fetch('https://api.resend.com/emails',{method:'POST',redirect:'error',signal:AbortSignal.timeout(10000),headers:{Authorization:`Bearer ${key}`,'Content-Type':'application/json','Idempotency-Key':`fitcircle:${process.env.ENGAGE_ENVIRONMENT || process.env.NODE_ENV || 'development'}:${opts.key}`},body:JSON.stringify({
       from: `${fromName} via FitCircle <team@fitcircle.ai>`,
-      replyTo: 'team@fitcircle.ai',
+      reply_to: 'team@fitcircle.ai',
       to,
       subject: email.subject,
       html: email.html,
@@ -173,15 +176,19 @@ export async function sendReferralEmail(
             'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
           }
         : undefined,
-    });
-    if (error) {
-      console.error('[ReferralInviteService] Resend rejected email:', error.message);
-      return false;
+    })});
+    if(!response.ok) {
+      void response.body?.cancel().catch(()=>undefined);
+      if(response.status>=400 && response.status<500 && ![408,409].includes(response.status)) return false;
+      throw new ReferralDeliveryUnknownError();
     }
+    const result=JSON.parse((await readBoundedBody(response,16384)).toString('utf8'));
+    if(typeof result.id!=='string' || !/^[A-Za-z0-9_-]{1,512}$/.test(result.id)) throw new ReferralDeliveryUnknownError();
     return true;
-  } catch (err: any) {
-    console.error('[ReferralInviteService] email send failed:', err?.message);
-    return false;
+  } catch {
+    // Never collapse uncertain acceptance into a rejection: callers release
+    // their durable invitation/nudge claim only for a definite rejection.
+    throw new ReferralDeliveryUnknownError();
   }
 }
 
@@ -228,7 +235,7 @@ export class ReferralInviteService {
     let sentCount = 0;
 
     const since = new Date(Date.now() - 24 * HOUR).toISOString();
-    const [{ count: emailsToday }, { count: pending }] = await Promise.all([
+    const [emailCount,pendingCount] = await Promise.all([
       supabase
         .from('referral_invites')
         .select('id', { count: 'exact', head: true })
@@ -241,6 +248,8 @@ export class ReferralInviteService {
         .eq('inviter_id', userId)
         .eq('status', 'invited'),
     ]);
+    if(emailCount.error || pendingCount.error) throw new Error('Invite limits are temporarily unavailable');
+    const emailsToday=emailCount.count,pending=pendingCount.count;
     let emailBudget = INVITE_LIMITS.emailsPer24h - (emailsToday ?? 0);
     let pendingBudget = INVITE_LIMITS.pendingTotal - (pending ?? 0);
     const seen = new Set<string>();
@@ -263,6 +272,7 @@ export class ReferralInviteService {
           continue;
         }
         const row = await this.insertInvite({ inviter_id: userId, channel: 'sms', contact_hash: hash, email: null, contact_display: display, name, circle_id: ctx.circle?.id ?? null });
+        if (typeof row === 'string') { results.push({contact:display,channel:'sms',name,status:row,inviteId:null}); continue; }
         if (!row) {
           results.push({ contact: display, channel: 'sms', name, status: 'already_invited', inviteId: null });
           continue;
@@ -286,18 +296,23 @@ export class ReferralInviteService {
         results.push({ contact: display, channel: 'email', name, status, inviteId });
 
       if (ctx.email && email === ctx.email.toLowerCase()) { push('self'); continue; }
-      const { data: optout } = await supabase.from('referral_email_optouts').select('email_hash').eq('email_hash', hash).maybeSingle();
+      const { data: optout,error:optoutError } = await supabase.from('referral_email_optouts').select('email_hash').eq('email_hash', hash).maybeSingle();
+      if(optoutError) throw new Error('Invite preferences are temporarily unavailable');
       if (optout) { push('opted_out'); continue; }
-      const { data: member } = await supabase.from('profiles').select('id').ilike('email', email).limit(1).maybeSingle();
+      const literalEmail=email.replace(/[\\%_]/g,'\\$&');
+      const { data: member,error:memberError } = await supabase.from('profiles').select('id').ilike('email', literalEmail).limit(1).maybeSingle();
+      if(memberError) throw new Error('Invite membership is temporarily unavailable');
       if (member) { push('already_member'); continue; }
       if (emailBudget <= 0 || pendingBudget <= 0) { push('rate_limited'); continue; }
 
       const row = await this.insertInvite({ inviter_id: userId, channel: 'email', contact_hash: hash, email, contact_display: display, name, circle_id: ctx.circle?.id ?? null });
+      if (typeof row === 'string') { push(row); continue; }
       if (!row) { push('already_invited'); continue; }
       emailBudget--;
       const delivered = await sendReferralEmail(email, inviteEmail(this.emailInput(ctx, name, hash)), {
         fromName: ctx.firstName,
         unsubscribe: unsubscribeUrl(hash),
+        key:`invite:${row.id}`,
       });
       if (!delivered) {
         // Free the slot so the member can retry once email is healthy.
@@ -329,12 +344,14 @@ export class ReferralInviteService {
 
     // Claim the nudge slot first (CAS on nudge_count) so double taps send once.
     const now = new Date().toISOString();
-    const { data: claimed } = await supabase
+    const { data: claimed, error:claimError } = await supabase
       .from('referral_invites')
       .update({ nudge_count: row.nudge_count + 1, last_nudged_at: now })
       .eq('id', row.id)
       .eq('nudge_count', row.nudge_count)
       .select('id');
+    if (claimError?.code === 'P0102') return {status:'not_nudgeable',nextAt:null,remaining:0,smsBody:null};
+    if (claimError) throw new Error('Invite reminder authorization is temporarily unavailable');
     if ((claimed ?? []).length !== 1) return { status: 'too_soon', nextAt: null, remaining: state.remaining, smsBody: null };
     const after = inviteNudgeState({ ...row, nudge_count: row.nudge_count + 1, last_nudged_at: now });
 
@@ -342,14 +359,16 @@ export class ReferralInviteService {
     if (row.channel === 'sms') {
       return { status: 'sent', nextAt: after.nextAt, remaining: after.remaining, smsBody: smsReminderBody(ctx.circle?.name ?? null, this.link(ctx), inviteeRewardDays()) };
     }
-    const { data: optout } = await supabase.from('referral_email_optouts').select('email_hash').eq('email_hash', row.contact_hash).maybeSingle();
+    const { data: optout,error:optoutError } = await supabase.from('referral_email_optouts').select('email_hash').eq('email_hash', row.contact_hash).maybeSingle();
+    if(optoutError) throw new Error('Invite preferences are temporarily unavailable');
     if (optout || !row.email) return { status: 'not_nudgeable', nextAt: null, remaining: 0, smsBody: null };
     const delivered = await sendReferralEmail(row.email, reminderEmail(this.emailInput(ctx, row.name, row.contact_hash)), {
       fromName: ctx.firstName,
       unsubscribe: unsubscribeUrl(row.contact_hash),
+      key:`reminder:${row.id}:${row.nudge_count+1}`,
     });
     if (!delivered) {
-      await supabase.from('referral_invites').update({ nudge_count: row.nudge_count, last_nudged_at: row.last_nudged_at }).eq('id', row.id);
+      await supabase.from('referral_invites').update({ nudge_count: row.nudge_count, last_nudged_at: row.last_nudged_at }).eq('id', row.id).eq('nudge_count',row.nudge_count+1).eq('last_nudged_at',now);
       throw new Error('reminder email failed');
     }
     return { status: 'sent', nextAt: after.nextAt, remaining: after.remaining, smsBody: null };
@@ -424,7 +443,8 @@ export class ReferralInviteService {
     const { error } = await supabase.from('referral_email_optouts').insert({ email_hash: hash });
     if (error && error.code !== '23505') throw new Error(`optout insert failed: ${error.message}`);
     // Stop any pending reminders and drop the stored address.
-    await supabase.from('referral_invites').update({ email: null, nudge_count: INVITE_LIMITS.inviteReminders }).eq('contact_hash', hash).eq('status', 'invited');
+    const {error:cleanupError}=await supabase.from('referral_invites').update({ email: null, nudge_count: INVITE_LIMITS.inviteReminders }).eq('contact_hash', hash).eq('status', 'invited');
+    if(cleanupError) throw new Error('Opt-out is recorded; invitation address cleanup must be retried');
     return true;
   }
 
@@ -443,10 +463,16 @@ export class ReferralInviteService {
   }
 
   /** "You both earned a week" email. Best-effort; true when delivered. */
-  static async sendRewardEmail(to: string | null | undefined, input: RewardEmailInput): Promise<boolean> {
+  static async sendRewardEmail(to: string | null | undefined, input: RewardEmailInput, identity?: {userId:string;rewardId:string}): Promise<boolean> {
     const email = normalizeEmail(to);
     if (!email) return false;
-    return sendReferralEmail(email, rewardEmail(input));
+    const {nativeBridgeActive}=await import('../engage/server');
+    if (await nativeBridgeActive()) {
+      if (!identity) throw new Error('Reward email requires an account and reward identity');
+      return deliverLegacyEmail(identity.userId,{key:`referral_reward:${identity.rewardId}`,category:'lifecycle',lifecycle_category:'celebration'},{to:email,...rewardEmail(input)});
+    }
+    if(!identity) throw new Error('Reward email requires a stable reward identity');
+    return sendReferralEmail(email, rewardEmail(input),{key:`reward:${identity.rewardId}`});
   }
 
   /** Composer text + email preview for the hub. */
@@ -491,11 +517,13 @@ export class ReferralInviteService {
     };
   }
 
-  private static async insertInvite(row: Omit<InviteRow, 'id' | 'status' | 'referral_id' | 'nudge_count' | 'last_nudged_at' | 'sent_at' | 'joined_at'>): Promise<InviteRow | null> {
+  private static async insertInvite(row: Omit<InviteRow, 'id' | 'status' | 'referral_id' | 'nudge_count' | 'last_nudged_at' | 'sent_at' | 'joined_at'>): Promise<InviteRow | 'rate_limited' | 'opted_out' | null> {
     const supabase = createAdminSupabase();
     const { data, error } = await supabase.from('referral_invites').insert(row).select('*').single();
     if (error) {
       if (error.code === '23505') return null;
+      if (error.code === 'P0101') return 'rate_limited';
+      if (error.code === 'P0102') return 'opted_out';
       throw new Error(`invite insert failed: ${error.message}`);
     }
     return data as InviteRow;
@@ -522,14 +550,17 @@ export class ReferralInviteService {
       return { id: c.id, name: c.name, inviteCode: c.invite_code, memberCount: count ?? 1 };
     };
     if (circleId) {
-      const { data: membership } = await supabase
+      const { data: membership,error:membershipError } = await supabase
         .from('fitcircle_members')
         .select('id')
         .eq('fitcircle_id', circleId)
         .eq('user_id', userId)
         .eq('status', 'active')
         .maybeSingle();
-      if (membership) circle = await pick(circleId);
+      if(membershipError) throw new Error('Circle membership is temporarily unavailable');
+      if(!membership) throw new Error('Active circle membership is required');
+      circle = await pick(circleId);
+      if(!circle) throw new Error('The requested circle is unavailable');
     }
     if (!circle) {
       const { data: own } = await supabase

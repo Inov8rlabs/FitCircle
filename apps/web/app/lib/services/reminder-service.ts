@@ -138,11 +138,13 @@ export class ReminderService {
         const near = MILESTONES.find((m) => m.days > currentStreak && m.days - currentStreak <= 2);
         const result = near
           ? await NotificationOrchestrator.send(userId, 'near_milestone', {
+              dedupeKey: `momentum_reminder:${local.date}`,
               currentMomentum: currentStreak,
               daysAway: near.days - currentStreak,
               milestoneName: near.name,
             })
           : await NotificationOrchestrator.send(userId, 'momentum_at_risk', {
+              dedupeKey: `momentum_reminder:${local.date}`,
               currentMomentum: currentStreak,
             });
         if (result.sent) sent++;

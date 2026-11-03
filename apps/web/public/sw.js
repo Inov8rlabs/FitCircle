@@ -1,3 +1,5 @@
+// Optional Engage worker bundle; malformed/foreign Engage envelopes never fall through to legacy display.
+try { importScripts('/engage-worker.js'); } catch { self.engagePushHandler = null; }
 // Service Worker for FitCircle PWA
 const CACHE_NAME = 'fitcircle-v2';
 const STATIC_CACHE = 'fitcircle-static-v2';
@@ -178,6 +180,12 @@ async function syncCheckIns() {
 
 // Push notifications
 self.addEventListener('push', (event) => {
+  let envelope;
+  try { envelope = event.data?.json(); } catch { /* Legacy text notification. */ }
+  if (envelope && typeof envelope === 'object' && ('app_id' in envelope || 'binding_id' in envelope)) {
+    if (self.engagePushHandler) event.waitUntil(self.engagePushHandler.push(envelope).catch(() => false));
+    return;
+  }
   const options = {
     body: event.data ? event.data.text() : 'New notification from FitCircle',
     icon: '/icons/icon-192x192.png',
@@ -207,6 +215,11 @@ self.addEventListener('push', (event) => {
 // Notification click handler
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
+  const envelope = event.notification.data;
+  if (envelope && typeof envelope === 'object' && ('app_id' in envelope || 'binding_id' in envelope)) {
+    if (self.engagePushHandler) event.waitUntil(self.engagePushHandler.click(envelope,event.action).catch(() => false));
+    return;
+  }
 
   if (event.action === 'open') {
     event.waitUntil(
