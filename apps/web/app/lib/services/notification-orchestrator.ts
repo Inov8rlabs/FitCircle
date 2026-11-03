@@ -185,7 +185,9 @@ export type NotificationType =
   // Day-2 "meet Fitzy" for activated users who never opened Fitzy (ACTIVATION_JOURNEY_SPEC §6)
   | 'fitzy_intro'
   // Transactional: the free trial renews tomorrow (ONBOARDING_V2_EXPERIMENT_SPEC §3.2; TrialReminderService)
-  | 'trial_ending_reminder';
+  | 'trial_ending_reminder'
+  // "Finish setting up" for sign-ups who left onboarding midway (OnboardingNudgeService; data.touch = 1 | 2)
+  | 'onboarding_finish_reminder';
 
 interface NotificationContent {
   title: string;
@@ -282,6 +284,8 @@ export const TYPE_SCREEN_MAP: Record<NotificationType, NotificationScreen> = {
   fitzy_intro: 'fitzy_chat',
   // Shipped apps have no subscription screen in the allowlist; the dashboard is safe everywhere.
   trial_ending_reminder: 'dashboard',
+  // The apps resume onboarding at the saved step whenever onboarding_completed is false.
+  onboarding_finish_reminder: 'dashboard',
 };
 
 /** Coach pushes: Android "Coach" channel (FCM falls back to the default channel on older builds). */
@@ -665,6 +669,19 @@ export const NOTIFICATION_TEMPLATES: Record<
     body: 'Your FitCircle Pro trial ends tomorrow. Keep it, or cancel anytime in Settings → Subscriptions.',
     category: 'journey',
   }),
+  // A nudge (journey toggle, counts toward + respects the daily cap). Touch 2 is ~24 h after sign-up.
+  onboarding_finish_reminder: (data) =>
+    Number(data.touch) === 2
+      ? {
+          title: 'Your plan is still waiting',
+          body: "You're about 2 minutes from done. Pick up right where you left off.",
+          category: 'journey',
+        }
+      : {
+          title: 'Your plan is almost ready',
+          body: '2 minutes left to finish setting up FitCircle.',
+          category: 'journey',
+        },
 };
 
 /** " and 2 other circles" for a cross-circle coalesced push; "" otherwise. */

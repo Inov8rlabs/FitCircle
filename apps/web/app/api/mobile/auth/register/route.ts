@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { registerRateLimiter, getIdentifier, applyRateLimit } from '@/lib/middleware/rate-limit';
 import { MobileAPIService } from '@/lib/services/mobile-api-service';
 import { toMobileUser } from '@/lib/services/mobile-profile-response';
+import { recordTestDeviceSignal } from '@/lib/services/test-device-service';
 import {
   USERNAME_PATTERN,
   USERNAME_RULES_MESSAGE,
@@ -130,6 +131,9 @@ export async function POST(request: NextRequest) {
         { status: 500 }
       );
     }
+
+    // Firebase Test Lab / Play pre-launch robots send X-Test-Device: 1 (excluded from lifecycle nudges).
+    await recordTestDeviceSignal(authData.user.id, request.headers);
 
     // Generate JWT tokens for mobile
     const tokens = await MobileAPIService.generateTokens(authData.user.id, authData.user.email!);

@@ -6,6 +6,7 @@ import { authRateLimiter, getIdentifier, applyRateLimit } from '@/lib/middleware
 import { MobileAPIService } from '@/lib/services/mobile-api-service';
 import { toMobileUser } from '@/lib/services/mobile-profile-response';
 import { SocialAuthError, findOrCreateSocialUser } from '@/lib/services/social-auth-service';
+import { recordTestDeviceSignal } from '@/lib/services/test-device-service';
 import { parseLenient, validationMessage } from '@/lib/validation/lenient-parse';
 
 
@@ -127,6 +128,7 @@ export async function POST(request: NextRequest) {
       providerUserId: googleUser.sub,
     });
 
+    await recordTestDeviceSignal(userId, request.headers); // X-Test-Device: 1 (Test Lab robots)
     const tokens = await MobileAPIService.generateTokens(userId, email);
 
     console.log('[Google Auth] Sign-in successful for user:', userId);

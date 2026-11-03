@@ -7,6 +7,7 @@ import { AppleTokenService } from '@/lib/services/apple-token-service';
 import { MobileAPIService } from '@/lib/services/mobile-api-service';
 import { toMobileUser } from '@/lib/services/mobile-profile-response';
 import { SocialAuthError, findOrCreateSocialUser } from '@/lib/services/social-auth-service';
+import { recordTestDeviceSignal } from '@/lib/services/test-device-service';
 import { validationMessage } from '@/lib/validation/lenient-parse';
 
 import { appleTokenAudiences, parseAppleAuthRequest } from './apple-request';
@@ -103,6 +104,7 @@ export async function POST(request: NextRequest) {
       providerUserId: userIdentifier,
     });
 
+    await recordTestDeviceSignal(userId, request.headers); // X-Test-Device: 1 (Test Lab robots)
     const tokens = await MobileAPIService.generateTokens(userId, email);
 
     // Apple requires the user's tokens to be revoked when the account is

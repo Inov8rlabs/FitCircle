@@ -177,24 +177,40 @@ export interface SendEmailParams {
   subject: string;
   html: string;
   text?: string;
+  /** Extra headers, e.g. List-Unsubscribe / List-Unsubscribe-Post for lifecycle mail. */
+  headers?: Record<string, string>;
+  /** Resend idempotency key: a retry with the same key within 24 h is not sent twice. */
+  idempotencyKey?: string;
 }
 
 /**
  * Send a plain transactional / internal email (e.g. the ads report) from the
- * FitCircle sender. Never throws.
+ * FitCircle sender. Never throws. `errorName` is Resend's error name
+ * (e.g. `rate_limit_exceeded`, `validation_error`) so callers can tell a
+ * transient failure from a permanent one; `not_configured` without a key.
  */
-export async function sendEmail({ to, subject, html, text }: SendEmailParams): Promise<{ success: boolean; id?: string; error?: string }> {
+export async function sendEmail({
+  to,
+  subject,
+  html,
+  text,
+  headers,
+  idempotencyKey,
+}: SendEmailParams): Promise<{ success: boolean; id?: string; error?: string; errorName?: string }> {
   const resend = getResend();
   if (!resend) {
     console.warn('RESEND_API_KEY not configured, skipping email send');
-    return { success: false, error: 'Email service not configured' };
+    return { success: false, error: 'Email service not configured', errorName: 'not_configured' };
   }
   try {
-    const { data, error } = await resend.emails.send({ from: FROM_EMAIL, to, replyTo: REPLY_TO, subject, html, text });
-    if (error) return { success: false, error: error.message };
+    const { data, error } = await resend.emails.send(
+      { from: FROM_EMAIL, to, replyTo: REPLY_TO, subject, html, text, ...(headers ? { headers } : {}) },
+      idempotencyKey ? { idempotencyKey } : undefined
+    );
+    if (error) return { success: false, error: error.message, errorName: error.name };
     return { success: true, id: data?.id };
   } catch (error) {
-    return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+    return { success: false, error: error instanceof Error ? error.message : 'Unknown error', errorName: 'network_error' };
   }
 }
 

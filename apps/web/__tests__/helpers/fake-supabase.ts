@@ -97,8 +97,9 @@ class FakeQuery {
     return this;
   }
 
+  /** `col` may be a JSON path (`a->b->>c`), like `.is()`. */
   eq(column: string, value: any) {
-    this.filters.push(r => r[column] === value);
+    this.filters.push(r => readPath(r, column) === value);
     return this;
   }
 
@@ -123,7 +124,7 @@ class FakeQuery {
   /** PostgREST `.not(col, 'is', null)` / `.not(col, 'eq', value)`. */
   not(column: string, operator: string, value: any) {
     if (operator === 'is') {
-      this.filters.push(r => (value === null ? r[column] != null : r[column] !== value));
+      this.filters.push(r => (value === null ? readPath(r, column) != null : readPath(r, column) !== value));
     } else if (operator === 'eq') {
       this.filters.push(r => r[column] !== value);
     } else {

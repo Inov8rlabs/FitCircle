@@ -3,6 +3,7 @@ import { type NextRequest } from 'next/server';
 import { mobileFailFrom, ok, readJson } from '@/lib/experiments/http';
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { OnboardingFlowService, progressSchema } from '@/lib/services/onboarding-flow-service';
+import { recordTestDeviceSignal } from '@/lib/services/test-device-service';
 
 export const dynamic = 'force-dynamic';
 
@@ -21,6 +22,7 @@ export async function PATCH(request: NextRequest) {
   try {
     const user = await requireMobileAuth(request);
     const input = progressSchema.parse(await readJson(request));
+    await recordTestDeviceSignal(user.id, request.headers); // X-Test-Device: 1 (Test Lab robots)
     return ok(await OnboardingFlowService.saveProgress(user.id, input), startTime);
   } catch (error) {
     return mobileFailFrom(error, 'onboarding/progress');
