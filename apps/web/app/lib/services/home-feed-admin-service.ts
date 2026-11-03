@@ -232,7 +232,7 @@ const db = () => createAdminSupabase();
 /** Never show another member's name or message in the admin preview (circle_chat props carry them). */
 function redactCard(card: FeedCard): FeedCard {
   if (card.type !== 'circle_chat' || !card.props) return card;
-  const { unread_count, total_unread, circles_with_unread } = card.props as Record<string, unknown>;
+  const { unread_count, total_unread, circles_with_unread } = card.props;
   return { ...card, props: { unread_count, total_unread, circles_with_unread } };
 }
 

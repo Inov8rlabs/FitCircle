@@ -28,10 +28,10 @@ vi.mock('@/lib/services/entitlement-service', () => ({
 }));
 vi.mock('@/lib/services/vitals-service', () => ({ VitalsService: { getHydrationToday: async () => ({ todayMl: 0, goalMl: 2000, date: '2026-10-22' }) } }));
 
-import { HomeFeedFakeDb, setHomeFeedDb } from '@/lib/home-feed/__tests__/fake-db';
 import { parseClientCards } from '@/lib/home-feed';
-import { readRequestInfo } from '@/lib/home-feed/context';
+import { HomeFeedFakeDb, setHomeFeedDb } from '@/lib/home-feed/__tests__/fake-db';
 import { rowToFlat, rulesetVersion } from '@/lib/home-feed/admin/ruleset';
+import { readRequestInfo } from '@/lib/home-feed/context';
 import { defaultClientDeclaration, PERSONA_USER_ID } from '@/lib/services/home-feed-admin-service';
 import { HomeFeedService } from '@/lib/services/home-feed-service';
 
