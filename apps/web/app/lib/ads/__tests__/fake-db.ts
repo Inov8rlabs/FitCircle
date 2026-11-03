@@ -17,6 +17,11 @@ const PK: Record<string, string[]> = {
   subscription_events: ['id'],
 };
 
+/** Column defaults the real tables have (releases: jsonb/array defaults). */
+const DEFAULTS: Record<string, () => Row> = {
+  releases: () => ({ commits: [], migrations: [], links: {} }),
+};
+
 export class AdsFakeDb {
   tables: Record<string, Row[]> = {};
   failing = new Set<string>();
@@ -84,7 +89,8 @@ class FakeQuery implements PromiseLike<any> {
     return this;
   }
   eq(col: string, val: any) {
-    this.filters.push((r) => r[col] === val);
+    // jsonb columns: PostgREST compares `col=eq.<json text>` as jsonb.
+    this.filters.push((r) => r[col] === val || (r[col] !== null && typeof r[col] === 'object' && typeof val === 'string' && JSON.stringify(r[col]) === val));
     return this;
   }
   in(col: string, vals: any[]) {
@@ -135,7 +141,7 @@ class FakeQuery implements PromiseLike<any> {
       const pk = PK[this.table] ?? ['id'];
       const out: Row[] = [];
       for (const r of list) {
-        const row = { ...(pk.includes('id') ? { id: r.id ?? this.db.nextId() } : {}), created_at: r.created_at ?? now, ...r };
+        const row = { ...(DEFAULTS[this.table]?.() ?? {}), ...(pk.includes('id') ? { id: r.id ?? this.db.nextId() } : {}), created_at: r.created_at ?? now, ...r };
         if (rows.some((x) => this.keyOf(x, pk) === this.keyOf(row, pk))) return { data: null, error: { code: '23505', message: 'duplicate key value violates unique constraint' } };
         rows.push(row);
         out.push(row);
@@ -147,7 +153,7 @@ class FakeQuery implements PromiseLike<any> {
       for (const r of list) {
         const hit = rows.find((x) => this.keyOf(x, this.conflict!) === this.keyOf(r, this.conflict!));
         if (hit) Object.assign(hit, r);
-        else rows.push({ id: this.db.nextId(), ...r });
+        else rows.push({ ...(DEFAULTS[this.table]?.() ?? {}), id: this.db.nextId(), ...r });
       }
       return { data: this.returning ? list : null, error: null };
     }

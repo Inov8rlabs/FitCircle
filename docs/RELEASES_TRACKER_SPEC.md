@@ -40,7 +40,25 @@ The store's raw state is kept in `store_status`, and the raw API payload is in `
 **Column ownership:**
 - **Store-owned** (the sync overwrites these): status, store_status, build, release_type, rollout_fraction, countries, whats_new, source/source_id, store_created_at, uploaded_at, submitted_at, raw, synced_at.
 - **Set once:** approved_at, released_at and superseded_at are stamped when the sync sees the status change. A row the sync sees for the first time never gets invented dates.
-- **Admin-owned** (the sync never writes these): internal_notes, known_issues, commits, migrations, links, notes_updated_by/at.
+- **Admin-owned** (the sync never overwrites these): internal_notes, known_issues, commits, migrations, links, notes_updated_by/at.
+  - The sync never writes internal_notes, known_issues, migrations or notes_updated_by/at.
+  - **Fill-if-empty:** the sync writes `commits` only while the stored list is empty, and adds a `links` key only when the key is absent. It never changes existing commits or links (`status.ts#planFill`).
+  - These writes are separate compare-and-set updates (`sync-service.ts#applyFill`): `commits` is set only `where commits = '[]'`, and `links` only where they still equal what the sync read. An admin edit made mid-sync always wins.
+  - Clearing `commits` back to `[]` lets the next sync fill it again.
+
+**Commits** have the shape `{ sha, subject, repo, date }`:
+- `sha` is the full 40-character SHA.
+- `subject` is the first line of the commit message.
+- `repo` is `FitCircleBE`, `FitCircle-iOS` or `Fitcircle-Android`.
+- `date` is `YYYY-MM-DD`.
+
+How each platform gets its SHA:
+
+| platform | source | written when |
+|---|---|---|
+| iOS (App Store + TestFlight) | Xcode Cloud build run with the same number as the build (§3.1) | hourly ASC sync |
+| Android (every Play track, Firebase) | `releases/<versionCode>/COMMIT` from `scripts/play-release.sh` (§3.2.1) | next `play-release.sh` run, or the recorder script. New track rows copy it from a sibling with the same versionCode. |
+| Backend | the running deployment's `VERCEL_GIT_COMMIT_SHA` (§3.3) | hourly cron, admin Sync now, first admin list per instance |
 
 ## 2. "Live now"
 
@@ -78,6 +96,13 @@ What it reads:
   - Status: processing, in_testing, expired or removed.
   - The en-US TestFlight "What to Test" text.
 
+- **Xcode Cloud commit** (Xcode Cloud stamps build number = ciBuildRun number):
+  - Reads `ciProducts?filter[app]=<appId>`, then one page of `ciProducts/{id}/buildRuns?sort=-number&limit=200` with fields `number, startedDate, finishedDate, sourceCommit, completionStatus`.
+  - For each iOS row (`app_store` and `testflight`) whose build number matches a `SUCCEEDED` run, it fills `commits` with `[{ sha: sourceCommit.commitSha, subject: first line of sourceCommit.message, repo: 'FitCircle-iOS', date: run startedDate (UTC day) }]` when `commits` is empty. Apple gives no commit date.
+  - It also sets `links.xcode_cloud` to `sourceCommit.webUrl` (the GitHub commit page) when that key is absent.
+  - Build numbers have collided: some 1.0.4–1.0.6 builds were uploaded from a Mac, reusing numbers before the cloud run with that number existed. So a match also requires the build's `uploadedDate` to fall between the run's start and 6 hours after it finished. Otherwise nothing is filled.
+  - A failing Xcode Cloud read only logs a warning. The store sync still succeeds.
+
 Apple exposes no "approved at" or "released at" timestamps. The sync records them when it observes the change, to within an hour.
 
 ### 3.2 Google Play (`connectors/google-play.ts`), read-only
@@ -101,9 +126,58 @@ The version comes from the release name ("36 (1.0.9)"). Release notes come from 
 
 The Play API has no "in review" state, so review shows up only as a gap before a release appears on the track.
 
-### 3.3 Backend / web
+#### 3.2.1 Android commits
 
-Vercel deploys are not synced. Record them with `POST /api/admin/releases` (platform `backend`, track `production`, build = short SHA), from Admin Tools → Releases → New release. Creating a `live` row on a store track automatically supersedes the previous live row of that platform and track.
+Play does not know commits. The Android repo is private, and the Vercel project has no GitHub token, so the SHA is recorded at build time:
+- `Fitcircle-Android/scripts/play-release.sh <versionCode>` refuses to build from a dirty tree. `ALLOW_DIRTY=1` overrides it loudly.
+- It captures HEAD before the build. With the bundle, it writes `releases/<versionCode>/COMMIT`:
+  - line 1: the full SHA
+  - line 2: the commit date (`%cs`)
+  - line 3: the subject
+  - line 4: `dirty`, only with ALLOW_DIRTY. The recorded subject then ends with "(built from a dirty tree)".
+- By convention the release commit is "Android X.Y.Z versionCode N".
+- `apps/web/scripts/releases-record-android-commits.ts --env <.env.local> --releases-dir <Fitcircle-Android/releases> [--dry-run]` (`services/android-commits.ts`) fills `commits` on every android row with that build (any track) where it is empty. It is re-runnable.
+- `play-release.sh` runs the recorder after the prod smoke gate, for all earlier builds, whose Play rows exist by then. A failure there never blocks the release.
+- When the Play sync first sees a new track row for a versionCode (e.g. `play_production:49` after `play_internal:49`), it copies the commits of a sibling android row with the same build. Android versionCodes are unique; iOS build numbers are not, so this applies to Android only.
+
+### 3.3 Backend / web: self-registration (`services/backend-release.ts`)
+
+The running production deployment registers itself. `ensureRunningBackendRelease()` runs on:
+- the hourly releases cron
+- admin "Sync now"
+- the first `GET /api/admin/releases` per server instance (memoized, never throws)
+
+It uses Vercel's system env vars. "Automatically expose System Environment Variables" is on for `fit-circle-web` (checked 2026-11-03).
+
+| env | use |
+|---|---|
+| `VERCEL_ENV` | must be `production`, else skipped (preview, local) |
+| `VERCEL_GIT_COMMIT_SHA` | full SHA. The key is `backend:production:<first 7>` |
+| `VERCEL_GIT_COMMIT_MESSAGE` | first line becomes the commit subject |
+| `VERCEL_GIT_COMMIT_REF` | `store_status` and `raw.gitRef` |
+| `VERCEL_DEPLOYMENT_ID` | `source_id` and `raw.vercelDeploymentId` |
+
+**New SHA:** it inserts a row in the same format as the hand-made rows:
+- version = UTC date
+- build = 7-character SHA
+- status `live`
+- source `git`
+- `released_at` = the first time this SHA is seen running
+- `commits` = `[{ sha, subject, repo: 'FitCircleBE', date: that UTC day }]`
+- `links.commit` = the GitHub commit URL
+- `migrations` = `[]`
+
+It writes a `null → live` event. Each previous `live`/`rolling_out` backend row becomes `superseded`, with `superseded_at` and an event.
+
+Rules:
+- The time is first-seen, not the deploy time. Vercel exposes no deploy time without an API token, so the time can be up to an hour after the deploy unless someone opens Releases first.
+- Migrations are not detected: `supabase/migrations` is not in the serverless bundle. Add them on the row by hand.
+- **Known SHA** (e.g. added by hand): it only fills empty `commits` and a missing `links.commit`. Status, dates and notes are left alone.
+- A rollback to an older, superseded SHA is not re-marked live automatically. Set it by hand.
+- Concurrent instances race on the `release_key` unique constraint, and the loser does nothing.
+- It never runs at build time or cold start. Vercel sets the same env during `next build`, and that build may still fail.
+
+Rows can still be added or edited by hand with `POST /api/admin/releases` or Admin Tools → Releases → New release (e.g. web-only deploys). Creating a `live` row on a store track automatically supersedes the previous live row of that platform and track.
 
 ### 3.4 Running the sync from a laptop
 
@@ -133,10 +207,10 @@ The Admin Tools proxy whitelists exactly these routes: GET/POST `releases`, POST
 1. **iOS / Android:** submit as usual. Within an hour the sync creates the row (`draft` → `waiting_for_review` → … → `live`) with the store's What's New. Open it in Admin Tools → Releases and fill in:
    - **Internal notes** (markdown): what shipped and key fixes.
    - **Known issues.**
-   - **Commits:** the range since the previous version.
+   - **Commits:** filled automatically (§1 "How each platform gets its SHA"). Add the range since the previous version if useful; the sync never overwrites it.
    - **Migrations:** any backend migrations the release depends on.
    - **Links:** PRs, the Firebase build, crash dashboards.
-2. **Backend:** after a production deploy is READY, use **New release** with platform `backend`, track `production`, version = the date, build = the short SHA, status `live`, migrations, and notes. Over the API:
+2. **Backend:** the row creates itself (§3.3); add migrations and notes on it. To add one by hand (e.g. before the cron runs), use **New release** with platform `backend`, track `production`, version = the date, build = the short SHA, status `live`, migrations, and notes. Over the API:
    ```
    curl -X POST https://www.fitcircle.ai/api/admin/releases -H "Authorization: Bearer $ADMIN_API_SECRET" -H "X-Admin-Actor: you@inov8rlabs.com" -H 'Content-Type: application/json' \
      -d '{"platform":"backend","track":"production","version":"2026-10-27","build":"abcdef1","status":"live","migrations":["111_releases_tracker"],"internalNotes":"- …"}'
@@ -160,4 +234,6 @@ The backfill was built from read-only git history and release notes. Uncertain i
 
 - Approval and release times are only as precise as the hourly sync. Backfilled ones are day-precision.
 - Play review state is not visible through the API.
-- Vercel deploys are not synced automatically. A follow-up could read the Vercel API with a token, or use a deploy hook.
+- Backend `released_at` is first-seen, not the Vercel ready time, and backend migrations are not detected (§3.3). A Vercel API token or deploy hook could fix both.
+- Android commits depend on `play-release.sh`. A bundle built another way has no COMMIT file; fill its commits in Admin Tools.
+- iOS builds not made by Xcode Cloud (local uploads) get no commit automatically.

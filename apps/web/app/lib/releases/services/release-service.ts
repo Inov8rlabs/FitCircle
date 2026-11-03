@@ -12,6 +12,7 @@ import { computeLiveNow, rowToEvent, rowToRelease, sortTimeline } from '../model
 import { releaseKey } from '../status';
 import { isStoreTrack, LIVE_STATUSES, RELEASE_PLATFORMS, RELEASE_STATUSES, type Release, type ReleaseDetail, type ReleaseStatus, type ReleasesList } from '../types';
 
+import { ensureRunningBackendReleaseOnce } from './backend-release';
 import { ReleaseSyncService } from './sync-service';
 
 const YMD = /^\d{4}-\d{2}-\d{2}$/;
@@ -100,6 +101,8 @@ export class ReleaseService {
     if (f.platform && !(RELEASE_PLATFORMS as readonly string[]).includes(f.platform)) throw new CampaignError(400, 'VALIDATION_ERROR', `platform must be one of ${RELEASE_PLATFORMS.join(', ')}`);
     if (f.status && !(RELEASE_STATUSES as readonly string[]).includes(f.status)) throw new CampaignError(400, 'VALIDATION_ERROR', 'unknown status');
     if ((f.from && !YMD.test(f.from)) || (f.to && !YMD.test(f.to))) throw new CampaignError(400, 'VALIDATION_ERROR', 'from/to must be YYYY-MM-DD');
+    // Cheap (one keyed read, once per instance): make sure the running prod deploy has its row.
+    await ensureRunningBackendReleaseOnce();
     const all = await this.all();
     const limit = Math.min(Math.max(Number(f.limit) || 300, 1), 1000);
     const filtered = all.filter((r) => {

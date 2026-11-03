@@ -6,15 +6,23 @@
  * Per sync: appStoreVersions (+ build, phased release), reviewSubmissions
  * (submittedDate), one en-US localization read per version (whatsNew), and
  * TestFlight builds (+ preReleaseVersion, buildBetaDetail, betaBuildLocalizations).
- * ≈ 12–15 requests/hour against Apple's 3,600/hour.
+ * Plus Xcode Cloud: ciProducts (filter[app]) and one page of its buildRuns,
+ * to record the exact commit each build was made from (Xcode Cloud stamps
+ * build number = ciBuildRun number).
+ * ≈ 15 requests/hour against Apple's 3,600/hour.
  */
 import { ASC_BASE, AscClient, ascConfig } from '@/lib/campaigns/app-store';
 
 import { ascVersionStatus, phasedFraction, releaseKey, supersedeOlderLive, testflightStatus, type ObservedRelease } from '../status';
+import type { ReleaseCommit } from '../types';
 
 import type { FetchLike, ReleaseConnector, StoreSnapshot } from './types';
 
 type Json = Record<string, any>;
+
+export const IOS_REPO = 'FitCircle-iOS';
+/** An Xcode Cloud build is uploaded during its run; allow this much after finishedDate. */
+const RUN_UPLOAD_SLACK_MS = 6 * 60 * 60 * 1000;
 
 const MAX_PAGES = 5;
 
@@ -126,6 +134,69 @@ export function mapAscBuilds(builds: { data: Json[]; included?: Json[] }): Obser
   return out;
 }
 
+export interface CiRunCommit {
+  number: string;
+  runId: string;
+  startedAt: string | null;
+  finishedAt: string | null;
+  commit: ReleaseCommit;
+  webUrl: string | null;
+}
+
+/** ciBuildRuns response → SUCCEEDED runs with a source commit, by build number. */
+export function mapCiBuildRuns(runs: { data?: Json[] }): Map<string, CiRunCommit[]> {
+  const out = new Map<string, CiRunCommit[]>();
+  for (const r of runs.data ?? []) {
+    const a = r.attributes ?? {};
+    const sc = a.sourceCommit ?? {};
+    const sha = typeof sc.commitSha === 'string' ? sc.commitSha.trim().toLowerCase() : '';
+    if (a.completionStatus !== 'SUCCEEDED' || a.number == null || !/^[0-9a-f]{40}$/.test(sha)) continue;
+    const startedAt = isoOrNull(a.startedDate) ?? isoOrNull(a.createdDate);
+    const message = typeof sc.message === 'string' ? sc.message : '';
+    const webUrl = typeof sc.webUrl === 'string' && /^https?:\/\//.test(sc.webUrl) ? sc.webUrl : null;
+    const run: CiRunCommit = {
+      number: String(a.number),
+      runId: String(r.id),
+      startedAt,
+      finishedAt: isoOrNull(a.finishedDate),
+      commit: { sha, subject: message.split('\n')[0].trim().slice(0, 500), repo: IOS_REPO, date: startedAt ? startedAt.slice(0, 10) : null },
+      webUrl,
+    };
+    out.set(run.number, [...(out.get(run.number) ?? []), run]);
+  }
+  return out;
+}
+
+/**
+ * The run that produced this build: same number, and (when the build's upload
+ * time is known) uploaded inside the run's window. The window check keeps a
+ * locally uploaded build that reused a number from picking up a cloud commit.
+ */
+function runFor(r: ObservedRelease, runs: Map<string, CiRunCommit[]>): CiRunCommit | null {
+  if (!r.build) return null;
+  const candidates = runs.get(r.build) ?? [];
+  const up = r.uploadedAt ? Date.parse(r.uploadedAt) : NaN;
+  const fits = candidates.filter((c) => {
+    if (!Number.isFinite(up)) return true;
+    const start = c.startedAt ? Date.parse(c.startedAt) : NaN;
+    const end = c.finishedAt ? Date.parse(c.finishedAt) : NaN;
+    if (Number.isFinite(start) && up < start) return false;
+    if (Number.isFinite(end) && up > end + RUN_UPLOAD_SLACK_MS) return false;
+    return true;
+  });
+  return fits.length === 1 ? fits[0] : null;
+}
+
+/** Attach the Xcode Cloud commit (and its GitHub link) to iOS releases whose build came from a SUCCEEDED run. */
+export function attachCiCommits(releases: ObservedRelease[], runs: Map<string, CiRunCommit[]>): ObservedRelease[] {
+  return releases.map((r) => {
+    if (r.platform !== 'ios') return r;
+    const run = runFor(r, runs);
+    if (!run) return r;
+    return { ...r, commits: [run.commit], links: run.webUrl ? { ...(r.links ?? {}), xcode_cloud: run.webUrl } : r.links };
+  });
+}
+
 export class AppStoreReleasesConnector implements ReleaseConnector {
   source = 'app_store_connect' as const;
   constructor(private readonly fetchImpl?: FetchLike) {}
@@ -178,9 +249,24 @@ export class AppStoreReleasesConnector implements ReleaseConnector {
       client,
       `/v1/builds?filter[app]=${app}&limit=200&sort=-uploadedDate&include=preReleaseVersion,buildBetaDetail,betaBuildLocalizations&fields[preReleaseVersions]=version,platform`
     );
-    return {
-      releases: [...mapAscVersions(versions, submittedDates(submissions.data), whatsNew), ...mapAscBuilds(builds)],
-      completeTracks: [],
-    };
+    const releases = [...mapAscVersions(versions, submittedDates(submissions.data), whatsNew), ...mapAscBuilds(builds)];
+    return { releases: attachCiCommits(releases, await this.ciRuns(client)), completeTracks: [] };
+  }
+
+  /** Xcode Cloud runs by build number. A failure here never fails the store sync. */
+  private async ciRuns(client: AscClient): Promise<Map<string, CiRunCommit[]>> {
+    try {
+      const products: Json = await client.call('GET', `/v1/ciProducts?filter[app]=${client.appId}&limit=10`);
+      const product = (products?.data ?? []).find((p: Json) => p.attributes?.productType !== 'FRAMEWORK') ?? products?.data?.[0];
+      if (!product?.id) return new Map();
+      const runs: Json = await client.call(
+        'GET',
+        `/v1/ciProducts/${product.id}/buildRuns?sort=-number&limit=200&fields[ciBuildRuns]=number,createdDate,startedDate,finishedDate,sourceCommit,completionStatus`
+      );
+      return mapCiBuildRuns(runs ?? {});
+    } catch (e) {
+      console.warn('[releases/asc] Xcode Cloud runs read failed:', (e as Error)?.message);
+      return new Map();
+    }
   }
 }

@@ -3,7 +3,7 @@
  * status, version ordering, release keys, and the "did the status change?"
  * plan the sync applies. No I/O here; everything is unit-tested.
  */
-import { LIVE_STATUSES, type ReleasePlatform, type ReleaseStatus } from './types';
+import { LIVE_STATUSES, type ReleaseCommit, type ReleasePlatform, type ReleaseStatus } from './types';
 
 // --- store state mapping ------------------------------------------------------
 
@@ -148,6 +148,10 @@ export interface ObservedRelease {
   /** When the store says the current status began (else: observed now). */
   statusAt?: string | null;
   raw?: unknown;
+  /** Commits the source knows for this build (Xcode Cloud run). Written only into an empty `commits`. */
+  commits?: ReleaseCommit[] | null;
+  /** Links the source knows. Each key is written only when the stored row lacks it. */
+  links?: Record<string, string> | null;
 }
 
 /** The subset of a stored row the plan needs. */
@@ -163,6 +167,8 @@ export interface ExistingRelease {
   superseded_at: string | null;
   whats_new: string | null;
   countries?: string[] | null;
+  commits?: unknown;
+  links?: unknown;
 }
 
 export interface PlannedEvent {
@@ -173,10 +179,35 @@ export interface PlannedEvent {
   note: string | null;
 }
 
+/** Fill-if-empty admin fields (applied as separate guarded updates, never in the upsert). */
+export interface ReleaseFill {
+  /** Set only when the stored `commits` is empty. */
+  commits?: ReleaseCommit[];
+  /** The full links object to store: stored links plus the keys the source adds. */
+  links?: Record<string, string>;
+}
+
 export interface ReleasePlan {
   /** Store-owned columns only: never internal_notes / commits / migrations / links. */
   row: Record<string, unknown>;
   event: PlannedEvent | null;
+  fill: ReleaseFill | null;
+}
+
+const isEmptyCommits = (v: unknown) => v === null || v === undefined || (Array.isArray(v) && v.length === 0);
+const asLinks = (v: unknown): Record<string, string> => (v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, string>) : {});
+
+/**
+ * What a source can add to the admin-owned fields without overwriting anything:
+ * commits only into an empty list, links only for absent keys. Null = nothing to do.
+ */
+export function planFill(existing: { commits?: unknown; links?: unknown } | null, o: { commits?: ReleaseCommit[] | null; links?: Record<string, string> | null }): ReleaseFill | null {
+  const fill: ReleaseFill = {};
+  if (o.commits?.length && isEmptyCommits(existing?.commits)) fill.commits = o.commits;
+  const stored = asLinks(existing?.links);
+  const added = Object.entries(o.links ?? {}).filter(([k, v]) => v && !(k in stored));
+  if (added.length) fill.links = { ...stored, ...Object.fromEntries(added) };
+  return fill.commits || fill.links ? fill : null;
 }
 
 const APPROVED: readonly ReleaseStatus[] = ['pending_release', 'rolling_out', 'live'];
@@ -227,7 +258,7 @@ export function planRelease(existing: ExistingRelease | null, o: ObservedRelease
         note: existing ? null : 'first seen by sync',
       }
     : null;
-  return { row, event };
+  return { row, event, fill: planFill(existing, o) };
 }
 
 /**

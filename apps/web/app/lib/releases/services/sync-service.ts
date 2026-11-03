@@ -7,13 +7,31 @@
 import { chunk, db } from '@/lib/ads/services/db';
 
 import { getReleaseConnector, SYNC_SOURCES, type StoreSnapshot } from '../connectors';
-import { planRelease, type ExistingRelease, type ObservedRelease } from '../status';
-import type { ReleaseStatus, ReleaseSyncStatus, SyncSource, SyncSourceResult } from '../types';
+import { planRelease, type ExistingRelease, type ObservedRelease, type ReleaseFill } from '../status';
+import type { ReleaseCommit, ReleaseStatus, ReleaseSyncStatus, SyncSource, SyncSourceResult } from '../types';
 
 const DEBOUNCE_MS = 2 * 60 * 1000;
-const EXISTING_COLS = 'id, release_key, status, store_created_at, uploaded_at, submitted_at, approved_at, released_at, superseded_at, whats_new, countries';
+const EXISTING_COLS = 'id, release_key, status, store_created_at, uploaded_at, submitted_at, approved_at, released_at, superseded_at, whats_new, countries, commits, links';
 /** Rows of a fully-listed track that are "current" and get superseded when they drop off the list. */
 const CURRENT_ON_TRACK: ReleaseStatus[] = ['live', 'rolling_out', 'in_testing', 'halted'];
+
+/**
+ * Write fill-if-empty admin fields with compare-and-set guards, so an admin edit
+ * made between our read and this write is never overwritten: commits only while
+ * the stored list is still `[]`, links only while they are still what we read.
+ */
+export async function applyFill(id: string, fill: ReleaseFill, readLinks: unknown, nowIso: string): Promise<void> {
+  const supabase = db();
+  if (fill.commits) {
+    const { error } = await supabase.from('releases').update({ commits: fill.commits, updated_at: nowIso }).eq('id', id).eq('commits', '[]');
+    if (error) throw new Error(`releases fill commits: ${error.message}`);
+  }
+  if (fill.links) {
+    const before = readLinks && typeof readLinks === 'object' && !Array.isArray(readLinks) ? readLinks : {};
+    const { error } = await supabase.from('releases').update({ links: fill.links, updated_at: nowIso }).eq('id', id).eq('links', JSON.stringify(before));
+    if (error) throw new Error(`releases fill links: ${error.message}`);
+  }
+}
 
 export class ReleaseSyncService {
   /** Apply one store snapshot. Returns rows upserted and events written. */
@@ -30,6 +48,22 @@ export class ReleaseSyncService {
       for (const r of (data ?? []) as ExistingRelease[]) existing.set(r.release_key, r);
     }
 
+    // Android versionCodes are unique: a new track row (play_production:N) inherits
+    // the commits already recorded on a sibling (play_internal:N) — see android-commits.ts.
+    const androidBuilds = [...new Set([...uniq.values()].filter((o) => o.platform === 'android' && o.build && !o.commits?.length).map((o) => o.build!))];
+    const siblingCommits = new Map<string, ReleaseCommit[]>();
+    for (const part of chunk(androidBuilds, 200)) {
+      const { data, error } = await supabase.from('releases').select('build, commits').eq('platform', 'android').in('build', part);
+      if (error) throw new Error(`releases read siblings: ${error.message}`);
+      for (const r of (data ?? []) as Array<{ build: string; commits: unknown }>) {
+        if (Array.isArray(r.commits) && r.commits.length && !siblingCommits.has(r.build)) siblingCommits.set(r.build, r.commits as ReleaseCommit[]);
+      }
+    }
+    for (const [key, o] of uniq) {
+      const inherited = o.platform === 'android' && o.build && !o.commits?.length ? siblingCommits.get(o.build) : undefined;
+      if (inherited) uniq.set(key, { ...o, commits: inherited });
+    }
+
     const plans = [...uniq.values()].map((o) => ({ key: o.releaseKey, ...planRelease(existing.get(o.releaseKey) ?? null, o, source, nowIso) }));
     for (const part of chunk(plans, 200)) {
       const { error } = await supabase.from('releases').upsert(part.map((p) => p.row), { onConflict: 'release_key' });
@@ -38,7 +72,7 @@ export class ReleaseSyncService {
 
     // Ids for new rows.
     const ids = new Map<string, string>([...existing.values()].map((r) => [r.release_key, r.id]));
-    const missing = plans.filter((p) => p.event && !ids.has(p.key)).map((p) => p.key);
+    const missing = plans.filter((p) => (p.event || p.fill) && !ids.has(p.key)).map((p) => p.key);
     for (const part of chunk(missing, 200)) {
       const { data, error } = await supabase.from('releases').select('id, release_key').in('release_key', part);
       if (error) throw new Error(`releases read ids: ${error.message}`);
@@ -60,6 +94,11 @@ export class ReleaseSyncService {
         if (upErr) throw new Error(`releases supersede: ${upErr.message}`);
         events.push({ release_id: r.id, from_status: r.status, to_status: 'superseded', store_status: null, occurred_at: nowIso, note: 'no longer on the track', source: 'sync' });
       }
+    }
+
+    for (const p of plans) {
+      const id = ids.get(p.key);
+      if (p.fill && id) await applyFill(id, p.fill, existing.get(p.key)?.links, nowIso);
     }
 
     for (const part of chunk(events, 200)) {
