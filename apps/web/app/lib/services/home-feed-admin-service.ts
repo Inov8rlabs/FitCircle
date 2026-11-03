@@ -50,6 +50,7 @@ import {
 } from '@/lib/home-feed/admin/ruleset';
 import { activeCampaignsCache, buildFeedContext, defaultContextLoaders, readRequestInfo, type ContextLoaders, type FeedProfile, type FeedRequestInfo } from '@/lib/home-feed/context';
 import { HomeFeedError } from '@/lib/home-feed/http';
+import { completionView } from '@/lib/profile-completion/model';
 import { PROMO_CARD_TYPE, PROMO_CARD_VERSION, parsePromoClient, type PromoClientSupport } from '@/lib/promos';
 import { createAdminSupabase } from '@/lib/supabase-admin';
 
@@ -259,7 +260,16 @@ function personaProfile(now: Date, timezone: string | undefined): FeedProfile {
   };
 }
 
-/** A representative member: free, 60 days in, one circle, not checked in yet, no water yet, a couple of unread chats. Campaign + flags are the real global state. */
+/**
+ * The typical member's profile answers (profile_completion@1): onboarded through v3, which saved height, weight
+ * and sex to the profile but never goal / activity — so goal, goal weight, birth year and activity are still open.
+ */
+const PERSONA_COMPLETION_PROFILE = { onboarding_completed: true, height_cm: 170, weight_kg: 75, gender: 'prefer_not_to_say', goals: [], preferences: {} };
+
+/**
+ * A representative member: free, 60 days in, one circle, not checked in yet, no water yet, a couple of unread chats,
+ * a partly answered profile (shows profile_completion@1 when the preview declares it). Campaign + flags are the real global state.
+ */
 export function personaLoaders(base: ContextLoaders = defaultContextLoaders): ContextLoaders {
   return {
     campaign: base.campaign,
@@ -269,6 +279,11 @@ export function personaLoaders(base: ContextLoaders = defaultContextLoaders): Co
     checkedIn: async () => false,
     waterTodayMl: async () => 0,
     chatUnread: async () => ({ total_unread: 2, circles_with_unread: 1, circle_id: null, circle_name: null, unread_count: 2, sender_display_name: null, preview: null }),
+    profileCompletion: async () => ({
+      onboardingCompleted: true,
+      snoozed: false,
+      view: completionView({ profile: PERSONA_COMPLETION_PROFILE, onboardingData: null, latestWeightKg: null }),
+    }),
   };
 }
 
@@ -367,7 +382,13 @@ export class HomeFeedAdminService {
     const now = opts.now ?? new Date();
     const feedEnabled = isFeedEnabled(info.platform);
     const rulesEnabled = areRulesEnabled();
-    const ctx = await buildFeedContext(subject.profile, info, { loaders: subject.loaders, now, wantChat: support.has('circle_chat') });
+    // Same context flags as HomeFeedService.getFeed, so the preview matches what the client would be served.
+    const ctx = await buildFeedContext(subject.profile, info, {
+      loaders: subject.loaders,
+      now,
+      wantChat: support.has('circle_chat'),
+      wantProfileCompletion: support.has('profile_completion'),
+    });
     if (!feedEnabled) {
       // Kill switch: production serves the static default (no context, no rules) — so does the preview.
       const r = composeFeed({ support, ctx: null, now, traceRanked: true });

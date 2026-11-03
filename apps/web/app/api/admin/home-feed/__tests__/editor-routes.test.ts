@@ -219,6 +219,44 @@ describe('POST preview (draft)', () => {
     expect((await previewGet(req(`/api/admin/home-feed/preview?userId=${USER}`, tools()))).status).toBe(200);
   });
 
+  describe('profile_completion@1 (clients that declare it)', () => {
+    const withCard = (platform: 'ios' | 'android') => `${defaultClientDeclaration(platform, '1.1.0').cards},profile_completion@1`;
+
+    it('the typical persona shows the card (below the top 3) with its open questions; shipped declarations do not', async () => {
+      for (const platform of ['ios', 'android'] as const) {
+        const { body } = await json(await previewPost(req('/api/admin/home-feed/preview', tools({ platform, version: '1.1.0', persona: 'typical', cards: withCard(platform) }))));
+        for (const s of [body.data.before, body.data.after]) {
+          const order = ids(s.feed).filter((id) => id !== 'offline_banner');
+          const at = order.indexOf('profile_completion');
+          expect(at).toBeGreaterThanOrEqual(3); // G10
+          const card = s.feed.cards.find((c: any) => c.type === 'profile_completion');
+          expect(card.props).toMatchObject({ remaining: ['goal', 'goal_weight', 'birth_year', 'activity'], answered: 3, total: 7, percent: 43, goal: null });
+        }
+        const shipped = (await json(await previewPost(req('/api/admin/home-feed/preview', tools({ platform, version: '1.1.0', persona: 'typical' }))))).body.data;
+        expect(ids(shipped.after.feed)).not.toContain('profile_completion');
+      }
+    });
+
+    it('previewing a real user matches GET /api/mobile/home-feed, card included', async () => {
+      Object.assign(db.rows('profiles').find((p) => p.id === USER)!, { onboarding_completed: true, height_cm: 180, gender: 'male', goals: [], preferences: {} });
+      const now = new Date('2026-10-22T16:00:00Z');
+      vi.useFakeTimers({ now, toFake: ['Date'] });
+      try {
+        const cards = withCard('ios');
+        const { body } = await json(await previewPost(req('/api/admin/home-feed/preview', tools({ platform: 'ios', version: '1.1.0', userId: USER, cards }))));
+        const profile = db.rows('profiles').find((p) => p.id === USER)!;
+        const info = readRequestInfo({ headers: new Headers({ 'x-app-platform': 'ios', 'x-app-version': '1.1.0' }) });
+        const prod = await HomeFeedService.getFeed(profile as any, info, parseClientCards(cards), { record: false, now });
+        expect(ids(prod)).toContain('profile_completion');
+        expect(ids(body.data.after.feed)).toEqual(ids(prod));
+        const card = body.data.after.feed.cards.find((c: any) => c.type === 'profile_completion');
+        expect(card.props).toEqual(prod.cards.find((c) => c.type === 'profile_completion')!.props);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+  });
+
   it('persona id is never a real user', () => {
     expect(PERSONA_USER_ID).toMatch(/^00000000-0000-4000-8000-0000000000/);
   });
