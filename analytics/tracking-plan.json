@@ -1,6 +1,6 @@
 {
   "$schema": "./tracking-plan.schema.json",
-  "version": 23,
+  "version": 24,
   "updated": "2026-11-02",
   "conventions": {
     "eventNames": "Title Case, '<Object> <Past-tense verb>' (e.g. 'Meal Logged'). Names are frozen once shipped: rename in the analytics tool, never in code.",
@@ -160,6 +160,19 @@
       "play_flexible",
       "play_immediate",
       "store_link"
+    ],
+    "profile_question_key": [
+      "goal",
+      "height",
+      "weight",
+      "goal_weight",
+      "birth_year",
+      "sex",
+      "activity"
+    ],
+    "profile_question_source": [
+      "home_card",
+      "profile"
     ]
   },
   "globalProperties": [
@@ -898,6 +911,29 @@
             "edit_profile"
           ],
           "required": true
+        }
+      ]
+    },
+    {
+      "name": "Profile Question Answered",
+      "category": "settings",
+      "platforms": [
+        "ios",
+        "android"
+      ],
+      "description": "The user saved one profile completion answer (POST /api/mobile/profile/completion), from the home feed profile_completion card or Profile. Never send the answer itself.",
+      "properties": [
+        {
+          "name": "question_key",
+          "type": "enum",
+          "required": true,
+          "enum": "profile_question_key"
+        },
+        {
+          "name": "source",
+          "type": "enum",
+          "required": true,
+          "enum": "profile_question_source"
         }
       ]
     },

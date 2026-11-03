@@ -75,6 +75,14 @@ export const CATALOG: Readonly<Record<string, CatalogEntry>> = Object.freeze({
   native_ad: entry('native_ad', 'ad'),
   charts: entry('charts', 'utility'),
   /**
+   * "Complete your profile" carousel (docs/PROFILE_COMPLETION_CARD_SPEC.md).
+   * Only for clients that declare profile_completion@1; only when onboarding
+   * is complete, a question remains and it isn't snoozed. Props = completion
+   * status. Placed "midway" (just below `vitals`) via EXTRA_CARDS; guardrail
+   * G10 keeps it out of the first 3.
+   */
+  profile_completion: entry('profile_completion', 'utility', true),
+  /**
    * Server-driven promo card (docs/PROMO_CARD_SPEC.md): creative + actions
    * inline, id `promo:<key>`. Never in DEFAULT_ORDER — only the promo engine
    * adds it, and only for clients that declare promo@1.
@@ -88,6 +96,7 @@ export const CATALOG: Readonly<Record<string, CatalogEntry>> = Object.freeze({
  */
 export const EXTRA_CARDS: ReadonlyArray<{ type: CardType; after: CardType }> = [
   { type: 'circle_chat', after: 'health_sync_banner' },
+  { type: 'profile_completion', after: 'vitals' },
 ];
 
 /**

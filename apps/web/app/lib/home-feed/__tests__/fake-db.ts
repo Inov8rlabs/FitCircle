@@ -1,7 +1,7 @@
 /**
  * Minimal in-memory Supabase stand-in for the home-feed route tests: the
  * query shapes HomeFeedService + the context loaders use (select / eq / order
- * / in / limit / count-head / insert / update / maybeSingle / single).
+ * / in / gt / gte / limit / count-head / insert / update / maybeSingle / single).
  */
 type Row = Record<string, any>;
 
@@ -18,6 +18,9 @@ export class HomeFeedFakeDb {
     food_log_entries: [],
     promo_user_state: [],
     feature_gates: [],
+    // profile_completion@1
+    onboarding_progress: [],
+    daily_tracking: [],
   };
   /** Tables whose next query errors (simulate outages). */
   failing = new Set<string>();
@@ -70,6 +73,10 @@ class FakeQuery implements PromiseLike<any> {
     this.op = 'upsert';
     this.payload = rows;
     this.conflictCols = (opts?.onConflict ?? 'id').split(',').map((c) => c.trim());
+    return this;
+  }
+  gt(col: string, val: any) {
+    this.preds.push((r) => r[col] !== null && r[col] !== undefined && r[col] > val);
     return this;
   }
   gte(col: string, val: any) {

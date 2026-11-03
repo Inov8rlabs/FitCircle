@@ -68,6 +68,7 @@ Each card keeps its existing self-gating on the client (e.g. campaign card hides
 | `fitzy_focus` | (dashboard focus) | FitzyHomeFocusCard | |
 | `native_ad` | FitCircleNativeAdView | native ad | client still enforces ads eligibility |
 | `charts` | chartsSection | charts | |
+| `profile_completion` | — (1.2.0+) | — (1.2.0+) | added 2026-11-02, docs/PROFILE_COMPLETION_CARD_SPEC.md: only for clients that declare `profile_completion@1`; `props` = completion status; placed right after `vitals`; never in the first 3 (guardrail G10); dismiss = 7-day snooze |
 
 ## 4. Default layout (also the clients' built-in fallback)
 
@@ -83,7 +84,7 @@ With the guardrail below, when a campaign card is present the referral card move
 - `candidates.ts` — eligibility: which catalog cards apply (filtered by client `cards`).
 - `rankers/` — `Ranker` interface `rank(candidates, ctx) → ScoredCard[]`. `RulesRanker` (v1) evaluates rules from the DB; `DefaultRanker` = static default order. Future `ModelRanker` (ML) plugs in here; a `BlendRanker` can combine. Rankers are pure and unit-tested.
 - `rules.ts` — rule schema (JSON): `{ id, enabled, priority, platforms?, minAppVersion?, maxAppVersion?, audience?: { percent?, bucketSalt?, pro?, hasCircle?, campaignPhase?, daysSinceSignupLt? ... }, actions: [ {op:"move", card, before|after|toTop|toBottom}, {op:"hide", card}, {op:"show", card}, {op:"variant", card, variant}, {op:"boost", card, by} ] }`. Deterministic bucketing by `hash(user_id + salt) % 100`.
-- `guardrails.ts` — applied after ranking, always: `header` first; `offline_banner` handled by client; never two promo cards (`campaign`, `referral`, `pro_upsell`) adjacent; max 2 promos in the first 6 cards; `hydration` immediately above `referral` when both present; `native_ad` never in the first 3.
+- `guardrails.ts` — applied after ranking, always: `header` first; `offline_banner` handled by client; never two promo cards (`campaign`, `referral`, `pro_upsell`) adjacent; max 2 promos in the first 6 cards; `hydration` immediately above `referral` when both present; `native_ad` never in the first 3; (G10, 2026-11-02) `profile_completion` never in the first 3.
 - `compose.ts` — orchestrates context → candidates → ranker → guardrails → response; generates `decision_id`; records the decision (async, fail-soft).
 - Kill switches: env `HOME_FEED_ENABLED` (default on) and per-platform `HOME_FEED_PLATFORMS=ios,android`, plus a rule `minAppVersion`. When disabled the endpoint returns the default layout (still 200), so clients behave identically.
 

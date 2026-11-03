@@ -46,14 +46,18 @@ const SEX_OFFSET = { male: 5, female: -161, neutral: -78 } as const;
 /** Goal ids from the v2 goal step. Only `lose_weight` changes the maths. */
 export const PLAN_GOALS = ['lose_weight', 'eat_healthier', 'build_habits', 'fit_with_friends'] as const;
 
+/** Body ranges the plan accepts (also the profile-completion card's save validation). */
+export const PLAN_HEIGHT_RANGE_CM = { min: 100, max: 250 } as const;
+export const PLAN_WEIGHT_RANGE_KG = { min: 30, max: 300 } as const;
+
 const num = (min: number, max: number) => z.number().finite().min(min).max(max);
 
 export const planRequestSchema = z
   .object({
     goal: z.string().trim().min(1).max(40),
-    heightCm: num(100, 250).nullish(),
-    weightKg: num(30, 300).nullish(),
-    targetWeightKg: num(30, 300).nullish(),
+    heightCm: num(PLAN_HEIGHT_RANGE_CM.min, PLAN_HEIGHT_RANGE_CM.max).nullish(),
+    weightKg: num(PLAN_WEIGHT_RANGE_KG.min, PLAN_WEIGHT_RANGE_KG.max).nullish(),
+    targetWeightKg: num(PLAN_WEIGHT_RANGE_KG.min, PLAN_WEIGHT_RANGE_KG.max).nullish(),
     sex: z.enum(['male', 'female', 'other', 'prefer_not_to_say']).nullish(),
     age: z.number().int().min(13).max(100).nullish(),
     unitsSystem: z.enum(['metric', 'imperial']).nullish(),

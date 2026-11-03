@@ -52,6 +52,7 @@ export function toFeedCard(c: ScoredCard): FeedCard {
   const card: FeedCard = { id: c.id, type: c.type, version: c.version };
   if (c.variant) card.variant = c.variant;
   if (c.props && Object.keys(c.props).length > 0) card.props = c.props;
+  if (c.dismissible !== undefined) card.dismissible = c.dismissible;
   return card;
 }
 

@@ -9,6 +9,7 @@
  *  G4  `hydration` sits immediately above `referral` when both are present.
  *  G5  `native_ad` is never in the first 3 positions.
  *  G6  card ids are unique (first occurrence wins).
+ *  G10 `profile_completion` is never in the first 3 positions ("midway" card).
  *
  * promo@1 clients (PROMO_CARD_SPEC §6.2, ACTIVATION_JOURNEY_SPEC §3) add:
  *  G7  at most 2 promo-category cards in the whole feed (promo + campaign +
@@ -63,6 +64,8 @@ const MAX_PROMOS_IN_TOP = 1;
 const UTILITY_PROMO_MAX_INDEX = 1;
 
 const promo = (c: GuardCard | undefined) => !!c && isPromoCard(c);
+/** Card types kept out of the first 3 positions (G5 native_ad, G10 profile_completion). */
+const BELOW_TOP3: ReadonlySet<string> = new Set(['native_ad', 'profile_completion']);
 
 /** G7 — keep the first MAX_PROMOS_PER_FEED promo-category cards (rank order), drop the rest. */
 export function capPromoTotal<T extends GuardCard>(cards: T[]): T[] {
@@ -99,7 +102,16 @@ export function headerFirst<T extends GuardCard>(cards: T[]): T[] {
 
 /** G5 — move the ad to index 3 (4 if 3 would split hydration→referral); drop it if the feed is too short. */
 export function nativeAdNotInFirst3<T extends GuardCard>(cards: T[]): T[] {
-  const i = cards.findIndex((c) => c.type === 'native_ad');
+  return notInFirst3(cards, 'native_ad');
+}
+
+/** G10 — same move for the profile completion card. */
+export function profileCompletionNotInFirst3<T extends GuardCard>(cards: T[]): T[] {
+  return notInFirst3(cards, 'profile_completion');
+}
+
+function notInFirst3<T extends GuardCard>(cards: T[], type: string): T[] {
+  const i = cards.findIndex((c) => c.type === type);
   if (i === -1 || i >= AD_MIN_INDEX) return cards;
   const rest = cards.filter((_, k) => k !== i);
   if (rest.length < AD_MIN_INDEX) return rest;
@@ -139,8 +151,8 @@ export function promoSpacing<T extends GuardCard>(cards: T[], opts: GuardrailOpt
   const pending: T[][] = [];
   const canPlace = (u: T[]) => {
     if (promo(out[out.length - 1]) && promo(u[0])) return false;
-    // Pulling cards forward must not drag the ad into the first 3 (G5).
-    if (u.some((c) => c.type === 'native_ad') && out.length < AD_MIN_INDEX) return false;
+    // Pulling cards forward must not drag the ad / profile card into the first 3 (G5, G10).
+    if (u.some((c) => BELOW_TOP3.has(c.type)) && out.length < AD_MIN_INDEX) return false;
     return windows.every((w) => {
       let count = out.slice(0, w.size).filter(promo).length;
       u.forEach((c, k) => {
@@ -208,6 +220,8 @@ export function violations(cards: readonly GuardCard[], opts: GuardrailOptions =
   if (h !== -1 && r !== -1 && h !== r - 1) v.push('G4 hydration not directly above referral');
   const ad = idx('native_ad');
   if (ad !== -1 && ad < AD_MIN_INDEX) v.push('G5 native_ad in first 3');
+  const pc = idx('profile_completion');
+  if (pc !== -1 && pc < AD_MIN_INDEX) v.push('G10 profile_completion in first 3');
   if (new Set(cards.map((c) => c.id)).size !== cards.length) v.push('G6 duplicate ids');
   if (opts.promoV1) {
     if (cards.filter(promo).length > MAX_PROMOS_PER_FEED) v.push('G7 >2 promos in feed');
@@ -222,8 +236,10 @@ export function violations(cards: readonly GuardCard[], opts: GuardrailOptions =
 function enforceByDropping<T extends GuardCard>(cards: T[], opts: GuardrailOptions): T[] {
   let out = dedupe(headerFirst(cards));
   if (opts.promoV1) out = utilityPromoTop(capPromoTotal(out));
-  const ad = out.findIndex((c) => c.type === 'native_ad');
-  if (ad !== -1 && ad < AD_MIN_INDEX) out = out.filter((_, i) => i !== ad);
+  for (const type of BELOW_TOP3) {
+    const i = out.findIndex((c) => c.type === type);
+    if (i !== -1 && i < AD_MIN_INDEX) out = out.filter((_, k) => k !== i);
+  }
   const h = out.findIndex((c) => c.type === 'hydration');
   const r = out.findIndex((c) => c.type === 'referral');
   if (h !== -1 && r !== -1 && h !== r - 1) out = out.filter((c) => c.type !== 'referral');
@@ -235,7 +251,7 @@ function enforceByDropping<T extends GuardCard>(cards: T[], opts: GuardrailOptio
     kept.push(c);
   }
   // Dropping a promo can make the ad slide into the first 3 or orphan hydration's pair: re-check once more.
-  return violations(kept, opts).length === 0 ? kept : kept.filter((c) => !promo(c) && c.type !== 'native_ad');
+  return violations(kept, opts).length === 0 ? kept : kept.filter((c) => !promo(c) && !BELOW_TOP3.has(c.type));
 }
 
 const sameOrder = (a: readonly GuardCard[], b: readonly GuardCard[]) => a.length === b.length && a.every((c, i) => c.id === b[i].id);
@@ -258,6 +274,7 @@ export function applyGuardrails<T extends GuardCard>(input: readonly T[], opts: 
     ['header moved first', headerFirst],
     ...(opts.promoV1 ? ([['utility promo moved up', utilityPromoTop]] as Array<[string, (c: T[]) => T[]]>) : []),
     ['native_ad moved out of the first 3', nativeAdNotInFirst3],
+    ['profile_completion moved out of the first 3', profileCompletionNotInFirst3],
     ['hydration moved above referral', hydrationAboveReferral],
     ['promos spaced out', (c: T[]) => promoSpacing(c, opts)],
   ];

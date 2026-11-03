@@ -11,6 +11,8 @@ export type FeedSchema = (typeof SUPPORTED_FEED_SCHEMAS)[number];
 
 export type AppPlatform = 'ios' | 'android' | 'web';
 
+import type { CompletionView } from '../profile-completion/model';
+
 /** A card type string. Known v1 types live in catalog.ts; rules may name future types. */
 export type CardType = string;
 
@@ -55,6 +57,8 @@ export interface Candidate {
   variant?: string;
   /** Score override (promo cards): otherwise the default-order score of `type`. */
   baseScore?: number;
+  /** Sent as `dismissible` when set (v1 cards leave it unset; profile_completion sends true per its spec). */
+  dismissible?: boolean;
 }
 
 /** A ranked card: candidate + score + per-decision annotations. */
@@ -111,4 +115,15 @@ export interface FeedContext {
   adsEligible: boolean | null;
   /** Unread chat; only loaded for clients that declare circle_chat. undefined/null = unknown. */
   chatUnread?: ChatUnreadHint | null;
+  /** Profile completion; only loaded for clients that declare profile_completion. undefined/null = unknown. */
+  profileCompletion?: ProfileCompletionFeedHint | null;
+}
+
+/** The profile_completion card's inputs (docs/PROFILE_COMPLETION_CARD_SPEC.md). */
+export interface ProfileCompletionFeedHint {
+  onboardingCompleted: boolean;
+  /** Dismissed within the last 7 days (dismiss = snooze). */
+  snoozed: boolean;
+  /** The card props. */
+  view: CompletionView;
 }

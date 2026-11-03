@@ -178,6 +178,25 @@ describe('applyGuardrails', () => {
     }
   });
 
+  it('PROPERTY: with the extra cards (circle_chat, profile_completion) every subset is valid; G10 holds', () => {
+    const rand = rng(1103);
+    const all = [...DEFAULT_ORDER, 'circle_chat', 'profile_completion'];
+    for (let i = 0; i < 2000; i++) {
+      const subset = shuffle([...all], rand).filter(() => rand() > 0.25);
+      const out = applyGuardrails(c(...subset)).cards;
+      const body = out.filter((x) => x.type !== 'offline_banner');
+      expect(violations(body), subset.join(',')).toEqual([]);
+      const pc = t(body).indexOf('profile_completion');
+      if (pc !== -1) expect(pc).toBeGreaterThanOrEqual(3);
+      // Only promos, the ad, or the profile card (when the feed has < 4 cards) may be dropped.
+      for (const type of subset) {
+        if (['campaign', 'referral', 'pro_upsell', 'native_ad'].includes(type)) continue;
+        if (type === 'profile_completion' && body.length < 4) continue;
+        expect(t(out), subset.join(',')).toContain(type);
+      }
+    }
+  });
+
   it('promoSpacing alone never reorders non-promo cards relative to each other', () => {
     const input = c('header', 'campaign', 'referral', 'vitals', 'pro_upsell', 'charts', 'progress');
     const utilities = (xs: string[]) => xs.filter((x) => !['campaign', 'referral', 'pro_upsell'].includes(x));

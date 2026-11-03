@@ -11,12 +11,13 @@ import { CampaignService, featuredCampaign, viewerToday } from '@/lib/services/c
 import { ChatInboxService, type ChatInbox } from '@/lib/services/chat-inbox-service';
 import { normalizeTier } from '@/lib/services/entitlement-service';
 import { FeatureFlagService } from '@/lib/services/feature-flag-service';
+import { ProfileCompletionService } from '@/lib/services/profile-completion-service';
 import { VitalsService } from '@/lib/services/vitals-service';
 import { isValidTimezone } from '@/lib/streaks/streak-calculator';
 import { createAdminSupabase } from '@/lib/supabase-admin';
 
 import { swrCache } from './cache';
-import type { AppPlatform, ChatUnreadHint, FeedContext } from './types';
+import type { AppPlatform, ChatUnreadHint, FeedContext, ProfileCompletionFeedHint } from './types';
 
 /**
  * Context budget. The loaders run in one parallel round; anything slower than
@@ -88,6 +89,8 @@ export interface ContextLoaders {
   waterTodayMl(userId: string, timezone: string, profile: FeedProfile): Promise<number>;
   /** Unread chat summary (only called for clients that declare circle_chat). */
   chatUnread?(userId: string): Promise<ChatUnreadHint>;
+  /** Profile completion (only called for clients that declare profile_completion). */
+  profileCompletion?(profile: FeedProfile, now: Date): Promise<ProfileCompletionFeedHint>;
 }
 
 /** /chats inbox → the circle_chat card hint. Pure. */
@@ -144,6 +147,7 @@ export const defaultContextLoaders: ContextLoaders = {
   async chatUnread(userId) {
     return chatUnreadHint(await ChatInboxService.listChats(userId));
   },
+  profileCompletion: (profile, now) => ProfileCompletionService.feedHint(profile, now),
 };
 
 // ---------------------------------------------------------------------------
@@ -242,7 +246,7 @@ export function proFromProfile(profile: FeedProfile): boolean | null {
 export async function buildFeedContext(
   profile: FeedProfile,
   info: FeedRequestInfo,
-  opts: { loaders?: ContextLoaders; now?: Date; timeoutMs?: number; wantChat?: boolean } = {}
+  opts: { loaders?: ContextLoaders; now?: Date; timeoutMs?: number; wantChat?: boolean; wantProfileCompletion?: boolean } = {}
 ): Promise<FeedContext> {
   const loaders = opts.loaders ?? defaultContextLoaders;
   const now = opts.now ?? new Date();
@@ -252,7 +256,8 @@ export async function buildFeedContext(
   const userId = profile.id;
 
   const chatLoader = loaders.chatUnread;
-  const [campaign, referralProgramEnabled, subscriptionsEnabled, circleCount, checkedInToday, waterMl, chatUnread] = await Promise.all([
+  const completionLoader = loaders.profileCompletion;
+  const [campaign, referralProgramEnabled, subscriptionsEnabled, circleCount, checkedInToday, waterMl, chatUnread, profileCompletion] = await Promise.all([
     softly(() => loaders.campaign(profile, timezone), t),
     softly(() => loaders.referralProgramEnabled(profile), t),
     softly(() => loaders.subscriptionsEnabled(profile), t),
@@ -260,6 +265,7 @@ export async function buildFeedContext(
     softly(() => loaders.checkedIn(userId, local.date), t),
     softly(() => loaders.waterTodayMl(userId, timezone, profile), t),
     opts.wantChat && chatLoader ? softly(() => chatLoader.call(loaders, userId), t) : Promise.resolve(null),
+    opts.wantProfileCompletion && completionLoader ? softly(() => completionLoader.call(loaders, profile, now), t) : Promise.resolve(null),
   ]);
 
   const isPro = proFromProfile(profile);
@@ -285,5 +291,6 @@ export async function buildFeedContext(
     waterLoggedToday: waterMl === null ? null : waterMl > 0,
     adsEligible: isPro === null ? null : !isPro,
     ...(opts.wantChat ? { chatUnread } : {}),
+    ...(opts.wantProfileCompletion ? { profileCompletion } : {}),
   };
 }

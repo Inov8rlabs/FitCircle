@@ -52,7 +52,8 @@ export interface CandidateSet {
 
 /** Why a card is hinted ineligible, or null when it is eligible. */
 export function ineligibleReason(type: CardType, ctx: FeedContext | null): string | null {
-  if (!ctx) return null;
+  // Needs its props (the questions left): without context there is nothing to render.
+  if (!ctx) return type === 'profile_completion' ? 'no_context' : null;
   switch (type) {
     case 'campaign':
       return ctx.campaign?.present === false ? 'no_campaign' : null;
@@ -63,6 +64,14 @@ export function ineligibleReason(type: CardType, ctx: FeedContext | null): strin
       return ctx.subscriptionsEnabled === false ? 'subscriptions_off' : null;
     case 'native_ad':
       return ctx.isPro === true || ctx.adsEligible === false ? 'ads_ineligible' : null;
+    case 'profile_completion': {
+      // Unknown (loader failed / timed out) → dropped: the card has nothing to ask without props.
+      const pc = ctx.profileCompletion;
+      if (!pc) return 'profile_completion_unknown';
+      if (!pc.onboardingCompleted) return 'onboarding_incomplete';
+      if (pc.view.remaining.length === 0) return 'profile_complete';
+      return pc.snoozed ? 'profile_completion_snoozed' : null;
+    }
     case 'circle_chat':
       if (ctx.hasCircle === false) return 'no_circle';
       return ctx.chatUnread && ctx.chatUnread.total_unread === 0 ? 'no_unread_chat' : null;
@@ -90,6 +99,11 @@ function candidateFor(type: CardType, ctx: FeedContext | null): Candidate {
       preview: u.preview,
     };
     return { id: cardId(type), type, version, props };
+  }
+  if (type === 'profile_completion' && ctx?.profileCompletion) {
+    const v = ctx.profileCompletion.view;
+    const props = { percent: v.percent, answered: v.answered, total: v.total, remaining: v.remaining, units: v.units, hints: v.hints, goal: v.goal };
+    return { id: cardId(type), type, version, props, dismissible: true };
   }
   return { id: cardId(type), type, version };
 }
