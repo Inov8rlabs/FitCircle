@@ -1,6 +1,6 @@
 {
   "$schema": "./tracking-plan.schema.json",
-  "version": 26,
+  "version": 27,
   "updated": "2026-11-04",
   "conventions": {
     "eventNames": "Title Case, '<Object> <Past-tense verb>' (e.g. 'Meal Logged'). Names are frozen once shipped: rename in the analytics tool, never in code.",
@@ -1484,14 +1484,18 @@
       "name": "Review Prompt Requested",
       "category": "streaks",
       "platforms": [
-        "ios"
+        "ios",
+        "android"
       ],
-      "description": "The app asked the OS for the App Store rating prompt at a positive moment. The OS decides whether it is shown (max 3 per year), so this is an upper bound on prompts seen.",
+      "description": "The app asked the OS for its store rating prompt (iOS RequestReview / Play In-App Review) at a positive moment. From 1.1.3 the server decides who is eligible and which moments are on (GET /api/mobile/rating-prompt, Admin Tools \u2192 Rating prompt); the app also POSTs /api/mobile/rating-prompt/requested. The OS never says whether the prompt was shown or whether the user rated (Apple: max 3 per 365 days; Play: its own quota, nothing for non-Play installs), so this is an upper bound on prompts seen. trigger = the server trigger key: meal_saved, streak_reached, challenge_day_completed. streak_milestone and meal_count are the legacy (iOS <= 1.1.2) values.",
       "properties": [
         {
           "name": "trigger",
           "type": "enum",
           "values": [
+            "meal_saved",
+            "streak_reached",
+            "challenge_day_completed",
             "streak_milestone",
             "meal_count"
           ],
