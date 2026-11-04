@@ -20,8 +20,10 @@ import { createHash } from 'node:crypto';
 
 import { z } from 'zod';
 
+import { checkStyleSetting, styleSettingSchema, type StyleIssue } from '../promos/style';
 import { PROMO_LAYOUTS } from '../promos/types';
 
+import { STATE_STYLE } from './looks';
 import { PRO_LIFECYCLE_STATES, type ProLifecycleConfig, type ProLifecycleState, type StateConfig } from './types';
 
 export const CONFIG_FLAG_NAME = 'pro_lifecycle_prompts';
@@ -98,6 +100,7 @@ const stateSchema = z
     daysAfter: z.number().int().min(TIMING_LIMITS.daysAfter.min).max(TIMING_LIMITS.daysAfter.max),
     snoozeDays: z.number().int().min(TIMING_LIMITS.snoozeDays.min).max(TIMING_LIMITS.snoozeDays.max),
     push: pushCopySchema,
+    style: styleSettingSchema.optional(),
   })
   .strict();
 
@@ -111,7 +114,24 @@ export const proLifecycleConfigSchema = z
     if (c.states.trial_expiring.push.enabled) {
       ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['states', 'trial_expiring', 'push', 'enabled'], message: 'store trials already get the "trial ends tomorrow" push (trial_ending_reminder); this state is card-only' });
     }
+    // Button style / surface: label contrast, button vs card, eyebrow (errors only; warnings via lifecycleStyleIssues).
+    for (const state of PRO_LIFECYCLE_STATES) {
+      for (const i of lifecycleStateStyleIssues(state, c.states[state])) {
+        if (i.level === 'error') ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['states', state, 'style', ...i.path.split('.')], message: i.message });
+      }
+    }
   });
+
+/** Style checks for one state against its fixed card theme + chosen layout. */
+export function lifecycleStateStyleIssues(state: ProLifecycleState, sc: Pick<StateConfig, 'layout' | 'style'>): StyleIssue[] {
+  if (!sc.style) return [];
+  return checkStyleSetting(sc.style, [{ theme: STATE_STYLE[state].theme, layout: sc.layout }]);
+}
+
+/** All style issues (errors + warnings) with full paths, for the admin editor. */
+export function lifecycleStyleIssues(config: ProLifecycleConfig): Array<StyleIssue & { path: string }> {
+  return PRO_LIFECYCLE_STATES.flatMap((state) => lifecycleStateStyleIssues(state, config.states[state]).map((i) => ({ ...i, path: `states.${state}.style.${i.path}` })));
+}
 
 // ---------------------------------------------------------------------------- defaults
 
@@ -239,7 +259,8 @@ export function configVersion(enabled: boolean, config: ProLifecycleConfig): str
 export function diffConfigs(before: ProLifecycleConfig, after: ProLifecycleConfig): Array<{ path: string; before: unknown; after: unknown }> {
   const out: Array<{ path: string; before: unknown; after: unknown }> = [];
   const walk = (a: unknown, b: unknown, path: string) => {
-    if (a && b && typeof a === 'object' && typeof b === 'object' && !Array.isArray(a) && !Array.isArray(b)) {
+    // A card look (`states.<s>.style`) is one value: its variants only make sense together.
+    if (a && b && typeof a === 'object' && typeof b === 'object' && !Array.isArray(a) && !Array.isArray(b) && !path.endsWith('.style')) {
       for (const k of [...new Set([...Object.keys(a), ...Object.keys(b)])].sort()) {
         walk((a as Record<string, unknown>)[k], (b as Record<string, unknown>)[k], path ? `${path}.${k}` : k);
       }

@@ -1,0 +1,1930 @@
+{
+  "expiring-ios": {
+    "schema": 1,
+    "ttl_seconds": 900,
+    "layout_key": "default-v1",
+    "experiment": null,
+    "cards": [
+      {
+        "id": "offline_banner",
+        "type": "offline_banner",
+        "version": 1
+      },
+      {
+        "id": "header",
+        "type": "header",
+        "version": 1
+      },
+      {
+        "id": "promo:pro_expiring",
+        "type": "promo",
+        "version": 1,
+        "props": {
+          "promoId": "pro_expiring",
+          "creativeId": "pro_expiring_hero_trial_usage",
+          "layout": "hero",
+          "theme": {
+            "background": {
+              "kind": "gradient",
+              "colors": [
+                "#1E1B4B",
+                "#4338CA",
+                "#7C3AED"
+              ]
+            },
+            "foreground": "light"
+          },
+          "icon": "hourglass",
+          "emoji": "⏳",
+          "eyebrow": "FitCircle Pro",
+          "title": "Your free Pro week ends tomorrow",
+          "body": "So far with Pro: 5 meals analyzed by AI. Keep the momentum going.",
+          "countdown": {
+            "endsAt": "2026-11-09T13:00:00",
+            "label": "Pro ends in"
+          },
+          "primary": {
+            "label": "Start 3-day free trial",
+            "action": {
+              "type": "paywall",
+              "params": {
+                "placement": "pro_expiring_card"
+              }
+            }
+          },
+          "dismissible": true
+        }
+      },
+      {
+        "id": "health_sync_banner",
+        "type": "health_sync_banner",
+        "version": 1
+      },
+      {
+        "id": "hydration",
+        "type": "hydration",
+        "version": 1
+      },
+      {
+        "id": "campaign:hold_the_line",
+        "type": "campaign",
+        "version": 1,
+        "props": {
+          "slug": "hold_the_line"
+        }
+      },
+      {
+        "id": "streak_warning",
+        "type": "streak_warning",
+        "version": 1
+      },
+      {
+        "id": "daily_goals",
+        "type": "daily_goals",
+        "version": 1
+      },
+      {
+        "id": "fitzy_focus",
+        "type": "fitzy_focus",
+        "version": 1
+      },
+      {
+        "id": "progress",
+        "type": "progress",
+        "version": 1
+      },
+      {
+        "id": "vitals",
+        "type": "vitals",
+        "version": 1
+      },
+      {
+        "id": "body_comp",
+        "type": "body_comp",
+        "version": 1
+      },
+      {
+        "id": "past_date_log",
+        "type": "past_date_log",
+        "version": 1
+      },
+      {
+        "id": "charts",
+        "type": "charts",
+        "version": 1
+      }
+    ]
+  },
+  "expiring-ios-icon_keys": {
+    "schema": 1,
+    "ttl_seconds": 900,
+    "layout_key": "default-v1",
+    "experiment": null,
+    "cards": [
+      {
+        "id": "offline_banner",
+        "type": "offline_banner",
+        "version": 1
+      },
+      {
+        "id": "header",
+        "type": "header",
+        "version": 1
+      },
+      {
+        "id": "promo:pro_expiring",
+        "type": "promo",
+        "version": 1,
+        "props": {
+          "promoId": "pro_expiring",
+          "creativeId": "pro_expiring_hero_trial_usage",
+          "layout": "hero",
+          "theme": {
+            "background": {
+              "kind": "gradient",
+              "colors": [
+                "#1E1B4B",
+                "#4338CA",
+                "#7C3AED"
+              ]
+            },
+            "foreground": "light"
+          },
+          "icon": "hourglass",
+          "emoji": null,
+          "eyebrow": "FitCircle Pro",
+          "title": "Your free Pro week ends tomorrow",
+          "body": "So far with Pro: 5 meals analyzed by AI. Keep the momentum going.",
+          "countdown": {
+            "endsAt": "2026-11-09T13:00:00",
+            "label": "Pro ends in"
+          },
+          "primary": {
+            "label": "Start 3-day free trial",
+            "action": {
+              "type": "paywall",
+              "params": {
+                "placement": "pro_expiring_card"
+              }
+            }
+          },
+          "dismissible": true
+        }
+      },
+      {
+        "id": "health_sync_banner",
+        "type": "health_sync_banner",
+        "version": 1
+      },
+      {
+        "id": "hydration",
+        "type": "hydration",
+        "version": 1
+      },
+      {
+        "id": "campaign:hold_the_line",
+        "type": "campaign",
+        "version": 1,
+        "props": {
+          "slug": "hold_the_line"
+        }
+      },
+      {
+        "id": "streak_warning",
+        "type": "streak_warning",
+        "version": 1
+      },
+      {
+        "id": "daily_goals",
+        "type": "daily_goals",
+        "version": 1
+      },
+      {
+        "id": "fitzy_focus",
+        "type": "fitzy_focus",
+        "version": 1
+      },
+      {
+        "id": "progress",
+        "type": "progress",
+        "version": 1
+      },
+      {
+        "id": "vitals",
+        "type": "vitals",
+        "version": 1
+      },
+      {
+        "id": "body_comp",
+        "type": "body_comp",
+        "version": 1
+      },
+      {
+        "id": "past_date_log",
+        "type": "past_date_log",
+        "version": 1
+      },
+      {
+        "id": "charts",
+        "type": "charts",
+        "version": 1
+      }
+    ]
+  },
+  "expiring-android": {
+    "schema": 1,
+    "ttl_seconds": 900,
+    "layout_key": "default-v1",
+    "experiment": null,
+    "cards": [
+      {
+        "id": "offline_banner",
+        "type": "offline_banner",
+        "version": 1
+      },
+      {
+        "id": "header",
+        "type": "header",
+        "version": 1
+      },
+      {
+        "id": "promo:pro_expiring",
+        "type": "promo",
+        "version": 1,
+        "props": {
+          "promoId": "pro_expiring",
+          "creativeId": "pro_expiring_hero_trial_usage",
+          "layout": "hero",
+          "theme": {
+            "background": {
+              "kind": "gradient",
+              "colors": [
+                "#1E1B4B",
+                "#4338CA",
+                "#7C3AED"
+              ]
+            },
+            "foreground": "light"
+          },
+          "icon": "hourglass",
+          "emoji": "⏳",
+          "eyebrow": "FitCircle Pro",
+          "title": "Your free Pro week ends tomorrow",
+          "body": "So far with Pro: 5 meals analyzed by AI. Keep the momentum going.",
+          "countdown": {
+            "endsAt": "2026-11-09T13:00:00",
+            "label": "Pro ends in"
+          },
+          "primary": {
+            "label": "Start 3-day free trial",
+            "action": {
+              "type": "paywall",
+              "params": {
+                "placement": "pro_expiring_card"
+              }
+            }
+          },
+          "dismissible": true
+        }
+      },
+      {
+        "id": "health_sync_banner",
+        "type": "health_sync_banner",
+        "version": 1
+      },
+      {
+        "id": "hydration",
+        "type": "hydration",
+        "version": 1
+      },
+      {
+        "id": "campaign:hold_the_line",
+        "type": "campaign",
+        "version": 1,
+        "props": {
+          "slug": "hold_the_line"
+        }
+      },
+      {
+        "id": "streak_warning",
+        "type": "streak_warning",
+        "version": 1
+      },
+      {
+        "id": "missing_days",
+        "type": "missing_days",
+        "version": 1
+      },
+      {
+        "id": "daily_goals",
+        "type": "daily_goals",
+        "version": 1
+      },
+      {
+        "id": "fitzy_focus",
+        "type": "fitzy_focus",
+        "version": 1
+      },
+      {
+        "id": "progress",
+        "type": "progress",
+        "version": 1
+      },
+      {
+        "id": "vitals",
+        "type": "vitals",
+        "version": 1
+      },
+      {
+        "id": "body_comp",
+        "type": "body_comp",
+        "version": 1
+      },
+      {
+        "id": "past_date_log",
+        "type": "past_date_log",
+        "version": 1
+      },
+      {
+        "id": "charts",
+        "type": "charts",
+        "version": 1
+      }
+    ]
+  },
+  "expiring-android-icon_keys": {
+    "schema": 1,
+    "ttl_seconds": 900,
+    "layout_key": "default-v1",
+    "experiment": null,
+    "cards": [
+      {
+        "id": "offline_banner",
+        "type": "offline_banner",
+        "version": 1
+      },
+      {
+        "id": "header",
+        "type": "header",
+        "version": 1
+      },
+      {
+        "id": "promo:pro_expiring",
+        "type": "promo",
+        "version": 1,
+        "props": {
+          "promoId": "pro_expiring",
+          "creativeId": "pro_expiring_hero_trial_usage",
+          "layout": "hero",
+          "theme": {
+            "background": {
+              "kind": "gradient",
+              "colors": [
+                "#1E1B4B",
+                "#4338CA",
+                "#7C3AED"
+              ]
+            },
+            "foreground": "light"
+          },
+          "icon": "hourglass",
+          "emoji": null,
+          "eyebrow": "FitCircle Pro",
+          "title": "Your free Pro week ends tomorrow",
+          "body": "So far with Pro: 5 meals analyzed by AI. Keep the momentum going.",
+          "countdown": {
+            "endsAt": "2026-11-09T13:00:00",
+            "label": "Pro ends in"
+          },
+          "primary": {
+            "label": "Start 3-day free trial",
+            "action": {
+              "type": "paywall",
+              "params": {
+                "placement": "pro_expiring_card"
+              }
+            }
+          },
+          "dismissible": true
+        }
+      },
+      {
+        "id": "health_sync_banner",
+        "type": "health_sync_banner",
+        "version": 1
+      },
+      {
+        "id": "hydration",
+        "type": "hydration",
+        "version": 1
+      },
+      {
+        "id": "campaign:hold_the_line",
+        "type": "campaign",
+        "version": 1,
+        "props": {
+          "slug": "hold_the_line"
+        }
+      },
+      {
+        "id": "streak_warning",
+        "type": "streak_warning",
+        "version": 1
+      },
+      {
+        "id": "missing_days",
+        "type": "missing_days",
+        "version": 1
+      },
+      {
+        "id": "daily_goals",
+        "type": "daily_goals",
+        "version": 1
+      },
+      {
+        "id": "fitzy_focus",
+        "type": "fitzy_focus",
+        "version": 1
+      },
+      {
+        "id": "progress",
+        "type": "progress",
+        "version": 1
+      },
+      {
+        "id": "vitals",
+        "type": "vitals",
+        "version": 1
+      },
+      {
+        "id": "body_comp",
+        "type": "body_comp",
+        "version": 1
+      },
+      {
+        "id": "past_date_log",
+        "type": "past_date_log",
+        "version": 1
+      },
+      {
+        "id": "charts",
+        "type": "charts",
+        "version": 1
+      }
+    ]
+  },
+  "expired-ios": {
+    "schema": 1,
+    "ttl_seconds": 900,
+    "layout_key": "default-v1",
+    "experiment": null,
+    "cards": [
+      {
+        "id": "offline_banner",
+        "type": "offline_banner",
+        "version": 1
+      },
+      {
+        "id": "header",
+        "type": "header",
+        "version": 1
+      },
+      {
+        "id": "promo:pro_expired",
+        "type": "promo",
+        "version": 1,
+        "props": {
+          "promoId": "pro_expired",
+          "creativeId": "pro_expired_hero_trial_usage",
+          "layout": "hero",
+          "theme": {
+            "background": {
+              "kind": "gradient",
+              "colors": [
+                "#3B0764",
+                "#7E22CE",
+                "#BE185D"
+              ]
+            },
+            "foreground": "light"
+          },
+          "icon": "crown",
+          "emoji": "👑",
+          "eyebrow": "FitCircle Pro",
+          "title": "Your free Pro week ended",
+          "body": "With Pro you got 5 meals analyzed by AI. Pick up right where you left off.",
+          "primary": {
+            "label": "Get Pro: 3 days free",
+            "action": {
+              "type": "paywall",
+              "params": {
+                "placement": "pro_expired_card"
+              }
+            }
+          },
+          "dismissible": true
+        }
+      },
+      {
+        "id": "health_sync_banner",
+        "type": "health_sync_banner",
+        "version": 1
+      },
+      {
+        "id": "hydration",
+        "type": "hydration",
+        "version": 1
+      },
+      {
+        "id": "campaign:hold_the_line",
+        "type": "campaign",
+        "version": 1,
+        "props": {
+          "slug": "hold_the_line"
+        }
+      },
+      {
+        "id": "streak_warning",
+        "type": "streak_warning",
+        "version": 1
+      },
+      {
+        "id": "daily_goals",
+        "type": "daily_goals",
+        "version": 1
+      },
+      {
+        "id": "fitzy_focus",
+        "type": "fitzy_focus",
+        "version": 1
+      },
+      {
+        "id": "progress",
+        "type": "progress",
+        "version": 1
+      },
+      {
+        "id": "vitals",
+        "type": "vitals",
+        "version": 1
+      },
+      {
+        "id": "body_comp",
+        "type": "body_comp",
+        "version": 1
+      },
+      {
+        "id": "past_date_log",
+        "type": "past_date_log",
+        "version": 1
+      },
+      {
+        "id": "native_ad",
+        "type": "native_ad",
+        "version": 1
+      },
+      {
+        "id": "charts",
+        "type": "charts",
+        "version": 1
+      }
+    ]
+  },
+  "expired-ios-icon_keys": {
+    "schema": 1,
+    "ttl_seconds": 900,
+    "layout_key": "default-v1",
+    "experiment": null,
+    "cards": [
+      {
+        "id": "offline_banner",
+        "type": "offline_banner",
+        "version": 1
+      },
+      {
+        "id": "header",
+        "type": "header",
+        "version": 1
+      },
+      {
+        "id": "promo:pro_expired",
+        "type": "promo",
+        "version": 1,
+        "props": {
+          "promoId": "pro_expired",
+          "creativeId": "pro_expired_hero_trial_usage",
+          "layout": "hero",
+          "theme": {
+            "background": {
+              "kind": "gradient",
+              "colors": [
+                "#3B0764",
+                "#7E22CE",
+                "#BE185D"
+              ]
+            },
+            "foreground": "light"
+          },
+          "icon": "crown",
+          "emoji": null,
+          "eyebrow": "FitCircle Pro",
+          "title": "Your free Pro week ended",
+          "body": "With Pro you got 5 meals analyzed by AI. Pick up right where you left off.",
+          "primary": {
+            "label": "Get Pro: 3 days free",
+            "action": {
+              "type": "paywall",
+              "params": {
+                "placement": "pro_expired_card"
+              }
+            }
+          },
+          "dismissible": true
+        }
+      },
+      {
+        "id": "health_sync_banner",
+        "type": "health_sync_banner",
+        "version": 1
+      },
+      {
+        "id": "hydration",
+        "type": "hydration",
+        "version": 1
+      },
+      {
+        "id": "campaign:hold_the_line",
+        "type": "campaign",
+        "version": 1,
+        "props": {
+          "slug": "hold_the_line"
+        }
+      },
+      {
+        "id": "streak_warning",
+        "type": "streak_warning",
+        "version": 1
+      },
+      {
+        "id": "daily_goals",
+        "type": "daily_goals",
+        "version": 1
+      },
+      {
+        "id": "fitzy_focus",
+        "type": "fitzy_focus",
+        "version": 1
+      },
+      {
+        "id": "progress",
+        "type": "progress",
+        "version": 1
+      },
+      {
+        "id": "vitals",
+        "type": "vitals",
+        "version": 1
+      },
+      {
+        "id": "body_comp",
+        "type": "body_comp",
+        "version": 1
+      },
+      {
+        "id": "past_date_log",
+        "type": "past_date_log",
+        "version": 1
+      },
+      {
+        "id": "native_ad",
+        "type": "native_ad",
+        "version": 1
+      },
+      {
+        "id": "charts",
+        "type": "charts",
+        "version": 1
+      }
+    ]
+  },
+  "expired-android": {
+    "schema": 1,
+    "ttl_seconds": 900,
+    "layout_key": "default-v1",
+    "experiment": null,
+    "cards": [
+      {
+        "id": "offline_banner",
+        "type": "offline_banner",
+        "version": 1
+      },
+      {
+        "id": "header",
+        "type": "header",
+        "version": 1
+      },
+      {
+        "id": "promo:pro_expired",
+        "type": "promo",
+        "version": 1,
+        "props": {
+          "promoId": "pro_expired",
+          "creativeId": "pro_expired_hero_trial_usage",
+          "layout": "hero",
+          "theme": {
+            "background": {
+              "kind": "gradient",
+              "colors": [
+                "#3B0764",
+                "#7E22CE",
+                "#BE185D"
+              ]
+            },
+            "foreground": "light"
+          },
+          "icon": "crown",
+          "emoji": "👑",
+          "eyebrow": "FitCircle Pro",
+          "title": "Your free Pro week ended",
+          "body": "With Pro you got 5 meals analyzed by AI. Pick up right where you left off.",
+          "primary": {
+            "label": "Get Pro: 3 days free",
+            "action": {
+              "type": "paywall",
+              "params": {
+                "placement": "pro_expired_card"
+              }
+            }
+          },
+          "dismissible": true
+        }
+      },
+      {
+        "id": "health_sync_banner",
+        "type": "health_sync_banner",
+        "version": 1
+      },
+      {
+        "id": "hydration",
+        "type": "hydration",
+        "version": 1
+      },
+      {
+        "id": "campaign:hold_the_line",
+        "type": "campaign",
+        "version": 1,
+        "props": {
+          "slug": "hold_the_line"
+        }
+      },
+      {
+        "id": "streak_warning",
+        "type": "streak_warning",
+        "version": 1
+      },
+      {
+        "id": "missing_days",
+        "type": "missing_days",
+        "version": 1
+      },
+      {
+        "id": "daily_goals",
+        "type": "daily_goals",
+        "version": 1
+      },
+      {
+        "id": "fitzy_focus",
+        "type": "fitzy_focus",
+        "version": 1
+      },
+      {
+        "id": "progress",
+        "type": "progress",
+        "version": 1
+      },
+      {
+        "id": "vitals",
+        "type": "vitals",
+        "version": 1
+      },
+      {
+        "id": "body_comp",
+        "type": "body_comp",
+        "version": 1
+      },
+      {
+        "id": "past_date_log",
+        "type": "past_date_log",
+        "version": 1
+      },
+      {
+        "id": "native_ad",
+        "type": "native_ad",
+        "version": 1
+      },
+      {
+        "id": "charts",
+        "type": "charts",
+        "version": 1
+      }
+    ]
+  },
+  "expired-android-icon_keys": {
+    "schema": 1,
+    "ttl_seconds": 900,
+    "layout_key": "default-v1",
+    "experiment": null,
+    "cards": [
+      {
+        "id": "offline_banner",
+        "type": "offline_banner",
+        "version": 1
+      },
+      {
+        "id": "header",
+        "type": "header",
+        "version": 1
+      },
+      {
+        "id": "promo:pro_expired",
+        "type": "promo",
+        "version": 1,
+        "props": {
+          "promoId": "pro_expired",
+          "creativeId": "pro_expired_hero_trial_usage",
+          "layout": "hero",
+          "theme": {
+            "background": {
+              "kind": "gradient",
+              "colors": [
+                "#3B0764",
+                "#7E22CE",
+                "#BE185D"
+              ]
+            },
+            "foreground": "light"
+          },
+          "icon": "crown",
+          "emoji": null,
+          "eyebrow": "FitCircle Pro",
+          "title": "Your free Pro week ended",
+          "body": "With Pro you got 5 meals analyzed by AI. Pick up right where you left off.",
+          "primary": {
+            "label": "Get Pro: 3 days free",
+            "action": {
+              "type": "paywall",
+              "params": {
+                "placement": "pro_expired_card"
+              }
+            }
+          },
+          "dismissible": true
+        }
+      },
+      {
+        "id": "health_sync_banner",
+        "type": "health_sync_banner",
+        "version": 1
+      },
+      {
+        "id": "hydration",
+        "type": "hydration",
+        "version": 1
+      },
+      {
+        "id": "campaign:hold_the_line",
+        "type": "campaign",
+        "version": 1,
+        "props": {
+          "slug": "hold_the_line"
+        }
+      },
+      {
+        "id": "streak_warning",
+        "type": "streak_warning",
+        "version": 1
+      },
+      {
+        "id": "missing_days",
+        "type": "missing_days",
+        "version": 1
+      },
+      {
+        "id": "daily_goals",
+        "type": "daily_goals",
+        "version": 1
+      },
+      {
+        "id": "fitzy_focus",
+        "type": "fitzy_focus",
+        "version": 1
+      },
+      {
+        "id": "progress",
+        "type": "progress",
+        "version": 1
+      },
+      {
+        "id": "vitals",
+        "type": "vitals",
+        "version": 1
+      },
+      {
+        "id": "body_comp",
+        "type": "body_comp",
+        "version": 1
+      },
+      {
+        "id": "past_date_log",
+        "type": "past_date_log",
+        "version": 1
+      },
+      {
+        "id": "native_ad",
+        "type": "native_ad",
+        "version": 1
+      },
+      {
+        "id": "charts",
+        "type": "charts",
+        "version": 1
+      }
+    ]
+  },
+  "newbie-ios": {
+    "schema": 1,
+    "ttl_seconds": 900,
+    "layout_key": "default-v1",
+    "experiment": null,
+    "cards": [
+      {
+        "id": "offline_banner",
+        "type": "offline_banner",
+        "version": 1
+      },
+      {
+        "id": "header",
+        "type": "header",
+        "version": 1
+      },
+      {
+        "id": "promo:first_meal",
+        "type": "promo",
+        "version": 1,
+        "props": {
+          "promoId": "first_meal",
+          "creativeId": "first_meal_v1",
+          "layout": "hero",
+          "theme": {
+            "background": {
+              "kind": "gradient",
+              "colors": [
+                "#312E81",
+                "#6D28D9",
+                "#BE185D"
+              ]
+            },
+            "foreground": "light"
+          },
+          "icon": "camera",
+          "emoji": "📸",
+          "eyebrow": "Your first step",
+          "title": "Snap your first meal",
+          "body": "Take a photo of what you're eating and get calories and macros in seconds. Or just describe it.",
+          "primary": {
+            "label": "Snap a meal",
+            "action": {
+              "type": "open_screen",
+              "params": {
+                "screen": "log_meal"
+              }
+            }
+          },
+          "dismissible": true
+        }
+      },
+      {
+        "id": "health_sync_banner",
+        "type": "health_sync_banner",
+        "version": 1
+      },
+      {
+        "id": "campaign:hold_the_line",
+        "type": "campaign",
+        "version": 1,
+        "props": {
+          "slug": "hold_the_line"
+        }
+      },
+      {
+        "id": "streak_warning",
+        "type": "streak_warning",
+        "version": 1
+      },
+      {
+        "id": "daily_goals",
+        "type": "daily_goals",
+        "version": 1
+      },
+      {
+        "id": "fitzy_focus",
+        "type": "fitzy_focus",
+        "version": 1
+      },
+      {
+        "id": "progress",
+        "type": "progress",
+        "version": 1
+      },
+      {
+        "id": "hydration",
+        "type": "hydration",
+        "version": 1
+      },
+      {
+        "id": "referral",
+        "type": "referral",
+        "version": 1
+      },
+      {
+        "id": "vitals",
+        "type": "vitals",
+        "version": 1
+      },
+      {
+        "id": "body_comp",
+        "type": "body_comp",
+        "version": 1
+      },
+      {
+        "id": "past_date_log",
+        "type": "past_date_log",
+        "version": 1
+      },
+      {
+        "id": "native_ad",
+        "type": "native_ad",
+        "version": 1
+      },
+      {
+        "id": "charts",
+        "type": "charts",
+        "version": 1
+      }
+    ]
+  },
+  "newbie-ios-icon_keys": {
+    "schema": 1,
+    "ttl_seconds": 900,
+    "layout_key": "default-v1",
+    "experiment": null,
+    "cards": [
+      {
+        "id": "offline_banner",
+        "type": "offline_banner",
+        "version": 1
+      },
+      {
+        "id": "header",
+        "type": "header",
+        "version": 1
+      },
+      {
+        "id": "promo:first_meal",
+        "type": "promo",
+        "version": 1,
+        "props": {
+          "promoId": "first_meal",
+          "creativeId": "first_meal_v1",
+          "layout": "hero",
+          "theme": {
+            "background": {
+              "kind": "gradient",
+              "colors": [
+                "#312E81",
+                "#6D28D9",
+                "#BE185D"
+              ]
+            },
+            "foreground": "light"
+          },
+          "icon": "camera",
+          "emoji": null,
+          "eyebrow": "Your first step",
+          "title": "Snap your first meal",
+          "body": "Take a photo of what you're eating and get calories and macros in seconds. Or just describe it.",
+          "primary": {
+            "label": "Snap a meal",
+            "action": {
+              "type": "open_screen",
+              "params": {
+                "screen": "log_meal"
+              }
+            }
+          },
+          "dismissible": true
+        }
+      },
+      {
+        "id": "health_sync_banner",
+        "type": "health_sync_banner",
+        "version": 1
+      },
+      {
+        "id": "campaign:hold_the_line",
+        "type": "campaign",
+        "version": 1,
+        "props": {
+          "slug": "hold_the_line"
+        }
+      },
+      {
+        "id": "streak_warning",
+        "type": "streak_warning",
+        "version": 1
+      },
+      {
+        "id": "daily_goals",
+        "type": "daily_goals",
+        "version": 1
+      },
+      {
+        "id": "fitzy_focus",
+        "type": "fitzy_focus",
+        "version": 1
+      },
+      {
+        "id": "progress",
+        "type": "progress",
+        "version": 1
+      },
+      {
+        "id": "hydration",
+        "type": "hydration",
+        "version": 1
+      },
+      {
+        "id": "referral",
+        "type": "referral",
+        "version": 1
+      },
+      {
+        "id": "vitals",
+        "type": "vitals",
+        "version": 1
+      },
+      {
+        "id": "body_comp",
+        "type": "body_comp",
+        "version": 1
+      },
+      {
+        "id": "past_date_log",
+        "type": "past_date_log",
+        "version": 1
+      },
+      {
+        "id": "native_ad",
+        "type": "native_ad",
+        "version": 1
+      },
+      {
+        "id": "charts",
+        "type": "charts",
+        "version": 1
+      }
+    ]
+  },
+  "newbie-android": {
+    "schema": 1,
+    "ttl_seconds": 900,
+    "layout_key": "default-v1",
+    "experiment": null,
+    "cards": [
+      {
+        "id": "offline_banner",
+        "type": "offline_banner",
+        "version": 1
+      },
+      {
+        "id": "header",
+        "type": "header",
+        "version": 1
+      },
+      {
+        "id": "promo:first_meal",
+        "type": "promo",
+        "version": 1,
+        "props": {
+          "promoId": "first_meal",
+          "creativeId": "first_meal_v1",
+          "layout": "hero",
+          "theme": {
+            "background": {
+              "kind": "gradient",
+              "colors": [
+                "#312E81",
+                "#6D28D9",
+                "#BE185D"
+              ]
+            },
+            "foreground": "light"
+          },
+          "icon": "camera",
+          "emoji": "📸",
+          "eyebrow": "Your first step",
+          "title": "Snap your first meal",
+          "body": "Take a photo of what you're eating and get calories and macros in seconds. Or just describe it.",
+          "primary": {
+            "label": "Snap a meal",
+            "action": {
+              "type": "open_screen",
+              "params": {
+                "screen": "log_meal"
+              }
+            }
+          },
+          "dismissible": true
+        }
+      },
+      {
+        "id": "health_sync_banner",
+        "type": "health_sync_banner",
+        "version": 1
+      },
+      {
+        "id": "campaign:hold_the_line",
+        "type": "campaign",
+        "version": 1,
+        "props": {
+          "slug": "hold_the_line"
+        }
+      },
+      {
+        "id": "streak_warning",
+        "type": "streak_warning",
+        "version": 1
+      },
+      {
+        "id": "missing_days",
+        "type": "missing_days",
+        "version": 1
+      },
+      {
+        "id": "daily_goals",
+        "type": "daily_goals",
+        "version": 1
+      },
+      {
+        "id": "fitzy_focus",
+        "type": "fitzy_focus",
+        "version": 1
+      },
+      {
+        "id": "progress",
+        "type": "progress",
+        "version": 1
+      },
+      {
+        "id": "hydration",
+        "type": "hydration",
+        "version": 1
+      },
+      {
+        "id": "referral",
+        "type": "referral",
+        "version": 1
+      },
+      {
+        "id": "vitals",
+        "type": "vitals",
+        "version": 1
+      },
+      {
+        "id": "body_comp",
+        "type": "body_comp",
+        "version": 1
+      },
+      {
+        "id": "past_date_log",
+        "type": "past_date_log",
+        "version": 1
+      },
+      {
+        "id": "native_ad",
+        "type": "native_ad",
+        "version": 1
+      },
+      {
+        "id": "charts",
+        "type": "charts",
+        "version": 1
+      }
+    ]
+  },
+  "newbie-android-icon_keys": {
+    "schema": 1,
+    "ttl_seconds": 900,
+    "layout_key": "default-v1",
+    "experiment": null,
+    "cards": [
+      {
+        "id": "offline_banner",
+        "type": "offline_banner",
+        "version": 1
+      },
+      {
+        "id": "header",
+        "type": "header",
+        "version": 1
+      },
+      {
+        "id": "promo:first_meal",
+        "type": "promo",
+        "version": 1,
+        "props": {
+          "promoId": "first_meal",
+          "creativeId": "first_meal_v1",
+          "layout": "hero",
+          "theme": {
+            "background": {
+              "kind": "gradient",
+              "colors": [
+                "#312E81",
+                "#6D28D9",
+                "#BE185D"
+              ]
+            },
+            "foreground": "light"
+          },
+          "icon": "camera",
+          "emoji": null,
+          "eyebrow": "Your first step",
+          "title": "Snap your first meal",
+          "body": "Take a photo of what you're eating and get calories and macros in seconds. Or just describe it.",
+          "primary": {
+            "label": "Snap a meal",
+            "action": {
+              "type": "open_screen",
+              "params": {
+                "screen": "log_meal"
+              }
+            }
+          },
+          "dismissible": true
+        }
+      },
+      {
+        "id": "health_sync_banner",
+        "type": "health_sync_banner",
+        "version": 1
+      },
+      {
+        "id": "campaign:hold_the_line",
+        "type": "campaign",
+        "version": 1,
+        "props": {
+          "slug": "hold_the_line"
+        }
+      },
+      {
+        "id": "streak_warning",
+        "type": "streak_warning",
+        "version": 1
+      },
+      {
+        "id": "missing_days",
+        "type": "missing_days",
+        "version": 1
+      },
+      {
+        "id": "daily_goals",
+        "type": "daily_goals",
+        "version": 1
+      },
+      {
+        "id": "fitzy_focus",
+        "type": "fitzy_focus",
+        "version": 1
+      },
+      {
+        "id": "progress",
+        "type": "progress",
+        "version": 1
+      },
+      {
+        "id": "hydration",
+        "type": "hydration",
+        "version": 1
+      },
+      {
+        "id": "referral",
+        "type": "referral",
+        "version": 1
+      },
+      {
+        "id": "vitals",
+        "type": "vitals",
+        "version": 1
+      },
+      {
+        "id": "body_comp",
+        "type": "body_comp",
+        "version": 1
+      },
+      {
+        "id": "past_date_log",
+        "type": "past_date_log",
+        "version": 1
+      },
+      {
+        "id": "native_ad",
+        "type": "native_ad",
+        "version": 1
+      },
+      {
+        "id": "charts",
+        "type": "charts",
+        "version": 1
+      }
+    ]
+  },
+  "free-ios": {
+    "schema": 1,
+    "ttl_seconds": 900,
+    "layout_key": "default-v1",
+    "experiment": null,
+    "cards": [
+      {
+        "id": "offline_banner",
+        "type": "offline_banner",
+        "version": 1
+      },
+      {
+        "id": "header",
+        "type": "header",
+        "version": 1
+      },
+      {
+        "id": "health_sync_banner",
+        "type": "health_sync_banner",
+        "version": 1
+      },
+      {
+        "id": "campaign:hold_the_line",
+        "type": "campaign",
+        "version": 1,
+        "props": {
+          "slug": "hold_the_line"
+        }
+      },
+      {
+        "id": "hydration",
+        "type": "hydration",
+        "version": 1
+      },
+      {
+        "id": "promo:log_meal_now",
+        "type": "promo",
+        "version": 1,
+        "props": {
+          "promoId": "log_meal_now",
+          "creativeId": "log_meal_now_breakfast",
+          "layout": "banner",
+          "theme": {
+            "background": {
+              "kind": "gradient",
+              "colors": [
+                "#064E3B",
+                "#047857",
+                "#0E7490"
+              ]
+            },
+            "foreground": "light"
+          },
+          "icon": "meal",
+          "emoji": "🍳",
+          "title": "Log your breakfast",
+          "body": "Snap it and see calories and macros in seconds.",
+          "primary": {
+            "label": "Log breakfast",
+            "action": {
+              "type": "open_screen",
+              "params": {
+                "screen": "log_meal",
+                "meal": "breakfast"
+              }
+            }
+          },
+          "dismissible": true
+        }
+      },
+      {
+        "id": "streak_warning",
+        "type": "streak_warning",
+        "version": 1
+      },
+      {
+        "id": "daily_goals",
+        "type": "daily_goals",
+        "version": 1
+      },
+      {
+        "id": "fitzy_focus",
+        "type": "fitzy_focus",
+        "version": 1
+      },
+      {
+        "id": "progress",
+        "type": "progress",
+        "version": 1
+      },
+      {
+        "id": "vitals",
+        "type": "vitals",
+        "version": 1
+      },
+      {
+        "id": "body_comp",
+        "type": "body_comp",
+        "version": 1
+      },
+      {
+        "id": "past_date_log",
+        "type": "past_date_log",
+        "version": 1
+      },
+      {
+        "id": "native_ad",
+        "type": "native_ad",
+        "version": 1
+      },
+      {
+        "id": "charts",
+        "type": "charts",
+        "version": 1
+      }
+    ]
+  },
+  "free-ios-icon_keys": {
+    "schema": 1,
+    "ttl_seconds": 900,
+    "layout_key": "default-v1",
+    "experiment": null,
+    "cards": [
+      {
+        "id": "offline_banner",
+        "type": "offline_banner",
+        "version": 1
+      },
+      {
+        "id": "header",
+        "type": "header",
+        "version": 1
+      },
+      {
+        "id": "health_sync_banner",
+        "type": "health_sync_banner",
+        "version": 1
+      },
+      {
+        "id": "campaign:hold_the_line",
+        "type": "campaign",
+        "version": 1,
+        "props": {
+          "slug": "hold_the_line"
+        }
+      },
+      {
+        "id": "hydration",
+        "type": "hydration",
+        "version": 1
+      },
+      {
+        "id": "promo:log_meal_now",
+        "type": "promo",
+        "version": 1,
+        "props": {
+          "promoId": "log_meal_now",
+          "creativeId": "log_meal_now_breakfast",
+          "layout": "banner",
+          "theme": {
+            "background": {
+              "kind": "gradient",
+              "colors": [
+                "#064E3B",
+                "#047857",
+                "#0E7490"
+              ]
+            },
+            "foreground": "light"
+          },
+          "icon": "meal",
+          "emoji": null,
+          "title": "Log your breakfast",
+          "body": "Snap it and see calories and macros in seconds.",
+          "primary": {
+            "label": "Log breakfast",
+            "action": {
+              "type": "open_screen",
+              "params": {
+                "screen": "log_meal",
+                "meal": "breakfast"
+              }
+            }
+          },
+          "dismissible": true
+        }
+      },
+      {
+        "id": "streak_warning",
+        "type": "streak_warning",
+        "version": 1
+      },
+      {
+        "id": "daily_goals",
+        "type": "daily_goals",
+        "version": 1
+      },
+      {
+        "id": "fitzy_focus",
+        "type": "fitzy_focus",
+        "version": 1
+      },
+      {
+        "id": "progress",
+        "type": "progress",
+        "version": 1
+      },
+      {
+        "id": "vitals",
+        "type": "vitals",
+        "version": 1
+      },
+      {
+        "id": "body_comp",
+        "type": "body_comp",
+        "version": 1
+      },
+      {
+        "id": "past_date_log",
+        "type": "past_date_log",
+        "version": 1
+      },
+      {
+        "id": "native_ad",
+        "type": "native_ad",
+        "version": 1
+      },
+      {
+        "id": "charts",
+        "type": "charts",
+        "version": 1
+      }
+    ]
+  },
+  "free-android": {
+    "schema": 1,
+    "ttl_seconds": 900,
+    "layout_key": "default-v1",
+    "experiment": null,
+    "cards": [
+      {
+        "id": "offline_banner",
+        "type": "offline_banner",
+        "version": 1
+      },
+      {
+        "id": "header",
+        "type": "header",
+        "version": 1
+      },
+      {
+        "id": "health_sync_banner",
+        "type": "health_sync_banner",
+        "version": 1
+      },
+      {
+        "id": "campaign:hold_the_line",
+        "type": "campaign",
+        "version": 1,
+        "props": {
+          "slug": "hold_the_line"
+        }
+      },
+      {
+        "id": "hydration",
+        "type": "hydration",
+        "version": 1
+      },
+      {
+        "id": "promo:log_meal_now",
+        "type": "promo",
+        "version": 1,
+        "props": {
+          "promoId": "log_meal_now",
+          "creativeId": "log_meal_now_breakfast",
+          "layout": "banner",
+          "theme": {
+            "background": {
+              "kind": "gradient",
+              "colors": [
+                "#064E3B",
+                "#047857",
+                "#0E7490"
+              ]
+            },
+            "foreground": "light"
+          },
+          "icon": "meal",
+          "emoji": "🍳",
+          "title": "Log your breakfast",
+          "body": "Snap it and see calories and macros in seconds.",
+          "primary": {
+            "label": "Log breakfast",
+            "action": {
+              "type": "open_screen",
+              "params": {
+                "screen": "log_meal",
+                "meal": "breakfast"
+              }
+            }
+          },
+          "dismissible": true
+        }
+      },
+      {
+        "id": "streak_warning",
+        "type": "streak_warning",
+        "version": 1
+      },
+      {
+        "id": "missing_days",
+        "type": "missing_days",
+        "version": 1
+      },
+      {
+        "id": "daily_goals",
+        "type": "daily_goals",
+        "version": 1
+      },
+      {
+        "id": "fitzy_focus",
+        "type": "fitzy_focus",
+        "version": 1
+      },
+      {
+        "id": "progress",
+        "type": "progress",
+        "version": 1
+      },
+      {
+        "id": "vitals",
+        "type": "vitals",
+        "version": 1
+      },
+      {
+        "id": "body_comp",
+        "type": "body_comp",
+        "version": 1
+      },
+      {
+        "id": "past_date_log",
+        "type": "past_date_log",
+        "version": 1
+      },
+      {
+        "id": "native_ad",
+        "type": "native_ad",
+        "version": 1
+      },
+      {
+        "id": "charts",
+        "type": "charts",
+        "version": 1
+      }
+    ]
+  },
+  "free-android-icon_keys": {
+    "schema": 1,
+    "ttl_seconds": 900,
+    "layout_key": "default-v1",
+    "experiment": null,
+    "cards": [
+      {
+        "id": "offline_banner",
+        "type": "offline_banner",
+        "version": 1
+      },
+      {
+        "id": "header",
+        "type": "header",
+        "version": 1
+      },
+      {
+        "id": "health_sync_banner",
+        "type": "health_sync_banner",
+        "version": 1
+      },
+      {
+        "id": "campaign:hold_the_line",
+        "type": "campaign",
+        "version": 1,
+        "props": {
+          "slug": "hold_the_line"
+        }
+      },
+      {
+        "id": "hydration",
+        "type": "hydration",
+        "version": 1
+      },
+      {
+        "id": "promo:log_meal_now",
+        "type": "promo",
+        "version": 1,
+        "props": {
+          "promoId": "log_meal_now",
+          "creativeId": "log_meal_now_breakfast",
+          "layout": "banner",
+          "theme": {
+            "background": {
+              "kind": "gradient",
+              "colors": [
+                "#064E3B",
+                "#047857",
+                "#0E7490"
+              ]
+            },
+            "foreground": "light"
+          },
+          "icon": "meal",
+          "emoji": null,
+          "title": "Log your breakfast",
+          "body": "Snap it and see calories and macros in seconds.",
+          "primary": {
+            "label": "Log breakfast",
+            "action": {
+              "type": "open_screen",
+              "params": {
+                "screen": "log_meal",
+                "meal": "breakfast"
+              }
+            }
+          },
+          "dismissible": true
+        }
+      },
+      {
+        "id": "streak_warning",
+        "type": "streak_warning",
+        "version": 1
+      },
+      {
+        "id": "missing_days",
+        "type": "missing_days",
+        "version": 1
+      },
+      {
+        "id": "daily_goals",
+        "type": "daily_goals",
+        "version": 1
+      },
+      {
+        "id": "fitzy_focus",
+        "type": "fitzy_focus",
+        "version": 1
+      },
+      {
+        "id": "progress",
+        "type": "progress",
+        "version": 1
+      },
+      {
+        "id": "vitals",
+        "type": "vitals",
+        "version": 1
+      },
+      {
+        "id": "body_comp",
+        "type": "body_comp",
+        "version": 1
+      },
+      {
+        "id": "past_date_log",
+        "type": "past_date_log",
+        "version": 1
+      },
+      {
+        "id": "native_ad",
+        "type": "native_ad",
+        "version": 1
+      },
+      {
+        "id": "charts",
+        "type": "charts",
+        "version": 1
+      }
+    ]
+  }
+}

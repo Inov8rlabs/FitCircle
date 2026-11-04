@@ -93,6 +93,9 @@ All text is plain (no Markdown or HTML), trimmed and length-checked on the serve
 - Dynamic Type / font scale: text wraps (never truncates the title below 2 lines); the image box keeps its aspect. RTL mirrors the layout.
 - Loading: the card is the same height whether the image has loaded or not (the box is reserved from `aspect`; a shimmer shows until it loads). This follows the "never jumps" rule from the 1.0.8 loading work.
 
+### 3.2 Button styles + card surface (promo_style@1)
+Server-controlled button fills (white / solid / gradient), a `dark` card surface and an eyebrow colour, for clients that declare `promo_style@1` (1.1.3+). Shipped clients get exactly the payload above, and the server never sends `theme.accent`. See `PROMO_BUTTON_STYLE_SPEC.md`.
+
 ## 4. Action registry (v1)
 
 Every button has `action: { type, params, fallback? }`. Types are versioned as `type@n`, and each client declares the exact set it handles (§6).

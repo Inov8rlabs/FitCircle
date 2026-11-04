@@ -10,9 +10,10 @@
  */
 import { localClock } from '../journey/meal-slots';
 import type { CreativeOption, PromoDefinition } from '../promos/engine';
-import type { PromoAction, PromoTheme } from '../promos/types';
+import type { PromoAction } from '../promos/types';
 
 import { renderCardCopy, type RenderInput } from './copy';
+import { STATE_STYLE } from './looks';
 import {
   PRO_LIFECYCLE_PAYWALL_SOURCES,
   PRO_LIFECYCLE_PROMO_KEYS,
@@ -32,16 +33,10 @@ export const PRO_LIFECYCLE_SCORE = 988;
  * dark semibold text (iOS PromoCard.swift: Capsule white / #111111, min 48 pt, ignores accent; Android
  * PromoCard.kt: Material Button CircleShape, container = accent ?? white, label #0F172A by luminance,
  * min 44 dp) — the same as every other promo@1 hero (first_meal). Setting `accent` would recolour the
- * button on Android only, so it is never sent.
+ * button on Android only, so it is never sent. Admins change the look for 1.1.3+ with
+ * `StateConfig.style` (promo_style@1 — docs/PROMO_BUTTON_STYLE_SPEC.md), which shipped apps never see.
  */
-const theme = (colors: string[]): PromoTheme => ({ background: { kind: 'gradient', colors }, foreground: 'light' });
-
-/** Fixed per state (not editable): colours + icon key (with the legacy glyph for pre-icon_keys builds). */
-export const STATE_STYLE: Record<ProLifecycleState, { theme: PromoTheme; icon: 'hourglass' | 'crown'; emoji: string; countdownLabel: string | null }> = {
-  pro_expiring: { theme: theme(['#1E1B4B', '#4338CA', '#7C3AED']), icon: 'hourglass', emoji: '⏳', countdownLabel: 'Pro ends in' },
-  pro_expired: { theme: theme(['#3B0764', '#7E22CE', '#BE185D']), icon: 'crown', emoji: '👑', countdownLabel: null },
-  trial_expiring: { theme: theme(['#0C4A6E', '#0369A1', '#6D28D9']), icon: 'hourglass', emoji: '⏳', countdownLabel: 'Trial ends in' },
-};
+export { STATE_STYLE };
 
 /** Per-user inputs for the card (null = the lifecycle read failed → no card). */
 export interface LifecycleFeedInput {
@@ -119,6 +114,8 @@ export function lifecyclePromoDefinitions(input: LifecycleFeedInput | null, conf
       key: PRO_LIFECYCLE_PROMO_KEYS[state],
       kind: 'promo',
       score: PRO_LIFECYCLE_SCORE,
+      // promo_style@1 clients only; absent = today's look.
+      style: sc.style ?? null,
       caps: { cooldownHoursAfterDismiss: Math.max(1, sc.snoozeDays * 24) },
       requiresState: true,
       audience: () => {

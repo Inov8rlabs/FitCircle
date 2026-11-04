@@ -278,6 +278,8 @@ export const draftPreviewBodySchema = z
     /** promo@1 `actions=` / `promoLayouts=` (default: none → no promos unless given). */
     actions: z.string().max(1000).optional(),
     promoLayouts: z.string().max(200).optional(),
+    /** promo features (`features=`, e.g. promo_style@1; default: what that version declares). */
+    features: z.string().max(200).optional(),
     draft: z
       .object({
         /** The full proposed ruleset (flat form). */

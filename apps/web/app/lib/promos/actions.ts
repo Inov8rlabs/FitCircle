@@ -11,6 +11,7 @@ import { z } from 'zod';
 
 import { MEAL_SLOTS } from '../journey/meal-slots';
 
+import { parseFeatureTokens } from './style';
 import { PROMO_LAYOUTS, type PromoAction, type PromoClientSupport, type PromoLayout, type WireAction } from './types';
 
 export const ACTION_TYPES = [
@@ -144,11 +145,17 @@ export function parsePromoLayouts(raw: string | null | undefined): Set<PromoLayo
   return out;
 }
 
-export function parsePromoClient(params: { cardsSupportPromo: boolean; actions: string | null; promoLayouts: string | null }): PromoClientSupport {
+/**
+ * `features` = the `features=` query and/or the X-Client-Features header (comma lists, `name@n`).
+ * Only promo_style@1 means anything today; without it the payload is exactly the shipped one.
+ */
+export function parsePromoClient(params: { cardsSupportPromo: boolean; actions: string | null; promoLayouts: string | null; features?: Array<string | null | undefined> }): PromoClientSupport {
+  const features = parseFeatureTokens(...(params.features ?? []));
   return {
     promoCard: params.cardsSupportPromo,
     actions: parseClientActions(params.actions),
     layouts: parsePromoLayouts(params.promoLayouts),
+    ...(features.size ? { features } : {}),
   };
 }
 

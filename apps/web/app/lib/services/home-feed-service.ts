@@ -48,7 +48,12 @@ import {
   parsePromoClient,
   promosConfig,
   selectPromos,
+  supportsPromoStyle,
+  promoStylesEnabled,
+  withPromoStyles,
+  PROMO_FEATURES_PARAM,
   type PromoClientSupport,
+  type PromoStylesConfig,
   type PromoTraceEntry,
 } from '@/lib/promos';
 import { createAdminSupabase } from '@/lib/supabase-admin';
@@ -56,6 +61,7 @@ import { runAfterResponse } from '@/lib/utils/after-response';
 
 import { lifecycleConfigCache, lifecycleLive } from './pro-lifecycle-service';
 import { PromoService, defaultPromoLoaders, liveProFeaturesCache, type LifecycleRound, type PromoLoaders } from './promo-service';
+import { promoStylesCache } from './promo-style-store';
 
 /** Rules: fresh 30 s, then served stale (≤ 10 min) while one refresh runs — never blocks a warm request. */
 const RULES_TTL_MS = 30_000;
@@ -186,6 +192,7 @@ export class HomeFeedService {
     feedFlagsCache.clear();
     liveProFeaturesCache.clear();
     lifecycleConfigCache.clear();
+    promoStylesCache.clear();
   }
 
   /**
@@ -289,14 +296,17 @@ export class HomeFeedService {
     // Journey facts + promo state get a longer budget than the feed context: when either times out
     // the time-of-day meal card can't be placed, which read as the card flickering in and out.
     const lifecycleLoader = loaders.proLifecycle;
-    const [facts, state, liveProFeatures, lifecycle] = await Promise.all([
+    // System promo looks: only promo_style@1 clients (zero cost for shipped apps).
+    const stylesLoader = supportsPromoStyle(client.features) && promoStylesEnabled() ? loaders.promoStyles : undefined;
+    const [facts, state, liveProFeatures, lifecycle, styles] = await Promise.all([
       softly(() => loaders.journeyFacts(profile.id, localDate), PROMO_LOADER_TIMEOUT_MS),
       softly(() => loaders.promoState(profile.id), PROMO_LOADER_TIMEOUT_MS),
       softly(() => loaders.liveProFeatures()),
       // Pro lifecycle prompts (docs/PRO_LIFECYCLE_PROMPTS.md): config (cached) + grants/purchases (+ usage when in a state).
       lifecycleLoader ? softly(() => lifecycleLoader.call(loaders, profile, timezone, now), PROMO_LOADER_TIMEOUT_MS) : Promise.resolve(null),
+      stylesLoader ? softly(() => stylesLoader.call(loaders)) : Promise.resolve(null),
     ]);
-    return { facts, state, liveProFeatures, timezone, localDate, lifecycle };
+    return { facts, state, liveProFeatures, timezone, localDate, lifecycle, styles };
   }
 
   /** Pure-ish: promo candidates + what they replace, for composeFeed. */
@@ -312,8 +322,11 @@ export class HomeFeedService {
     const journey = buildJourneyContext(profile, data.facts, { now: ctx.now, timezone: data.timezone, localDate: data.localDate });
     const lc = data.lifecycle ?? null;
     const lifecycleDefs = lc ? lifecyclePromoDefinitions(lc.input, lc.pub.config, { enabled: lifecycleLive(lc.pub), now: ctx.now }) : [];
+    // Looks (promo_style@1 clients only — the engine ignores `style` for everyone else). Env kill switch → default look.
+    const stylesOn = promoStylesEnabled();
+    const definitions = stylesOn ? [...lifecycleDefs, ...withPromoStyles(SYSTEM_PROMOS, data.styles ?? null)] : [...lifecycleDefs, ...SYSTEM_PROMOS].map((d) => ({ ...d, style: null }));
     const selected = selectPromos({
-      definitions: [...lifecycleDefs, ...SYSTEM_PROMOS],
+      definitions,
       ctx,
       journey,
       state: data.state,
@@ -471,6 +484,7 @@ export class HomeFeedService {
       cardsSupportPromo: (support.get(PROMO_CARD_TYPE) ?? 0) >= PROMO_CARD_VERSION,
       actions: params.get('actions'),
       promoLayouts: params.get('promoLayouts'),
+      features: [params.get(PROMO_FEATURES_PARAM)],
     });
     const promoData = enabled ? await this.promoRound(profile as FeedProfile, info, promoClient, now, opts.promoLoaders) : null;
     const promos = this.selectPromosFor(profile as FeedProfile, ctx, promoClient, promoData);
@@ -497,6 +511,8 @@ export interface PromoRoundData {
   localDate: string;
   /** Pro lifecycle round (null = not loaded / timed out → no lifecycle card). */
   lifecycle?: LifecycleRound | null;
+  /** System promo looks (promo_style@1 clients only; null = not loaded → default look). */
+  styles?: PromoStylesConfig | null;
 }
 
 /** promo@1 support when the caller didn't parse `actions=` / `promoLayouts=` (e.g. admin preview default). */

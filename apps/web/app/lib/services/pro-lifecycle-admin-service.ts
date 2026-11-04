@@ -42,10 +42,28 @@ import {
   renderPushCopy,
   unknownPlaceholders,
   validateConfig,
+  lifecycleStyleIssues,
+  STATE_STYLE,
   type ProLifecycleConfig,
   type ProLifecycleState,
 } from '@/lib/pro-lifecycle';
-import { PROMO_CARD_TYPE, PROMO_CARD_VERSION, parsePromoClient, promoCardId, promosConfig } from '@/lib/promos';
+import {
+  BRAND_EYEBROW,
+  BUTTON_PRESETS,
+  DARK_SURFACE,
+  DEFAULT_APPEARANCE,
+  LOOK_PRESETS,
+  PRESETS,
+  PROMO_CARD_TYPE,
+  PROMO_CARD_VERSION,
+  PROMO_STYLE_FEATURE,
+  PROMO_STYLE_VERSION,
+  STYLE_THRESHOLDS,
+  parsePromoClient,
+  promoCardId,
+  promoStylesEnabled,
+  promosConfig,
+} from '@/lib/promos';
 import { createAdminSupabase } from '@/lib/supabase-admin';
 
 import { defaultClientDeclaration, lifecyclePersonaSubject, personaPromoRound } from './home-feed-admin-service';
@@ -64,8 +82,21 @@ export const previewBodySchema = z
     version: appVersion.default('1.1.0'),
     timezone: z.string().min(1).max(64).optional(),
     sample: z.object({ trialAvailable: z.boolean(), usage: z.enum(['sample', 'none']) }).strict().optional(),
+    /** Preview this look variant id (A/B) instead of the user's bucket; states without it keep their looks. */
+    styleVariant: z.string().regex(/^[a-z][a-z0-9]{0,7}$/).optional(),
   })
   .strict();
+
+/** The config with each state's style narrowed to `variantId` (weight 100) when that state has it. */
+export function forceStyleVariant(config: ProLifecycleConfig, variantId: string | undefined): ProLifecycleConfig {
+  if (!variantId) return config;
+  const states = { ...config.states };
+  for (const state of PRO_LIFECYCLE_STATES) {
+    const v = states[state].style?.variants.find((x) => x.id === variantId);
+    if (v) states[state] = { ...states[state], style: { variants: [{ ...v, weight: 100 }] } };
+  }
+  return { ...config, states };
+}
 
 export const publishBodySchema = z
   .object({
@@ -165,11 +196,23 @@ export class ProLifecycleAdminService {
       states: PRO_LIFECYCLE_STATES.map((s) => ({
         state: s,
         ...STATE_LABELS[s],
+        /** The fixed card colours (what button styles are checked against). */
+        theme: STATE_STYLE[s].theme,
         promoKey: PRO_LIFECYCLE_PROMO_KEYS[s],
         paywallSource: PRO_LIFECYCLE_PAYWALL_SOURCES[s],
         pushType: s === 'trial_expiring' ? null : PRO_LIFECYCLE_PUSH_TYPES[s],
       })),
       lastChange: last.changes[0] ?? null,
+      /** Card looks for 1.1.3+ (docs/PROMO_BUTTON_STYLE_SPEC.md): presets + thresholds for the editor's live checks. */
+      styles: {
+        enabled: promoStylesEnabled(),
+        capability: { feature: `${PROMO_STYLE_FEATURE}@${PROMO_STYLE_VERSION}`, firstVersion: '1.1.3' },
+        presets: BUTTON_PRESETS.map((id) => ({ id, label: PRESETS[id].label, style: PRESETS[id].style })),
+        looks: Object.entries(LOOK_PRESETS).map(([id, l]) => ({ id, label: l.label, appearance: l.appearance })),
+        defaultAppearance: DEFAULT_APPEARANCE,
+        tokens: { darkSurface: DARK_SURFACE, brandEyebrow: BRAND_EYEBROW },
+        thresholds: STYLE_THRESHOLDS,
+      },
       propagation: {
         server: 'within ~30 s (per-instance config cache)',
         apps: 'on the next home feed fetch (apps reuse a layout for up to 15 min)',
@@ -199,14 +242,15 @@ export class ProLifecycleAdminService {
   static async preview(body: unknown, opts: { now?: Date } = {}) {
     const input = previewBodySchema.parse(body ?? {});
     const now = opts.now ?? new Date();
-    const pub = await readPublishedConfig();
-    const draftRaw = input.config === undefined ? pub.config : input.config;
+    const pubRaw = await readPublishedConfig();
+    const pub: PublishedConfig = { ...pubRaw, config: forceStyleVariant(pubRaw.config, input.styleVariant) };
+    const draftRaw = input.config === undefined ? pubRaw.config : input.config;
     const validated = this.validate(draftRaw);
     const draftEnabled = input.enabled ?? pub.enabled;
     const sample = input.sample ?? DEFAULT_SAMPLE;
     const declared = defaultClientDeclaration(input.platform, input.version);
     const support = parseClientCards(declared.cards);
-    const promoClient = parsePromoClient({ cardsSupportPromo: (support.get(PROMO_CARD_TYPE) ?? 0) >= PROMO_CARD_VERSION, actions: declared.actions, promoLayouts: declared.promoLayouts });
+    const promoClient = parsePromoClient({ cardsSupportPromo: (support.get(PROMO_CARD_TYPE) ?? 0) >= PROMO_CARD_VERSION, actions: declared.actions, promoLayouts: declared.promoLayouts, features: [declared.features] });
     const headers = new Headers({ 'x-app-platform': input.platform, 'x-app-version': input.version });
     if (input.timezone) headers.set('x-client-timezone', input.timezone);
     const info = readRequestInfo({ headers });
@@ -258,16 +302,22 @@ export class ProLifecycleAdminService {
     };
 
     const before = await side(pub);
-    const afterPub: PublishedConfig = validated.config ? { ...pub, enabled: draftEnabled, config: validated.config, version: configVersion(draftEnabled, validated.config) } : pub;
+    const afterPub: PublishedConfig = validated.config ? { ...pub, enabled: draftEnabled, config: forceStyleVariant(validated.config, input.styleVariant), version: configVersion(draftEnabled, validated.config) } : pub;
     const after = validated.config ? await side(afterPub) : before;
     return {
       request: { platform: input.platform, version: input.version, timezone: info.clientTimezone ?? 'America/Los_Angeles', sample },
       draft: {
         valid: validated.issues.length === 0,
         issues: validated.issues,
+        /** Style warnings (hue-only separation, styles a layout doesn't draw): shown, never blocking. */
+        warnings: validated.config
+          ? lifecycleStyleIssues(validated.config)
+              .filter((i) => i.level === 'warning')
+              .map(({ path, message }) => ({ path, message }))
+          : [],
         baseVersion: pub.version,
         afterVersion: validated.config ? configVersion(draftEnabled, validated.config) : null,
-        changes: validated.config ? diffConfigs(pub.config, validated.config).concat(draftEnabled !== pub.enabled ? [{ path: 'enabled', before: pub.enabled, after: draftEnabled }] : []) : [],
+        changes: validated.config ? diffConfigs(pubRaw.config, validated.config).concat(draftEnabled !== pub.enabled ? [{ path: 'enabled', before: pub.enabled, after: draftEnabled }] : []) : [],
       },
       killSwitch: { promptsEnabled: promptsEnabled(), promosEnabled: promosConfig().enabled },
       before,

@@ -16,12 +16,14 @@ import {
   promoKeyFromCardId,
   promosConfig,
   type JourneyFacts,
+  type PromoStylesConfig,
   type PromoUserState,
 } from '@/lib/promos';
 import { addDays } from '@/lib/streaks/streak-calculator';
 import { createAdminSupabase } from '@/lib/supabase-admin';
 
 import { ProLifecycleService, lifecycleConfigCache, lifecycleLive, type PublishedConfig } from './pro-lifecycle-service';
+import { promoStylesCache } from './promo-style-store';
 
 export type ConversionKind = 'meal_logged' | 'subscription_started' | 'fitzy_opened';
 
@@ -151,6 +153,8 @@ export interface PromoLoaders {
   liveProFeatures(): Promise<Set<string>>;
   /** Pro lifecycle prompts: the published config + this viewer's state (input null when prompts are off). */
   proLifecycle?(profile: Record<string, any> & { id: string }, timezone: string, now: Date): Promise<LifecycleRound>;
+  /** System promo looks (only called for promo_style@1 clients). */
+  promoStyles?(): Promise<PromoStylesConfig>;
 }
 
 /** What the promo round learns about the Pro lifecycle prompts. */
@@ -195,6 +199,9 @@ export const defaultPromoLoaders: PromoLoaders = {
     const pub = await lifecycleConfigCache.get();
     if (!lifecycleLive(pub)) return { pub, input: null };
     return { pub, input: await ProLifecycleService.feedInput(profile, timezone, now, pub.config) };
+  },
+  async promoStyles() {
+    return (await promoStylesCache.get()).config;
   },
 };
 

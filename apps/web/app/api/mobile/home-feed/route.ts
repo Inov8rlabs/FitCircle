@@ -1,13 +1,13 @@
 import { NextResponse, type NextRequest } from 'next/server';
 
-import { applyIconCompat, requestRendersIconKeys } from '@/lib/design/icon-compat';
+import { CLIENT_FEATURES_HEADER, applyIconCompat, requestRendersIconKeys } from '@/lib/design/icon-compat';
 import { parseClientCards } from '@/lib/home-feed/candidates';
 import { readRequestInfo } from '@/lib/home-feed/context';
 import { fail, feedFailFrom } from '@/lib/home-feed/http';
 import { SUPPORTED_FEED_SCHEMAS } from '@/lib/home-feed/types';
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { addAutoRefreshHeaders } from '@/lib/middleware/mobile-auto-refresh';
-import { PROMO_CARD_TYPE, PROMO_CARD_VERSION, parsePromoClient } from '@/lib/promos';
+import { PROMO_CARD_TYPE, PROMO_CARD_VERSION, PROMO_FEATURES_PARAM, parsePromoClient } from '@/lib/promos';
 import { HomeFeedService, SLOW_FEED_MS, type FeedTiming } from '@/lib/services/home-feed-service';
 import { ProfileTimezoneService } from '@/lib/services/profile-timezone-service';
 import { runAfterResponse } from '@/lib/utils/after-response';
@@ -19,6 +19,8 @@ export const dynamic = 'force-dynamic';
  *   promo@1 clients (docs/PROMO_CARD_SPEC.md §6.1) add `promo@1` to cards plus
  *   &actions=open_screen@1,paywall@1,…&promoLayouts=hero,banner,compact
  *   (missing actions → only dismiss@1 → no promo with a primary button is sent).
+ *   1.1.3+ add `&features=promo_style@1` (or X-Client-Features: promo_style@1) to receive button
+ *   styles + card surface (docs/PROMO_BUTTON_STYLE_SPEC.md); without it the props are unchanged.
  *
  * Headers: X-Feed-Schema: 1 (required), X-App-Platform (or X-Platform),
  * X-App-Version, X-App-Build, x-client-timezone.
@@ -58,6 +60,8 @@ export async function GET(request: NextRequest) {
       cardsSupportPromo: (support.get(PROMO_CARD_TYPE) ?? 0) >= PROMO_CARD_VERSION,
       actions: request.nextUrl.searchParams.get('actions'),
       promoLayouts: request.nextUrl.searchParams.get('promoLayouts'),
+      // promo_style@1 (docs/PROMO_BUTTON_STYLE_SPEC.md): `features=` query and/or X-Client-Features.
+      features: [request.nextUrl.searchParams.get(PROMO_FEATURES_PARAM), request.headers.get(CLIENT_FEATURES_HEADER)],
     });
     const feed = await HomeFeedService.getFeed(user, info, support, { timing, promoClient });
     if (ProfileTimezoneService.pendingUpdate((user as { timezone?: string | null }).timezone, info.clientTimezone)) {

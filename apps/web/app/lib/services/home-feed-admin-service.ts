@@ -52,7 +52,7 @@ import { activeCampaignsCache, buildFeedContext, defaultContextLoaders, readRequ
 import { HomeFeedError } from '@/lib/home-feed/http';
 import { DEFAULT_SAMPLE, personaLifecycle, type PersonaSample, type ProLifecycleState } from '@/lib/pro-lifecycle';
 import { completionView } from '@/lib/profile-completion/model';
-import { PROMO_CARD_TYPE, PROMO_CARD_VERSION, parsePromoClient, type PromoClientSupport } from '@/lib/promos';
+import { PROMO_CARD_TYPE, PROMO_CARD_VERSION, PROMO_STYLE_FEATURE, PROMO_STYLE_VERSION, parsePromoClient, type PromoClientSupport } from '@/lib/promos';
 import { createAdminSupabase } from '@/lib/supabase-admin';
 
 import { HomeFeedService, type PromoRoundData, type RuleRow } from './home-feed-service';
@@ -111,8 +111,8 @@ const atLeast = (version: string, min: number[]) => {
  * 1.0.8–1.0.9 = spec §2 lists (Android adds missing_days); 1.1.0+ also
  * declares promo@1 (+ actions/layouts) and circle_chat@1. Web: its own list.
  */
-export function defaultClientDeclaration(platform: 'ios' | 'android' | 'web', version: string): { cards: string; actions: string | null; promoLayouts: string | null } {
-  if (platform === 'web') return { cards: WEB_CARDS.map((t) => `${t}@1`).join(','), actions: null, promoLayouts: null };
+export function defaultClientDeclaration(platform: 'ios' | 'android' | 'web', version: string): { cards: string; actions: string | null; promoLayouts: string | null; features: string | null } {
+  if (platform === 'web') return { cards: WEB_CARDS.map((t) => `${t}@1`).join(','), actions: null, promoLayouts: null, features: null };
   const types: string[] = platform === 'android' ? [...DEFAULT_ORDER] : [...IOS_108_CARDS];
   const v110 = atLeast(version, [1, 1, 0]);
   if (v110) types.push('promo', 'circle_chat');
@@ -120,6 +120,8 @@ export function defaultClientDeclaration(platform: 'ios' | 'android' | 'web', ve
     cards: types.map((t) => `${t}@${CATALOG[t]?.version ?? 1}`).join(','),
     actions: v110 ? PROMO_ACTIONS : null,
     promoLayouts: v110 ? PROMO_LAYOUTS : null,
+    // 1.1.3+ draw server-controlled button styles + card surface (docs/PROMO_BUTTON_STYLE_SPEC.md).
+    features: atLeast(version, [1, 1, 3]) ? `${PROMO_STYLE_FEATURE}@${PROMO_STYLE_VERSION}` : null,
   };
 }
 
@@ -479,12 +481,13 @@ export class HomeFeedAdminService {
     const cards = input.cards ?? declared.cards;
     const actions = input.actions ?? declared.actions;
     const promoLayouts = input.promoLayouts ?? declared.promoLayouts;
+    const features = input.features ?? declared.features;
     const headers = new Headers({ 'x-app-platform': input.platform, 'x-app-version': input.version });
     if (input.build !== undefined) headers.set('x-app-build', String(input.build));
     if (input.timezone) headers.set('x-client-timezone', input.timezone);
     const info = readRequestInfo({ headers });
     const support = parseClientCards(cards);
-    const promoClient = parsePromoClient({ cardsSupportPromo: (support.get(PROMO_CARD_TYPE) ?? 0) >= PROMO_CARD_VERSION, actions, promoLayouts });
+    const promoClient = parsePromoClient({ cardsSupportPromo: (support.get(PROMO_CARD_TYPE) ?? 0) >= PROMO_CARD_VERSION, actions, promoLayouts, features: [features] });
 
     const { ctx, before, after, feedEnabled, rulesEnabled } = await this.composeBoth(subject, info, support, promoClient, current.flat, afterRules, { ...opts, now });
 
@@ -494,7 +497,7 @@ export class HomeFeedAdminService {
 
     return {
       subject: { kind: subject.kind, userId: subject.kind === 'persona' ? null : subject.profile.id, displayName: displayName(subject.profile) },
-      request: { platform: input.platform, version: input.version, build: input.build ?? null, timezone: ctx.timezone, cards, actions, promoLayouts },
+      request: { platform: input.platform, version: input.version, build: input.build ?? null, timezone: ctx.timezone, cards, actions, promoLayouts, features },
       killSwitch: { feedEnabled, rulesEnabled, publishEnabled: isPublishEnabled() },
       context: redactContext(ctx),
       before: side(before),
@@ -564,7 +567,7 @@ export class HomeFeedAdminService {
       for (const platform of ['ios', 'android'] as const) {
         const declared = defaultClientDeclaration(platform, appVersion);
         const support = parseClientCards(declared.cards);
-        const promoClient = parsePromoClient({ cardsSupportPromo: (support.get(PROMO_CARD_TYPE) ?? 0) >= PROMO_CARD_VERSION, actions: declared.actions, promoLayouts: declared.promoLayouts });
+        const promoClient = parsePromoClient({ cardsSupportPromo: (support.get(PROMO_CARD_TYPE) ?? 0) >= PROMO_CARD_VERSION, actions: declared.actions, promoLayouts: declared.promoLayouts, features: [declared.features] });
         const info = readRequestInfo({ headers: new Headers({ 'x-app-platform': platform, 'x-app-version': appVersion }) });
         const subject: Subject = { kind: 'persona', profile: personaProfile(now, undefined), loaders: personaLoaders(opts.loaders) };
         const r = await this.composeBoth(subject, info, support, promoClient, before, after, { ...opts, now });

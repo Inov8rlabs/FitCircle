@@ -19,6 +19,7 @@ import { addDays } from '../streaks/streak-calculator';
 
 import { isPromoLive, type PromosConfig } from './config';
 import { buildPromoProps } from './creative';
+import { styledProps, supportsPromoStyle, type StyleSetting } from './style';
 import {
   PROMO_CARD_TYPE,
   PROMO_CARD_VERSION,
@@ -51,6 +52,8 @@ export interface PromoDefinition {
   /** false → may still show when promo_user_state couldn't be read. */
   requiresState: boolean;
   experimentKey?: string;
+  /** Button style / surface looks (promo_style@1 clients only; absent = today's look). */
+  style?: StyleSetting | null;
   /** null = matches; otherwise why not. Unknown context values must NOT match. */
   audience(input: PromoMatchInput): string | null;
   creatives(input: PromoMatchInput): CreativeOption[];
@@ -70,6 +73,9 @@ export interface PromoTraceEntry {
   key: string;
   outcome: 'selected' | string;
   creativeId?: string;
+  /** promo_style@1 clients: the look variant drawn (null = default look); `styleRejected` = why a configured one wasn't. */
+  styleVariant?: string | null;
+  styleRejected?: string;
 }
 
 export interface SelectPromosInput {
@@ -187,17 +193,25 @@ export function selectPromos(input: SelectPromosInput): { candidates: PromoCandi
       skip(def.key, options.length === 0 ? 'no_creative' : 'unrenderable');
       continue;
     }
+    let props = built.get(creative.id)!;
+    let style: Pick<PromoTraceEntry, 'styleVariant' | 'styleRejected'> = {};
+    // promo_style@1 only: shipped clients get exactly the props above (no style / surface / eyebrowColor).
+    if (supportsPromoStyle(client.features)) {
+      const s = styledProps(def.key, props, def.style, ctx.userId);
+      props = s.props;
+      style = { styleVariant: s.variantId, ...(s.rejected ? { styleRejected: s.rejected } : {}) };
+    }
     candidates.push({
       id: promoCardId(def.key),
       type: PROMO_CARD_TYPE,
       version: PROMO_CARD_VERSION,
-      props: built.get(creative.id)! as PromoProps & Record<string, unknown>,
+      props: props as PromoProps & Record<string, unknown>,
       baseScore: def.score + (def.priority ?? 0),
       promoKey: def.key,
-      creativeId: creative.id,
+      creativeId: props.creativeId,
       kind: def.kind,
     });
-    trace.push({ key: def.key, outcome: 'selected', creativeId: creative.id });
+    trace.push({ key: def.key, outcome: 'selected', creativeId: props.creativeId, ...style });
   }
   return { candidates, trace };
 }

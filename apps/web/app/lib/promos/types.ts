@@ -36,7 +36,26 @@ export interface WireAction {
 export interface PromoButton<A = PromoAction> {
   label: string;
   action: A;
+  /** promo_style@1 clients only (style.ts, docs/PROMO_BUTTON_STYLE_SPEC.md). Never on the server-side creative. */
+  style?: WireButtonStyle;
 }
+
+/** A resolved button style on the wire (presets expanded, label colour concrete). */
+export interface WireButtonStyle {
+  kind: 'white' | 'solid' | 'gradient';
+  /** Named preset this came from (analytics / debugging only; clients draw from the fields). */
+  preset?: string;
+  /** white / solid: the fill. */
+  fill?: string;
+  /** gradient: 2–3 stops + CSS angle in degrees (90 = leading → trailing). */
+  gradient?: { colors: string[]; angle: number };
+  /** Label (and icon) colour, always concrete #RRGGBB. */
+  text: string;
+  /** Optional leading icon key (design/icons.json). */
+  icon?: IconKey;
+}
+
+export type CardSurface = 'gradient' | 'dark';
 
 export type PromoBackground = { kind: 'gradient'; colors: string[] } | { kind: 'solid'; color: string };
 
@@ -94,6 +113,10 @@ export interface PromoProps {
   primary: PromoButton<WireAction>;
   secondary?: PromoButton<WireAction>;
   dismissible: boolean;
+  /** promo_style@1 only: `dark` = the Home card surface instead of theme.background (legacy clients: absent). */
+  surface?: CardSurface;
+  /** promo_style@1 only: eyebrow text colour (absent = the default eyebrow colour). */
+  eyebrowColor?: string;
 }
 
 export interface PromoCaps {
@@ -147,4 +170,9 @@ export interface PromoClientSupport {
   /** action type → highest version. Missing `actions=` → only dismiss@1. */
   actions: Map<string, number>;
   layouts: Set<PromoLayout>;
+  /**
+   * Optional promo features (`features=promo_style@1` query and/or X-Client-Features: promo_style@1),
+   * name → highest version. Missing → none: the payload is exactly what shipped clients get.
+   */
+  features?: Map<string, number>;
 }

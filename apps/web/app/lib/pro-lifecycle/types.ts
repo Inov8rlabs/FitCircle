@@ -5,6 +5,7 @@
  * services/pro-lifecycle-service.ts (config, facts, admin) and
  * services/pro-lifecycle-push-service.ts (cron pushes).
  */
+import type { StyleSetting } from '../promos/style';
 import type { PromoLayout } from '../promos/types';
 
 export const PRO_LIFECYCLE_STATES = ['pro_expiring', 'pro_expired', 'trial_expiring'] as const;
@@ -68,6 +69,12 @@ export interface StateConfig {
   snoozeDays: number;
   /** trial_expiring: push is always off (the existing trial_ending_reminder covers it). */
   push: PushCopy;
+  /**
+   * Card look for promo_style@1 clients (1.1.3+): surface + button style, 1–3 A/B variants
+   * (docs/PROMO_BUTTON_STYLE_SPEC.md). Absent = today's look (gradient card + white pill); older apps
+   * always draw today's look whatever is set here.
+   */
+  style?: StyleSetting;
 }
 
 export interface ProLifecycleConfig {

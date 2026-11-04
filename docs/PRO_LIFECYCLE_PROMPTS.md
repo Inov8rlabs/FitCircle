@@ -23,6 +23,7 @@ Excluded: internal / test accounts (`ads/test-users.ts` rules), anyone who paid 
 - Primary = `paywall@1` with `placement` `pro_expiring_card` / `pro_expired_card` / `trial_expiring_card`. No fallback: a client without `paywall@1` gets no card.
 - Fixed style per state (theme gradient, icon key `hourglass` / `crown` + legacy glyph for pre-`icon_keys` builds); expiring states carry a `countdown` in the user's local wall time ("Pro ends in 1d 3h").
 - Copy (Admin Tools): eyebrow, title, body, usage body (`{{usage}}`), CTA with trial, CTA without trial. Placeholders: `{{first_name}} {{period}} {{ends}} {{ended}} {{usage}}`. `{{usage}}` = real counts while Pro was on (AI-analyzed meals, meals, Fitzy chats, weekly plans); below the thresholds or too long → the value-prop body. Never estimated.
+- **Card look (1.1.3+)**: `StateConfig.style` (optional; 1–3 A/B variants of surface + button style + eyebrow colour). It goes only to clients that declare `promo_style@1`. Absent means today's look, and the defaults are unchanged. 1.1.0–1.1.2 always draw today's white pill. While a test runs, the creative id gets `_s<variant>`. See `PROMO_BUTTON_STYLE_SPEC.md`.
 - Dismiss = snooze `snoozeDays` (expiring 1, expired 3) through `promo_user_state` (cross-device). Converts on `subscription_started`.
 
 ## 3. Push
@@ -39,7 +40,7 @@ Dry run: `GET /api/cron/pro-lifecycle?dryRun=true` (or env `PRO_ENDING_PUSH_DRY_
 
 ## 5. Admin Tools (Home feed → Pro lifecycle)
 
-`/api/admin/home-feed/pro-lifecycle` (GET state), `/audience` (GET, who is in each state now), `/preview` (POST draft → each state's card in the persona's real feed + push, before/after), `/publish` (POST, optimistic concurrency on the content version `pl1-…`, 409 `STALE_DRAFT`), `/changes` (GET history). Admin-only (same gate as the home feed editor); exact routes are whitelisted in the Admin Tools proxy. The home feed editor's preview personas include `pro_expiring` / `pro_expired`.
+`/api/admin/home-feed/pro-lifecycle` (GET state), `/audience` (GET, who is in each state now), `/preview` (POST draft → each state's card in the persona's real feed + push, before/after), `/publish` (POST, optimistic concurrency on the content version `pl1-…`, 409 `STALE_DRAFT`), `/changes` (GET history). Admin-only (same gate as the home feed editor); exact routes are whitelisted in the Admin Tools proxy. The home feed editor's preview personas include `pro_expiring` / `pro_expired`. Look controls (PROMO_BUTTON_STYLE_SPEC §7): `GET` returns `states[].theme` + `styles` presets, preview takes `styleVariant` and returns `draft.warnings`, and the editor previews `1.1.3` (styled) against `1.1.2` (today's apps).
 
 ## 6. Analytics (tracking plan v26)
 

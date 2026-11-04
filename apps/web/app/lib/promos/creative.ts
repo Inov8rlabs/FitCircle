@@ -8,6 +8,8 @@ import { z } from 'zod';
 import { ICON_KEYS } from '@/lib/design/icons';
 
 import { resolveAction } from './actions';
+import { contrastRatio } from './color';
+import { cardSurfaceSchema, wireButtonStyleSchema } from './style';
 import { PROMO_LAYOUTS, type PromoCreative, type PromoProps, type PromoTheme, type WireAction } from './types';
 
 export const TEXT_LIMITS = { eyebrow: 28, title: 44, body: 120, badge: 12, label: 24 } as const;
@@ -31,7 +33,8 @@ const themeSchema = z
   .strict();
 
 const wireAction = z.object({ type: z.string().min(1), params: z.record(z.unknown()) }).strict();
-const button = z.object({ label: text(TEXT_LIMITS.label), action: wireAction }).strict();
+// `style` only reaches clients that declared promo_style@1 (style.ts; docs/PROMO_BUTTON_STYLE_SPEC.md).
+const button = z.object({ label: text(TEXT_LIMITS.label), action: wireAction, style: wireButtonStyleSchema.optional() }).strict();
 
 /** Wire `props` of a promo@1 card. */
 export const promoPropsSchema = z
@@ -60,6 +63,9 @@ export const promoPropsSchema = z
     primary: button,
     secondary: button.optional(),
     dismissible: z.boolean(),
+    // promo_style@1 only (style.ts).
+    surface: cardSurfaceSchema.optional(),
+    eyebrowColor: hex.optional(),
   })
   .strict()
   .superRefine((p, ctx) => {
@@ -71,19 +77,7 @@ export const promoPropsSchema = z
 
 // ---------------------------------------------------------------------------- contrast
 
-function luminance(hexColor: string): number {
-  const n = parseInt(hexColor.slice(1), 16);
-  const ch = [(n >> 16) & 255, (n >> 8) & 255, n & 255].map((v) => {
-    const c = v / 255;
-    return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
-  });
-  return 0.2126 * ch[0] + 0.7152 * ch[1] + 0.0722 * ch[2];
-}
-
-export function contrastRatio(a: string, b: string): number {
-  const [l1, l2] = [luminance(a), luminance(b)].sort((x, y) => y - x);
-  return (l1 + 0.05) / (l2 + 0.05);
-}
+export { contrastRatio };
 
 /** The gradient's mid colour (middle stop; average of the two middle stops for an even count). */
 export function midColor(theme: PromoTheme): string {

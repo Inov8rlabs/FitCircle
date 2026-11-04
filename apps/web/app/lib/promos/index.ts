@@ -5,3 +5,5 @@ export * from './config';
 export * from './engine';
 export * from './system-promos';
 export * from './journey-context';
+export * from './style';
+export * from './style-config';
