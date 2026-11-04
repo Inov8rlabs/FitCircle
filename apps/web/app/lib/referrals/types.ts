@@ -207,7 +207,9 @@ export type ReferralErrorCode =
   | 'ALREADY_ATTRIBUTED'
   | 'WINDOW_CLOSED'
   | 'DEVICE_INELIGIBLE'
-  | 'PROGRAM_DISABLED';
+  | 'PROGRAM_DISABLED'
+  /** One or more typed addresses failed validation; data = { invalidEmails }. */
+  | 'INVALID_EMAIL';
 
 const STATUS: Record<ReferralErrorCode, number> = {
   INVALID_CODE: 404,
@@ -216,6 +218,7 @@ const STATUS: Record<ReferralErrorCode, number> = {
   WINDOW_CLOSED: 422,
   DEVICE_INELIGIBLE: 422,
   PROGRAM_DISABLED: 403,
+  INVALID_EMAIL: 422,
 };
 
 export class ReferralError extends Error {

@@ -31,6 +31,7 @@ vi.mock('resend', () => ({
   },
 }));
 
+import { MemorySuppressionStore, setSuppressionStoreForTests } from '../../email/suppression';
 import {
   ReferralInviteService,
   contactHash,
@@ -117,11 +118,70 @@ describe('inviteContacts', () => {
         { email: 'SAM@example.com' },
         { email: 'gone@example.com' },
         { email: 'lee@example.com' },
-        { email: 'not-an-email' },
       ],
     });
-    expect(out.results.map((r) => r.status)).toEqual(['self', 'already_member', 'opted_out', 'already_invited', 'invalid']);
+    expect(out.results.map((r) => r.status)).toEqual(['self', 'already_member', 'opted_out', 'already_invited']);
     expect(out.sentCount).toBe(0);
+  });
+
+  it('rejects the whole batch with 422 INVALID_EMAIL when any typed email is bad — nothing is sent or recorded', async () => {
+    const err = await ReferralService.inviteContacts(MAYA, {
+      contacts: [
+        { email: 'lee@example.com' },
+        { phone: '416-555-0123', channel: 'sms' },
+        { email: 'r.celeste1957@yahoo.comr', name: 'Rosa' },
+        { email: 'not-an-email' },
+        { email: 'sam@gmial.com' },
+      ],
+    }).catch((e) => e);
+    expect(err).toMatchObject({ code: 'INVALID_EMAIL', status: 422, message: "That email doesn't look right." });
+    expect(err.data).toEqual({
+      invalidEmails: [
+        { index: 2, email: 'r.celeste1957@yahoo.comr', reason: 'unknown_tld', suggestion: 'r.celeste1957@yahoo.com' },
+        { index: 3, email: 'not-an-email', reason: 'syntax' },
+        { index: 4, email: 'sam@gmial.com', reason: 'typo_likely', suggestion: 'sam@gmail.com' },
+      ],
+    });
+    expect(mail.sent).toHaveLength(0);
+    expect(db.rows('referral_invites')).toHaveLength(0);
+  });
+
+  it('a contact with no email and no phone counts as an empty email', async () => {
+    const err = await ReferralService.inviteContacts(MAYA, { contacts: [{ name: 'Nobody' }] }).catch((e) => e);
+    expect(err.data.invalidEmails).toEqual([{ index: 0, email: '', reason: 'empty' }]);
+  });
+
+  it('never reminds a stored address that fails validation (pre-validation typo)', async () => {
+    db.rows('referral_invites').push({
+      id: 'old', inviter_id: MAYA, channel: 'email', contact_hash: contactHash('email', 'r@yahoo.comr'), email: 'r@yahoo.comr',
+      contact_display: 'r•••@yahoo.comr', name: null, circle_id: null, status: 'invited', nudge_count: 0, last_nudged_at: null,
+      sent_at: new Date(Date.now() - 4 * DAY).toISOString(), referral_id: null, joined_at: null,
+    });
+    const out = await ReferralService.nudge(MAYA, { inviteId: 'old' });
+    expect(out.status).toBe('not_nudgeable');
+    expect(mail.sent).toHaveLength(0);
+  });
+
+  it('hard-bounced / complained addresses are not emailed ("Can\'t invite this address") and never reminded', async () => {
+    const store = new MemorySuppressionStore().add('bounced@example.org');
+    setSuppressionStoreForTests(store);
+    try {
+      const out = await ReferralService.inviteContacts(MAYA, { contacts: [{ email: 'Bounced@Example.org' }, { email: 'lee@example.com' }] });
+      expect(out.results.map((r) => r.status)).toEqual(['opted_out', 'sent']);
+      expect(mail.sent.map((m) => m.to)).toEqual(['lee@example.com']);
+
+      db.rows('referral_invites').push({
+        id: 'b1', inviter_id: MAYA, channel: 'email', contact_hash: contactHash('email', 'bounced@example.org'), email: 'bounced@example.org',
+        contact_display: 'bo•••@example.org', name: null, circle_id: null, status: 'invited', nudge_count: 0, last_nudged_at: null,
+        sent_at: new Date(Date.now() - 4 * DAY).toISOString(), referral_id: null, joined_at: null,
+      });
+      mail.sent.length = 0;
+      expect((await ReferralService.nudge(MAYA, { inviteId: 'b1' })).status).toBe('not_nudgeable');
+      expect(mail.sent).toHaveLength(0);
+      expect(db.rows('referral_invites').find((r) => r.id === 'b1')!.nudge_count).toBe(0); // slot given back
+    } finally {
+      setSuppressionStoreForTests(null);
+    }
   });
 
   it('enforces the daily email cap', async () => {

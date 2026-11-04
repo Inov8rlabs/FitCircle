@@ -14,9 +14,15 @@ export function ok(data: unknown, startTime?: number, status = 200): NextRespons
   );
 }
 
-export function fail(status: number, code: string, message: string, data: unknown = null): NextResponse {
+export function fail(
+  status: number,
+  code: string,
+  message: string,
+  data: unknown = null,
+  details: Record<string, unknown> = {}
+): NextResponse {
   return NextResponse.json(
-    { success: false, data, error: { code, message, details: {}, timestamp: new Date().toISOString() }, meta: null },
+    { success: false, data, error: { code, message, details, timestamp: new Date().toISOString() }, meta: null },
     { status, headers: { 'Cache-Control': 'no-store' } }
   );
 }
@@ -25,7 +31,10 @@ export function fail(status: number, code: string, message: string, data: unknow
 export function failFrom(error: unknown, label: string): NextResponse {
   if (error instanceof ReferralError) {
     if (error.status >= 500) reportRouteError(label, error, { status: error.status, code: error.code });
-    return fail(error.status, error.code, error.message, error.data);
+    // INVALID_EMAIL carries { invalidEmails } in both data and error.details (clients read either;
+    // shipped apps only read error.code / error.message — docs/INVITE_EMAIL_VALIDATION.md).
+    const details = error.code === 'INVALID_EMAIL' && error.data && typeof error.data === 'object' ? (error.data as Record<string, unknown>) : {};
+    return fail(error.status, error.code, error.message, error.data, details);
   }
   if ((error as any)?.message === 'Unauthorized') return fail(401, 'UNAUTHORIZED', 'Invalid or expired token');
   if ((error as any)?.name === 'ZodError') return fail(400, 'VALIDATION_ERROR', 'Invalid request body');

@@ -13,6 +13,8 @@
  * Ads Console classifier (lib/ads/test-users.ts).
  */
 import { type AdRevenueMetrics, type AdRevenueRow, sumRevenue } from './ad-revenue';
+import { emailBrandHeader } from '../email/brand-shell';
+
 import { addDays, ymdInTz } from './dates';
 import { ratio, sumDelivery } from './metrics';
 import type { TestUserReason } from './test-users';
@@ -498,6 +500,8 @@ export function renderHtml(r: AdsEmailReport): string {
   const h2 = (s: string, sub?: string) =>
     `<h2 style="font-size:15px;margin:18px 0 2px;color:#111827">${esc(s)}</h2>${sub ? `<div style="font-size:12px;color:#6b7280">${esc(sub)}</div>` : ''}`;
   const parts: string[] = [];
+  // Brand mark: the real app icon + wordmark (lib/email/brand-shell.ts), dark text on this white data layout.
+  parts.push(`<div style="margin:0 0 14px">${emailBrandHeader({ onLight: true })}</div>`);
   parts.push(`<h1 style="font-size:18px;margin:0 0 4px;color:#111827">FitCircle ads — ${esc(r.dayLabel)} ${r.slot}</h1>`);
   parts.push(
     `<div style="font-size:12px;color:#6b7280">Time zone ${esc(r.timeZone)} · generated ${esc(fmtTime(r.generatedAt, r.timeZone))} · ad data as of last sync ${esc(r.adDataAsOf ? fmtTime(r.adDataAsOf, r.timeZone) : 'never')}</div>`

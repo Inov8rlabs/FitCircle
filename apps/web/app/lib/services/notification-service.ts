@@ -1,15 +1,5 @@
-import { Resend } from 'resend';
-
+import { sendEmail } from '../email/email-service';
 import { generateGenericNotificationEmail } from '../email/templates';
-
-let _resend: Resend | null = null;
-function getResend(): Resend | null {
-  if (!process.env.RESEND_API_KEY) return null;
-  if (!_resend) _resend = new Resend(process.env.RESEND_API_KEY);
-  return _resend;
-}
-const FROM_EMAIL = 'FitCircle <team@fitcircle.ai>';
-const REPLY_TO = 'team@fitcircle.ai';
 
 export interface NotificationPayload {
     userId: string;
@@ -29,11 +19,6 @@ export class NotificationService {
      */
     static async sendEmailNotification(payload: NotificationPayload): Promise<boolean> {
         try {
-            if (!process.env.RESEND_API_KEY) {
-                console.warn('RESEND_API_KEY is not set. Skipping email notification.');
-                return false;
-            }
-
             const html = generateGenericNotificationEmail({
                 title: payload.title,
                 body: payload.body,
@@ -43,23 +28,17 @@ export class NotificationService {
                 footerText: `You received this email because you have ${payload.type.replace(/_/g, ' ')} notifications enabled.`,
             });
 
-            const resend = getResend();
-            if (!resend) return false;
-
-            const { data, error } = await resend.emails.send({
-                from: FROM_EMAIL,
+            // Central sender: suppression list + category tag (lib/email/email-service.ts).
+            const res = await sendEmail({
                 to: payload.userEmail,
-                replyTo: REPLY_TO,
                 subject: payload.title,
                 html,
-                tags: [
-                    { name: 'notification_type', value: payload.type },
-                    { name: 'user_id', value: payload.userId },
-                ],
+                category: 'notification',
+                tags: { notification_type: payload.type },
             });
 
-            if (error) {
-                console.error('Error sending email notification:', error);
+            if (!res.success) {
+                if (res.errorName !== 'suppressed') console.error('Error sending email notification:', res.error);
                 return false;
             }
 

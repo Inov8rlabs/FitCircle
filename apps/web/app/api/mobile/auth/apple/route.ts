@@ -2,12 +2,14 @@ import { createClient } from '@supabase/supabase-js';
 import { after, type NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 
+import { parseClientPlatform } from '@/lib/experiments/request-info';
 import { authRateLimiter, getIdentifier, applyRateLimit } from '@/lib/middleware/rate-limit';
 import { AppleTokenService } from '@/lib/services/apple-token-service';
 import { MobileAPIService } from '@/lib/services/mobile-api-service';
 import { toMobileUser } from '@/lib/services/mobile-profile-response';
 import { SocialAuthError, findOrCreateSocialUser } from '@/lib/services/social-auth-service';
-import { recordTestDeviceSignal } from '@/lib/services/test-device-service';
+import { isTestDeviceRequest, recordTestDeviceSignal } from '@/lib/services/test-device-service';
+import { triggerWelcomeEmail } from '@/lib/services/welcome-email-service';
 import { validationMessage } from '@/lib/validation/lenient-parse';
 
 import { appleTokenAudiences, parseAppleAuthRequest } from './apple-request';
@@ -106,6 +108,20 @@ export async function POST(request: NextRequest) {
 
     await recordTestDeviceSignal(userId, request.headers); // X-Test-Device: 1 (Test Lab robots)
     const tokens = await MobileAPIService.generateTokens(userId, email);
+
+    // First sign-in created the account: one welcome email after the response.
+    // Returning sign-ins (isNewUser false) never get one; the once-only record in
+    // profiles.metadata also stops a second one for a web-then-mobile sign-up.
+    if (isNewUser) {
+      triggerWelcomeEmail({
+        userId,
+        email,
+        displayName: (profile as { display_name?: string | null } | null)?.display_name ?? null,
+        method: 'apple',
+        platform: parseClientPlatform(request.headers.get('x-app-platform')),
+        testDevice: isTestDeviceRequest(request.headers),
+      });
+    }
 
     // Apple requires the user's tokens to be revoked when the account is
     // deleted, which needs a refresh token. Runs after the response so sign-in

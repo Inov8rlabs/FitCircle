@@ -194,6 +194,6 @@ export class AdsEmailReportService {
   }
 
   static async send(rendered: RenderedAdsReport, recipients = reportRecipients()): Promise<{ success: boolean; id?: string; error?: string }> {
-    return sendEmail({ to: recipients, subject: rendered.subject, html: rendered.html, text: rendered.text });
+    return sendEmail({ to: recipients, subject: rendered.subject, html: rendered.html, text: rendered.text, category: 'ads_report' });
   }
 }

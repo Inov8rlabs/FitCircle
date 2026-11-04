@@ -18,7 +18,7 @@
     "test:e2e:ui": "playwright test --ui",
     "test:e2e:debug": "playwright test --debug",
     "test:ci": "vitest run && playwright test",
-    "test:email": "bun scripts/test-welcome-email.ts",
+    "test:email": "npx tsx scripts/test-welcome-email.ts",
     "test:email:invite": "bun scripts/test-invitation-email.ts",
     "generate:icons": "node scripts/generate-icons.mjs && node scripts/generate-favicon.mjs",
     "fitzy:eval": "npx -y tsx scripts/fitzy-eval/run.ts"

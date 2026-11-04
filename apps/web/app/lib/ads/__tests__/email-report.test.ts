@@ -264,6 +264,9 @@ describe('rendering', () => {
     expect(html).toContain('A &lt;b&gt;&amp;&lt;/b&gt; B');
     expect(html).not.toContain('<b>&</b>');
     expect(html).toContain('href="https://admintools.inov8rlabs.com/apps/fitcircle/ads"');
+    // Real brand mark (app icon + wordmark), never a drawn one.
+    expect(html).toContain('src="https://www.fitcircle.ai/email/fitcircle-icon-40@2x.png"');
+    expect(html).not.toMatch(/<svg|Georgia/i);
   });
 });
 

@@ -324,6 +324,16 @@ export const useAuthStore = create<AuthState>()(
           }
 
           if (authData.user && authData.session) {
+            // New account: ask the server for the one welcome email (it re-checks the
+            // account is new and sends at most once per user). Never blocks sign-up.
+            if (accountCreated) {
+              fetch('/api/auth/welcome', {
+                method: 'POST',
+                credentials: 'include',
+                headers: { Authorization: `Bearer ${authData.session.access_token}` },
+              }).catch(() => undefined);
+            }
+
             // Create user profile
             const newUser: User = {
               id: authData.user.id,

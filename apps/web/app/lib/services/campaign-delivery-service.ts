@@ -13,7 +13,6 @@
  * per campaign (the next hourly run continues). Dedupe `email:{key}`
  * (`email:{key}:{date}` for daily items). Skips marketingEmails === false.
  */
-import { Resend } from 'resend';
 
 import { CampaignError } from '../campaigns/http';
 import { dateOfDay, totalDaysOf, type CampaignRow } from '../campaigns/model';
@@ -21,6 +20,7 @@ import { firstNameOf, renderPlaceholders, type PlaceholderVars } from '../campai
 import type { CampaignEmail, CampaignNotification } from '../campaigns/types';
 import { campaignPageUrl, campaignUnsubscribeUrl } from '../campaigns/unsubscribe';
 import { campaignEmail } from '../email/campaign-emails';
+import { sendEmail } from '../email/email-service';
 import type { RenderedEmail } from '../email/referral-emails';
 import { addDays, daysBetween, isValidTimezone } from '../streaks/streak-calculator';
 import { createAdminSupabase } from '../supabase-admin';
@@ -125,38 +125,21 @@ export function renderEmail(item: CampaignEmail, row: CampaignRow, date: string,
 const pushKey = (key: string, date: string) => `push:${key}:${date}`;
 const emailKey = (item: CampaignEmail, date: string) => (item.kind === 'daily' ? `email:${item.key}:${date}` : `email:${item.key}`);
 
-let resend: Resend | null = null;
-
-/** Resend transport for campaign mail. False when unconfigured or rejected. */
+/** Campaign mail through the central sender (suppression list, category tag). False when unconfigured, suppressed or rejected. */
 export async function sendCampaignEmail(to: string, email: RenderedEmail, unsubscribeUrl: string): Promise<boolean> {
-  const key = process.env.RESEND_API_KEY;
-  if (!key) {
-    console.warn('[CampaignDelivery] RESEND_API_KEY not configured; email skipped');
-    return false;
-  }
-  resend ??= new Resend(key);
-  try {
-    const { error } = await resend.emails.send({
-      from: 'FitCircle <team@fitcircle.ai>',
-      replyTo: 'team@fitcircle.ai',
-      to,
-      subject: email.subject,
-      html: email.html,
-      text: email.text,
-      headers: {
-        'List-Unsubscribe': `<${unsubscribeUrl}>`,
-        'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
-      },
-    });
-    if (error) {
-      console.error('[CampaignDelivery] Resend rejected email:', error.message);
-      return false;
-    }
-    return true;
-  } catch (err: any) {
-    console.error('[CampaignDelivery] email send failed:', err?.message);
-    return false;
-  }
+  const res = await sendEmail({
+    to,
+    subject: email.subject,
+    html: email.html,
+    text: email.text,
+    category: 'campaign',
+    headers: {
+      'List-Unsubscribe': `<${unsubscribeUrl}>`,
+      'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
+    },
+  });
+  if (!res.success && res.errorName !== 'suppressed') console.error('[CampaignDelivery] email not sent:', res.errorName, res.error);
+  return res.success;
 }
 
 const chunks = <T>(xs: T[], n = CHUNK): T[][] => {

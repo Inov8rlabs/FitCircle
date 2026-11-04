@@ -1,12 +1,24 @@
 /**
- * Email Service using Resend
+ * Email Service using Resend — the ONE place FitCircle hands email to Resend.
  *
- * Provides functions to send branded emails for various user actions
+ * Every sender (welcome, circle + referral invites, reminders, rewards,
+ * campaigns, onboarding nudges, notification emails, the internal ads report)
+ * goes through `sendEmail`, which:
+ *   - drops recipients on the suppression list (hard bounce / spam complaint,
+ *     written by /api/webhooks/resend — lib/email/suppression.ts). Fail-open
+ *     when the list can't be read;
+ *   - tags the message with its `category` so Resend's dashboard and the
+ *     webhook can tell the streams apart;
+ *   - never throws.
+ *
+ * Supabase Auth mail (password reset, confirmation) is sent by Supabase via
+ * its SMTP settings, not from here (docs/EMAIL_QUALITY.md).
  */
 
 import { Resend } from 'resend';
 
-import { generateWelcomeEmail, generateInvitationEmail } from './templates';
+import { findSuppressedAddresses, normalizeAddress } from './suppression';
+import { generateInvitationEmail } from './templates';
 
 let _resend: Resend | null = null;
 function getResend(): Resend | null {
@@ -19,11 +31,6 @@ function getResend(): Resend | null {
 const FROM_EMAIL = 'FitCircle <team@fitcircle.ai>';
 const REPLY_TO = 'team@fitcircle.ai';
 
-export interface SendWelcomeEmailParams {
-  to: string;
-  userName: string;
-}
-
 export interface SendInvitationEmailParams {
   to: string;
   invitedByName: string;
@@ -33,53 +40,6 @@ export interface SendInvitationEmailParams {
   endDate: string;
   participantCount: number;
   inviteCode: string;
-}
-
-/**
- * Send welcome email to new users
- */
-export async function sendWelcomeEmail({
-  to,
-  userName,
-}: SendWelcomeEmailParams): Promise<{ success: boolean; error?: string }> {
-  try {
-    if (!process.env.RESEND_API_KEY) {
-      console.warn('RESEND_API_KEY not configured, skipping email send');
-      return { success: false, error: 'Email service not configured' };
-    }
-
-    const html = generateWelcomeEmail({
-      userName,
-      userEmail: to,
-    });
-
-    const resend = getResend();
-    if (!resend) {
-      return { success: false, error: 'Email service not configured' };
-    }
-
-    const { data, error } = await resend.emails.send({
-      from: FROM_EMAIL,
-      to,
-      replyTo: REPLY_TO,
-      subject: `Welcome to FitCircle, ${userName}!`,
-      html,
-    });
-
-    if (error) {
-      console.error('Error sending welcome email:', error);
-      return { success: false, error: error.message };
-    }
-
-    console.log('Welcome email sent successfully:', data);
-    return { success: true };
-  } catch (error) {
-    console.error('Failed to send welcome email:', error);
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : 'Unknown error',
-    };
-  }
 }
 
 /**
@@ -94,51 +54,28 @@ export async function sendInvitationEmail({
   endDate,
   participantCount,
   inviteCode,
-}: SendInvitationEmailParams): Promise<{ success: boolean; error?: string }> {
-  try {
-    if (!process.env.RESEND_API_KEY) {
-      console.warn('RESEND_API_KEY not configured, skipping email send');
-      return { success: false, error: 'Email service not configured' };
-    }
-
-    const html = generateInvitationEmail({
-      invitedByName,
-      invitedEmail: to,
-      circleName,
-      circleType,
-      startDate,
-      endDate,
-      participantCount,
-      inviteCode,
-    });
-
-    const resend = getResend();
-    if (!resend) {
-      return { success: false, error: 'Email service not configured' };
-    }
-
-    const { data, error } = await resend.emails.send({
-      from: FROM_EMAIL,
-      to,
-      replyTo: REPLY_TO,
-      subject: `${invitedByName} invited you to join "${circleName}" on FitCircle`,
-      html,
-    });
-
-    if (error) {
-      console.error('Error sending invitation email:', error);
-      return { success: false, error: error.message };
-    }
-
-    console.log('Invitation email sent successfully:', data);
-    return { success: true };
-  } catch (error) {
-    console.error('Failed to send invitation email:', error);
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : 'Unknown error',
-    };
+}: SendInvitationEmailParams): Promise<{ success: boolean; error?: string; suppressed?: boolean }> {
+  const html = generateInvitationEmail({
+    invitedByName,
+    invitedEmail: to,
+    circleName,
+    circleType,
+    startDate,
+    endDate,
+    participantCount,
+    inviteCode,
+  });
+  const res = await sendEmail({
+    to,
+    subject: `${invitedByName} invited you to join "${circleName}" on FitCircle`,
+    html,
+    category: 'circle_invite',
+  });
+  if (!res.success) {
+    if (res.errorName !== 'suppressed') console.error('Error sending invitation email:', res.error);
+    return { success: false, error: res.error, suppressed: res.errorName === 'suppressed' };
   }
+  return { success: true };
 }
 
 /**
@@ -147,18 +84,21 @@ export async function sendInvitationEmail({
  */
 export async function sendBatchInvitationEmails(
   invitations: SendInvitationEmailParams[]
-): Promise<{ success: number; failed: number; errors: string[] }> {
+): Promise<{ success: number; failed: number; suppressed: number; errors: string[] }> {
   const results = await Promise.allSettled(
     invitations.map((invitation) => sendInvitationEmail(invitation))
   );
 
   let success = 0;
   let failed = 0;
+  let suppressed = 0;
   const errors: string[] = [];
 
   results.forEach((result, index) => {
     if (result.status === 'fulfilled' && result.value.success) {
       success++;
+    } else if (result.status === 'fulfilled' && result.value.suppressed) {
+      suppressed++;
     } else {
       failed++;
       const errorMsg =
@@ -169,8 +109,21 @@ export async function sendBatchInvitationEmails(
     }
   });
 
-  return { success, failed, errors };
+  return { success, failed, suppressed, errors };
 }
+
+/** Which stream an email belongs to (Resend tag `category`; docs/EMAIL_QUALITY.md). */
+export type EmailCategory =
+  | 'welcome'
+  | 'circle_invite'
+  | 'referral_invite'
+  | 'referral_reminder'
+  | 'referral_reward'
+  | 'campaign'
+  | 'onboarding_nudge'
+  | 'notification'
+  | 'ads_report'
+  | 'other';
 
 export interface SendEmailParams {
   to: string | string[];
@@ -181,13 +134,50 @@ export interface SendEmailParams {
   headers?: Record<string, string>;
   /** Resend idempotency key: a retry with the same key within 24 h is not sent twice. */
   idempotencyKey?: string;
+  /** Display name: "Maya" → `Maya via FitCircle <team@fitcircle.ai>`. Default `FitCircle`. */
+  fromName?: string;
+  /** Stream tag (default `other`). */
+  category?: EmailCategory;
+  /** Extra Resend tags (ASCII letters, digits, `_`, `-`; others become `_`). */
+  tags?: Record<string, string | null | undefined>;
+}
+
+export interface SendEmailResult {
+  success: boolean;
+  id?: string;
+  error?: string;
+  /**
+   * Resend's error name (e.g. `rate_limit_exceeded`, `validation_error`) so
+   * callers can tell a transient failure from a permanent one;
+   * `not_configured` without a key; `suppressed` when every recipient is on
+   * the bounce/complaint suppression list (nothing was sent).
+   */
+  errorName?: string;
+  /** Recipients dropped because they're suppressed (normalised). */
+  suppressed?: string[];
+}
+
+const TAG_UNSAFE = /[^A-Za-z0-9_-]+/g;
+
+/** Resend tag list (invalid characters → `_`, ≤ 256 chars; empty values dropped). */
+export function resendTags(tags: Record<string, string | null | undefined> = {}): Array<{ name: string; value: string }> {
+  return Object.entries(tags)
+    .filter(([, v]) => v !== undefined && v !== null && String(v) !== '')
+    .map(([name, value]) => ({
+      name: name.replace(TAG_UNSAFE, '_').slice(0, 256),
+      value: String(value).replace(TAG_UNSAFE, '_').slice(0, 256),
+    }));
+}
+
+function fromHeader(fromName: string | undefined): string {
+  const name = (fromName ?? '').replace(/[<>"\r\n]/g, '').trim().slice(0, 40);
+  return !name || name === 'FitCircle' ? FROM_EMAIL : `${name} via FitCircle <team@fitcircle.ai>`;
 }
 
 /**
- * Send a plain transactional / internal email (e.g. the ads report) from the
- * FitCircle sender. Never throws. `errorName` is Resend's error name
- * (e.g. `rate_limit_exceeded`, `validation_error`) so callers can tell a
- * transient failure from a permanent one; `not_configured` without a key.
+ * Send one email (to one or several recipients) from the FitCircle sender.
+ * Suppressed recipients are dropped first; if none remain nothing is sent and
+ * `errorName` is `suppressed`. Never throws.
  */
 export async function sendEmail({
   to,
@@ -196,7 +186,23 @@ export async function sendEmail({
   text,
   headers,
   idempotencyKey,
-}: SendEmailParams): Promise<{ success: boolean; id?: string; error?: string; errorName?: string }> {
+  fromName,
+  category = 'other',
+  tags,
+}: SendEmailParams): Promise<SendEmailResult> {
+  const recipients = (Array.isArray(to) ? to : [to]).map((r) => r.trim()).filter(Boolean);
+  if (recipients.length === 0) return { success: false, error: 'No recipient', errorName: 'validation_error' };
+
+  const blocked = await findSuppressedAddresses(recipients);
+  const allowed = recipients.filter((r) => !blocked.has(normalizeAddress(r)));
+  const suppressed = recipients.filter((r) => blocked.has(normalizeAddress(r))).map(normalizeAddress);
+  if (suppressed.length > 0) {
+    console.warn(`[email] ${category}: skipped ${suppressed.length} suppressed recipient(s) (hard bounce / complaint)`);
+  }
+  if (allowed.length === 0) {
+    return { success: false, error: 'All recipients are suppressed (bounced or complained)', errorName: 'suppressed', suppressed };
+  }
+
   const resend = getResend();
   if (!resend) {
     console.warn('RESEND_API_KEY not configured, skipping email send');
@@ -204,11 +210,20 @@ export async function sendEmail({
   }
   try {
     const { data, error } = await resend.emails.send(
-      { from: FROM_EMAIL, to, replyTo: REPLY_TO, subject, html, text, ...(headers ? { headers } : {}) },
+      {
+        from: fromHeader(fromName),
+        to: Array.isArray(to) ? allowed : allowed[0],
+        replyTo: REPLY_TO,
+        subject,
+        html,
+        text,
+        tags: resendTags({ category, ...(tags ?? {}) }),
+        ...(headers ? { headers } : {}),
+      },
       idempotencyKey ? { idempotencyKey } : undefined
     );
-    if (error) return { success: false, error: error.message, errorName: error.name };
-    return { success: true, id: data?.id };
+    if (error) return { success: false, error: error.message, errorName: error.name, ...(suppressed.length ? { suppressed } : {}) };
+    return { success: true, id: data?.id, ...(suppressed.length ? { suppressed } : {}) };
   } catch (error) {
     return { success: false, error: error instanceof Error ? error.message : 'Unknown error', errorName: 'network_error' };
   }

@@ -48,6 +48,7 @@ import { CIRCLE_TYPE_LABELS, circleTypeForChallenge, type CircleTypeValue } from
 import { CHALLENGE_TEMPLATES } from '@/lib/data/challenge-templates';
 import { supabase } from '@/lib/supabase';
 import { type ChallengeCategory } from '@/lib/types/circle-challenge';
+import { EMAIL_COPY, validateEmailAddress } from '@/lib/validation/email-address';
 import { useAuthStore } from '@/stores/auth-store';
 
 interface CircleCreationWizardProps {
@@ -254,15 +255,19 @@ export default function CircleCreationWizard({ isOpen, onClose, onSuccess, initi
   };
 
   const addEmail = () => {
-    const email = emailInput.trim().toLowerCase();
-    if (!email) return;
+    if (!emailInput.trim()) return;
 
-    // Basic email validation
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email)) {
-      toast.error('Please enter a valid email address');
+    // Shared validator: rejects typos like `yahoo.comr` and offers the fix.
+    const result = validateEmailAddress(emailInput);
+    if (!result.valid) {
+      const suggestion = result.suggestion;
+      toast.error(EMAIL_COPY.invalid, {
+        description: suggestion ? EMAIL_COPY.didYouMean(suggestion) : undefined,
+        action: suggestion ? { label: 'Use it', onClick: () => setEmailInput(suggestion) } : undefined,
+      });
       return;
     }
+    const email = result.normalized.toLowerCase();
 
     if (formData.inviteEmails.includes(email)) {
       toast.error('This email is already added');

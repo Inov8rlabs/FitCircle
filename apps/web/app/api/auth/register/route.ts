@@ -2,7 +2,6 @@ import { createClient } from '@supabase/supabase-js';
 import { type NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 
-import { sendWelcomeEmail } from '@/lib/email/email-service';
 import { registerRateLimiter, getIdentifier, applyRateLimit } from '@/lib/middleware/rate-limit';
 import { CLEAR_FC_REF_COOKIE, claimWebInvite, resolveWebInvite } from '@/lib/referrals/web-claim';
 import { ensureProfileRow } from '@/lib/services/profile-bootstrap';
@@ -12,6 +11,7 @@ import {
   deriveUsernameBase,
   ensureUniqueUsername,
 } from '@/lib/services/username-service';
+import { triggerWelcomeEmail } from '@/lib/services/welcome-email-service';
 
 // Validation schema
 const registerSchema = z.object({
@@ -120,13 +120,14 @@ export async function POST(request: NextRequest) {
       if (!ensured) console.error('[register] profile still missing after bootstrap', { userId: authData.user.id });
     }
 
-    // Send welcome email (don't wait for it, send async)
-    sendWelcomeEmail({
-      to: validatedData.email,
-      userName: validatedData.fullName,
-    }).catch((error) => {
-      // Log error but don't fail registration if email fails
-      console.error('Failed to send welcome email:', error);
+    // New account: one welcome email, after the response (never fails registration;
+    // once-only per user across platforms — lib/services/welcome-email-service.ts).
+    triggerWelcomeEmail({
+      userId: authData.user.id,
+      email: validatedData.email,
+      displayName: validatedData.fullName,
+      method: 'email',
+      platform: 'web',
     });
 
     // Invite: attribution + circle join (runs after the profile exists).

@@ -205,6 +205,8 @@ export function emailDisposition(res: { success: boolean; id?: string; errorName
   if (res.success) return { kind: 'record', record: { status: 'sent', ...(res.id ? { id: res.id } : {}) } };
   const reason = res.errorName || 'unknown_error';
   if (TRANSIENT_EMAIL_ERRORS.has(reason)) return { kind: 'release', reason };
+  // On the bounce/complaint suppression list: final, never retried.
+  if (reason === 'suppressed') return { kind: 'record', record: { status: 'suppressed', reason } };
   return { kind: 'record', record: { status: 'failed', reason } };
 }
 

@@ -1,0 +1,6 @@
+Confirm signup (confirmation.html): Confirm your FitCircle email
+Reset Password (recovery.html): Reset your FitCircle password
+Magic Link (magic_link.html): Your FitCircle sign-in link
+Change Email Address (email_change.html): Confirm your new FitCircle email
+Invite user (invite.html): You're invited to FitCircle
+Reauthentication (reauthentication.html): Your FitCircle verification code

@@ -177,6 +177,19 @@ describe('POST /api/mobile/referrals/invites', () => {
     });
   });
 
+  it('answers 422 INVALID_EMAIL with { index, email, reason, suggestion } in data and error.details', async () => {
+    const invalidEmails = [{ index: 0, email: 'r.celeste1957@yahoo.comr', reason: 'unknown_tld', suggestion: 'r.celeste1957@yahoo.com' }];
+    svc.inviteContacts.mockRejectedValue(new ReferralError('INVALID_EMAIL', "That email doesn't look right.", { invalidEmails }));
+    const res = await invitesPOST(json('http://localhost/x', { contacts: [{ email: 'r.celeste1957@yahoo.comr' }] }));
+    expect(res.status).toBe(422);
+    expect(res.headers.get('Cache-Control')).toBe('no-store');
+    expect(await res.json()).toMatchObject({
+      success: false,
+      data: { invalidEmails },
+      error: { code: 'INVALID_EMAIL', message: "That email doesn't look right.", details: { invalidEmails } },
+    });
+  });
+
   it('rejects empty and oversized batches', async () => {
     expect((await invitesPOST(json('http://localhost/x', { contacts: [] }))).status).toBe(400);
     const many = Array.from({ length: 11 }, (_, i) => ({ email: `f${i}@x.com` }));

@@ -9,10 +9,10 @@
  * Contacts are keyed by a salted hash; phones are never stored in plaintext,
  * emails only until the friend joins (or 45 days, cron).
  */
-import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
+import { createHmac, timingSafeEqual } from 'node:crypto';
 
-import { Resend } from 'resend';
-
+import { sendEmail, type EmailCategory } from '../email/email-service';
+import { INVALID_EMAIL_MESSAGE, checkInviteEmails } from '../email/invite-email-check';
 import {
   inviteEmail,
   reminderEmail,
@@ -22,8 +22,11 @@ import {
   type RenderedEmail,
   type RewardEmailInput,
 } from '../email/referral-emails';
+import { findSuppressedAddresses, isEmailSuppressed } from '../email/suppression';
+import { contactHash } from '../referrals/contact-hash';
 import { INVITE_HOST, circleInviteUrl, personalInviteUrl } from '../referrals/links';
 import { inviteeRewardDays } from '../referrals/referral-policy';
+import { ReferralError } from '../referrals/types';
 import type {
   InviteContactsInput,
   InviteContactsResult,
@@ -91,10 +94,7 @@ export function normalizePhone(raw: string | null | undefined): string | null {
   return null;
 }
 
-export function contactHash(kind: 'email' | 'phone', value: string): string {
-  const salt = process.env.REFERRAL_DEVICE_SALT || 'fitcircle-referrals';
-  return createHash('sha256').update(`${salt}:${kind}:${value}`).digest('hex');
-}
+export { contactHash };
 
 export function maskEmail(email: string): string {
   const [local, domain] = email.split('@');
@@ -141,48 +141,34 @@ export function unsubscribeUrl(emailHash: string): string {
 }
 
 // ---------------------------------------------------------------------------
-// Mail transport (Resend). Returns false when unconfigured or rejected.
+// Mail transport: the central sender (lib/email/email-service.ts) — suppression
+// list, category tag. Returns false when unconfigured, suppressed or rejected.
 // ---------------------------------------------------------------------------
-
-let resend: Resend | null = null;
 
 export async function sendReferralEmail(
   to: string,
   email: RenderedEmail,
-  opts: { fromName?: string; unsubscribe?: string } = {}
+  opts: { fromName?: string; unsubscribe?: string; category?: EmailCategory } = {}
 ): Promise<boolean> {
-  const key = process.env.RESEND_API_KEY;
-  if (!key) {
-    console.warn('[ReferralInviteService] RESEND_API_KEY not configured; email skipped');
-    return false;
+  const res = await sendEmail({
+    to,
+    subject: email.subject,
+    html: email.html,
+    text: email.text,
+    fromName: opts.fromName ?? 'FitCircle',
+    category: opts.category ?? 'referral_invite',
+    // RFC 8058: mail clients POST to this URL for one-click unsubscribe.
+    headers: opts.unsubscribe
+      ? {
+          'List-Unsubscribe': `<${opts.unsubscribe.replace('/invite/unsubscribe?', '/api/referrals/unsubscribe?')}>`,
+          'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
+        }
+      : undefined,
+  });
+  if (!res.success && res.errorName !== 'suppressed') {
+    console.error('[ReferralInviteService] email not sent:', res.errorName, res.error);
   }
-  resend ??= new Resend(key);
-  const fromName = (opts.fromName ?? 'FitCircle').replace(/[<>"]/g, '').slice(0, 40);
-  try {
-    const { error } = await resend.emails.send({
-      from: `${fromName} via FitCircle <team@fitcircle.ai>`,
-      replyTo: 'team@fitcircle.ai',
-      to,
-      subject: email.subject,
-      html: email.html,
-      text: email.text,
-      // RFC 8058: mail clients POST to this URL for one-click unsubscribe.
-      headers: opts.unsubscribe
-        ? {
-            'List-Unsubscribe': `<${opts.unsubscribe.replace('/invite/unsubscribe?', '/api/referrals/unsubscribe?')}>`,
-            'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
-          }
-        : undefined,
-    });
-    if (error) {
-      console.error('[ReferralInviteService] Resend rejected email:', error.message);
-      return false;
-    }
-    return true;
-  } catch (err: any) {
-    console.error('[ReferralInviteService] email send failed:', err?.message);
-    return false;
-  }
+  return res.success;
 }
 
 // ---------------------------------------------------------------------------
@@ -215,13 +201,33 @@ export function joinedNudgeState(row: { status: string; nudge_count?: number | n
   return nudgeState(row.nudge_count ?? 0, row.last_nudged_at ?? null, INVITE_LIMITS.joinedNudges, INVITE_LIMITS.joinedNudgeGapHours);
 }
 
+const wantsSms = (raw: InviteContactsInput['contacts'][number]) => raw.channel === 'sms' || (!raw.email && !!raw.phone);
+
 export class ReferralInviteService {
-  /** Invite up to 10 friends: emails are sent now, texts are recorded (already sent from the phone). */
+  /**
+   * Invite up to 10 friends: emails are sent now, texts are recorded (already sent from the phone).
+   *
+   * Every typed email is validated first (syntax, real TLD, provider typos like
+   * `yahoo.comr`, DNS — docs/INVITE_EMAIL_VALIDATION.md). If any fails, NOTHING
+   * is sent or recorded and a 422 INVALID_EMAIL lists
+   * `{ index, email, reason, suggestion? }` per bad address so the app can offer
+   * "Did you mean …?" and resend the batch: a bounce costs us sender reputation.
+   */
   static async inviteContacts(
     userId: string,
     input: InviteContactsInput,
     getCode: (userId: string) => Promise<string>
   ): Promise<InviteContactsResult> {
+    const contacts = input.contacts.slice(0, INVITE_LIMITS.perRequest);
+    const { invalid, normalized: validEmails } = await checkInviteEmails(
+      contacts.flatMap((raw, index) => (wantsSms(raw) ? [] : [{ index, email: raw.email }]))
+    );
+    if (invalid.length > 0) {
+      throw new ReferralError('INVALID_EMAIL', INVALID_EMAIL_MESSAGE, { invalidEmails: invalid });
+    }
+    // Hard-bounced / complained addresses: reported like an opt-out ("Can't invite this address").
+    const suppressed = await findSuppressedAddresses([...validEmails.values()]);
+
     const supabase = createAdminSupabase();
     const ctx = await this.inviterContext(userId, input.circleId ?? null, getCode);
     const results: InviteResult[] = [];
@@ -245,10 +251,9 @@ export class ReferralInviteService {
     let pendingBudget = INVITE_LIMITS.pendingTotal - (pending ?? 0);
     const seen = new Set<string>();
 
-    for (const raw of input.contacts.slice(0, INVITE_LIMITS.perRequest)) {
+    for (const [index, raw] of contacts.entries()) {
       const name = cleanName(raw.name);
-      const wantsSms = raw.channel === 'sms' || (!raw.email && !!raw.phone);
-      if (wantsSms) {
+      if (wantsSms(raw)) {
         const phone = normalizePhone(raw.phone);
         if (!phone) {
           results.push({ contact: (raw.phone ?? '').slice(0, 24), channel: 'sms', name, status: 'invalid', inviteId: null });
@@ -273,7 +278,7 @@ export class ReferralInviteService {
         continue;
       }
 
-      const email = normalizeEmail(raw.email);
+      const email = normalizeEmail(validEmails.get(index));
       if (!email) {
         results.push({ contact: (raw.email ?? '').slice(0, 64), channel: 'email', name, status: 'invalid', inviteId: null });
         continue;
@@ -287,7 +292,7 @@ export class ReferralInviteService {
 
       if (ctx.email && email === ctx.email.toLowerCase()) { push('self'); continue; }
       const { data: optout } = await supabase.from('referral_email_optouts').select('email_hash').eq('email_hash', hash).maybeSingle();
-      if (optout) { push('opted_out'); continue; }
+      if (optout || suppressed.has(email)) { push('opted_out'); continue; }
       const { data: member } = await supabase.from('profiles').select('id').ilike('email', email).limit(1).maybeSingle();
       if (member) { push('already_member'); continue; }
       if (emailBudget <= 0 || pendingBudget <= 0) { push('rate_limited'); continue; }
@@ -298,6 +303,7 @@ export class ReferralInviteService {
       const delivered = await sendReferralEmail(email, inviteEmail(this.emailInput(ctx, name, hash)), {
         fromName: ctx.firstName,
         unsubscribe: unsubscribeUrl(hash),
+        category: 'referral_invite',
       });
       if (!delivered) {
         // Free the slot so the member can retry once email is healthy.
@@ -343,10 +349,21 @@ export class ReferralInviteService {
       return { status: 'sent', nextAt: after.nextAt, remaining: after.remaining, smsBody: smsReminderBody(ctx.circle?.name ?? null, this.link(ctx), inviteeRewardDays()) };
     }
     const { data: optout } = await supabase.from('referral_email_optouts').select('email_hash').eq('email_hash', row.contact_hash).maybeSingle();
-    if (optout || !row.email) return { status: 'not_nudgeable', nextAt: null, remaining: 0, smsBody: null };
+    // Invites stored before validation existed may hold a typo (`…@yahoo.comr`), and an
+    // address may have bounced / complained since: never remind those.
+    const undeliverable =
+      !row.email ||
+      (await checkInviteEmails([{ index: 0, email: row.email }])).invalid.length > 0 ||
+      (await isEmailSuppressed(row.email));
+    if (optout || undeliverable || !row.email) {
+      // Give the claimed slot back: nothing was sent.
+      await supabase.from('referral_invites').update({ nudge_count: row.nudge_count, last_nudged_at: row.last_nudged_at }).eq('id', row.id);
+      return { status: 'not_nudgeable', nextAt: null, remaining: 0, smsBody: null };
+    }
     const delivered = await sendReferralEmail(row.email, reminderEmail(this.emailInput(ctx, row.name, row.contact_hash)), {
       fromName: ctx.firstName,
       unsubscribe: unsubscribeUrl(row.contact_hash),
+      category: 'referral_reminder',
     });
     if (!delivered) {
       await supabase.from('referral_invites').update({ nudge_count: row.nudge_count, last_nudged_at: row.last_nudged_at }).eq('id', row.id);
@@ -446,7 +463,7 @@ export class ReferralInviteService {
   static async sendRewardEmail(to: string | null | undefined, input: RewardEmailInput): Promise<boolean> {
     const email = normalizeEmail(to);
     if (!email) return false;
-    return sendReferralEmail(email, rewardEmail(input));
+    return sendReferralEmail(email, rewardEmail(input), { category: 'referral_reward' });
   }
 
   /** Composer text + email preview for the hub. */

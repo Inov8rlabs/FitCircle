@@ -54,6 +54,8 @@ const supabaseStub = {
 };
 
 vi.mock('@supabase/supabase-js', () => ({ createClient: () => supabaseStub }));
+// Welcome email is covered in app/api/__tests__/signup-welcome-email.test.ts; keep these tests offline.
+vi.mock('@/lib/services/welcome-email-service', () => ({ triggerWelcomeEmail: () => {} }));
 vi.mock('@/lib/middleware/rate-limit', () => ({
   authRateLimiter: {},
   registerRateLimiter: {},

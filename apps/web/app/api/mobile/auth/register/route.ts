@@ -2,16 +2,18 @@ import { createClient } from '@supabase/supabase-js';
 import { type NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 
+import { parseClientPlatform } from '@/lib/experiments/request-info';
 import { registerRateLimiter, getIdentifier, applyRateLimit } from '@/lib/middleware/rate-limit';
 import { MobileAPIService } from '@/lib/services/mobile-api-service';
 import { toMobileUser } from '@/lib/services/mobile-profile-response';
-import { recordTestDeviceSignal } from '@/lib/services/test-device-service';
+import { isTestDeviceRequest, recordTestDeviceSignal } from '@/lib/services/test-device-service';
 import {
   USERNAME_PATTERN,
   USERNAME_RULES_MESSAGE,
   deriveUsernameBase,
   ensureUniqueUsername,
 } from '@/lib/services/username-service';
+import { triggerWelcomeEmail } from '@/lib/services/welcome-email-service';
 import { coerceDisplayName } from '@/lib/validation/display-name';
 import { parseLenient } from '@/lib/validation/lenient-parse';
 
@@ -137,6 +139,16 @@ export async function POST(request: NextRequest) {
 
     // Generate JWT tokens for mobile
     const tokens = await MobileAPIService.generateTokens(authData.user.id, authData.user.email!);
+
+    // New account: one welcome email, after the response (never fails registration).
+    triggerWelcomeEmail({
+      userId: authData.user.id,
+      email: authData.user.email ?? validatedData.email,
+      displayName: profile?.display_name ?? validatedData.displayName,
+      method: 'email',
+      platform: parseClientPlatform(request.headers.get('x-app-platform')),
+      testDevice: isTestDeviceRequest(request.headers),
+    });
 
     // Return mobile-friendly response matching login format
     return NextResponse.json(

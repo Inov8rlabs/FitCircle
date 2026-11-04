@@ -4,6 +4,7 @@ import {
   MAX_CONTACTS_PER_SEND,
   addChips,
   chipsToContacts,
+  invalidEmailsFrom,
   mergeFriends,
   normalizePhone,
   nudgeAnalytics,
@@ -27,6 +28,27 @@ describe('parseContact (smart field)', () => {
     expect(parseContact('sam@')).toMatchObject({ kind: 'invalid' });
     expect(parseContact('sam@example')).toMatchObject({ kind: 'invalid' });
     expect(parseContact('a b@x.com')).toMatchObject({ kind: 'invalid' });
+  });
+
+  it('rejects provider typos with a "Did you mean" suggestion (shared validator)', () => {
+    expect(parseContact('r.celeste1957@yahoo.comr')).toEqual({
+      kind: 'invalid',
+      input: 'r.celeste1957@yahoo.comr',
+      reason: "That email doesn't look right.",
+      suggestion: 'r.celeste1957@yahoo.com',
+    });
+    expect(parseContact('sam@gmial.com')).toMatchObject({ kind: 'invalid', suggestion: 'sam@gmail.com' });
+    expect(addChips([], 'ok@x.io, sam@hotmial.com').rejected).toEqual([
+      { input: 'sam@hotmial.com', reason: "That email doesn't look right.", suggestion: 'sam@hotmail.com' },
+    ]);
+  });
+
+  it('reads invalidEmails from a 422 envelope (data or error.details) or the web circle route', () => {
+    const list = [{ index: 1, email: 'a@yahoo.comr', reason: 'unknown_tld', suggestion: 'a@yahoo.com' }];
+    expect(invalidEmailsFrom({ success: false, data: { invalidEmails: list } })).toEqual(list);
+    expect(invalidEmailsFrom({ error: { details: { invalidEmails: list } } })).toEqual(list);
+    expect(invalidEmailsFrom({ error: 'INVALID_EMAIL', invalidEmails: list })).toEqual(list);
+    expect(invalidEmailsFrom(null)).toEqual([]);
   });
 
   it('normalizes phones to E.164', () => {

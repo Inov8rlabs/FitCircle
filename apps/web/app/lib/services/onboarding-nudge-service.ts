@@ -284,6 +284,8 @@ export class OnboardingNudgeService {
         'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
       },
       idempotencyKey: nudgeIdempotencyKey(row.id, action.touch),
+      category: 'onboarding_nudge',
+      tags: { touch: String(action.touch) },
     });
     const d = emailDisposition(res);
     if (d.kind === 'release') {
