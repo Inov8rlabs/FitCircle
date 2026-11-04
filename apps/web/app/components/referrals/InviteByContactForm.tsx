@@ -11,11 +11,15 @@ import {
   MAX_CONTACTS_PER_SEND,
   addChips,
   chipsToContacts,
+  invalidEmailsFrom,
+  parseContact,
   resultCopy,
   smsHref,
+  splitContactInput,
   type ContactChip,
 } from '@/lib/referrals/invite-form';
 import type { InviteResult } from '@/lib/referrals/types';
+import { EMAIL_COPY, validateEmailAddress } from '@/lib/validation/email-address';
 
 interface Props {
   /** Prefilled text for phone contacts (hub.smsBody). */
@@ -43,6 +47,8 @@ export function InviteByContactForm({ smsBody, focusSignal, source, onSent }: Pr
   const [name, setName] = useState('');
   const [chips, setChips] = useState<ContactChip[]>([]);
   const [fieldError, setFieldError] = useState<string | null>(null);
+  /** Full corrected address for "Did you mean …?" (replaces `suggestionFor` in the field). */
+  const [suggestion, setSuggestion] = useState<{ input: string; value: string } | null>(null);
   const [sending, setSending] = useState(false);
   const [results, setResults] = useState<InviteResult[] | null>(null);
   const [texted, setTexted] = useState<Record<string, 'saving' | 'done'>>({});
@@ -62,26 +68,72 @@ export function InviteByContactForm({ smsBody, focusSignal, source, onSent }: Pr
     analytics.track(AnalyticsEvents.referralInviteSheetOpened({ source }));
   };
 
-  const commit = (): ContactChip[] => {
-    if (!value.trim()) return chips;
-    const { chips: next, rejected } = addChips(chips, value, name);
+  const trackRejected = (input: string, checkedBy: 'client' | 'server', reason?: string, hasSuggestion = false) => {
+    const r = reason ?? validateEmailAddress(input).reason;
+    if (!r || r === 'empty') return;
+    analytics.track(
+      AnalyticsEvents.inviteEmailRejected({
+        reason: r as Parameters<typeof AnalyticsEvents.inviteEmailRejected>[0]['reason'],
+        suggestion_shown: hasSuggestion,
+        checked_by: checkedBy,
+        source,
+      })
+    );
+  };
+
+  const showRejected = (input: string, reason: string, suggested?: string) => {
+    setFieldError(reason);
+    setSuggestion(suggested ? { input, value: suggested } : null);
+  };
+
+  const commit = (fieldValue: string = value): ContactChip[] => {
+    if (!fieldValue.trim()) return chips;
+    const { chips: next, rejected } = addChips(chips, fieldValue, name);
     setChips(next);
     if (rejected.length) {
-      setFieldError(rejected[0].reason);
+      showRejected(rejected[0].input, rejected[0].reason, rejected[0].suggestion);
+      for (const r of rejected) if (r.input.includes('@')) trackRejected(r.input, 'client', undefined, Boolean(r.suggestion));
       setValue(rejected.map((r) => r.input).join(', '));
     } else {
       setFieldError(null);
+      setSuggestion(null);
       setValue('');
       setName('');
     }
     return next;
   };
 
+  /** Blur: flag a bad email early without turning it into a chip. */
+  const checkOnBlur = () => {
+    const bad = splitContactInput(value)
+      .filter((entry) => entry.includes('@'))
+      .map((entry) => ({ entry, parsed: parseContact(entry) }))
+      .find((x) => x.parsed.kind === 'invalid');
+    if (bad && bad.parsed.kind === 'invalid') {
+      showRejected(bad.entry, bad.parsed.reason, bad.parsed.suggestion);
+      trackRejected(bad.entry, 'client', undefined, Boolean(bad.parsed.suggestion));
+    }
+  };
+
+  const acceptSuggestion = () => {
+    if (!suggestion) return;
+    const reason = validateEmailAddress(suggestion.input).reason;
+    if (reason === 'unknown_tld' || reason === 'typo_likely') {
+      analytics.track(AnalyticsEvents.inviteEmailSuggestionAccepted({ reason, source }));
+    }
+    const fixed = value.includes(suggestion.input) ? value.replace(suggestion.input, suggestion.value) : suggestion.value;
+    setSuggestion(null);
+    setFieldError(null);
+    commit(fixed);
+  };
+
   const emailChips = chips.filter((c) => c.kind === 'email');
   const phoneChips = chips.filter((c) => c.kind === 'phone');
 
   const send = async () => {
+    const fieldHasInvalid = splitContactInput(value).some((entry) => parseContact(entry).kind === 'invalid');
     const all = commit();
+    if (fieldHasInvalid) return; // fix (or tap the suggestion) first — never send around a typo
     const emails = all.filter((c) => c.kind === 'email');
     if (!emails.length) return;
     setSending(true);
@@ -93,6 +145,16 @@ export function InviteByContactForm({ smsBody, focusSignal, source, onSent }: Pr
         body: JSON.stringify({ contacts: chipsToContacts(emails) }),
       });
       const body = await res.json().catch(() => null);
+      const invalid = res.status === 422 ? invalidEmailsFrom(body) : [];
+      if (invalid.length) {
+        // Server refused the batch (nothing sent): move the bad ones back into the field to fix.
+        const bad = invalid.map((e) => emails[e.index]).filter(Boolean);
+        setChips((prev) => prev.filter((c) => !bad.some((b) => b.key === c.key)));
+        setValue(bad.map((c) => c.value).join(', '));
+        showRejected(bad[0]?.value ?? invalid[0].email, EMAIL_COPY.invalid, invalid[0].suggestion);
+        for (const e of invalid) trackRejected(e.email, 'server', e.reason, Boolean(e.suggestion));
+        return;
+      }
       if (!res.ok || !body?.success) {
         toast.error(body?.error?.message || "Couldn't send invites. Try again.");
         return;
@@ -165,7 +227,9 @@ export function InviteByContactForm({ smsBody, focusSignal, source, onSent }: Pr
             onChange={(e) => {
               setValue(e.target.value);
               setFieldError(null);
+              setSuggestion(null);
             }}
+            onBlur={checkOnBlur}
             onFocus={trackOpened}
             onPaste={trackOpened}
             placeholder="Email or phone number"
@@ -196,6 +260,16 @@ export function InviteByContactForm({ smsBody, focusSignal, source, onSent }: Pr
           <p role="alert" className="mt-2 text-sm text-red-300">
             {fieldError}
           </p>
+        )}
+        {suggestion && (
+          <button
+            type="button"
+            onClick={acceptSuggestion}
+            data-testid="email-suggestion"
+            className="mt-2 inline-flex max-w-full items-center rounded-full border border-purple-500/50 bg-purple-500/15 px-3 py-1 text-sm text-purple-100 hover:bg-purple-500/25"
+          >
+            <span className="truncate">{EMAIL_COPY.didYouMean(suggestion.value)}</span>
+          </button>
         )}
 
         {chips.length > 0 && (
@@ -234,7 +308,7 @@ export function InviteByContactForm({ smsBody, focusSignal, source, onSent }: Pr
         <button
           type="button"
           onClick={() => void send()}
-          disabled={sending || (emailChips.length === 0 && !value.includes('@'))}
+          disabled={sending || Boolean(fieldError) || (emailChips.length === 0 && !value.includes('@'))}
           className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-purple-600 to-pink-600 px-5 py-3 font-semibold text-white disabled:opacity-50"
         >
           {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}

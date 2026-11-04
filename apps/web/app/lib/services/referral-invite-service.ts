@@ -13,6 +13,7 @@ import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
 
 import { Resend } from 'resend';
 
+import { INVALID_EMAIL_MESSAGE, checkInviteEmails } from '../email/invite-email-check';
 import {
   inviteEmail,
   reminderEmail,
@@ -24,6 +25,7 @@ import {
 } from '../email/referral-emails';
 import { INVITE_HOST, circleInviteUrl, personalInviteUrl } from '../referrals/links';
 import { inviteeRewardDays } from '../referrals/referral-policy';
+import { ReferralError } from '../referrals/types';
 import type {
   InviteContactsInput,
   InviteContactsResult,
@@ -215,13 +217,30 @@ export function joinedNudgeState(row: { status: string; nudge_count?: number | n
   return nudgeState(row.nudge_count ?? 0, row.last_nudged_at ?? null, INVITE_LIMITS.joinedNudges, INVITE_LIMITS.joinedNudgeGapHours);
 }
 
+const wantsSms = (raw: InviteContactsInput['contacts'][number]) => raw.channel === 'sms' || (!raw.email && !!raw.phone);
+
 export class ReferralInviteService {
-  /** Invite up to 10 friends: emails are sent now, texts are recorded (already sent from the phone). */
+  /**
+   * Invite up to 10 friends: emails are sent now, texts are recorded (already sent from the phone).
+   *
+   * Every typed email is validated first (syntax, real TLD, provider typos like
+   * `yahoo.comr`, DNS). If any fails, NOTHING is sent and a 422 INVALID_EMAIL
+   * lists `{ index, email, reason, suggestion? }` per bad address so the app can
+   * offer "Did you mean …?" and resend the batch — a bounce costs us sender reputation.
+   */
   static async inviteContacts(
     userId: string,
     input: InviteContactsInput,
     getCode: (userId: string) => Promise<string>
   ): Promise<InviteContactsResult> {
+    const contacts = input.contacts.slice(0, INVITE_LIMITS.perRequest);
+    const { invalid, normalized: validEmails } = await checkInviteEmails(
+      contacts.flatMap((raw, index) => (wantsSms(raw) ? [] : [{ index, email: raw.email }]))
+    );
+    if (invalid.length > 0) {
+      throw new ReferralError('INVALID_EMAIL', INVALID_EMAIL_MESSAGE, { invalidEmails: invalid });
+    }
+
     const supabase = createAdminSupabase();
     const ctx = await this.inviterContext(userId, input.circleId ?? null, getCode);
     const results: InviteResult[] = [];
@@ -245,10 +264,9 @@ export class ReferralInviteService {
     let pendingBudget = INVITE_LIMITS.pendingTotal - (pending ?? 0);
     const seen = new Set<string>();
 
-    for (const raw of input.contacts.slice(0, INVITE_LIMITS.perRequest)) {
+    for (const [index, raw] of contacts.entries()) {
       const name = cleanName(raw.name);
-      const wantsSms = raw.channel === 'sms' || (!raw.email && !!raw.phone);
-      if (wantsSms) {
+      if (wantsSms(raw)) {
         const phone = normalizePhone(raw.phone);
         if (!phone) {
           results.push({ contact: (raw.phone ?? '').slice(0, 24), channel: 'sms', name, status: 'invalid', inviteId: null });
@@ -273,7 +291,7 @@ export class ReferralInviteService {
         continue;
       }
 
-      const email = normalizeEmail(raw.email);
+      const email = normalizeEmail(validEmails.get(index));
       if (!email) {
         results.push({ contact: (raw.email ?? '').slice(0, 64), channel: 'email', name, status: 'invalid', inviteId: null });
         continue;
@@ -343,7 +361,9 @@ export class ReferralInviteService {
       return { status: 'sent', nextAt: after.nextAt, remaining: after.remaining, smsBody: smsReminderBody(ctx.circle?.name ?? null, this.link(ctx), inviteeRewardDays()) };
     }
     const { data: optout } = await supabase.from('referral_email_optouts').select('email_hash').eq('email_hash', row.contact_hash).maybeSingle();
-    if (optout || !row.email) return { status: 'not_nudgeable', nextAt: null, remaining: 0, smsBody: null };
+    // Invites stored before validation existed may hold a typo (`…@yahoo.comr`): never remind those.
+    const undeliverable = !row.email || (await checkInviteEmails([{ index: 0, email: row.email }])).invalid.length > 0;
+    if (optout || undeliverable || !row.email) return { status: 'not_nudgeable', nextAt: null, remaining: 0, smsBody: null };
     const delivered = await sendReferralEmail(row.email, reminderEmail(this.emailInput(ctx, row.name, row.contact_hash)), {
       fromName: ctx.firstName,
       unsubscribe: unsubscribeUrl(row.contact_hash),

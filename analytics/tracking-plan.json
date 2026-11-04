@@ -1,7 +1,7 @@
 {
   "$schema": "./tracking-plan.schema.json",
-  "version": 16,
-  "updated": "2026-10-28",
+  "version": 17,
+  "updated": "2026-10-31",
   "conventions": {
     "eventNames": "Title Case, '<Object> <Past-tense verb>' (e.g. 'Meal Logged'). Names are frozen once shipped: rename in the analytics tool, never in code.",
     "propertyNames": "snake_case. Enum values are lowercase snake_case.",
@@ -2912,6 +2912,97 @@
             "peak_moment",
             "circle",
             "campaign"
+          ],
+          "required": true
+        }
+      ]
+    },
+    {
+      "name": "Invite Email Rejected",
+      "category": "acquisition",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "description": "A typed invite email failed validation (bad syntax, unknown TLD like .comr, likely provider typo, or server DNS check). Never carries the address.",
+      "properties": [
+        {
+          "name": "reason",
+          "type": "enum",
+          "values": [
+            "empty",
+            "syntax",
+            "unknown_tld",
+            "typo_likely",
+            "domain_not_found"
+          ],
+          "required": true
+        },
+        {
+          "name": "suggestion_shown",
+          "type": "bool",
+          "required": true
+        },
+        {
+          "name": "checked_by",
+          "type": "enum",
+          "values": [
+            "client",
+            "server"
+          ],
+          "required": true
+        },
+        {
+          "name": "source",
+          "type": "enum",
+          "values": [
+            "hub",
+            "wizard",
+            "celebration",
+            "home_card",
+            "welcome",
+            "peak_moment",
+            "circle",
+            "campaign",
+            "fitzy"
+          ],
+          "required": true
+        }
+      ]
+    },
+    {
+      "name": "Invite Email Suggestion Accepted",
+      "category": "acquisition",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "description": "The member tapped \"Did you mean …?\" and the typed invite email was replaced by the suggestion.",
+      "properties": [
+        {
+          "name": "reason",
+          "type": "enum",
+          "values": [
+            "unknown_tld",
+            "typo_likely"
+          ],
+          "required": true
+        },
+        {
+          "name": "source",
+          "type": "enum",
+          "values": [
+            "hub",
+            "wizard",
+            "celebration",
+            "home_card",
+            "welcome",
+            "peak_moment",
+            "circle",
+            "campaign",
+            "fitzy"
           ],
           "required": true
         }

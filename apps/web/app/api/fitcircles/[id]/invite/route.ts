@@ -2,16 +2,18 @@ import { type NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 
 import { sendInvitationEmail, sendBatchInvitationEmails } from '@/lib/email/email-service';
+import { INVALID_EMAIL_MESSAGE, checkInviteEmails } from '@/lib/email/invite-email-check';
+import { contactHash } from '@/lib/services/referral-invite-service';
+import { createAdminSupabase } from '@/lib/supabase-admin';
 import { createServerSupabase } from '@/lib/supabase-server';
 
-// Validation schema for single invite
+// Shape only — addresses are validated by checkInviteEmails (typos, real TLD, DNS) below.
 const inviteSchema = z.object({
-  email: z.string().email('Invalid email address'),
+  email: z.string().max(320),
 });
 
-// Validation schema for batch invites
 const batchInviteSchema = z.object({
-  emails: z.array(z.string().email('Invalid email address')).min(1).max(50),
+  emails: z.array(z.string().max(320)).min(1).max(50),
 });
 
 /**
@@ -46,6 +48,30 @@ export async function POST(
     } else {
       const validated = inviteSchema.parse(body);
       emails = [validated.email];
+    }
+
+    // Reject typos (`…@yahoo.comr`) before anything is sent: 422 with a suggestion per address.
+    const { invalid, normalized } = await checkInviteEmails(emails.map((email, index) => ({ index, email })));
+    if (invalid.length > 0) {
+      return NextResponse.json(
+        { error: 'INVALID_EMAIL', message: INVALID_EMAIL_MESSAGE, invalidEmails: invalid },
+        { status: 422, headers: { 'Cache-Control': 'no-store' } }
+      );
+    }
+    emails = emails.map((_, index) => normalized.get(index)!);
+
+    // Suppression: never mail an address that unsubscribed from invites (or, once the
+    // Resend bounce webhook lands, hard-bounced — it should write to the same table).
+    const hashes = emails.map((email) => contactHash('email', email.toLowerCase()));
+    const { data: optouts } = await createAdminSupabase()
+      .from('referral_email_optouts')
+      .select('email_hash')
+      .in('email_hash', hashes);
+    const suppressed = new Set(((optouts ?? []) as Array<{ email_hash: string }>).map((o) => o.email_hash));
+    const skipped = emails.filter((_, i) => suppressed.has(hashes[i]));
+    emails = emails.filter((_, i) => !suppressed.has(hashes[i]));
+    if (emails.length === 0) {
+      return NextResponse.json({ success: true, sent: 0, failed: 0, skipped: skipped.length, message: 'Nothing to send' });
     }
 
     // Get challenge details
@@ -103,6 +129,7 @@ export async function POST(
         success: true,
         sent: results.success,
         failed: results.failed,
+        skipped: skipped.length,
         errors: results.errors.length > 0 ? results.errors : undefined,
       });
     } else {

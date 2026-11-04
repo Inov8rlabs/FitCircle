@@ -24,6 +24,8 @@ import {
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { AnalyticsEvents, analytics } from '@/lib/analytics';
+import { invalidEmailsFrom } from '@/lib/referrals/invite-form';
+import { EMAIL_COPY, validateEmailAddress } from '@/lib/validation/email-address';
 
 
 interface ShareFitCircleDialogProps {
@@ -46,6 +48,8 @@ export function ShareFitCircleDialog({
   const [isSending, setIsSending] = useState(false);
   const [emails, setEmails] = useState<string[]>(['']);
   const [emailErrors, setEmailErrors] = useState<Record<number, string>>({});
+  /** "Did you mean …?" per field (full corrected address). */
+  const [emailSuggestions, setEmailSuggestions] = useState<Record<number, string>>({});
 
   // Use environment variable for production URLs, fallback to window.location.origin for development
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL ||
@@ -93,9 +97,55 @@ Let's do this! 🚀`;
     }
   };
 
-  const validateEmail = (email: string): boolean => {
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    return emailRegex.test(email);
+  const trackRejected = (reason: string | undefined, suggestionShown: boolean, checkedBy: 'client' | 'server') => {
+    if (!reason || reason === 'empty') return;
+    analytics.track(
+      AnalyticsEvents.inviteEmailRejected({
+        reason: reason as Parameters<typeof AnalyticsEvents.inviteEmailRejected>[0]['reason'],
+        suggestion_shown: suggestionShown,
+        checked_by: checkedBy,
+        source: 'circle',
+      })
+    );
+  };
+
+  const setFieldResult = (index: number, error: string | null, suggestion?: string) => {
+    setEmailErrors((prev) => {
+      const next = { ...prev };
+      if (error) next[index] = error;
+      else delete next[index];
+      return next;
+    });
+    setEmailSuggestions((prev) => {
+      const next = { ...prev };
+      if (suggestion) next[index] = suggestion;
+      else delete next[index];
+      return next;
+    });
+  };
+
+  /** Blur: flag a typo (`yahoo.comr`) before they hit Send. */
+  const checkEmailField = (index: number) => {
+    const value = emails[index]?.trim();
+    if (!value) return;
+    const result = validateEmailAddress(value);
+    if (!result.valid) {
+      setFieldResult(index, EMAIL_COPY.invalid, result.suggestion);
+      trackRejected(result.reason, Boolean(result.suggestion), 'client');
+    }
+  };
+
+  const acceptSuggestion = (index: number) => {
+    const suggestion = emailSuggestions[index];
+    if (!suggestion) return;
+    const reason = validateEmailAddress(emails[index]).reason;
+    if (reason === 'unknown_tld' || reason === 'typo_likely') {
+      analytics.track(AnalyticsEvents.inviteEmailSuggestionAccepted({ reason, source: 'circle' }));
+    }
+    const next = [...emails];
+    next[index] = suggestion;
+    setEmails(next);
+    setFieldResult(index, null);
   };
 
   const handleEmailChange = (index: number, value: string) => {
@@ -104,6 +154,10 @@ Let's do this! 🚀`;
     setEmails(newEmails);
 
     // Clear error when user types
+    if (emailSuggestions[index]) {
+      const { [index]: _drop, ...rest } = emailSuggestions;
+      setEmailSuggestions(rest);
+    }
     if (emailErrors[index]) {
       const newErrors = { ...emailErrors };
       delete newErrors[index];
@@ -122,33 +176,40 @@ Let's do this! 🚀`;
       const newEmails = emails.filter((_, i) => i !== index);
       setEmails(newEmails);
 
-      // Clean up errors
-      const newErrors = { ...emailErrors };
-      delete newErrors[index];
-      setEmailErrors(newErrors);
+      // Indexes shift on removal: clear per-field errors/suggestions (re-checked on blur/send).
+      setEmailErrors({});
+      setEmailSuggestions({});
     }
   };
 
   const sendInviteEmails = async () => {
     // Validate all emails
     const validEmails: string[] = [];
+    /** validEmails[i] came from emails[fieldIndex[i]] (to map server 422 indexes back). */
+    const fieldIndex: number[] = [];
     const newErrors: Record<number, string> = {};
+    const newSuggestions: Record<number, string> = {};
     let hasErrors = false;
 
     emails.forEach((email, index) => {
       const trimmedEmail = email.trim();
       if (trimmedEmail) {
-        if (!validateEmail(trimmedEmail)) {
-          newErrors[index] = 'Invalid email address';
+        const result = validateEmailAddress(trimmedEmail);
+        if (!result.valid) {
+          newErrors[index] = EMAIL_COPY.invalid;
+          if (result.suggestion) newSuggestions[index] = result.suggestion;
+          trackRejected(result.reason, Boolean(result.suggestion), 'client');
           hasErrors = true;
         } else {
-          validEmails.push(trimmedEmail);
+          validEmails.push(result.normalized);
+          fieldIndex.push(index);
         }
       }
     });
 
     if (hasErrors) {
       setEmailErrors(newErrors);
+      setEmailSuggestions(newSuggestions);
       return;
     }
 
@@ -170,7 +231,22 @@ Let's do this! 🚀`;
         }),
       });
 
-      const result = await response.json();
+      const result = await response.json().catch(() => ({}));
+
+      const invalid = response.status === 422 ? invalidEmailsFrom(result) : [];
+      if (invalid.length) {
+        const errors: Record<number, string> = {};
+        const suggestions: Record<number, string> = {};
+        for (const e of invalid) {
+          const field = fieldIndex[e.index] ?? e.index;
+          errors[field] = EMAIL_COPY.invalid;
+          if (e.suggestion) suggestions[field] = e.suggestion;
+          trackRejected(e.reason, Boolean(e.suggestion), 'server');
+        }
+        setEmailErrors(errors);
+        setEmailSuggestions(suggestions);
+        return;
+      }
 
       if (!response.ok) {
         throw new Error(result.error || 'Failed to send invitations');
@@ -346,14 +422,26 @@ Let's do this! 🚀`;
                         placeholder={`friend${index + 1}@example.com`}
                         value={email}
                         onChange={(e) => handleEmailChange(index, e.target.value)}
+                        onBlur={() => checkEmailField(index)}
+                        aria-invalid={Boolean(emailErrors[index])}
                         className={`bg-white/5 border-glass ${
                           emailErrors[index] ? 'border-red-500' : ''
                         }`}
                       />
                       {emailErrors[index] && (
-                        <p className="text-xs text-red-400 mt-1">
+                        <p role="alert" className="text-xs text-red-400 mt-1">
                           {emailErrors[index]}
                         </p>
+                      )}
+                      {emailSuggestions[index] && (
+                        <button
+                          type="button"
+                          onClick={() => acceptSuggestion(index)}
+                          data-testid={`email-suggestion-${index}`}
+                          className="mt-1 inline-flex max-w-full items-center rounded-full border border-purple-500/50 bg-purple-500/15 px-3 py-1 text-xs text-purple-100 hover:bg-purple-500/25"
+                        >
+                          <span className="truncate">{EMAIL_COPY.didYouMean(emailSuggestions[index])}</span>
+                        </button>
                       )}
                     </div>
                     {emails.length > 1 && (
@@ -386,7 +474,7 @@ Let's do this! 🚀`;
 
               <Button
                 onClick={sendInviteEmails}
-                disabled={isSending}
+                disabled={isSending || Object.keys(emailErrors).length > 0}
                 className="w-full bg-gradient-brand shadow-glow hover:brightness-110"
               >
                 {isSending ? (

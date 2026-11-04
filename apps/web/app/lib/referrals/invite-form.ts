@@ -4,14 +4,14 @@
  * React — so it's unit-tested directly.
  */
 
+import { EMAIL_COPY, validateEmailAddress } from '../validation/email-address';
+
 export const MAX_CONTACTS_PER_SEND = 10;
 
 export type ParsedContact =
   | { kind: 'email'; value: string }
   | { kind: 'phone'; value: string; display: string }
-  | { kind: 'invalid'; input: string; reason: string };
-
-const EMAIL_RE = /^[^\s@<>(),;:"]+@[^\s@<>(),;:"]+\.[a-z]{2,}$/i;
+  | { kind: 'invalid'; input: string; reason: string; suggestion?: string };
 
 /** Normalizes a phone number to E.164. Without a "+", only North American numbers are assumed. */
 export function normalizePhone(raw: string): string | null {
@@ -33,8 +33,15 @@ export function parseContact(raw: string): ParsedContact {
   const input = raw.trim().replace(/^mailto:/i, '').replace(/^(sms|tel):/i, '');
   if (!input) return { kind: 'invalid', input, reason: 'Enter an email or phone number' };
   if (input.includes('@')) {
-    const email = input.toLowerCase();
-    return EMAIL_RE.test(email) ? { kind: 'email', value: email } : { kind: 'invalid', input, reason: "That email doesn't look right" };
+    // Shared validator (same rules as iOS/Android/server): rejects `yahoo.comr`, offers yahoo.com.
+    const result = validateEmailAddress(input);
+    if (result.valid) return { kind: 'email', value: result.normalized.toLowerCase() };
+    return {
+      kind: 'invalid',
+      input,
+      reason: EMAIL_COPY.invalid,
+      ...(result.suggestion ? { suggestion: result.suggestion } : {}),
+    };
   }
   if (/\d/.test(input)) {
     const phone = normalizePhone(input);
@@ -65,6 +72,30 @@ export interface ContactChip {
   name?: string;
 }
 
+export interface RejectedEntry {
+  input: string;
+  reason: string;
+  /** Corrected address for a "Did you mean …?" button. */
+  suggestion?: string;
+}
+
+/** One address the server refused (422 INVALID_EMAIL), indexed into the request's contacts[]. */
+export interface InvalidEmailEntry {
+  index: number;
+  email: string;
+  reason: string;
+  suggestion?: string;
+}
+
+/** Pull `invalidEmails` out of a 422 INVALID_EMAIL envelope (either `data` or `error.details`). */
+export function invalidEmailsFrom(body: unknown): InvalidEmailEntry[] {
+  const b = body as { data?: { invalidEmails?: unknown }; error?: { details?: { invalidEmails?: unknown } }; invalidEmails?: unknown };
+  const list = b?.data?.invalidEmails ?? b?.error?.details?.invalidEmails ?? b?.invalidEmails;
+  return Array.isArray(list)
+    ? list.filter((e): e is InvalidEmailEntry => typeof e?.email === 'string' && typeof e?.index === 'number')
+    : [];
+}
+
 /**
  * Adds parsed entries to the chip list: dedupes, caps at 10 and returns what
  * couldn't be added so the field can keep showing it.
@@ -73,15 +104,15 @@ export function addChips(
   chips: ContactChip[],
   raw: string,
   name?: string
-): { chips: ContactChip[]; rejected: Array<{ input: string; reason: string }> } {
+): { chips: ContactChip[]; rejected: RejectedEntry[] } {
   const next = [...chips];
-  const rejected: Array<{ input: string; reason: string }> = [];
+  const rejected: RejectedEntry[] = [];
   const entries = splitContactInput(raw);
   const trimmedName = name?.trim() || undefined;
   for (const entry of entries) {
     const parsed = parseContact(entry);
     if (parsed.kind === 'invalid') {
-      rejected.push({ input: parsed.input, reason: parsed.reason });
+      rejected.push({ input: parsed.input, reason: parsed.reason, ...(parsed.suggestion ? { suggestion: parsed.suggestion } : {}) });
       continue;
     }
     const key = `${parsed.kind}:${parsed.value}`;
