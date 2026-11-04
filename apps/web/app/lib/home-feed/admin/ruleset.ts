@@ -263,8 +263,12 @@ export const draftPreviewBodySchema = z
     userId: z.string().uuid().optional(),
     /** Preview as the FitCircle admin matching X-Admin-Actor (default when neither userId nor persona). */
     actorAsUser: z.literal(true).optional(),
-    /** A synthetic, representative user (no DB user needed; promo cards are not evaluated). */
-    persona: z.literal('typical').optional(),
+    /**
+     * A synthetic user (no DB user needed): `typical` (promo cards are not evaluated), or the same member
+     * while free Pro is ending (`pro_expiring`) / has ended (`pro_expired`) — promos ARE evaluated, with the
+     * published Pro lifecycle config (docs/PRO_LIFECYCLE_PROMPTS.md).
+     */
+    persona: z.enum(['typical', 'pro_expiring', 'pro_expired']).optional(),
     platform,
     version: appVersion,
     build: z.number().int().min(0).max(999_999_999).optional(),

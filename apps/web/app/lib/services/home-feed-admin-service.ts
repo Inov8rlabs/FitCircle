@@ -50,12 +50,14 @@ import {
 } from '@/lib/home-feed/admin/ruleset';
 import { activeCampaignsCache, buildFeedContext, defaultContextLoaders, readRequestInfo, type ContextLoaders, type FeedProfile, type FeedRequestInfo } from '@/lib/home-feed/context';
 import { HomeFeedError } from '@/lib/home-feed/http';
+import { DEFAULT_SAMPLE, personaLifecycle, type PersonaSample, type ProLifecycleState } from '@/lib/pro-lifecycle';
 import { completionView } from '@/lib/profile-completion/model';
 import { PROMO_CARD_TYPE, PROMO_CARD_VERSION, parsePromoClient, type PromoClientSupport } from '@/lib/promos';
 import { createAdminSupabase } from '@/lib/supabase-admin';
 
-import { HomeFeedService, type RuleRow } from './home-feed-service';
-import { type PromoLoaders } from './promo-service';
+import { HomeFeedService, type PromoRoundData, type RuleRow } from './home-feed-service';
+import { readPublishedConfig, type PublishedConfig } from './pro-lifecycle-service';
+import { liveProFeaturesCache, type PromoLoaders } from './promo-service';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -204,11 +206,17 @@ export function toChangeEntry(row: ChangeRow): ChangeEntry {
   };
 }
 
-interface Subject {
+export interface Subject {
   kind: 'user' | 'actor' | 'persona';
   profile: FeedProfile;
   loaders?: ContextLoaders;
+  /** Persona in a Pro lifecycle state: promos are evaluated with this synthetic input. */
+  lifecycle?: { state: ProLifecycleState; pub: PublishedConfig; sample: PersonaSample };
 }
+
+/** Preview personas: the typical member, and the same member while free Pro is ending / has ended. */
+export const PREVIEW_PERSONAS = ['typical', 'pro_expiring', 'pro_expired'] as const;
+export type PreviewPersona = (typeof PREVIEW_PERSONAS)[number];
 
 export interface PreviewSide {
   feed: ComposeResult['response'];
@@ -250,7 +258,7 @@ function side(result: ComposeResult): PreviewSide {
   return { feed, trace: result.trace, order: feed.cards.map((c) => c.id) };
 }
 
-function personaProfile(now: Date, timezone: string | undefined): FeedProfile {
+export function personaProfile(now: Date, timezone: string | undefined): FeedProfile {
   return {
     id: PERSONA_USER_ID,
     display_name: 'Alex',
@@ -270,6 +278,39 @@ const PERSONA_COMPLETION_PROFILE = { onboarding_completed: true, height_cm: 170,
  * A representative member: free, 60 days in, one circle, not checked in yet, no water yet, a couple of unread chats,
  * a partly answered profile (shows profile_completion@1 when the preview declares it). Campaign + flags are the real global state.
  */
+/**
+ * A Pro lifecycle persona's subject: the typical member with free Pro ending
+ * tomorrow / ended yesterday (referral week, sample usage), so the editor can
+ * see the whole feed with the lifecycle card in place. `pub` = the config to
+ * render with (published, or the lifecycle editor's draft).
+ */
+export function lifecyclePersonaSubject(state: ProLifecycleState, now: Date, timezone: string | undefined, pub: PublishedConfig, loaders?: ContextLoaders, sample: PersonaSample = DEFAULT_SAMPLE): Subject {
+  const base = personaProfile(now, timezone);
+  const { profile } = personaLifecycle(state, now, String(base.timezone), pub.config, sample);
+  return { kind: 'persona', profile: { ...base, ...profile } as FeedProfile, loaders: personaLoaders(loaders), lifecycle: { state, pub, sample } };
+}
+
+/** The promo round for a persona: one logged meal, no promo history, the live Pro gates, and its lifecycle input. */
+export async function personaPromoRound(subject: Subject, ctx: FeedContext): Promise<PromoRoundData | null> {
+  if (!subject.lifecycle) return null;
+  const { state, pub, sample } = subject.lifecycle;
+  const { input } = personaLifecycle(state, ctx.now, ctx.timezone, pub.config, sample);
+  let live: Set<string> | null = null;
+  try {
+    live = await liveProFeaturesCache.get();
+  } catch {
+    live = null;
+  }
+  return {
+    facts: { lastMeal: { title: 'Grilled chicken salad', meal_type: 'lunch', logged_at: new Date(ctx.now.getTime() - 86_400_000).toISOString() }, recentEntries: [] },
+    state: new Map(),
+    liveProFeatures: live,
+    timezone: ctx.timezone,
+    localDate: ctx.localDate,
+    lifecycle: { pub, input },
+  };
+}
+
 export function personaLoaders(base: ContextLoaders = defaultContextLoaders): ContextLoaders {
   return {
     campaign: base.campaign,
@@ -353,7 +394,8 @@ export class HomeFeedAdminService {
   // Draft preview
   // -------------------------------------------------------------------------
 
-  private static async resolveSubject(body: { userId?: string; persona?: 'typical'; timezone?: string }, caller: AdminCaller, now: Date, opts: ServiceOpts): Promise<Subject> {
+  private static async resolveSubject(body: { userId?: string; persona?: PreviewPersona; timezone?: string }, caller: AdminCaller, now: Date, opts: ServiceOpts): Promise<Subject> {
+    if (body.persona === 'pro_expiring' || body.persona === 'pro_expired') return lifecyclePersonaSubject(body.persona, now, body.timezone, await readPublishedConfig(), opts.loaders);
     if (body.persona) return { kind: 'persona', profile: personaProfile(now, body.timezone), loaders: personaLoaders(opts.loaders) };
     if (body.userId) {
       const { data, error } = await db().from('profiles').select('*').eq('id', body.userId).maybeSingle();
@@ -394,7 +436,12 @@ export class HomeFeedAdminService {
       const r = composeFeed({ support, ctx: null, now, traceRanked: true });
       return { ctx, before: r, after: r, feedEnabled, rulesEnabled };
     }
-    const promoData = subject.kind === 'persona' ? null : await HomeFeedService.promoRound(subject.profile, info, promoClient, now, opts.promoLoaders);
+    const promoData =
+      subject.kind === 'persona'
+        ? promoClient.promoCard
+          ? await personaPromoRound(subject, ctx)
+          : null
+        : await HomeFeedService.promoRound(subject.profile, info, promoClient, now, opts.promoLoaders);
     const promos = HomeFeedService.selectPromosFor(subject.profile, ctx, promoClient, promoData);
     const run = (rules: FlatRule[]) => {
       const r = composeFeed({ support, ctx, rules: rulesEnabled ? toFeedRules(rules) : [], now, traceRanked: true, ...promos.compose });

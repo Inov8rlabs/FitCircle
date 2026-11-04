@@ -38,6 +38,7 @@ import {
 } from '@/lib/home-feed/context';
 import { localParts, resolveTimezone } from '@/lib/home-feed/context';
 import { HomeFeedError } from '@/lib/home-feed/http';
+import { LIFECYCLE_PROMO_KEY_SET, SUPERSEDED_CARD_TYPES, SUPERSEDED_PROMO_KEYS, lifecyclePromoDefinitions } from '@/lib/pro-lifecycle';
 import {
   PROMO_CARD_TYPE,
   PROMO_CARD_VERSION,
@@ -53,7 +54,8 @@ import {
 import { createAdminSupabase } from '@/lib/supabase-admin';
 import { runAfterResponse } from '@/lib/utils/after-response';
 
-import { PromoService, defaultPromoLoaders, liveProFeaturesCache, type PromoLoaders } from './promo-service';
+import { lifecycleConfigCache, lifecycleLive } from './pro-lifecycle-service';
+import { PromoService, defaultPromoLoaders, liveProFeaturesCache, type LifecycleRound, type PromoLoaders } from './promo-service';
 
 /** Rules: fresh 30 s, then served stale (≤ 10 min) while one refresh runs — never blocks a warm request. */
 const RULES_TTL_MS = 30_000;
@@ -183,6 +185,7 @@ export class HomeFeedService {
     activeCampaignsCache.clear();
     feedFlagsCache.clear();
     liveProFeaturesCache.clear();
+    lifecycleConfigCache.clear();
   }
 
   /**
@@ -194,7 +197,10 @@ export class HomeFeedService {
     if (areRulesEnabled()) void quiet(enabledRulesCache.get());
     void quiet(activeCampaignsCache.get());
     void quiet(feedFlagsCache.get());
-    if (promosConfig().enabled) void quiet(liveProFeaturesCache.get());
+    if (promosConfig().enabled) {
+      void quiet(liveProFeaturesCache.get());
+      void quiet(lifecycleConfigCache.get());
+    }
   }
 
   /** All rule rows (enabled or not), newest config first. */
@@ -282,12 +288,15 @@ export class HomeFeedService {
     const localDate = localParts(now, timezone).date;
     // Journey facts + promo state get a longer budget than the feed context: when either times out
     // the time-of-day meal card can't be placed, which read as the card flickering in and out.
-    const [facts, state, liveProFeatures] = await Promise.all([
+    const lifecycleLoader = loaders.proLifecycle;
+    const [facts, state, liveProFeatures, lifecycle] = await Promise.all([
       softly(() => loaders.journeyFacts(profile.id, localDate), PROMO_LOADER_TIMEOUT_MS),
       softly(() => loaders.promoState(profile.id), PROMO_LOADER_TIMEOUT_MS),
       softly(() => loaders.liveProFeatures()),
+      // Pro lifecycle prompts (docs/PRO_LIFECYCLE_PROMPTS.md): config (cached) + grants/purchases (+ usage when in a state).
+      lifecycleLoader ? softly(() => lifecycleLoader.call(loaders, profile, timezone, now), PROMO_LOADER_TIMEOUT_MS) : Promise.resolve(null),
     ]);
-    return { facts, state, liveProFeatures, timezone, localDate };
+    return { facts, state, liveProFeatures, timezone, localDate, lifecycle };
   }
 
   /** Pure-ish: promo candidates + what they replace, for composeFeed. */
@@ -301,8 +310,10 @@ export class HomeFeedService {
     const promoV1 = client.promoCard;
     if (!cfg.enabled || !client.promoCard || !data) return { compose: { promoV1 }, trace: null };
     const journey = buildJourneyContext(profile, data.facts, { now: ctx.now, timezone: data.timezone, localDate: data.localDate });
-    const { candidates, trace } = selectPromos({
-      definitions: SYSTEM_PROMOS,
+    const lc = data.lifecycle ?? null;
+    const lifecycleDefs = lc ? lifecyclePromoDefinitions(lc.input, lc.pub.config, { enabled: lifecycleLive(lc.pub), now: ctx.now }) : [];
+    const selected = selectPromos({
+      definitions: [...lifecycleDefs, ...SYSTEM_PROMOS],
       ctx,
       journey,
       state: data.state,
@@ -310,8 +321,16 @@ export class HomeFeedService {
       client,
       config: cfg,
     });
+    let { candidates } = selected;
+    const { trace } = selected;
     // pro_value replaces the legacy pro_upsell card for promo@1 clients (while pro_value is live).
     const replacedTypes = new Set<string>(isPromoLive('pro_value', cfg) ? ['pro_upsell'] : []);
+    // A Pro lifecycle card is THE paywall card while it shows: the evergreen upsells step aside.
+    if (candidates.some((c) => LIFECYCLE_PROMO_KEY_SET.has(c.promoKey))) {
+      candidates = candidates.filter((c) => !SUPERSEDED_PROMO_KEYS.has(c.promoKey));
+      for (const t of trace) if (SUPERSEDED_PROMO_KEYS.has(t.key) && t.outcome === 'selected') t.outcome = 'superseded_by_pro_lifecycle';
+      for (const type of SUPERSEDED_CARD_TYPES) replacedTypes.add(type);
+    }
     return { compose: { promos: candidates, replacedTypes, promoV1 }, trace };
   }
 
@@ -476,6 +495,8 @@ export interface PromoRoundData {
   liveProFeatures: Set<string> | null;
   timezone: string;
   localDate: string;
+  /** Pro lifecycle round (null = not loaded / timed out → no lifecycle card). */
+  lifecycle?: LifecycleRound | null;
 }
 
 /** promo@1 support when the caller didn't parse `actions=` / `promoLayouts=` (e.g. admin preview default). */

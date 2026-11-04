@@ -23,13 +23,22 @@ export class HomeFeedFakeDb {
     // profile_completion@1
     onboarding_progress: [],
     daily_tracking: [],
+    // Pro lifecycle prompts (docs/PRO_LIFECYCLE_PROMPTS.md)
+    complimentary_grants: [],
+    subscription_events: [],
+    fitzy_messages: [],
+    fitzy_plans: [],
+    notification_log: [],
+    notification_preferences: [],
+    experiment_audit_log: [],
+    push_tokens: [],
   };
   /** Tables whose next query errors (simulate outages). */
   failing = new Set<string>();
   /** One-shot failures: the next `op` on `table` errors once (rollback tests). */
   failNext: Array<{ table: string; op: 'select' | 'insert' | 'update' | 'upsert' | 'delete' }> = [];
   /** UNIQUE columns per table (insert → 23505 on a clash). */
-  unique: Record<string, string[]> = { home_feed_rules: ['key'], home_feed_rule_changes: ['seq'] };
+  unique: Record<string, string[]> = { home_feed_rules: ['key'], home_feed_rule_changes: ['seq'], feature_flags: ['name'] };
   /** Queries run per table (latency tests: warm requests must not re-read shared tables). */
   queries: Record<string, number> = {};
   private seq = 0;

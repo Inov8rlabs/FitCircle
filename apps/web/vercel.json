@@ -101,6 +101,10 @@
       "schedule": "5 * * * *"
     },
     {
+      "path": "/api/cron/pro-lifecycle",
+      "schedule": "25 * * * *"
+    },
+    {
       "path": "/api/cron/onboarding-nudges",
       "schedule": "7,22,37,52 * * * *"
     }

@@ -187,7 +187,10 @@ export type NotificationType =
   // Transactional: the free trial renews tomorrow (ONBOARDING_V2_EXPERIMENT_SPEC §3.2; TrialReminderService)
   | 'trial_ending_reminder'
   // "Finish setting up" for sign-ups who left onboarding midway (OnboardingNudgeService; data.touch = 1 | 2)
-  | 'onboarding_finish_reminder';
+  | 'onboarding_finish_reminder'
+  // Transactional: free Pro (referral / complimentary) ends tomorrow, and has ended (docs/PRO_LIFECYCLE_PROMPTS.md; ProLifecyclePushService).
+  | 'pro_expiring_reminder'
+  | 'pro_expired';
 
 interface NotificationContent {
   title: string;
@@ -286,6 +289,9 @@ export const TYPE_SCREEN_MAP: Record<NotificationType, NotificationScreen> = {
   trial_ending_reminder: 'dashboard',
   // The apps resume onboarding at the saved step whenever onboarding_completed is false.
   onboarding_finish_reminder: 'dashboard',
+  // Shipped apps can only open Home from these; the Pro lifecycle card (with the paywall button) is on Home.
+  pro_expiring_reminder: 'dashboard',
+  pro_expired: 'dashboard',
 };
 
 /** Coach pushes: Android "Coach" channel (FCM falls back to the default channel on older builds). */
@@ -682,6 +688,17 @@ export const NOTIFICATION_TEMPLATES: Record<
           body: '2 minutes left to finish setting up FitCircle.',
           category: 'journey',
         },
+  // Copy is rendered per user by ProLifecyclePushService from the Admin Tools config (data.title / data.body).
+  pro_expiring_reminder: (data) => ({
+    title: stripEmoji(String(data.title || 'Your free Pro ends tomorrow')),
+    body: stripEmoji(String(data.body || 'Keep unlimited AI meal scans and weekly plans from Fitzy. Keep Pro from your Home screen.')),
+    category: 'journey',
+  }),
+  pro_expired: (data) => ({
+    title: stripEmoji(String(data.title || 'Your free Pro ended')),
+    body: stripEmoji(String(data.body || 'Thanks for trying Pro. You can get it back anytime from your Home screen.')),
+    category: 'journey',
+  }),
 };
 
 /** " and 2 other circles" for a cross-circle coalesced push; "" otherwise. */
@@ -899,6 +916,9 @@ export const CAP_EXEMPT_TYPES: ReadonlySet<NotificationType> = new Set<Notificat
   'circle_daily_summary',
   // Transactional trust message about money (ONBOARDING_V2 §3.2): never capped.
   'trial_ending_reminder',
+  // Same for free Pro ending / ended (one each per Pro period; quiet hours + dedupe still apply).
+  'pro_expiring_reminder',
+  'pro_expired',
 ]);
 
 export function isCapExempt(type: NotificationType): boolean {

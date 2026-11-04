@@ -9,6 +9,7 @@
  */
 import { swrCache } from '@/lib/home-feed/cache';
 import { localClock } from '@/lib/journey/meal-slots';
+import { LIFECYCLE_PROMO_KEY_SET, type LifecycleFeedInput } from '@/lib/pro-lifecycle';
 import {
   CONVERSION_WINDOW_DAYS,
   SYSTEM_PROMO_KEYS,
@@ -20,12 +21,15 @@ import {
 import { addDays } from '@/lib/streaks/streak-calculator';
 import { createAdminSupabase } from '@/lib/supabase-admin';
 
+import { ProLifecycleService, lifecycleConfigCache, lifecycleLive, type PublishedConfig } from './pro-lifecycle-service';
+
 export type ConversionKind = 'meal_logged' | 'subscription_started' | 'fitzy_opened';
 
 /** Which promos a completed action converts (PROMO_CARD_SPEC §4 completion events). */
 export const CONVERSIONS: Record<ConversionKind, readonly string[]> = {
   meal_logged: ['first_meal', 'log_meal_now'],
-  subscription_started: ['pro_value'],
+  // The Pro lifecycle cards (pro_expiring / pro_expired / trial_expiring) open the paywall too.
+  subscription_started: ['pro_value', ...LIFECYCLE_PROMO_KEY_SET],
   fitzy_opened: ['meet_fitzy'],
 };
 
@@ -145,6 +149,15 @@ export interface PromoLoaders {
   journeyFacts(userId: string, localDate: string): Promise<JourneyFacts>;
   promoState(userId: string): Promise<Map<string, PromoUserState>>;
   liveProFeatures(): Promise<Set<string>>;
+  /** Pro lifecycle prompts: the published config + this viewer's state (input null when prompts are off). */
+  proLifecycle?(profile: Record<string, any> & { id: string }, timezone: string, now: Date): Promise<LifecycleRound>;
+}
+
+/** What the promo round learns about the Pro lifecycle prompts. */
+export interface LifecycleRound {
+  pub: PublishedConfig;
+  /** Null when the prompts are off (no per-user reads were made). */
+  input: LifecycleFeedInput | null;
 }
 
 export const defaultPromoLoaders: PromoLoaders = {
@@ -178,6 +191,11 @@ export const defaultPromoLoaders: PromoLoaders = {
     return new Map(((data ?? []) as StateRow[]).map((r) => [r.promo_key, stateFromRow(r)]));
   },
   liveProFeatures: () => liveProFeaturesCache.get(),
+  async proLifecycle(profile, timezone, now) {
+    const pub = await lifecycleConfigCache.get();
+    if (!lifecycleLive(pub)) return { pub, input: null };
+    return { pub, input: await ProLifecycleService.feedInput(profile, timezone, now, pub.config) };
+  },
 };
 
 export class PromoService {
@@ -189,7 +207,7 @@ export class PromoService {
     const byKey = new Map<string, PromoEventInput[]>();
     for (const e of events) {
       const key = e.promo_id ?? promoKeyFromCardId(e.card_id);
-      if (!key || !SYSTEM_PROMO_KEYS.includes(key)) continue;
+      if (!key || !(SYSTEM_PROMO_KEYS.includes(key) || LIFECYCLE_PROMO_KEY_SET.has(key))) continue;
       byKey.set(key, [...(byKey.get(key) ?? []), e]);
     }
     if (byKey.size === 0) return 0;

@@ -2,6 +2,7 @@ import { type NextRequest, NextResponse } from 'next/server';
 
 import { reportRouteError } from '@/lib/api/route-errors';
 import { ComplimentaryGrantService } from '@/lib/services/complimentary-grant-service';
+import { ProLifecyclePushService } from '@/lib/services/pro-lifecycle-push-service';
 import { ReferralInviteService } from '@/lib/services/referral-invite-service';
 import { ReferralRewardService } from '@/lib/services/referral-reward-service';
 import { ReferralService } from '@/lib/services/referral-service';
@@ -17,6 +18,9 @@ export const dynamic = 'force-dynamic';
  *     without a webhook reaching holdIfGranted.
  *  3. End expired promotional Pro on time: a referral week is a week, not
  *     "a week plus up to 30h" waiting for the daily reconcile.
+ *     Then the "your Pro ended" push (ProLifecyclePushService.notifyExpired:
+ *     only when the user really is free now; quiet hours → the hourly
+ *     /api/cron/pro-lifecycle retries). ?dryRun=true reports it without sending.
  *  4. Re-send referral pushes that weren't delivered (quiet hours, no device).
  *  5. Forget plaintext emails of invites that never converted (45 days).
  */
@@ -66,6 +70,8 @@ export async function GET(request: NextRequest) {
       .lt('subscription_expires_at', new Date().toISOString())
       .limit(500);
     let ended = 0;
+    const endedPushes: Array<{ userId: string; outcome: string }> = [];
+    const pushDryRun = ['1', 'true', 'yes'].includes((request.nextUrl.searchParams.get('dryRun') ?? '').toLowerCase());
     for (const row of (expired ?? []) as Array<{ id: string }>) {
       try {
         try {
@@ -88,11 +94,13 @@ export async function GET(request: NextRequest) {
           }
         }
         ended++;
+        const push = await ProLifecyclePushService.notifyExpired(row.id, { dryRun: pushDryRun });
+        if (push) endedPushes.push({ userId: row.id, outcome: push.outcome });
       } catch (err: any) {
         console.error('[cron/referrals] expiry sync failed:', row.id, err?.message);
       }
     }
-    result.expired = { checked: expired?.length ?? 0, ended };
+    result.expired = { checked: expired?.length ?? 0, ended, pushes: endedPushes };
   } catch (err: any) {
     reportRouteError('cron/referrals expired', err);
     result.expired = { error: err?.message };

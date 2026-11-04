@@ -1,7 +1,7 @@
 {
   "$schema": "./tracking-plan.schema.json",
-  "version": 25,
-  "updated": "2026-11-03",
+  "version": 26,
+  "updated": "2026-11-04",
   "conventions": {
     "eventNames": "Title Case, '<Object> <Past-tense verb>' (e.g. 'Meal Logged'). Names are frozen once shipped: rename in the analytics tool, never in code.",
     "propertyNames": "snake_case. Enum values are lowercase snake_case.",
@@ -856,7 +856,8 @@
         {
           "name": "notification_type",
           "type": "string",
-          "required": false
+          "required": false,
+          "description": "Server notification type (push data `type`), e.g. meal_reminder_lunch, trial_ending_reminder, pro_expiring_reminder (free Pro ends tomorrow), pro_expired (free Pro ended)."
         },
         {
           "name": "route",
@@ -2183,7 +2184,7 @@
           "name": "source",
           "type": "string",
           "required": true,
-          "description": "Snake_case trigger id: ai_limit, pro_card, settings, circle_limit, history_limit, remove_ads, body_scan, milestone, streak_shield, locked_feature, pricing_page, onboarding, landing, landing_footer (web), first_meal_aha (post-first-meal soft paywall), feed_pro_value (home feed pro_value promo). Never camelCase."
+          "description": "Snake_case trigger id: ai_limit, pro_card, settings, circle_limit, history_limit, remove_ads, body_scan, milestone, streak_shield, locked_feature, pricing_page, onboarding, landing, landing_footer (web), first_meal_aha (post-first-meal soft paywall), feed_pro_value (home feed pro_value promo), pro_expiring_card / pro_expired_card / trial_expiring_card (Pro lifecycle home card: free Pro ending, ended, store trial ending — PRO_LIFECYCLE_PROMPTS.md; Android prefixes promo sources with 'promo:'). Never camelCase."
         },
         {
           "name": "is_hard",
@@ -2219,7 +2220,7 @@
           "name": "source",
           "type": "string",
           "required": true,
-          "description": "Snake_case trigger id: ai_limit, pro_card, settings, circle_limit, history_limit, remove_ads, body_scan, milestone, streak_shield, locked_feature, pricing_page, onboarding, landing, landing_footer (web), first_meal_aha (post-first-meal soft paywall), feed_pro_value (home feed pro_value promo). Never camelCase."
+          "description": "Snake_case trigger id: ai_limit, pro_card, settings, circle_limit, history_limit, remove_ads, body_scan, milestone, streak_shield, locked_feature, pricing_page, onboarding, landing, landing_footer (web), first_meal_aha (post-first-meal soft paywall), feed_pro_value (home feed pro_value promo), pro_expiring_card / pro_expired_card / trial_expiring_card (Pro lifecycle home card: free Pro ending, ended, store trial ending — PRO_LIFECYCLE_PROMPTS.md; Android prefixes promo sources with 'promo:'). Never camelCase."
         },
         {
           "name": "plan",
@@ -2267,7 +2268,7 @@
           "name": "source",
           "type": "string",
           "required": true,
-          "description": "Snake_case trigger id: ai_limit, pro_card, settings, circle_limit, history_limit, remove_ads, body_scan, milestone, streak_shield, locked_feature, pricing_page, onboarding, landing, landing_footer (web), first_meal_aha (post-first-meal soft paywall), feed_pro_value (home feed pro_value promo). Never camelCase."
+          "description": "Snake_case trigger id: ai_limit, pro_card, settings, circle_limit, history_limit, remove_ads, body_scan, milestone, streak_shield, locked_feature, pricing_page, onboarding, landing, landing_footer (web), first_meal_aha (post-first-meal soft paywall), feed_pro_value (home feed pro_value promo), pro_expiring_card / pro_expired_card / trial_expiring_card (Pro lifecycle home card: free Pro ending, ended, store trial ending — PRO_LIFECYCLE_PROMPTS.md; Android prefixes promo sources with 'promo:'). Never camelCase."
         },
         {
           "name": "is_hard",
@@ -4273,7 +4274,7 @@
           "name": "promo",
           "type": "string",
           "required": true,
-          "description": "Promo key (props.promoId), e.g. first_meal, log_meal_now, pro_value, meet_fitzy."
+          "description": "Promo key (props.promoId), e.g. first_meal, log_meal_now, pro_value, meet_fitzy, pro_expiring, pro_expired, trial_expiring."
         },
         {
           "name": "creative",
@@ -4319,7 +4320,7 @@
           "name": "promo",
           "type": "string",
           "required": true,
-          "description": "Promo key (props.promoId), e.g. first_meal, log_meal_now, pro_value, meet_fitzy."
+          "description": "Promo key (props.promoId), e.g. first_meal, log_meal_now, pro_value, meet_fitzy, pro_expiring, pro_expired, trial_expiring."
         },
         {
           "name": "creative",
@@ -4364,7 +4365,7 @@
           "name": "promo",
           "type": "string",
           "required": true,
-          "description": "Promo key (props.promoId), e.g. first_meal, log_meal_now, pro_value, meet_fitzy."
+          "description": "Promo key (props.promoId), e.g. first_meal, log_meal_now, pro_value, meet_fitzy, pro_expiring, pro_expired, trial_expiring."
         },
         {
           "name": "creative",
@@ -4388,13 +4389,13 @@
         "android",
         "web"
       ],
-      "description": "SERVER-RECORDED (promo_user_state.converted_at): the promo's completion event (first meal, subscription, Fitzy opened) happened within 7 days of a tap. Clients do not send this; listed so the name is reserved.",
+      "description": "SERVER-RECORDED (promo_user_state.converted_at): the promo's completion event (first meal, subscription, Fitzy opened; the Pro lifecycle cards convert on subscription) happened within 7 days of a tap. Clients do not send this; listed so the name is reserved.",
       "properties": [
         {
           "name": "promo",
           "type": "string",
           "required": true,
-          "description": "Promo key (props.promoId), e.g. first_meal, log_meal_now, pro_value, meet_fitzy."
+          "description": "Promo key (props.promoId), e.g. first_meal, log_meal_now, pro_value, meet_fitzy, pro_expiring, pro_expired, trial_expiring."
         },
         {
           "name": "creative",
@@ -4413,6 +4414,36 @@
           "type": "string",
           "required": false,
           "description": "Home feed decision_id of the response that carried the card."
+        }
+      ]
+    },
+    {
+      "name": "Pro Lifecycle Push Sent",
+      "category": "monetization",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "description": "SERVER-RECORDED (notification_log rows of type pro_expiring_reminder / pro_expired, data.dedupeKey = <type>:<user>:<endsAt>): a free-Pro ending / ended push was delivered (docs/PRO_LIFECYCLE_PROMPTS.md). Clients do not send this; listed so the name is reserved. Opens arrive as Push Notification Opened {notification_type}.",
+      "properties": [
+        {
+          "name": "state",
+          "type": "string",
+          "required": true,
+          "description": "pro_expiring | pro_expired."
+        },
+        {
+          "name": "source",
+          "type": "string",
+          "required": false,
+          "description": "Where the Pro time came from: referral | complimentary."
+        },
+        {
+          "name": "trial_available",
+          "type": "bool",
+          "required": true,
+          "description": "The copy offered the 3-day free trial."
         }
       ]
     },

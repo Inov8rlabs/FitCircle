@@ -108,13 +108,17 @@ const TYPE_CATEGORY_MAP: Record<string, NotificationCategory> = {
 
   // "Finish setting up" nudge for sign-ups who left onboarding (OnboardingNudgeService).
   onboarding_finish_reminder: 'journey',
+
+  // Transactional (docs/PRO_LIFECYCLE_PROMPTS.md): free Pro ending / ended — see TRANSACTIONAL_TYPES.
+  pro_expiring_reminder: 'journey',
+  pro_expired: 'journey',
 };
 
 /**
  * Account/billing messages the user must get whatever their category toggles
  * say (only the push master switch can silence them).
  */
-export const TRANSACTIONAL_TYPES: ReadonlySet<string> = new Set(['trial_ending_reminder']);
+export const TRANSACTIONAL_TYPES: ReadonlySet<string> = new Set(['trial_ending_reminder', 'pro_expiring_reminder', 'pro_expired']);
 
 // ============================================================================
 // SERVICE
