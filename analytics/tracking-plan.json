@@ -1,7 +1,7 @@
 {
   "$schema": "./tracking-plan.schema.json",
-  "version": 16,
-  "updated": "2026-10-28",
+  "version": 17,
+  "updated": "2026-10-31",
   "conventions": {
     "eventNames": "Title Case, '<Object> <Past-tense verb>' (e.g. 'Meal Logged'). Names are frozen once shipped: rename in the analytics tool, never in code.",
     "propertyNames": "snake_case. Enum values are lowercase snake_case.",
@@ -108,6 +108,24 @@
       "post_meal_sheet",
       "feed",
       "push"
+    ],
+    "lifecycle_skip_reason": [
+      "consent",
+      "cooldown",
+      "cap",
+      "dormant",
+      "no_data",
+      "flag_off",
+      "holdout",
+      "no_email",
+      "bounced",
+      "push_suppressed",
+      "already_sent",
+      "ledger_unavailable"
+    ],
+    "email_medium": [
+      "lifecycle",
+      "transactional"
     ]
   },
   "globalProperties": [
@@ -4006,6 +4024,596 @@
           "type": "enum",
           "enum": "meal_type",
           "required": true
+        }
+      ]
+    },
+    {
+      "name": "Email Sent",
+      "category": "engagement",
+      "platforms": [
+        "web"
+      ],
+      "description": "A lifecycle or transactional email was accepted by Resend. SERVER-SENT by the backend (lib/engagement, Amplitude HTTP API); clients never send this. docs/ENGAGEMENT_MESSAGING.md §8.",
+      "properties": [
+        {
+          "name": "message_key",
+          "type": "string",
+          "required": true,
+          "description": "Stable lifecycle message key: welcome, weekly_report, onboarding_first_meal, onboarding_first_circle, onboarding_invite_friend, celebrate_streak, reengage_comeback."
+        },
+        {
+          "name": "variant",
+          "type": "string",
+          "required": false,
+          "description": "Flattened variant ids, e.g. \"growth:invite_friend|hero:best_week|subject:best_week_2\"."
+        },
+        {
+          "name": "period_key",
+          "type": "string",
+          "required": false,
+          "description": "Occurrence of the message: once, an ISO week (2026-W44), lapse:<date>, circle:<id>, streak:<n>:<date>."
+        },
+        {
+          "name": "template_version",
+          "type": "string",
+          "required": false,
+          "description": "Renderer template, e.g. weekly_report@1, lifecycle@1, welcome@2."
+        },
+        {
+          "name": "send_id",
+          "type": "string",
+          "required": false,
+          "description": "engagement_sends row id (joins events to the send ledger)."
+        },
+        {
+          "name": "medium",
+          "type": "enum",
+          "enum": "email_medium",
+          "required": false
+        },
+        {
+          "name": "channel",
+          "type": "string",
+          "required": false,
+          "description": "email"
+        },
+        {
+          "name": "growth_slot",
+          "type": "string",
+          "required": false,
+          "description": "Weekly report growth slot shown: invite_friend, create_circle, join_campaign, try_fitzy, try_photo, none."
+        },
+        {
+          "name": "week_type",
+          "type": "string",
+          "required": false,
+          "description": "Weekly report week type: best_week, comeback, consistent, building, quiet, fresh_start."
+        }
+      ]
+    },
+    {
+      "name": "Email Delivered",
+      "category": "engagement",
+      "platforms": [
+        "web"
+      ],
+      "description": "Resend email.delivered (accepted by the recipient mail server). SERVER-SENT by the backend (lib/engagement, Amplitude HTTP API); clients never send this. docs/ENGAGEMENT_MESSAGING.md §8.",
+      "properties": [
+        {
+          "name": "message_key",
+          "type": "string",
+          "required": true,
+          "description": "Stable lifecycle message key: welcome, weekly_report, onboarding_first_meal, onboarding_first_circle, onboarding_invite_friend, celebrate_streak, reengage_comeback."
+        },
+        {
+          "name": "variant",
+          "type": "string",
+          "required": false,
+          "description": "Flattened variant ids, e.g. \"growth:invite_friend|hero:best_week|subject:best_week_2\"."
+        },
+        {
+          "name": "period_key",
+          "type": "string",
+          "required": false,
+          "description": "Occurrence of the message: once, an ISO week (2026-W44), lapse:<date>, circle:<id>, streak:<n>:<date>."
+        },
+        {
+          "name": "template_version",
+          "type": "string",
+          "required": false,
+          "description": "Renderer template, e.g. weekly_report@1, lifecycle@1, welcome@2."
+        },
+        {
+          "name": "send_id",
+          "type": "string",
+          "required": false,
+          "description": "engagement_sends row id (joins events to the send ledger)."
+        },
+        {
+          "name": "channel",
+          "type": "string",
+          "required": false,
+          "description": "email"
+        }
+      ]
+    },
+    {
+      "name": "Email Opened",
+      "category": "engagement",
+      "platforms": [
+        "web"
+      ],
+      "description": "Resend email.opened, first open only. Provider-observed: includes privacy proxies (Apple MPP), so treat as directional. SERVER-SENT by the backend (lib/engagement, Amplitude HTTP API); clients never send this. docs/ENGAGEMENT_MESSAGING.md §8.",
+      "properties": [
+        {
+          "name": "message_key",
+          "type": "string",
+          "required": true,
+          "description": "Stable lifecycle message key: welcome, weekly_report, onboarding_first_meal, onboarding_first_circle, onboarding_invite_friend, celebrate_streak, reengage_comeback."
+        },
+        {
+          "name": "variant",
+          "type": "string",
+          "required": false,
+          "description": "Flattened variant ids, e.g. \"growth:invite_friend|hero:best_week|subject:best_week_2\"."
+        },
+        {
+          "name": "period_key",
+          "type": "string",
+          "required": false,
+          "description": "Occurrence of the message: once, an ISO week (2026-W44), lapse:<date>, circle:<id>, streak:<n>:<date>."
+        },
+        {
+          "name": "template_version",
+          "type": "string",
+          "required": false,
+          "description": "Renderer template, e.g. weekly_report@1, lifecycle@1, welcome@2."
+        },
+        {
+          "name": "send_id",
+          "type": "string",
+          "required": false,
+          "description": "engagement_sends row id (joins events to the send ledger)."
+        },
+        {
+          "name": "channel",
+          "type": "string",
+          "required": false,
+          "description": "email"
+        }
+      ]
+    },
+    {
+      "name": "Email Clicked",
+      "category": "engagement",
+      "platforms": [
+        "web"
+      ],
+      "description": "Resend email.clicked, first click only. SERVER-SENT by the backend (lib/engagement, Amplitude HTTP API); clients never send this. docs/ENGAGEMENT_MESSAGING.md §8.",
+      "properties": [
+        {
+          "name": "message_key",
+          "type": "string",
+          "required": true,
+          "description": "Stable lifecycle message key: welcome, weekly_report, onboarding_first_meal, onboarding_first_circle, onboarding_invite_friend, celebrate_streak, reengage_comeback."
+        },
+        {
+          "name": "variant",
+          "type": "string",
+          "required": false,
+          "description": "Flattened variant ids, e.g. \"growth:invite_friend|hero:best_week|subject:best_week_2\"."
+        },
+        {
+          "name": "period_key",
+          "type": "string",
+          "required": false,
+          "description": "Occurrence of the message: once, an ISO week (2026-W44), lapse:<date>, circle:<id>, streak:<n>:<date>."
+        },
+        {
+          "name": "template_version",
+          "type": "string",
+          "required": false,
+          "description": "Renderer template, e.g. weekly_report@1, lifecycle@1, welcome@2."
+        },
+        {
+          "name": "send_id",
+          "type": "string",
+          "required": false,
+          "description": "engagement_sends row id (joins events to the send ledger)."
+        },
+        {
+          "name": "channel",
+          "type": "string",
+          "required": false,
+          "description": "email"
+        },
+        {
+          "name": "cta",
+          "type": "string",
+          "required": false,
+          "description": "CTA id from utm_term (primary, growth, unsubscribe)."
+        }
+      ]
+    },
+    {
+      "name": "Email Bounced",
+      "category": "engagement",
+      "platforms": [
+        "web"
+      ],
+      "description": "Resend email.bounced. Hard bounces stop further engagement email. SERVER-SENT by the backend (lib/engagement, Amplitude HTTP API); clients never send this. docs/ENGAGEMENT_MESSAGING.md §8.",
+      "properties": [
+        {
+          "name": "message_key",
+          "type": "string",
+          "required": true,
+          "description": "Stable lifecycle message key: welcome, weekly_report, onboarding_first_meal, onboarding_first_circle, onboarding_invite_friend, celebrate_streak, reengage_comeback."
+        },
+        {
+          "name": "variant",
+          "type": "string",
+          "required": false,
+          "description": "Flattened variant ids, e.g. \"growth:invite_friend|hero:best_week|subject:best_week_2\"."
+        },
+        {
+          "name": "period_key",
+          "type": "string",
+          "required": false,
+          "description": "Occurrence of the message: once, an ISO week (2026-W44), lapse:<date>, circle:<id>, streak:<n>:<date>."
+        },
+        {
+          "name": "template_version",
+          "type": "string",
+          "required": false,
+          "description": "Renderer template, e.g. weekly_report@1, lifecycle@1, welcome@2."
+        },
+        {
+          "name": "send_id",
+          "type": "string",
+          "required": false,
+          "description": "engagement_sends row id (joins events to the send ledger)."
+        },
+        {
+          "name": "channel",
+          "type": "string",
+          "required": false,
+          "description": "email"
+        },
+        {
+          "name": "bounce_type",
+          "type": "string",
+          "required": false,
+          "description": "permanent, transient, unknown."
+        }
+      ]
+    },
+    {
+      "name": "Email Complained",
+      "category": "engagement",
+      "platforms": [
+        "web"
+      ],
+      "description": "Resend email.complained (marked as spam). Unsubscribes the person from all engagement email. SERVER-SENT by the backend (lib/engagement, Amplitude HTTP API); clients never send this. docs/ENGAGEMENT_MESSAGING.md §8.",
+      "properties": [
+        {
+          "name": "message_key",
+          "type": "string",
+          "required": true,
+          "description": "Stable lifecycle message key: welcome, weekly_report, onboarding_first_meal, onboarding_first_circle, onboarding_invite_friend, celebrate_streak, reengage_comeback."
+        },
+        {
+          "name": "variant",
+          "type": "string",
+          "required": false,
+          "description": "Flattened variant ids, e.g. \"growth:invite_friend|hero:best_week|subject:best_week_2\"."
+        },
+        {
+          "name": "period_key",
+          "type": "string",
+          "required": false,
+          "description": "Occurrence of the message: once, an ISO week (2026-W44), lapse:<date>, circle:<id>, streak:<n>:<date>."
+        },
+        {
+          "name": "template_version",
+          "type": "string",
+          "required": false,
+          "description": "Renderer template, e.g. weekly_report@1, lifecycle@1, welcome@2."
+        },
+        {
+          "name": "send_id",
+          "type": "string",
+          "required": false,
+          "description": "engagement_sends row id (joins events to the send ledger)."
+        },
+        {
+          "name": "channel",
+          "type": "string",
+          "required": false,
+          "description": "email"
+        }
+      ]
+    },
+    {
+      "name": "Email Unsubscribed",
+      "category": "engagement",
+      "platforms": [
+        "web"
+      ],
+      "description": "The person used an engagement email unsubscribe link (or one-click List-Unsubscribe). SERVER-SENT by the backend (lib/engagement, Amplitude HTTP API); clients never send this. docs/ENGAGEMENT_MESSAGING.md §8.",
+      "properties": [
+        {
+          "name": "scope",
+          "type": "string",
+          "required": true,
+          "description": "weekly_report, tips or all."
+        },
+        {
+          "name": "channel",
+          "type": "string",
+          "required": false,
+          "description": "email"
+        },
+        {
+          "name": "variant",
+          "type": "string",
+          "required": false,
+          "description": "Flattened variant ids, e.g. \"growth:invite_friend|hero:best_week|subject:best_week_2\"."
+        },
+        {
+          "name": "period_key",
+          "type": "string",
+          "required": false,
+          "description": "Occurrence of the message: once, an ISO week (2026-W44), lapse:<date>, circle:<id>, streak:<n>:<date>."
+        },
+        {
+          "name": "template_version",
+          "type": "string",
+          "required": false,
+          "description": "Renderer template, e.g. weekly_report@1, lifecycle@1, welcome@2."
+        },
+        {
+          "name": "send_id",
+          "type": "string",
+          "required": false,
+          "description": "engagement_sends row id (joins events to the send ledger)."
+        },
+        {
+          "name": "message_key",
+          "type": "string",
+          "required": false,
+          "description": "The message the link came from, when known."
+        }
+      ]
+    },
+    {
+      "name": "Push Sent",
+      "category": "engagement",
+      "platforms": [
+        "web"
+      ],
+      "description": "A lifecycle push was delivered to at least one device via NotificationOrchestrator. SERVER-SENT by the backend (lib/engagement, Amplitude HTTP API); clients never send this. docs/ENGAGEMENT_MESSAGING.md §8.",
+      "properties": [
+        {
+          "name": "message_key",
+          "type": "string",
+          "required": true,
+          "description": "Stable lifecycle message key: welcome, weekly_report, onboarding_first_meal, onboarding_first_circle, onboarding_invite_friend, celebrate_streak, reengage_comeback."
+        },
+        {
+          "name": "variant",
+          "type": "string",
+          "required": false,
+          "description": "Flattened variant ids, e.g. \"growth:invite_friend|hero:best_week|subject:best_week_2\"."
+        },
+        {
+          "name": "period_key",
+          "type": "string",
+          "required": false,
+          "description": "Occurrence of the message: once, an ISO week (2026-W44), lapse:<date>, circle:<id>, streak:<n>:<date>."
+        },
+        {
+          "name": "template_version",
+          "type": "string",
+          "required": false,
+          "description": "Renderer template, e.g. weekly_report@1, lifecycle@1, welcome@2."
+        },
+        {
+          "name": "send_id",
+          "type": "string",
+          "required": false,
+          "description": "engagement_sends row id (joins events to the send ledger)."
+        },
+        {
+          "name": "channel",
+          "type": "string",
+          "required": false,
+          "description": "push"
+        },
+        {
+          "name": "notification_type",
+          "type": "string",
+          "required": false,
+          "description": "weekly_summary or lifecycle_nudge."
+        },
+        {
+          "name": "growth_slot",
+          "type": "string",
+          "required": false,
+          "description": "Weekly report growth slot shown: invite_friend, create_circle, join_campaign, try_fitzy, try_photo, none."
+        },
+        {
+          "name": "week_type",
+          "type": "string",
+          "required": false,
+          "description": "Weekly report week type: best_week, comeback, consistent, building, quiet, fresh_start."
+        }
+      ]
+    },
+    {
+      "name": "Weekly Report Sent",
+      "category": "engagement",
+      "platforms": [
+        "web"
+      ],
+      "description": "The weekly report email was sent (alongside Email Sent). SERVER-SENT by the backend (lib/engagement, Amplitude HTTP API); clients never send this. docs/ENGAGEMENT_MESSAGING.md §8.",
+      "properties": [
+        {
+          "name": "message_key",
+          "type": "string",
+          "required": true,
+          "description": "Stable lifecycle message key: welcome, weekly_report, onboarding_first_meal, onboarding_first_circle, onboarding_invite_friend, celebrate_streak, reengage_comeback."
+        },
+        {
+          "name": "variant",
+          "type": "string",
+          "required": false,
+          "description": "Flattened variant ids, e.g. \"growth:invite_friend|hero:best_week|subject:best_week_2\"."
+        },
+        {
+          "name": "period_key",
+          "type": "string",
+          "required": false,
+          "description": "Occurrence of the message: once, an ISO week (2026-W44), lapse:<date>, circle:<id>, streak:<n>:<date>."
+        },
+        {
+          "name": "template_version",
+          "type": "string",
+          "required": false,
+          "description": "Renderer template, e.g. weekly_report@1, lifecycle@1, welcome@2."
+        },
+        {
+          "name": "send_id",
+          "type": "string",
+          "required": false,
+          "description": "engagement_sends row id (joins events to the send ledger)."
+        },
+        {
+          "name": "growth_slot",
+          "type": "string",
+          "required": false,
+          "description": "Weekly report growth slot shown: invite_friend, create_circle, join_campaign, try_fitzy, try_photo, none."
+        },
+        {
+          "name": "week_type",
+          "type": "string",
+          "required": false,
+          "description": "Weekly report week type: best_week, comeback, consistent, building, quiet, fresh_start."
+        },
+        {
+          "name": "stat_count",
+          "type": "int",
+          "required": false,
+          "description": "Stat tiles shown (only metrics we have data for)."
+        },
+        {
+          "name": "active_days",
+          "type": "int",
+          "required": false,
+          "description": "Active days in the reported week (0-7)."
+        }
+      ]
+    },
+    {
+      "name": "Lifecycle Message Skipped",
+      "category": "engagement",
+      "platforms": [
+        "web"
+      ],
+      "description": "A due lifecycle message was not sent. SERVER-SENT by the backend (lib/engagement, Amplitude HTTP API); clients never send this. docs/ENGAGEMENT_MESSAGING.md §8.",
+      "properties": [
+        {
+          "name": "message_key",
+          "type": "string",
+          "required": true,
+          "description": "Message key."
+        },
+        {
+          "name": "reason",
+          "type": "enum",
+          "enum": "lifecycle_skip_reason",
+          "required": true
+        },
+        {
+          "name": "channel",
+          "type": "string",
+          "required": false,
+          "description": "email or push."
+        },
+        {
+          "name": "period_key",
+          "type": "string",
+          "required": false,
+          "description": "Occurrence."
+        },
+        {
+          "name": "variant",
+          "type": "string",
+          "required": false,
+          "description": "Variant ids when known."
+        },
+        {
+          "name": "detail",
+          "type": "string",
+          "required": false,
+          "description": "Orchestrator reason for push_suppressed (quiet_hours, frequency_cap, category_disabled, no_delivery…)."
+        }
+      ]
+    },
+    {
+      "name": "Lifecycle Goal Converted",
+      "category": "engagement",
+      "platforms": [
+        "web"
+      ],
+      "description": "The message's goal happened within its window after the send (or after a holdout row, for lift). SERVER-SENT by the backend (lib/engagement, Amplitude HTTP API); clients never send this. docs/ENGAGEMENT_MESSAGING.md §8.",
+      "properties": [
+        {
+          "name": "message_key",
+          "type": "string",
+          "required": true,
+          "description": "Stable lifecycle message key: welcome, weekly_report, onboarding_first_meal, onboarding_first_circle, onboarding_invite_friend, celebrate_streak, reengage_comeback."
+        },
+        {
+          "name": "variant",
+          "type": "string",
+          "required": false,
+          "description": "Flattened variant ids, e.g. \"growth:invite_friend|hero:best_week|subject:best_week_2\"."
+        },
+        {
+          "name": "period_key",
+          "type": "string",
+          "required": false,
+          "description": "Occurrence of the message: once, an ISO week (2026-W44), lapse:<date>, circle:<id>, streak:<n>:<date>."
+        },
+        {
+          "name": "template_version",
+          "type": "string",
+          "required": false,
+          "description": "Renderer template, e.g. weekly_report@1, lifecycle@1, welcome@2."
+        },
+        {
+          "name": "send_id",
+          "type": "string",
+          "required": false,
+          "description": "engagement_sends row id (joins events to the send ledger)."
+        },
+        {
+          "name": "channel",
+          "type": "string",
+          "required": false,
+          "description": "email or push."
+        },
+        {
+          "name": "goal",
+          "type": "string",
+          "required": true,
+          "description": "meal_logged, circle_joined, invite_sent, active, growth_<slot>."
+        },
+        {
+          "name": "status",
+          "type": "string",
+          "required": false,
+          "description": "sent or holdout."
         }
       ]
     }

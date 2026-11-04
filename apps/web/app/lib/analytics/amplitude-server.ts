@@ -77,3 +77,60 @@ export function identifyInBackground(identifications: readonly AmplitudeIdentifi
   if (!amplitudeServerKey() || identifications.length === 0) return;
   runAfterResponse(() => sendIdentify(identifications), `amplitude ${label}`);
 }
+
+// ---------------------------------------------------------------------------
+// Server-side events (HTTP API v2). Same key rules as identify.
+// ---------------------------------------------------------------------------
+
+export const AMPLITUDE_HTTP_API_URL = 'https://api2.amplitude.com/2/httpapi';
+
+export interface AmplitudeServerEvent {
+  user_id: string;
+  /** A tracking-plan event name (analytics/tracking-plan.json, platforms incl. web). */
+  event_type: string;
+  event_properties?: Record<string, string | number | boolean>;
+  /** Amplitude drops a repeat of the same insert_id within 7 days. */
+  insert_id?: string;
+  time?: number;
+}
+
+/** Send events now. Resolves true on HTTP 2xx; false when disabled, timed out or failed. Never throws. */
+export async function sendServerEvents(
+  events: readonly AmplitudeServerEvent[],
+  opts: { env?: NodeJS.ProcessEnv; fetchImpl?: typeof fetch; timeoutMs?: number } = {}
+): Promise<boolean> {
+  const key = amplitudeServerKey(opts.env);
+  if (!key || events.length === 0) return false;
+  const doFetch = opts.fetchImpl ?? fetch;
+  const environment = isProductionDeployment(opts.env) ? 'production' : 'development';
+  try {
+    const res = await doFetch(AMPLITUDE_HTTP_API_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: '*/*' },
+      body: JSON.stringify({
+        api_key: key,
+        events: events.map((e) => ({
+          ...e,
+          time: e.time ?? Date.now(),
+          platform: 'server',
+          event_properties: { ...(e.event_properties ?? {}), environment },
+        })),
+      }),
+      signal: AbortSignal.timeout(opts.timeoutMs ?? AMPLITUDE_TIMEOUT_MS),
+    });
+    if (!res.ok) {
+      console.warn('[amplitude-server] events failed:', res.status);
+      return false;
+    }
+    return true;
+  } catch (err: any) {
+    console.warn('[amplitude-server] events error:', err?.name ?? '', err?.message ?? err);
+    return false;
+  }
+}
+
+/** Fire-and-forget after the response. No-op without a key. */
+export function trackServerEventsInBackground(events: readonly AmplitudeServerEvent[], label = 'events'): void {
+  if (!amplitudeServerKey() || events.length === 0) return;
+  runAfterResponse(() => sendServerEvents(events), `amplitude ${label}`);
+}

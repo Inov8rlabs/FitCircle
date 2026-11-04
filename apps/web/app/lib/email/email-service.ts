@@ -198,6 +198,56 @@ export async function sendEmail({ to, subject, html, text }: SendEmailParams): P
   }
 }
 
+export interface SendTrackedEmailParams {
+  to: string;
+  subject: string;
+  html: string;
+  text: string;
+  /** Resend tags: names/values limited to ASCII letters, digits, `_` and `-`. */
+  tags?: Record<string, string>;
+  headers?: Record<string, string>;
+  /** Resend idempotency key (24 h): a retried call never sends twice. */
+  idempotencyKey?: string;
+}
+
+const TAG_SAFE = /[^A-Za-z0-9_-]+/g;
+
+/** Resend tag list from a map (invalid characters → `_`, values ≤ 256 chars). */
+export function resendTags(tags: Record<string, string> = {}): Array<{ name: string; value: string }> {
+  return Object.entries(tags)
+    .filter(([, v]) => v !== undefined && v !== null && String(v) !== '')
+    .map(([name, value]) => ({ name: name.replace(TAG_SAFE, '_').slice(0, 256), value: String(value).replace(TAG_SAFE, '_').slice(0, 256) }));
+}
+
+/**
+ * Send with tags + headers + idempotency, returning Resend's email id (which
+ * the Resend webhook reports back). Used by the welcome email and the
+ * lifecycle messaging EmailSender. Never throws.
+ */
+export async function sendTrackedEmail(p: SendTrackedEmailParams): Promise<{ success: true; id: string | null } | { success: false; error: string }> {
+  const resend = getResend();
+  if (!resend) return { success: false, error: 'not_configured' };
+  try {
+    const { data, error } = await resend.emails.send(
+      {
+        from: FROM_EMAIL,
+        to: p.to,
+        replyTo: REPLY_TO,
+        subject: p.subject,
+        html: p.html,
+        text: p.text,
+        tags: resendTags(p.tags),
+        headers: p.headers,
+      },
+      p.idempotencyKey ? { idempotencyKey: p.idempotencyKey } : undefined
+    );
+    if (error) return { success: false, error: `${error.name ?? 'error'}: ${error.message}` };
+    return { success: true, id: data?.id ?? null };
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+  }
+}
+
 // Re-export NotificationService
 export { NotificationService } from '../services/notification-service';
 export type { NotificationPayload } from '../services/notification-service';

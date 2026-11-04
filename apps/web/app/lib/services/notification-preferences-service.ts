@@ -104,6 +104,8 @@ const TYPE_CATEGORY_MAP: Record<string, NotificationCategory> = {
   // Transactional (ONBOARDING_V2 §3.2): listed for reporting; never gated by a
   // category toggle, see TRANSACTIONAL_TYPES.
   trial_ending_reminder: 'journey',
+  // Lifecycle onboarding / re-engagement (docs/ENGAGEMENT_MESSAGING.md §3)
+  lifecycle_nudge: 'journey',
 };
 
 /**

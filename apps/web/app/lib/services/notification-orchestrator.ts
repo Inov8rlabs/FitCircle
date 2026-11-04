@@ -168,7 +168,10 @@ export type NotificationType =
   // Day-2 "meet Fitzy" for activated users who never opened Fitzy (ACTIVATION_JOURNEY_SPEC §6)
   | 'fitzy_intro'
   // Transactional: the free trial renews tomorrow (ONBOARDING_V2_EXPERIMENT_SPEC §3.2; TrialReminderService)
-  | 'trial_ending_reminder';
+  | 'trial_ending_reminder'
+  // Lifecycle onboarding / re-engagement steps (docs/ENGAGEMENT_MESSAGING.md §3): copy and
+  // screen come from data (lib/engagement); journey category, so the journey toggle + caps apply.
+  | 'lifecycle_nudge';
 
 interface NotificationContent {
   title: string;
@@ -264,7 +267,21 @@ export const TYPE_SCREEN_MAP: Record<NotificationType, NotificationScreen> = {
   fitzy_intro: 'fitzy_chat',
   // Shipped apps have no subscription screen in the allowlist; the dashboard is safe everywhere.
   trial_ending_reminder: 'dashboard',
+  // Default only: screenFor() uses data.screen when it is one of LIFECYCLE_SCREENS.
+  lifecycle_nudge: 'dashboard',
 };
+
+/** Screens a lifecycle_nudge may target (all already allowlisted by both apps). */
+export const LIFECYCLE_SCREENS: ReadonlySet<NotificationScreen> = new Set<NotificationScreen>([
+  'dashboard',
+  'food_log',
+  'exercise_log',
+  'circles',
+  'invite_hub',
+  'streaks',
+  'campaign',
+  'fitzy_chat',
+]);
 
 /** Coach pushes: Android "Coach" channel (FCM falls back to the default channel on older builds). */
 export const ANDROID_COACH_CHANNEL_ID = 'fitcircle_coach';
@@ -272,6 +289,9 @@ export const ANDROID_COACH_CHANNEL_ID = 'fitcircle_coach';
 export const FITZY_TIP_DATA_MAX = 400;
 
 export function screenFor(type: NotificationType, data: NotificationData): NotificationScreen {
+  if (type === 'lifecycle_nudge' && LIFECYCLE_SCREENS.has(data.screen as NotificationScreen)) {
+    return data.screen as NotificationScreen;
+  }
   const screen = TYPE_SCREEN_MAP[type] ?? 'dashboard';
   if ((screen === 'circle_detail' || screen === 'circle_chat') && !data.circleId) {
     return 'circles';
@@ -459,6 +479,10 @@ export const NOTIFICATION_TEMPLATES: Record<
 
   // ---- State - Summary (S10-S15) ----
   weekly_summary: (data) => {
+    // The weekly report (lib/engagement) supplies its own copy.
+    if (data.title && data.body) {
+      return { title: stripEmoji(String(data.title)), body: stripEmoji(String(data.body)), category: 'journey' };
+    }
     const parts = [`${data.workoutsThisWeek || 0} workouts`];
     if (typeof data.mealsThisWeek === 'number') parts.push(`${data.mealsThisWeek} days of meals logged`);
     parts.push(`${data.streakDays || 0}-day streak`);
@@ -620,6 +644,12 @@ export const NOTIFICATION_TEMPLATES: Record<
   trial_ending_reminder: () => ({
     title: 'Your trial ends tomorrow',
     body: 'Your FitCircle Pro trial ends tomorrow. Keep it, or cancel anytime in Settings → Subscriptions.',
+    category: 'journey',
+  }),
+  // Copy is built per message by lib/engagement (messages/lifecycle.ts).
+  lifecycle_nudge: (data) => ({
+    title: stripEmoji(String(data.title || 'FitCircle')) || 'FitCircle',
+    body: stripEmoji(String(data.body || '')),
     category: 'journey',
   }),
 };

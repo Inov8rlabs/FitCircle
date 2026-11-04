@@ -11,6 +11,7 @@ import {
   deriveUsernameBase,
   ensureUniqueUsername,
 } from '@/lib/services/username-service';
+import { triggerUserCreated } from '@/lib/services/user-created-hook';
 import { parseLenient } from '@/lib/validation/lenient-parse';
 
 // Validation schema
@@ -132,6 +133,14 @@ export async function POST(request: NextRequest) {
 
     // Generate JWT tokens for mobile
     const tokens = await MobileAPIService.generateTokens(authData.user.id, authData.user.email!);
+
+    // New account: welcome email etc. after the response (never fails registration).
+    triggerUserCreated({
+      userId: authData.user.id,
+      email: validatedData.email,
+      displayName: validatedData.displayName,
+      method: 'email',
+    });
 
     // Return mobile-friendly response matching login format
     return NextResponse.json(

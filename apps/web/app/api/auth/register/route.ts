@@ -2,7 +2,6 @@ import { createClient } from '@supabase/supabase-js';
 import { type NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 
-import { sendWelcomeEmail } from '@/lib/email/email-service';
 import { registerRateLimiter, getIdentifier, applyRateLimit } from '@/lib/middleware/rate-limit';
 import { CLEAR_FC_REF_COOKIE, claimWebInvite, resolveWebInvite } from '@/lib/referrals/web-claim';
 import {
@@ -11,6 +10,7 @@ import {
   deriveUsernameBase,
   ensureUniqueUsername,
 } from '@/lib/services/username-service';
+import { triggerUserCreated } from '@/lib/services/user-created-hook';
 
 // Validation schema
 const registerSchema = z.object({
@@ -112,13 +112,13 @@ export async function POST(request: NextRequest) {
       // It can be created later
     }
 
-    // Send welcome email (don't wait for it, send async)
-    sendWelcomeEmail({
-      to: validatedData.email,
-      userName: validatedData.fullName,
-    }).catch((error) => {
-      // Log error but don't fail registration if email fails
-      console.error('Failed to send welcome email:', error);
+    // New account: welcome email etc. after the response (never fails registration).
+    triggerUserCreated({
+      userId: authData.user.id,
+      email: validatedData.email,
+      displayName: validatedData.fullName,
+      method: 'email',
+      platform: 'web',
     });
 
     // Invite attribution: best-effort, never fails registration.

@@ -99,6 +99,14 @@
     {
       "path": "/api/cron/trial-reminders",
       "schedule": "5 * * * *"
+    },
+    {
+      "path": "/api/cron/engagement/lifecycle",
+      "schedule": "25 * * * *"
+    },
+    {
+      "path": "/api/cron/engagement/weekly-report",
+      "schedule": "45 * * * *"
     }
   ]
 }

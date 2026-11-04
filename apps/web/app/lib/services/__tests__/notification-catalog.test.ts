@@ -51,4 +51,17 @@ describe('notification catalog contract', () => {
     expect(screenFor('perfect_day', { circleId: 'c1' })).toBe('circle_detail');
     expect(screenFor('streak_lost', {})).toBe('streaks');
   });
+
+  it('lifecycle_nudge takes its screen from data, but only an allowlisted one', () => {
+    expect(screenFor('lifecycle_nudge', { screen: 'circles' })).toBe('circles');
+    expect(screenFor('lifecycle_nudge', { screen: 'invite_hub' })).toBe('invite_hub');
+    expect(screenFor('lifecycle_nudge', { screen: 'settings_billing' })).toBe('dashboard');
+    expect(screenFor('lifecycle_nudge', {})).toBe('dashboard');
+    expect(screenFor('weekly_summary', { screen: 'circles' })).toBe('dashboard');
+  });
+
+  it('weekly_summary / lifecycle_nudge use the copy the engagement module supplies', () => {
+    expect(NOTIFICATION_TEMPLATES.weekly_summary({ title: 'Your week in review', body: '4 days active.' })).toEqual({ title: 'Your week in review', body: '4 days active.', category: 'journey' });
+    expect(NOTIFICATION_TEMPLATES.lifecycle_nudge({ title: 'Better with friends', body: 'Start a circle.' }).category).toBe('journey');
+  });
 });

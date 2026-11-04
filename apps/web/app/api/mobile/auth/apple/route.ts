@@ -7,6 +7,7 @@ import { AppleTokenService } from '@/lib/services/apple-token-service';
 import { MobileAPIService } from '@/lib/services/mobile-api-service';
 import { toMobileUser } from '@/lib/services/mobile-profile-response';
 import { SocialAuthError, findOrCreateSocialUser } from '@/lib/services/social-auth-service';
+import { triggerUserCreated } from '@/lib/services/user-created-hook';
 import { validationMessage } from '@/lib/validation/lenient-parse';
 
 import { appleTokenAudiences, parseAppleAuthRequest } from './apple-request';
@@ -104,6 +105,16 @@ export async function POST(request: NextRequest) {
     });
 
     const tokens = await MobileAPIService.generateTokens(userId, email);
+
+    // First sign-in created the account: welcome email etc. after the response. Returning sign-ins skip it.
+    if (isNewUser) {
+      triggerUserCreated({
+        userId,
+        email,
+        displayName: (profile as { display_name?: string | null } | null)?.display_name ?? null,
+        method: 'apple',
+      });
+    }
 
     // Apple requires the user's tokens to be revoked when the account is
     // deleted, which needs a refresh token. Runs after the response so sign-in

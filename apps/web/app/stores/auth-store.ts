@@ -314,6 +314,12 @@ export const useAuthStore = create<AuthState>()(
           }
 
           if (authData.user && authData.session) {
+            // New account: ask the server for the welcome email (it re-checks the account is new;
+            // idempotent). Best-effort, never blocks sign-up.
+            if (accountCreated) {
+              fetch('/api/auth/welcome', { method: 'POST', credentials: 'same-origin' }).catch(() => undefined);
+            }
+
             // Create user profile
             const newUser: User = {
               id: authData.user.id,

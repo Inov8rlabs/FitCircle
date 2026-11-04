@@ -6,6 +6,7 @@ import { authRateLimiter, getIdentifier, applyRateLimit } from '@/lib/middleware
 import { MobileAPIService } from '@/lib/services/mobile-api-service';
 import { toMobileUser } from '@/lib/services/mobile-profile-response';
 import { SocialAuthError, findOrCreateSocialUser } from '@/lib/services/social-auth-service';
+import { triggerUserCreated } from '@/lib/services/user-created-hook';
 import { parseLenient, validationMessage } from '@/lib/validation/lenient-parse';
 
 
@@ -128,6 +129,16 @@ export async function POST(request: NextRequest) {
     });
 
     const tokens = await MobileAPIService.generateTokens(userId, email);
+
+    // First sign-in created the account: welcome email etc. after the response. Returning sign-ins skip it.
+    if (isNewUser) {
+      triggerUserCreated({
+        userId,
+        email,
+        displayName: (profile as { display_name?: string | null } | null)?.display_name ?? null,
+        method: 'google',
+      });
+    }
 
     console.log('[Google Auth] Sign-in successful for user:', userId);
 
