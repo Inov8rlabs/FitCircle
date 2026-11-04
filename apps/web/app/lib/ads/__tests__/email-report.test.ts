@@ -266,3 +266,27 @@ describe('rendering', () => {
     expect(html).toContain('href="https://admintools.inov8rlabs.com/apps/fitcircle/ads"');
   });
 });
+
+describe('ad revenue (AdMob) section', () => {
+  const rev = (date: string, earnings: number) => ({
+    source: 'admob', date, app_id: 'a', app_name: 'FitCircle', platform: 'android' as const, ad_unit_id: 'u', ad_unit_name: 'Home', format: 'NATIVE', country: 'US', currency: 'USD',
+    estimated_earnings: earnings, ad_requests: 10, matched_requests: 8, impressions: 4, clicks: 1,
+  });
+
+  it('sums AdMob earnings per window and renders them as estimates', () => {
+    const r = buildAdsEmailReport(input({ now: PM, adRevenue: { rows: [rev('2026-10-27', 0.0123), rev('2026-10-26', 0.5), rev('2026-10-25', 1.25)], lastSuccessAt: '2026-10-27T21:20:00Z' } }));
+    expect(r.adRevenue!.windows.today.earnings).toBeCloseTo(0.0123, 6);
+    expect(r.adRevenue!.windows.yesterday.earnings).toBeCloseTo(0.5, 6);
+    expect(r.adRevenue!.windows.launch.earnings).toBeCloseTo(1.7623, 6);
+    const text = renderText(r);
+    expect(text).toContain('AD REVENUE — AdMob (estimated)');
+    expect(text).toContain('$0.0123');
+    expect(renderHtml(r)).toContain('Ad revenue — AdMob (estimated)');
+  });
+
+  it('says "not connected" instead of showing $0 when AdMob is not set up', () => {
+    const r = buildAdsEmailReport(input({ now: PM }));
+    expect(r.adRevenue).toBeNull();
+    expect(renderText(r)).toContain('AdMob ad revenue: not connected');
+  });
+});

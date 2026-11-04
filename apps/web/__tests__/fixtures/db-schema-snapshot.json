@@ -1690,6 +1690,24 @@
       "redownloads",
       "synced_at"
     ],
+    "ad_revenue_daily": [
+      "source",
+      "date",
+      "app_id",
+      "app_name",
+      "platform",
+      "ad_unit_id",
+      "ad_unit_name",
+      "format",
+      "country",
+      "currency",
+      "estimated_earnings",
+      "ad_requests",
+      "matched_requests",
+      "impressions",
+      "clicks",
+      "synced_at"
+    ],
     "ad_sync_runs": [
       "id",
       "channel",

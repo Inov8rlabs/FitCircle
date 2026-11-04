@@ -2,6 +2,7 @@ import { type NextRequest } from 'next/server';
 
 import { adsFailFrom, ok, readJson, requireAdsAdmin } from '@/lib/ads/http';
 import { parseChannel } from '@/lib/ads/services/report-service';
+import { AdRevenueSyncService } from '@/lib/ads/services/ad-revenue-sync-service';
 import { AdsSyncService } from '@/lib/ads/services/sync-service';
 
 export const dynamic = 'force-dynamic';
@@ -17,14 +18,16 @@ export async function GET(request: NextRequest) {
   }
 }
 
-/** POST /api/admin/ads/sync { channel? } → sync now (no-op per channel if one finished < 2 min ago). */
+/** POST /api/admin/ads/sync { channel? } → sync now (no-op per channel if one finished < 2 min ago); without channel also AdMob. */
 export async function POST(request: NextRequest) {
   try {
     await requireAdsAdmin(request, { mutating: true });
     const body = await readJson(request);
     const channel = parseChannel(typeof body?.channel === 'string' ? body.channel : null);
     const results = await AdsSyncService.run({ channels: channel ? [channel] : undefined, trigger: 'manual', debounce: true });
-    return ok({ results, status: await AdsSyncService.status() });
+    // AdMob ad revenue rides along on a full sync (failures are reported, never thrown).
+    const adRevenue = channel ? null : await AdRevenueSyncService.run({ trigger: 'manual', debounce: true }).catch((e: any) => ({ channel: 'admob' as const, ok: false, range: null, rows: 0, error: String(e?.message ?? e), runId: null }));
+    return ok({ results, adRevenue, status: await AdsSyncService.status() });
   } catch (error) {
     return adsFailFrom(error, 'sync-now');
   }

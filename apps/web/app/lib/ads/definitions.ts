@@ -25,6 +25,8 @@ export const METRIC_DEFINITIONS: Record<MetricKey, string> = {
   costPerUser: 'Spend ÷ attributed sign-ups.',
   costPerActivated: 'Spend ÷ attributed activated users.',
   costPerPayer: 'CAC = spend ÷ attributed payers (to date).',
+  costPerTrial: 'Spend ÷ attributed users who started a free trial (PRODUCTION INITIAL_PURCHASE with period_type TRIAL).',
+  conversionRate: 'Install conversion rate = network-reported installs ÷ taps (Google Ads: app install conversions ÷ clicks).',
   roasD7: 'Revenue D7 ÷ spend. Incomplete until every cohort day is 7 days old.',
   roasD30: 'Revenue D30 ÷ spend. Incomplete until every cohort day is 30 days old.',
   roasToDate: 'Revenue to date ÷ spend (no LTV projection).',

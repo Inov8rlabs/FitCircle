@@ -19,6 +19,8 @@ import {
   type SyncState,
 } from '../email-report';
 import { dedupeEvents, type RevenueEvent, userOutcome } from '../metrics';
+import { AdRevenueReportService } from './ad-revenue-report-service';
+import { AdRevenueSyncService } from './ad-revenue-sync-service';
 import { classifyTestUser } from '../test-users';
 import { AD_CHANNELS, type AdEntityRow, type AttributionRow } from '../types';
 
@@ -184,7 +186,10 @@ export class AdsEmailReportService {
       lastError: s.error,
     }));
 
-    const report = buildAdsEmailReport({ now, timeZone, consoleUrl: consoleUrl(), entities: campaigns, metricRows, sync, users, launchDate: launch });
+    const [revenueStatus, revenueRows] = await Promise.all([AdRevenueSyncService.status().catch(() => null), AdRevenueReportService.loadRevenue(launch, today)]);
+    const adRevenue = revenueStatus?.configured || revenueRows.length ? { rows: revenueRows, lastSuccessAt: revenueStatus?.lastSuccessAt ?? null } : null;
+
+    const report = buildAdsEmailReport({ now, timeZone, consoleUrl: consoleUrl(), entities: campaigns, metricRows, sync, users, launchDate: launch, adRevenue });
     return { report, subject: renderSubject(report), text: renderText(report), html: renderHtml(report) };
   }
 

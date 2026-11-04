@@ -361,6 +361,8 @@ export function computeMetrics(
     costPerUser: ratio(spend, users),
     costPerActivated: ratio(spend, activated),
     costPerPayer: ratio(spend, payers),
+    costPerTrial: ratio(spend, trials),
+    conversionRate: ratio(delivery.installs, delivery.taps),
     roasD7: ratio(r7, spend),
     roasD30: ratio(r30, spend),
     roasToDate: ratio(rAll, spend),

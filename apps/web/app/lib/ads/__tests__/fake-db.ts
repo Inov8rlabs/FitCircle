@@ -15,6 +15,7 @@ const PK: Record<string, string[]> = {
   ad_sync_runs: ['id'],
   profiles: ['id'],
   subscription_events: ['id'],
+  ad_revenue_daily: ['source', 'date', 'ad_unit_id', 'country'],
 };
 
 /** Column defaults the real tables have (releases: jsonb/array defaults). */

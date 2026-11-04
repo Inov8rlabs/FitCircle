@@ -12,6 +12,7 @@
  * Test / internal / reviewer / Play pre-launch sign-ups are excluded with the
  * Ads Console classifier (lib/ads/test-users.ts).
  */
+import { type AdRevenueMetrics, type AdRevenueRow, sumRevenue } from './ad-revenue';
 import { addDays, ymdInTz } from './dates';
 import { ratio, sumDelivery } from './metrics';
 import type { TestUserReason } from './test-users';
@@ -116,6 +117,13 @@ export interface AdsEmailReport {
   adDataAsOf: string | null;
   alerts: ReportAlert[];
   consoleUrl: string;
+  /** AdMob estimated earnings per window; null when AdMob is not connected and has no rows. */
+  adRevenue: AdRevenueEmail | null;
+}
+
+export interface AdRevenueEmail {
+  windows: Record<WindowKey, AdRevenueMetrics>;
+  lastSuccessAt: string | null;
 }
 
 export interface BuildReportInput {
@@ -130,6 +138,8 @@ export interface BuildReportInput {
   /** Everyone who signed up launch … today (test users included; they are counted separately). */
   users: FunnelUser[];
   launchDate: string;
+  /** ad_revenue_daily rows launch … today (Pacific days); omit/null when AdMob is not connected. */
+  adRevenue?: { rows: AdRevenueRow[]; lastSuccessAt: string | null } | null;
 }
 
 export const STALE_SYNC_MS = 3 * 3600_000;
@@ -283,6 +293,17 @@ export function buildAdsEmailReport(input: BuildReportInput): AdsEmailReport {
     adDataAsOf: successes[successes.length - 1] ?? null,
     alerts: [],
     consoleUrl: input.consoleUrl,
+    adRevenue: input.adRevenue
+      ? {
+          // AdMob days are Pacific; the windows use the same calendar dates.
+          windows: {
+            today: sumRevenue(input.adRevenue.rows.filter((r) => inWindow(r.date, byKey.today))),
+            yesterday: sumRevenue(input.adRevenue.rows.filter((r) => inWindow(r.date, byKey.yesterday))),
+            launch: sumRevenue(input.adRevenue.rows.filter((r) => inWindow(r.date, byKey.launch))),
+          },
+          lastSuccessAt: input.adRevenue.lastSuccessAt,
+        }
+      : null,
   };
   report.alerts = buildAlerts(report, input.entities, now);
   return report;
@@ -386,6 +407,20 @@ const FUNNEL_ROWS: Array<[string, (f: FunnelStats) => string]> = [
   ['Test/internal sign-ups excluded', (f) => int(f.excludedTest)],
 ];
 
+const AD_REVENUE_ROWS: Array<[string, (m: AdRevenueMetrics) => string]> = [
+  ['Estimated earnings', (m) => money4(m.earnings)],
+  ['Impressions', (m) => int(m.impressions)],
+  ['eCPM', (m) => money(m.ecpm)],
+  ['Match rate', (m) => pct(m.matchRate)],
+  ['Show rate', (m) => pct(m.showRate)],
+  ['Clicks (CTR)', (m) => `${int(m.clicks)} (${pct(m.ctr)})`],
+];
+
+/** Sub-dollar ad earnings need more than 2 decimals to be readable. */
+const money4 = (n: number | null) => (n === null ? '—' : Math.abs(n) < 1 && n !== 0 ? `$${n.toFixed(4)}` : `$${n.toFixed(2)}`);
+
+const AD_REVENUE_NOTE = 'AdMob estimated earnings (not final until AdMob closes the month); AdMob days are Pacific time.';
+
 export const DATA_NOTES = [
   'Ad delivery: ad network reports (Apple Ads API) synced hourly into the Ads Console; networks restate the last few days, so today and yesterday can still move.',
   'Funnel: FitCircle database. Sign-ups = new profiles in the window (report time zone), all sources (paid + organic), excluding internal, App Review, Firebase Test Lab, Play pre-launch and Apple mock-attribution accounts. Onboarded / first meal / trial / paid are what those sign-ups have done as of now.',
@@ -430,6 +465,15 @@ export function renderText(r: AdsEmailReport): string {
   if (!r.campaigns.length) out.push('No live campaigns and no spend since launch.\n');
   for (const n of r.notConnected) out.push(`- ${n.text}`);
   if (r.notConnected.length) out.push('');
+  if (r.adRevenue) {
+    out.push('AD REVENUE — AdMob (estimated)');
+    out.push(textTable(AD_REVENUE_ROWS, windowCols(r, (k) => r.adRevenue!.windows[k])));
+    out.push(`  ${AD_REVENUE_NOTE}`);
+    out.push('');
+  } else {
+    out.push('- AdMob ad revenue: not connected (ADMOB_OAUTH_* missing)');
+    out.push('');
+  }
   out.push('FUNNEL — FitCircle database (all sources, not only ads)');
   out.push(textTable(FUNNEL_ROWS, windowCols(r, (k) => r.funnel[k])));
   out.push('');
@@ -478,6 +522,12 @@ export function renderHtml(r: AdsEmailReport): string {
   }
   if (!r.campaigns.length) parts.push('<p style="font-size:13px;color:#374151">No live campaigns and no spend since launch.</p>');
   if (r.notConnected.length) parts.push(`<ul style="font-size:13px;color:#6b7280;padding-left:18px">${r.notConnected.map((n) => `<li>${esc(n.text)}</li>`).join('')}</ul>`);
+  if (r.adRevenue) {
+    parts.push(h2('Ad revenue — AdMob (estimated)', AD_REVENUE_NOTE));
+    parts.push(htmlTable(AD_REVENUE_ROWS, windowCols(r, (k) => r.adRevenue!.windows[k])));
+  } else {
+    parts.push('<p style="font-size:13px;color:#6b7280">AdMob ad revenue: not connected yet.</p>');
+  }
   parts.push(h2('Funnel — FitCircle database', 'All sources (paid + organic), real users only; outcomes as of now'));
   parts.push(htmlTable(FUNNEL_ROWS, windowCols(r, (k) => r.funnel[k])));
   parts.push(

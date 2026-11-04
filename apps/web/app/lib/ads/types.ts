@@ -210,6 +210,10 @@ export interface AdsMetrics {
   costPerUser: number | null;
   costPerActivated: number | null;
   costPerPayer: number | null;
+  /** Spend ÷ attributed trial starters. */
+  costPerTrial: number | null;
+  /** Installs ÷ taps (network-reported; Google: install conversions ÷ clicks). */
+  conversionRate: number | null;
   roasD7: number | null;
   roasD30: number | null;
   roasToDate: number | null;

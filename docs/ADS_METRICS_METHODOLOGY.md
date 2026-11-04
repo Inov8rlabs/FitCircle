@@ -110,6 +110,8 @@ Every ratio is `null` (shown "—") when its denominator is 0; never NaN/Infinit
 | `costPerUser` | spend ÷ users |
 | `costPerActivated` | spend ÷ activated |
 | `costPerPayer` (CAC) | spend ÷ payers |
+| `costPerTrial` | spend ÷ trials |
+| `conversionRate` | installs ÷ taps |
 | `roasD7` / `roasD30` / `roasToDate` | revenueD7 / revenueD30 / revenueToDate ÷ spend |
 | `installToUser` | users ÷ installs |
 | `userToActivated` | activated ÷ users |
@@ -225,3 +227,56 @@ carries `coverage.counted`, `coverage.notCounted` and `coverage.sourceRows` (raw
 **Caveat on circle invites.** `POST /api/mobile/circles/join` sets `invited_by` to the **circle creator** for
 every join by invite code, whoever shared the code. A member who shares their circle's code therefore credits
 the creator, not themselves.
+
+## 9. Ad revenue — AdMob (`GET /api/admin/ads/revenue`, admin app → Ads → Revenue)
+
+### 9.1 Source
+- `ad_revenue_daily` (migration 126): the AdMob Network Report (`admob.googleapis.com/v1/accounts/{pub}/networkReport:generate`)
+  by `DATE × APP × PLATFORM × AD_UNIT × FORMAT × COUNTRY`, metrics `ESTIMATED_EARNINGS`, `AD_REQUESTS`,
+  `MATCHED_REQUESTS`, `IMPRESSIONS`, `CLICKS`. Synced inside the hourly `/api/cron/ads/sync` (and "Sync now") for
+  Pacific today−3 … today (first run: 90 days); each window is replaced, so restated rows are never doubled.
+  Runs are logged in `ad_sync_runs` with `channel = 'admob'`.
+- **Estimates.** The API only has *estimated* earnings; AdMob revises them for a few days and finalises the month after
+  it closes (AdMob → Payments). Every surface labels them "estimated".
+- **Pacific days.** The API accepts only `America/Los_Angeles` as the report time zone; spend / sign-ups use the console
+  time zone (America/New_York), so daily ad revenue and spend are offset by 3 hours.
+- Only additive counts are stored; every rate is derived from sums, so any grouping matches AdMob.
+
+### 9.2 Metrics
+| Key | Formula |
+|---|---|
+| `earnings` | Σ estimated earnings (USD) |
+| `matchRate` (fill) | matched requests ÷ ad requests |
+| `showRate` | impressions ÷ matched requests |
+| `ctr` | clicks ÷ impressions |
+| `ecpm` | earnings ÷ impressions × 1,000 |
+| `avgDau` | distinct signed-in non-test users whose app loaded the Home feed (`home_feed_decisions`, Pacific day), mean over days with data |
+| `arpdau` | Σ earnings ÷ Σ daily active users (days with a DAU measurement) |
+
+DAU comes from `home_feed_decisions` (every 1.0.8+ app loads Home on launch; rows are kept 90 days). Ads run only on
+Home, so this is the audience that can see them. Signed-out users are not counted.
+
+### 9.3 Returns on ad spend
+- **Per paid channel (cohort basis):** `roas = (subscription revenue to date + ad revenue to date) ÷ spend` for the
+  channel's sign-up cohort. `roasSubscriptions` is the existing ROAS to date.
+- **Ad revenue per channel is an estimate (allocation):** AdMob does not report revenue per user, so each day's
+  platform ARPDAU is credited to every user active that day (Σ over the cohort, sign-up → today). Summed over all
+  active users it equals the real earnings.
+- **Blended (cash basis, all users):** (AdMob earnings + net subscription revenue booked on days in the range) ÷ paid spend on days in the range.
+- Funnel costs per channel: cost per sign-up (`costPerUser`), per activated user, per trial, per payer; TTR and install
+  conversion rate (installs ÷ taps) from the network.
+- When AdMob is not connected, ad revenue is `null` ("—"), never 0.
+
+### 9.4 Access (one time, owner)
+The AdMob API needs OAuth user consent (no service accounts). `scripts/admob-oauth.mjs --client <client.json>` runs the
+consent flow for scope `admob.readonly`, checks access with a 7-day read-only report, and pipes
+`ADMOB_OAUTH_CLIENT_ID`, `ADMOB_OAUTH_CLIENT_SECRET`, `ADMOB_OAUTH_REFRESH_TOKEN` and `ADMOB_PUBLISHER_ID` into Vercel
+as sensitive production env vars. The OAuth consent screen must be **In production** (a "Testing" app's refresh tokens
+expire after 7 days; the sync then fails with `invalid_grant`).
+
+### 9.5 Not used as a source
+- **Amplitude** already receives per-impression paid values (Android `Analytics.adRevenue`, iOS `AdTelemetry.paid`),
+  but iOS divides `GADAdValue.value` (already in currency units) by 1,000,000, so iOS ad revenue there is 10⁶× too small.
+- **GA4 / BigQuery `ad_impression`** (Firebase logs it with `value` when the AdMob app is linked to Firebase) would need
+  no new auth (the `google-ads-reporting` service account already reads the export), but the export only starts on
+  2026-11-01, carries no ad requests / match rate, and depends on the AdMob ↔ Firebase app link. A fallback, not the source.
