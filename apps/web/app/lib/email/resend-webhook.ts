@@ -108,8 +108,23 @@ export const LOGGED_TYPES = new Set([
 ]);
 
 export type WebhookResult =
-  | { handled: false; reason: 'ignored_type' }
+  | { handled: false; reason: 'ignored_type' | 'other_sender' }
   | { handled: true; type: string; suppressed: number; suppressFailed: number };
+
+/**
+ * The Resend account is shared with other Inov8r Labs apps and webhooks are
+ * account-wide, so only events for mail sent from fitcircle.ai (or a
+ * subdomain) count. Events without a `from` are kept: we can't tell, and
+ * Resend sends it on every email event today.
+ */
+const OWN_SENDER_DOMAIN = 'fitcircle.ai';
+
+export function isOwnSender(from: string | undefined): boolean {
+  if (!from) return true;
+  const address = (from.match(/<([^>]+)>/)?.[1] ?? from).trim().toLowerCase();
+  const domain = address.split('@')[1] ?? '';
+  return domain === OWN_SENDER_DOMAIN || domain.endsWith(`.${OWN_SENDER_DOMAIN}`);
+}
 
 export interface WebhookDeps {
   suppress: (w: SuppressionWrite) => Promise<{ ok: boolean; error?: string }>;
@@ -134,6 +149,7 @@ function linkPath(raw: string | undefined): string | undefined {
 
 export async function handleResendEvent(e: ResendEvent, deps: WebhookDeps = defaultWebhookDeps): Promise<WebhookResult> {
   if (!LOGGED_TYPES.has(e.type)) return { handled: false, reason: 'ignored_type' };
+  if (!isOwnSender(e.data?.from)) return { handled: false, reason: 'other_sender' };
   const tags = tagsOf(e);
   const recipients = recipientsOf(e);
   const at = e.data?.created_at ?? e.created_at ?? new Date().toISOString();

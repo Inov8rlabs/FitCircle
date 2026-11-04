@@ -83,6 +83,22 @@ describe('handleResendEvent', () => {
     expect(logs.map((l) => l.bounce_type)).toEqual(['transient', 'undetermined']);
   });
 
+  it('events for mail from another app on the shared Resend account are ignored', async () => {
+    const { d, suppressed, logs } = deps();
+    const r = await handleResendEvent(ev('email.complained', { from: 'MyTripWiz <bookings@mytripwiz.com>' }), d);
+    await handleResendEvent(ev('email.bounced', { from: 'noreply@fitcircle.ai.evil.com', bounce: { type: 'Permanent' } }), d);
+    expect(r).toEqual({ handled: false, reason: 'other_sender' });
+    expect(suppressed).toEqual([]);
+    expect(logs).toEqual([]);
+  });
+
+  it('mail from fitcircle.ai (display name or a subdomain) is handled', async () => {
+    const { d, suppressed } = deps();
+    await handleResendEvent(ev('email.complained', { from: 'Maya via FitCircle <team@fitcircle.ai>' }), d);
+    await handleResendEvent(ev('email.complained', { from: 'noreply@mail.FitCircle.ai' }), d);
+    expect(suppressed).toHaveLength(2);
+  });
+
   it('complaint → suppress (complaint)', async () => {
     const { d, suppressed } = deps();
     await handleResendEvent(ev('email.complained'), d);

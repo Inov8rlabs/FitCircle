@@ -169,6 +169,8 @@ Screenshots and HTML for every email are in `/Users/ani/Code/FitCircle/email-sho
 
 ## C. Resend webhook: bounces and complaints
 
+The Resend account (team inov8rlabs) also sends mail for other apps, and Resend webhooks are account-wide. The handler ignores any event whose `from` is not `fitcircle.ai` or a subdomain (`reason: 'other_sender'`), so another app's bounces never land on FitCircle's suppression list.
+
 `POST /api/webhooks/resend`:
 - **Signature**: Svix, verified on the raw body with `RESEND_WEBHOOK_SECRET` (`whsec_…`). It accepts multiple `v1,` signatures (secret rotation), allows a 5-minute timestamp window (replay protection) and compares in constant time. A wrong or stale signature gets **401**. A missing secret gets **503**, which makes Resend retry.
 - **`email.bounced`** with `bounce.type = Permanent`: every `to` address is added to `email_suppressions` with reason `hard_bounce`. Transient and undetermined bounces are only logged.
