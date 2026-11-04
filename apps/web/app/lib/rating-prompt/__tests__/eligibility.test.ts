@@ -47,7 +47,7 @@ describe('defaults (no feature_flags row)', () => {
     expect(DEFAULT_CONFIG.minMealDays).toBe(3);
     expect(DEFAULT_CONFIG.cooldownDays).toBe(120);
     expect(DEFAULT_CONFIG.triggers.streak_reached.streakLengths).toEqual([3, 7]);
-    expect(DEFAULT_CONFIG.platforms.ios.minAppVersion).toBe('1.1.3');
+    expect(DEFAULT_CONFIG.platforms.ios.minAppVersion).toBe('1.1.2');
   });
 
   it('an eligible user gets every trigger, the exclusions and the version', () => {
@@ -80,8 +80,9 @@ describe('platform and version', () => {
     expect(decide({ config: c }).eligible).toBe(true);
   });
 
-  it('min app version: shipped clients (≤ 1.1.2) and unknown versions never qualify', () => {
-    expect(decide({ request: req({ appVersion: '1.1.2' }) }).reason).toBe('app_version');
+  it('min app version: shipped clients (≤ 1.1.1) and unknown versions never qualify', () => {
+    expect(decide({ request: req({ appVersion: '1.1.1' }) }).reason).toBe('app_version');
+    expect(decide({ request: req({ appVersion: '1.1.2' }) }).eligible).toBe(true);
     expect(decide({ request: req({ appVersion: null }) }).reason).toBe('app_version');
     expect(decide({ request: req({ appVersion: '1.2.0' }) }).eligible).toBe(true);
   });

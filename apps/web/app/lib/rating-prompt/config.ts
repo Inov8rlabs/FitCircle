@@ -30,7 +30,7 @@ export function envEnabled(env: Env = process.env): boolean {
 }
 
 /**
- * Trigger moments the apps know (1.1.3). The config may carry other keys
+ * Trigger moments the apps know (1.1.2). The config may carry other keys
  * (room for new moments): unknown keys are served to clients, which ignore
  * keys they don't know.
  */
@@ -110,8 +110,8 @@ export type RatingPromptConfig = z.infer<typeof ratingPromptConfigSchema>;
 export const DEFAULT_CONFIG: RatingPromptConfig = {
   version: 1,
   platforms: {
-    ios: { enabled: true, minAppVersion: '1.1.3' },
-    android: { enabled: true, minAppVersion: '1.1.3' },
+    ios: { enabled: true, minAppVersion: '1.1.2' },
+    android: { enabled: true, minAppVersion: '1.1.2' },
   },
   triggers: {
     meal_saved: { enabled: true },

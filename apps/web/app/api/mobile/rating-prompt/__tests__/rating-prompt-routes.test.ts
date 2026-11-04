@@ -111,8 +111,8 @@ describe('GET /api/mobile/rating-prompt', () => {
     expect(await decision(ADMIN)).toMatchObject({ eligible: false, reason: 'internal_account' });
   });
 
-  it('shipped clients (≤ 1.1.2, or no version) are never eligible', async () => {
-    expect(await decision(USER, { version: '1.1.2' })).toMatchObject({ eligible: false, reason: 'app_version' });
+  it('shipped clients (≤ 1.1.1, or no version) are never eligible', async () => {
+    expect(await decision(USER, { version: '1.1.1' })).toMatchObject({ eligible: false, reason: 'app_version' });
     expect(await decision(USER, { version: '' })).toMatchObject({ eligible: false, reason: 'app_version' });
     expect(await decision(USER, { platform: 'web' })).toMatchObject({ eligible: false, reason: 'unsupported_platform' });
   });

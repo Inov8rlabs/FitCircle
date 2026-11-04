@@ -1,4 +1,4 @@
-# Store rating prompt (server-driven, 1.1.3)
+# Store rating prompt (server-driven, 1.1.2)
 
 The apps ask the OS for its rating sheet (iOS `AppStore.requestReview(in:)`,
 Play In-App Review `requestReviewFlow` → `launchReviewFlow`) only when the
@@ -21,7 +21,7 @@ One `feature_flags` row, no migration (same pattern as `pro_lifecycle_prompts`):
 | `metadata` | `RatingPromptConfig` (`apps/web/app/lib/rating-prompt/config.ts`) |
 
 Missing row, read error or invalid blob → `DEFAULT_CONFIG` (on, iOS + Android
-≥ 1.1.3; triggers `meal_saved`, `streak_reached` [3, 7], `challenge_day_completed`;
+≥ 1.1.2; triggers `meal_saved`, `streak_reached` [3, 7], `challenge_day_completed`;
 2 days since signup; 3 meal days; 120-day cooldown; max 3 prompts per user;
 internal accounts excluded; paywall-same-session and 30-minute recent-error
 exclusions; 100 % rollout, all countries).

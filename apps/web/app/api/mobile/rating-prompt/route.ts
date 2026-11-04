@@ -6,7 +6,7 @@
  * session. no-store.
  *
  * Client context from the headers every mobile request carries:
- *   X-App-Platform ios | android, X-App-Version 1.1.3 (+ Vercel's IP country).
+ *   X-App-Platform ios | android, X-App-Version 1.1.2 (+ Vercel's IP country).
  *
  * data: { eligible, reason, triggers: [{ key, streakLengths? }], cooldownUntil,
  *         promptCount, maxPrompts, exclusions: { paywallSameSession,
