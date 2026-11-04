@@ -9,6 +9,7 @@ const meal = {
   id: 'e1',
   user_id: 'u1',
   entry_type: 'food', // what food_log_entries actually stores; the slot is meal_type
+  is_private: false,
   visibility: 'circle',
   title: 'Pancakes with fruit',
   meal_type: 'breakfast' as const,

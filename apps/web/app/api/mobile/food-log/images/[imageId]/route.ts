@@ -194,7 +194,12 @@ export async function GET(
       headers: {
         'Content-Type': 'image/jpeg',
         'Content-Length': buffer.length.toString(),
-        'Cache-Control': 'public, max-age=31536000, immutable', // Cache for 1 year
+        // Never `public` (a shared cache would serve it without the auth check)
+        // and short for anyone but the owner: when a meal goes private, other
+        // members' HTTP caches stop showing its photo within minutes
+        // (docs/FOOD_ENTRY_PRIVACY_SPEC.md). The owner can always see it.
+        'Cache-Control':
+          imageRecord.user_id === user.id ? 'private, max-age=86400' : 'private, max-age=300',
         'X-Request-Time': `${Date.now() - startTime}ms`,
       },
     });

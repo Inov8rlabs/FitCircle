@@ -1,7 +1,7 @@
 {
   "$schema": "./tracking-plan.schema.json",
-  "version": 24,
-  "updated": "2026-11-02",
+  "version": 25,
+  "updated": "2026-11-03",
   "conventions": {
     "eventNames": "Title Case, '<Object> <Past-tense verb>' (e.g. 'Meal Logged'). Names are frozen once shipped: rename in the analytics tool, never in code.",
     "propertyNames": "snake_case. Enum values are lowercase snake_case.",
@@ -173,6 +173,21 @@
     "profile_question_source": [
       "home_card",
       "profile"
+    ],
+    "meal_privacy_surface": [
+      "log_screen",
+      "edit_screen",
+      "entry_detail",
+      "chat_card",
+      "settings_bulk"
+    ],
+    "meal_sharing": [
+      "shared",
+      "private"
+    ],
+    "sharing_default_source": [
+      "settings",
+      "log_screen"
     ]
   },
   "globalProperties": [
@@ -1136,6 +1151,65 @@
           "name": "shared_circle_count",
           "type": "int",
           "required": false
+        },
+        {
+          "name": "is_shared",
+          "type": "bool",
+          "required": false,
+          "description": "The meal was saved shared with the user's circles (share_with_circles). Water/supplements: omit."
+        }
+      ]
+    },
+    {
+      "name": "Meal Privacy Changed",
+      "category": "nutrition",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "description": "The user changed who can see a logged meal AFTER it was saved (docs/FOOD_ENTRY_PRIVACY_SPEC.md). Send after the server accepted the change. Not sent for the choice made while logging (that is Meal Logged.is_shared). For the bulk 'Make all past meals private' send once with surface settings_bulk and entry_count.",
+      "properties": [
+        {
+          "name": "surface",
+          "type": "enum",
+          "enum": "meal_privacy_surface",
+          "required": true
+        },
+        {
+          "name": "to",
+          "type": "enum",
+          "enum": "meal_sharing",
+          "required": true
+        },
+        {
+          "name": "entry_count",
+          "type": "int",
+          "required": false,
+          "description": "settings_bulk only: entries_made_private from the response."
+        }
+      ]
+    },
+    {
+      "name": "Meal Sharing Default Changed",
+      "category": "nutrition",
+      "platforms": [
+        "ios",
+        "android",
+        "web"
+      ],
+      "description": "The user turned 'Share new meals with my circles' on or off (preferences.privacy.share_meals_with_circles). Send after the server saved it.",
+      "properties": [
+        {
+          "name": "enabled",
+          "type": "bool",
+          "required": true
+        },
+        {
+          "name": "source",
+          "type": "enum",
+          "enum": "sharing_default_source",
+          "required": true
         }
       ]
     },

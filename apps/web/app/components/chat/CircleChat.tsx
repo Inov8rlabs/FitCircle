@@ -2,6 +2,7 @@
 
 import { Loader2, MessageCircle, Send } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { toast } from 'sonner';
 
 import { ChatCircleSwitcher } from '@/components/chat/ChatSwitcher';
 import { MessageBubble } from '@/components/chat/MessageBubble';
@@ -13,6 +14,7 @@ import {
   type ChatMessage,
   type MessageReactionSummary,
 } from '@/lib/api/circle-chat-client';
+import { nutritionClient } from '@/lib/api/nutrition-client';
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/stores/auth-store';
 
@@ -291,6 +293,27 @@ export function CircleChat({ circleId, circleName, onSwitchCircle }: CircleChatP
     [upsertMessage]
   );
 
+  // "Make private" on your own meal card: PATCH the entry; the server retracts
+  // every card of it before answering, so hide this one right away.
+  const handleMakeMealPrivate = useCallback(async (messageId: string, entryId: string) => {
+    try {
+      await nutritionClient.setEntrySharing(entryId, false);
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === messageId || (m.system?.refId && m.system.refId === entryId)
+            ? { ...m, body: null, photoUrl: null, deletedAt: m.deletedAt ?? new Date().toISOString() }
+            : m
+        )
+      );
+      analytics.track(AnalyticsEvents.mealPrivacyChanged({ surface: 'chat_card', to: 'private' }));
+      toast.success('Meal is now private', { description: 'It was removed from your circles.' });
+    } catch (err) {
+      console.warn('[chat] make meal private failed', err);
+      toast.error('Could not make that meal private. Try again.');
+      throw err;
+    }
+  }, []);
+
   const handleReport = useCallback(async (messageId: string) => {
     const reason = window.prompt('Report this message — optional reason:');
     if (reason === null) return; // cancelled
@@ -429,6 +452,7 @@ export function CircleChat({ circleId, circleName, onSwitchCircle }: CircleChatP
                   onReport={handleReport}
                   onEdit={isPending ? undefined : handleEdit}
                   onDelete={isPending ? undefined : handleDelete}
+                  onMakeMealPrivate={handleMakeMealPrivate}
                 />
               );
             })}

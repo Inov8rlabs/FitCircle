@@ -78,8 +78,12 @@ export const CreateFoodLogEntrySchema = z.object({
   water_ml: z.number().int().min(1).max(10000).optional(),
   supplement_name: z.string().max(200).optional(),
   supplement_dosage: z.string().max(100).optional(),
+  // Legacy privacy fields: shipped clients send these from a hard-coded default,
+  // so only a request for privacy is honoured (lib/services/food-entry-privacy.ts).
   is_private: z.boolean().optional(),
   visibility: z.enum(['private', 'shared', 'circle']).optional(),
+  // The user's explicit per-entry choice (clients with the sharing control).
+  share_with_circles: z.boolean().optional(),
   tags: z.array(z.string().max(50)).max(10).optional(),
 }).refine(
   (data) => {
@@ -105,8 +109,12 @@ export const UpdateFoodLogEntrySchema = z.object({
   water_ml: z.number().int().min(1).max(10000).optional(),
   supplement_name: z.string().max(200).optional(),
   supplement_dosage: z.string().max(100).optional(),
+  // Legacy privacy fields: shipped clients send these from a hard-coded default,
+  // so only a request for privacy is honoured (lib/services/food-entry-privacy.ts).
   is_private: z.boolean().optional(),
   visibility: z.enum(['private', 'shared', 'circle']).optional(),
+  // The user's explicit per-entry choice (clients with the sharing control).
+  share_with_circles: z.boolean().optional(),
   tags: z.array(z.string().max(50)).max(10).optional(),
 });
 

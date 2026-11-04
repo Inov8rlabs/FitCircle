@@ -4,7 +4,10 @@ import {
   Activity,
   Award,
   Flame,
+  Loader2,
+  Lock,
   Smile,
+  Utensils,
   Sparkles,
   Trophy,
   UserPlus,
@@ -33,6 +36,11 @@ interface MessageBubbleProps {
   onReport?: (messageId: string) => void;
   onEdit?: (messageId: string) => void;
   onDelete?: (messageId: string) => void;
+  /**
+   * "Make private" on the viewer's own meal card (docs/FOOD_ENTRY_PRIVACY_SPEC.md §2.6).
+   * Resolves when the server accepted the change; rejects on failure.
+   */
+  onMakeMealPrivate?: (messageId: string, entryId: string) => Promise<void>;
 }
 
 // Edit grace window (mirrors the server-enforced 15-minute contract; the
@@ -58,6 +66,20 @@ export function cheerHeadline(
     actor: isMine ? 'You' : senderName || 'Someone',
     target: toMe ? 'you' : cheer.to_display_name || 'a member',
   };
+}
+
+/**
+ * The food entry behind a meal card the viewer owns, or null. Owner = the
+ * card's first actor (system posts have no sender). Pure.
+ */
+export function ownMealEntryId(message: ChatMessage, viewerId: string | null | undefined): string | null {
+  const system = message.system;
+  if (!viewerId || !system || message.deletedAt) return null;
+  const isMeal = system.renderHint === 'meal_card' || system.eventType === 'meal_logged';
+  if (!isMeal || system.actors[0]?.id !== viewerId) return null;
+  const fromPayload = system.payload?.entry_id;
+  const entryId = system.refId ?? (typeof fromPayload === 'string' ? fromPayload : null);
+  return entryId || null;
 }
 
 /** "2,732 steps · 34%" (null when the snapshot is missing). Pure. */
@@ -147,6 +169,7 @@ export function MessageBubble(props: MessageBubbleProps) {
         message={message}
         viewerId={props.viewerId}
         onReactionsChange={props.onReactionsChange}
+        onMakeMealPrivate={props.onMakeMealPrivate}
       />
     );
   }
@@ -315,6 +338,7 @@ function reactionsVersion(reactions: MessageReactionSummary[]): string {
 }
 
 const SYSTEM_ICON: Record<string, React.ComponentType<{ className?: string }>> = {
+  meal_logged: Utensils,
   workout_done: Activity,
   notable_meal: Sparkles,
   streak_milestone: Flame,
@@ -333,16 +357,39 @@ const SYSTEM_ICON: Record<string, React.ComponentType<{ className?: string }>> =
  * the server-provided `body` text — never re-derives copy. Activity posts about
  * another member get the inline "👏 Cheer" chip.
  */
-function SystemPost({
+function SystemPost(props: {
+  message: ChatMessage;
+  viewerId?: string | null;
+  onReactionsChange: MessageBubbleProps['onReactionsChange'];
+  onMakeMealPrivate?: MessageBubbleProps['onMakeMealPrivate'];
+}) {
+  // A retracted card (meal made private / deleted) leaves the timeline.
+  if (props.message.deletedAt) return null;
+  return <LiveSystemPost {...props} />;
+}
+
+function LiveSystemPost({
   message,
   viewerId,
   onReactionsChange,
+  onMakeMealPrivate,
 }: {
   message: ChatMessage;
   viewerId?: string | null;
   onReactionsChange: MessageBubbleProps['onReactionsChange'];
+  onMakeMealPrivate?: MessageBubbleProps['onMakeMealPrivate'];
 }) {
   const ui = useMessageInteractions(message, onReactionsChange, true);
+  const [makingPrivate, setMakingPrivate] = useState(false);
+  const ownEntryId = onMakeMealPrivate ? ownMealEntryId(message, viewerId) : null;
+  const makePrivate = () => {
+    if (!ownEntryId || !onMakeMealPrivate || makingPrivate) return;
+    ui.closeMenu();
+    setMakingPrivate(true);
+    onMakeMealPrivate(message.id, ownEntryId)
+      .catch(() => {})
+      .finally(() => setMakingPrivate(false));
+  };
   const system = message.system;
   const Icon = (system && SYSTEM_ICON[system.eventType]) || Sparkles;
   const hint = system?.renderHint ?? 'text';
@@ -351,6 +398,7 @@ function SystemPost({
   const showCheer = canCheer(message, viewerId);
 
   const actions: FocusMenuAction[] = body ? [{ label: 'Copy', onSelect: () => copyText(body) }] : [];
+  if (ownEntryId) actions.push({ label: 'Make private', onSelect: makePrivate });
 
   const accent =
     hint === 'completion_card'
@@ -410,6 +458,20 @@ function SystemPost({
 
       {showCheer && (
         <CheerChip cheered={ui.mine === 'clap'} onCheer={() => ui.cheer('cheer_button')} />
+      )}
+
+      {ownEntryId && (
+        <button
+          type="button"
+          data-testid="meal-make-private"
+          onClick={makePrivate}
+          disabled={makingPrivate}
+          aria-label="Make this meal private. It will be removed from your circles."
+          className="inline-flex items-center gap-1.5 rounded-full border border-slate-700/60 bg-slate-800/60 px-3 py-1 text-xs font-medium text-slate-300 transition-colors hover:bg-slate-700/60 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400 disabled:opacity-50"
+        >
+          {makingPrivate ? <Loader2 className="h-3 w-3 animate-spin" aria-hidden /> : <Lock className="h-3 w-3" aria-hidden />}
+          {makingPrivate ? 'Making private…' : 'Make private'}
+        </button>
       )}
 
       {ui.menuAnchor && (

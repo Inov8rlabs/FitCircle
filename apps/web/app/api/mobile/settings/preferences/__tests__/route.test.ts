@@ -179,6 +179,8 @@ describe('GET /api/mobile/settings/preferences', () => {
       show_progress: true,
       allow_team_invites: true,
       allow_challenge_invites: true,
+      // New meals are private unless the user turns sharing on (FOOD_ENTRY_PRIVACY_SPEC).
+      share_meals_with_circles: false,
     });
     // Everything that was returned before is still there.
     expect(body.data.notifications).toEqual({ push: true, email: true, challenge_invite: true, check_in_reminder: true });

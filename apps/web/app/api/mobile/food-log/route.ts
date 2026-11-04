@@ -11,6 +11,7 @@ import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { promosConfig } from '@/lib/promos/config';
 import { ConversionMilestoneService } from '@/lib/services/conversion-milestone-service';
 import { FeatureFlagService } from '@/lib/services/feature-flag-service';
+import { shareMealsByDefault } from '@/lib/services/food-entry-privacy';
 import { FoodLogImageService } from '@/lib/services/food-log-image-service';
 import { FoodLogService } from '@/lib/services/food-log-service';
 import { NutritionTrainingService } from '@/lib/services/nutrition-training-service';
@@ -217,6 +218,12 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
  * - Round trips (water, day already claimed): auth (blacklist ∥ profile) → flag
  *   → insert → (streak ∥ hydration). The audit row, circle meal post and the
  *   training reconcile run after the response.
+ * - Privacy (docs/FOOD_ENTRY_PRIVACY_SPEC.md): `share_with_circles` (bool) is the
+ *   user's explicit choice. Without it the entry is private unless the user's
+ *   default (preferences.privacy.share_meals_with_circles) is on; a legacy
+ *   `is_private:true` / `visibility:'private'` is honoured, a legacy
+ *   `is_private:false` / `visibility:'circle'` is NOT (shipped clients send it
+ *   as a hard-coded default). Water / supplements are always private.
  */
 export async function POST(request: NextRequest) {
   const startTime = Date.now();
@@ -267,9 +274,13 @@ export async function POST(request: NextRequest) {
 
     // Create entry (idempotent on the client id). The audit row and circle meal
     // post are scheduled after the response.
+    // Privacy: private unless the body carries share_with_circles:true or the
+    // user's saved default is on (docs/FOOD_ENTRY_PRIVACY_SPEC.md). The default
+    // comes from the profile auth just loaded — no extra read.
     const result = await FoodLogService.createEntry(user.id, validatedData, supabase, {
       id: clientId,
       defer: (task) => runAfterResponse(task, 'food-log create side effect'),
+      shareByDefault: user && 'preferences' in user ? shareMealsByDefault(user.preferences) : undefined,
     });
 
     if (result.conflict) {

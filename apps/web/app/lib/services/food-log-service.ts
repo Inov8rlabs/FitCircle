@@ -22,6 +22,13 @@ import type {
 } from '@/lib/types/food-log';
 
 import { CircleMealPostService } from './circle-meal-post-service';
+import {
+  isEntryPrivate,
+  isShareableType,
+  resolveCreatePrivacy,
+  resolveUpdatePrivacy,
+  shareMealsByDefault,
+} from './food-entry-privacy';
 import { logIgnoredQueryError } from '@/lib/api/route-errors';
 
 /**
@@ -57,6 +64,12 @@ export class FoodLogService {
       id?: string;
       /** Where the audit row and the circle meal post run; inline when omitted. */
       defer?: DeferFn;
+      /**
+       * The user's "Share new meals with my circles" default
+       * (preferences.privacy.share_meals_with_circles). Read from the profile
+       * when omitted and needed; any read failure means private.
+       */
+      shareByDefault?: boolean;
     } = {}
   ): Promise<{
     data: FoodLogEntry | null;
@@ -69,6 +82,19 @@ export class FoodLogService {
     try {
       // Validate entry type requirements
       this.validateEntryData(data);
+
+      // Private unless the user chose to share (explicit field or their saved
+      // default). Shipped clients' hard-coded is_private:false is not a choice.
+      // See lib/services/food-entry-privacy.ts + docs/FOOD_ENTRY_PRIVACY_SPEC.md.
+      const needsDefault =
+        isShareableType(data.entry_type) &&
+        typeof data.share_with_circles !== 'boolean' &&
+        data.is_private !== true &&
+        data.visibility !== 'private';
+      const shareByDefault = needsDefault
+        ? opts.shareByDefault ?? (await this.readShareDefault(userId, supabase))
+        : false;
+      const privacy = resolveCreatePrivacy(data, shareByDefault);
 
       const { data: entry, error } = await supabase
         .from('food_log_entries')
@@ -90,12 +116,9 @@ export class FoodLogService {
           water_ml: data.water_ml,
           supplement_name: data.supplement_name,
           supplement_dosage: data.supplement_dosage,
-          // Sharing by default (product decision 2026-09-17): a meal is shared
-          // with the user's circles unless they mark it private. `visibility`
-          // is what the circle feed filters on, so derive it from is_private
-          // whenever the client doesn't set it explicitly.
-          is_private: data.is_private ?? false,
-          visibility: data.visibility ?? ((data.is_private ?? false) ? 'private' : 'circle'),
+          // Both columns always agree (every reader may check either).
+          is_private: privacy.is_private,
+          visibility: privacy.visibility,
           tags: data.tags || [],
         })
         .select()
@@ -128,6 +151,21 @@ export class FoodLogService {
         data: null,
         error: error instanceof Error ? error : new Error('Unknown error'),
       };
+    }
+  }
+
+  /** The user's saved "share new meals" default; false (private) on any failure. */
+  static async readShareDefault(userId: string, supabase: SupabaseClient): Promise<boolean> {
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('preferences')
+        .eq('id', userId)
+        .maybeSingle();
+      logIgnoredQueryError('FoodLogService.readShareDefault', error);
+      return shareMealsByDefault((data as { preferences?: unknown } | null)?.preferences);
+    } catch {
+      return false;
     }
   }
 
@@ -306,13 +344,23 @@ export class FoodLogService {
     entryId: string,
     userId: string,
     data: UpdateFoodLogEntryInput,
-    supabase: SupabaseClient
-  ): Promise<{ data: FoodLogEntry | null; error: Error | null; failure?: UpdateFailure }> {
+    supabase: SupabaseClient,
+    opts: {
+      /** Where the meal-card refresh runs; inline when omitted. Going private is always inline. */
+      defer?: DeferFn;
+    } = {}
+  ): Promise<{
+    data: FoodLogEntry | null;
+    error: Error | null;
+    failure?: UpdateFailure;
+    /** Set when this edit changed who can see the entry. */
+    privacyChange?: { from: 'private' | 'shared'; to: 'private' | 'shared' };
+  }> {
     try {
       // Verify ownership. Missing / deleted → NOT_FOUND; someone else's → FORBIDDEN.
       const { data: existing, error: readError } = await supabase
         .from('food_log_entries')
-        .select('user_id')
+        .select('user_id, entry_type, is_private, visibility')
         .eq('id', entryId)
         .is('deleted_at', null)
         .maybeSingle();
@@ -347,12 +395,19 @@ export class FoodLogService {
         'water_ml',
         'supplement_name',
         'supplement_dosage',
-        'is_private',
-        'visibility',
         'tags',
       ];
       for (const key of passthroughKeys) {
         if (data[key] !== undefined) updatePayload[key] = data[key];
+      }
+      // Privacy: an explicit share_with_circles wins; a legacy request for
+      // privacy is honoured; a legacy is_private:false (shipped clients re-send
+      // the whole entry) never re-shares. Both columns are always written together.
+      const wasPrivate = isEntryPrivate(existing as { is_private?: boolean | null; visibility?: string | null });
+      const privacy = resolveUpdatePrivacy(data, existing as { entry_type: string; is_private?: boolean | null; visibility?: string | null });
+      if (privacy) {
+        updatePayload.is_private = privacy.is_private;
+        updatePayload.visibility = privacy.visibility;
       }
       // Keep the typed nutrition columns (migration 054) in sync on edit — derived from
       // nutrition_data when not passed explicitly. These are what Plate Score / Fitzy / insights read.
@@ -381,10 +436,23 @@ export class FoodLogService {
       // Audit log
       await this.auditLog(userId, entryId, 'update', supabase, { changes: data });
 
-      // Keep the circle chat meal cards in sync (or pull them if it went private).
-      void CircleMealPostService.onMealUpdated(updated as FoodLogEntry);
+      const privacyChange = privacy
+        ? { from: wasPrivate ? 'private' as const : 'shared' as const, to: privacy.is_private ? 'private' as const : 'shared' as const }
+        : undefined;
+      const effectiveChange = privacyChange && privacyChange.from !== privacyChange.to ? privacyChange : undefined;
 
-      return { data: updated, error: null };
+      if (effectiveChange?.to === 'private') {
+        // Pull the meal from every circle chat BEFORE answering, so "Private"
+        // in the app means it is already gone for everyone else.
+        await CircleMealPostService.retractMeal(entryId);
+      } else if (opts.defer) {
+        // Keep the cards in sync (or post them if it just became shared).
+        opts.defer(() => CircleMealPostService.onMealUpdated(updated as FoodLogEntry));
+      } else {
+        await CircleMealPostService.onMealUpdated(updated as FoodLogEntry);
+      }
+
+      return { data: updated, error: null, ...(effectiveChange ? { privacyChange: effectiveChange } : {}) };
     } catch (error) {
       return {
         data: null,
@@ -406,7 +474,7 @@ export class FoodLogService {
       // Check if user owns the entry
       const { data: entry, error: entryError } = await supabase
         .from('food_log_entries')
-        .select('user_id, entry_type')
+        .select('user_id, entry_type, is_private, visibility')
         .eq('id', entryId)
         .is('deleted_at', null)
         .single();
@@ -414,6 +482,10 @@ export class FoodLogService {
 
       if (!entry) return false;
       if (entry.user_id === viewerId) return true;
+
+      // A private entry is the owner's alone — an old per-user share row
+      // (food_log_shares) never outlives "Private".
+      if (isEntryPrivate(entry)) return false;
 
       // Supplements are ALWAYS private - cannot be shared
       if (entry.entry_type === 'supplement') return false;

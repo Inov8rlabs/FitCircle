@@ -22,6 +22,7 @@ import { EmptyState } from '@/components/ui/empty-state';
 import { DayHeader, MetricPill, ToneDisc, type Tone } from '@/components/ui/ios';
 import { useToast } from '@/components/ui/use-toast';
 import { AnalyticsEvents, analytics } from '@/lib/analytics';
+import { canShareEntry, isEntryShared } from '@/lib/food-sharing';
 import { BeverageLogService } from '@/lib/services/beverage-log-service';
 import { FoodLogService } from '@/lib/services/food-log-service';
 import { supabase } from '@/lib/supabase';
@@ -43,6 +44,7 @@ import {
   type FeedEntry,
   type FoodLogFilter,
 } from './feed-model';
+import { MealSharingChip } from './meal-sharing-control';
 import { NutritionDetailDialog } from './nutrition-detail-dialog';
 
 interface FoodLogFeedProps {
@@ -223,6 +225,9 @@ export function MealCard({ entry, onDelete }: { entry: FeedEntry; onDelete: () =
               {macros.protein !== null && macros.protein > 0 && <MetricPill tone="pink">P {Math.round(macros.protein)}g</MetricPill>}
               {macros.carbs !== null && macros.carbs > 0 && <MetricPill tone="yellow">C {Math.round(macros.carbs)}g</MetricPill>}
               {macros.fat !== null && macros.fat > 0 && <MetricPill tone="cyan">F {Math.round(macros.fat)}g</MetricPill>}
+              {canShareEntry(entry) && isEntryShared(entry) && (
+                <MealSharingChip shared testId="meal-card-shared-chip" />
+              )}
             </span>
           </span>
         </button>

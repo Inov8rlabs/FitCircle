@@ -15,6 +15,7 @@ import {
   REACTION_KINDS,
 } from '../types/food-feed';
 
+import { isEntryPrivate } from './food-entry-privacy';
 import { FoodPrivacyService } from './food-privacy-service';
 import { logIgnoredQueryError } from '@/lib/api/route-errors';
 
@@ -82,17 +83,21 @@ export class CircleFoodFeedService {
     if (!data) throw new Error('Forbidden');
   }
 
-  /** Resolve a food log entry's owner. Throws Error('NotFound') if missing/deleted. */
-  static async getEntryOwnerId(entryId: string): Promise<string> {
+  /**
+   * Resolve a food log entry's owner. Throws Error('NotFound') if missing/deleted,
+   * or — for anyone but the owner — private (a private entry doesn't exist to others).
+   */
+  static async getEntryOwnerId(entryId: string, viewerId?: string): Promise<string> {
     const supabaseAdmin = createAdminSupabase();
     const { data, error } = await supabaseAdmin
       .from('food_log_entries')
-      .select('user_id, deleted_at')
+      .select('user_id, deleted_at, is_private, visibility')
       .eq('id', entryId)
       .maybeSingle();
 
     if (error) throw error;
     if (!data || data.deleted_at) throw new Error('NotFound');
+    if (viewerId !== undefined && data.user_id !== viewerId && isEntryPrivate(data)) throw new Error('NotFound');
     return data.user_id as string;
   }
 
@@ -186,6 +191,9 @@ export class CircleFoodFeedService {
       .select(FEED_ENTRY_COLUMNS)
       .in('user_id', memberIds)
       .is('deleted_at', null)
+      // Both privacy columns must say "shared" (FOOD_ENTRY_PRIVACY_SPEC): a row
+      // with is_private=true is never shown, whatever its visibility says.
+      .eq('is_private', false)
       .in('visibility', FEED_VISIBLE_TIERS as unknown as string[])
       .order('logged_at', { ascending: false })
       .limit(limit + 1);
@@ -223,7 +231,7 @@ export class CircleFoodFeedService {
     reaction: ReactionKind
   ): Promise<LogReactionSummary[]> {
     this.assertValidReaction(reaction);
-    const ownerId = await this.getEntryOwnerId(entryId);
+    const ownerId = await this.getEntryOwnerId(entryId, userId);
     await this.assertSharesActiveCircle(userId, ownerId);
 
     const supabaseAdmin = createAdminSupabase();
@@ -249,7 +257,7 @@ export class CircleFoodFeedService {
     reaction: ReactionKind
   ): Promise<LogReactionSummary[]> {
     this.assertValidReaction(reaction);
-    const ownerId = await this.getEntryOwnerId(entryId);
+    const ownerId = await this.getEntryOwnerId(entryId, userId);
     await this.assertSharesActiveCircle(userId, ownerId);
 
     const supabaseAdmin = createAdminSupabase();

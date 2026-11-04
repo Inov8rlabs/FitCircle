@@ -326,7 +326,8 @@ describe('POST /api/mobile/food-log — non-water unchanged', () => {
     const { VitalsService } = await import('@/lib/services/vitals-service');
     const hydrationSpy = vi.spyOn(VitalsService, 'getHydrationToday');
 
-    const res = await post({ entry_type: 'food', meal_type: 'lunch', notes: 'Chicken bowl', is_private: false });
+    // An explicit share (new clients) — a bare is_private:false no longer shares.
+    const res = await post({ entry_type: 'food', meal_type: 'lunch', notes: 'Chicken bowl', share_with_circles: true });
     const body = await res.json();
 
     expect(res.status).toBe(201);

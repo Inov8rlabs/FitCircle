@@ -15,6 +15,7 @@ import {
   type NutritionDraftItem,
   type UnitOption,
 } from '@/lib/api/nutrition-client';
+import { useNewMealShareChoice } from '@/lib/food-sharing';
 import { cn } from '@/lib/utils';
 import { compressImagesForUpload } from '@/lib/utils/image-compression';
 import {
@@ -24,6 +25,8 @@ import {
   snapServings,
   stepQuantity,
 } from '@/lib/utils/quantity-input';
+
+import { MealSharingControl } from '../food-log/meal-sharing-control';
 
 import { AiEstimateNote } from './AiTextEstimate';
 
@@ -58,7 +61,12 @@ interface NutritionConfirmProps {
    * When set, commit PATCHes this existing entry (append a photo to a logged
    * meal) instead of creating a new one. `mealType` seeds the meal-type pills.
    */
-  editEntry?: { id: string; mealType?: MealType };
+  editEntry?: {
+    id: string;
+    mealType?: MealType;
+    /** The entry's current sharing state (`isEntryShared(entry)`); seeds the control. */
+    shared?: boolean;
+  };
 }
 
 function emptyItem(): NutritionDraftItem {
@@ -213,6 +221,12 @@ export function NutritionConfirm({
   const [healthScore, setHealthScore] = useState<number | null>(draft?.healthScore ?? null);
   const [addingPhoto, setAddingPhoto] = useState(false);
   const addPhotoRef = useRef<HTMLInputElement>(null);
+  // "Share with my circles": a new meal starts from the user's default (private
+  // when unknown); an edit starts from the entry's stored state.
+  const [newMealShared, setNewMealShared] = useNewMealShareChoice(!editEntry);
+  const [editShared, setEditShared] = useState<boolean>(editEntry?.shared ?? false);
+  const shared = editEntry ? editShared : newMealShared;
+  const setShared = editEntry ? setEditShared : setNewMealShared;
 
   const base = items.reduce(
     (a, it) => ({
@@ -380,10 +394,26 @@ export function NutritionConfirm({
       // its merged nutrition and attach the new photos. Otherwise create anew.
       let entryId: string;
       if (editEntry) {
-        await nutritionClient.updateFoodLog(editEntry.id, { meal_type: mealType, title, nutrition_data });
+        await nutritionClient.updateFoodLog(editEntry.id, {
+          meal_type: mealType,
+          title,
+          nutrition_data,
+          share_with_circles: shared,
+        });
         entryId = editEntry.id;
+        if (shared !== (editEntry.shared ?? false)) {
+          analytics.track(
+            AnalyticsEvents.mealPrivacyChanged({ surface: 'edit_screen', to: shared ? 'shared' : 'private' })
+          );
+        }
       } else {
-        const created = await nutritionClient.createFoodLog({ entry_type: 'food', meal_type: mealType, title, nutrition_data });
+        const created = await nutritionClient.createFoodLog({
+          entry_type: 'food',
+          meal_type: mealType,
+          title,
+          nutrition_data,
+          share_with_circles: shared,
+        });
         entryId = created.id;
         // Server-side streak auto-claim for this meal → refresh streak UI + toast.
         announceStreakAutoClaim(created.streak);
@@ -404,6 +434,7 @@ export function NutritionConfirm({
           meal_type: mealType === 'other' ? undefined : mealType,
           item_count: named.length,
           has_photo: images.length > 0,
+          is_shared: shared,
         })
       );
       onCommitted?.();
@@ -663,6 +694,14 @@ export function NutritionConfirm({
           </button>
         ))}
       </div>
+
+      <MealSharingControl
+        className="mt-3"
+        shared={shared}
+        onChange={setShared}
+        disabled={saving}
+        testId="confirm-sharing"
+      />
 
       {error && <p className="mt-3 text-sm text-red-400">{error}</p>}
 

@@ -147,6 +147,8 @@ export interface CreateFoodLogEntryInput extends NutritionColumnsInput {
   supplement_dosage?: string;
   is_private?: boolean;
   visibility?: Visibility;
+  /** Explicit "Share with my circles" choice (docs/FOOD_ENTRY_PRIVACY_SPEC.md). */
+  share_with_circles?: boolean;
   tags?: string[];
 }
 
@@ -163,6 +165,8 @@ export interface UpdateFoodLogEntryInput extends NutritionColumnsInput {
   supplement_dosage?: string;
   is_private?: boolean;
   visibility?: Visibility;
+  /** Explicit "Share with my circles" choice (docs/FOOD_ENTRY_PRIVACY_SPEC.md). */
+  share_with_circles?: boolean;
   tags?: string[];
 }
 

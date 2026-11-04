@@ -80,3 +80,14 @@ Backend changes made for the mobile local-first outbox. Every change is additive
 
 - Optional `image_key` field, with the same rules.
 - A duplicate returns `200` with `meta.duplicate: true` and the stored image. A new image returns `201` as before.
+
+## Create / PATCH: `share_with_circles` (food entry privacy)
+
+New meals are **private** unless the body carries `share_with_circles: true` or the user's
+default (`preferences.privacy.share_meals_with_circles`, default off) is on. A legacy
+`is_private:false` / `visibility:'circle'` is not a choice (shipped clients send it as a
+default) and never shares; a legacy `is_private:true` is honoured. Queued outbox items must
+store the user's `share_with_circles` choice at log time and replay it unchanged — a 1.1.1
+item replayed by a newer app has no field and stays private (or follows the default).
+On PATCH, `share_with_circles:false` retracts the meal's chat cards before the response
+(500 → retry, idempotent). Full contract: docs/FOOD_ENTRY_PRIVACY_SPEC.md.

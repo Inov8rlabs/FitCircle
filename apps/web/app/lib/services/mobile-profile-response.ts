@@ -125,6 +125,8 @@ export function withPreferenceDefaults(stored: unknown): Json {
     show_progress: bool(privacy.show_progress, bool(privacy.showProgress, true)),
     allow_team_invites: bool(privacy.allow_team_invites, bool(privacy.allowTeamInvites, true)),
     allow_challenge_invites: bool(privacy.allow_challenge_invites, bool(privacy.allowChallengeInvites, true)),
+    // New meals are private unless the user turned this on (FOOD_ENTRY_PRIVACY_SPEC).
+    share_meals_with_circles: privacy.share_meals_with_circles === true,
   };
 
   const displayOut: Json = {

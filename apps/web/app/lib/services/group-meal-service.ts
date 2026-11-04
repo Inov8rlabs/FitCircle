@@ -255,6 +255,8 @@ export class GroupMealService {
         fat_g: meal.fat_g,
         input_method: 'group_meal',
         nutrition_source: 'user',
+        // A diary copy is the member's own entry: private like any new meal.
+        is_private: true,
         visibility: 'private',
         source: 'manual',
       })

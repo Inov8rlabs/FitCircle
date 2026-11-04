@@ -12,6 +12,8 @@ import {
   MAX_TARGET_VALUE,
 } from '../types/nutrition-challenge';
 
+import { isEntryPrivate } from './food-entry-privacy';
+
 /**
  * NutritionChallengeService — nutrition-driven challenge metrics (PRD v4 §6.5).
  *
@@ -174,8 +176,11 @@ export class NutritionChallengeService {
       const c = computed.get(uid) ?? { successDays: 0, daysLogged: 0, sum: 0 };
       const adherencePct =
         challengeDays > 0 ? Math.round((c.successDays / challengeDays) * 100) : 0;
+      // Another member's average daily intake is food data: hidden when any of
+      // their entries in the window is private (their score still counts them).
+      const hideAverage = uid !== userId && (c as { anyPrivate?: boolean }).anyPrivate === true;
       const averageValue =
-        TARGET_REQUIRED_METRICS.includes(metricType) && c.daysLogged > 0
+        TARGET_REQUIRED_METRICS.includes(metricType) && c.daysLogged > 0 && !hideAverage
           ? Math.round((c.sum / c.daysLogged) * 10) / 10
           : null;
 
@@ -234,12 +239,12 @@ export class NutritionChallengeService {
     memberIds: string[],
     rangeStart: string | null,
     rangeEnd: string | null
-  ): Promise<Map<string, { successDays: number; daysLogged: number; sum: number }>> {
+  ): Promise<Map<string, { successDays: number; daysLogged: number; sum: number; anyPrivate?: boolean }>> {
     const supabaseAdmin = createAdminSupabase();
 
     let query = supabaseAdmin
       .from('food_log_entries')
-      .select('user_id, entry_date, calories, protein_g, carbs_g, tags')
+      .select('user_id, entry_date, calories, protein_g, carbs_g, tags, is_private, visibility')
       .in('user_id', memberIds)
       .is('deleted_at', null);
     if (rangeStart) query = query.gte('entry_date', rangeStart);
@@ -257,9 +262,14 @@ export class NutritionChallengeService {
       count: number;
     };
     const byUserDay = new Map<string, Map<string, DayAgg>>();
+    // Members with a private entry in the window: their score still counts it
+    // (the challenge needs it), but their raw intake average is not shown to
+    // others (FOOD_ENTRY_PRIVACY_SPEC §Challenges).
+    const usersWithPrivate = new Set<string>();
 
     for (const e of entries ?? []) {
       const uid = e.user_id as string;
+      if (isEntryPrivate(e as { is_private?: boolean | null; visibility?: string | null })) usersWithPrivate.add(uid);
       const day = this.toDateOnly(e.entry_date as string);
       let days = byUserDay.get(uid);
       if (!days) {
@@ -278,7 +288,7 @@ export class NutritionChallengeService {
       if (this.isNonVegEntry(e.tags as string[] | null)) agg.anyNonVeg = true;
     }
 
-    const result = new Map<string, { successDays: number; daysLogged: number; sum: number }>();
+    const result = new Map<string, { successDays: number; daysLogged: number; sum: number; anyPrivate?: boolean }>();
 
     for (const uid of memberIds) {
       const days = byUserDay.get(uid);
@@ -322,7 +332,7 @@ export class NutritionChallengeService {
         }
       }
 
-      result.set(uid, { successDays, daysLogged, sum });
+      result.set(uid, { successDays, daysLogged, sum, anyPrivate: usersWithPrivate.has(uid) });
     }
 
     return result;

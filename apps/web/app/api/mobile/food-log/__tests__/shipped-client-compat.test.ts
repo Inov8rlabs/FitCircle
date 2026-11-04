@@ -59,6 +59,7 @@ vi.mock('@/lib/services/circle-meal-post-service', () => ({
     isShareableMeal: (e: any) => e.entry_type === 'food' && !e.is_private,
     onMealLogged: vi.fn(async () => undefined),
     onMealUpdated: vi.fn(async () => undefined),
+    retractMeal: vi.fn(async () => 0),
     onMealPhotoAttached: vi.fn(async () => undefined),
     onMealDeleted: vi.fn(async () => undefined),
   },
@@ -741,5 +742,59 @@ describe.skipIf(!!process.env.COMPAT_BASELINE)('iOS uppercase ids — photo dedu
     const lower = await iosSingle(IOS_MEAL_ID.toLowerCase(), RED);
     expect(lower.status).toBe(200);
     expect(liveImages(IOS_MEAL_ID)).toHaveLength(1);
+  });
+});
+
+// ===========================================================================
+// Food entry privacy (docs/FOOD_ENTRY_PRIVACY_SPEC.md) — shipped iOS 1.1.1 /
+// Android 1.1.1 requests: new meals are private by default, the hard-coded
+// is_private:false they send is not a choice, and every response still decodes
+// (is_private stays a Bool; nothing removed or retyped).
+// ===========================================================================
+describe('food entry privacy — shipped clients (iOS 1.1.1, Android 1.1.1)', () => {
+  it('iOS create with is_private:false → private, response decodes unchanged', async () => {
+    const r = await call('privacy.ios.create.default', create(IOS_JSON, iosMeal({ is_private: false })));
+    expect(is2xx(r.status)).toBe(true);
+    expect([...iosEnvelope(r.body), ...iosEntry(r.body.data)]).toEqual([]);
+    expect(r.body.data.is_private).toBe(true);
+    expect(entryRow(IOS_MEAL_ID)).toMatchObject({ is_private: true, visibility: 'private' });
+  });
+
+  it('Android create with is_private:false + visibility:circle → private, response decodes unchanged', async () => {
+    const r = await call('privacy.android.create.default', create(ANDROID_JSON, androidMeal()));
+    expect(is2xx(r.status)).toBe(true);
+    expect([...androidEnvelope(r.body), ...androidOk(r.body), ...androidEntry(r.body.data)]).toEqual([]);
+    expect(r.body.data).toMatchObject({ is_private: true, visibility: 'private' });
+  });
+
+  it('with the user default ON, the same shipped bodies are shared (the default, not the field, decides)', async () => {
+    authedUser = { ...PROFILE, preferences: { privacy: { share_meals_with_circles: true } } };
+    const r = await call('privacy.android.create.default-on', create(ANDROID_JSON, androidMeal()));
+    expect(r.body.data).toMatchObject({ is_private: false, visibility: 'circle' });
+    expect(androidEntry(r.body.data)).toEqual([]);
+  });
+
+  it('Android whole-entry PATCH of a private meal keeps it private and decodes', async () => {
+    await create(ANDROID_JSON, androidMeal());
+    const r = await call('privacy.android.patch', patch(ANDROID_JSON, ANDROID_MEAL_ID, androidMeal({ notes: 'Edited' })));
+    expect(is2xx(r.status)).toBe(true);
+    expect([...androidEnvelope(r.body), ...androidOk(r.body), ...androidEntry(r.body.data)]).toEqual([]);
+    expect(r.body.data).toMatchObject({ notes: 'Edited', is_private: true, visibility: 'private' });
+  });
+
+  it('iOS PATCH full state of a private meal keeps it private and decodes', async () => {
+    await create(IOS_JSON, iosMeal({ is_private: false }));
+    const { id: _id, ...body } = iosMeal({ notes: 'Edited', is_private: false });
+    const r = await call('privacy.ios.patch', patch(IOS_JSON, IOS_MEAL_ID, body));
+    expect([...iosEnvelope(r.body), ...iosEntry(r.body.data)]).toEqual([]);
+    expect(r.body.data.is_private).toBe(true);
+  });
+
+  it('list and detail still decode with the private rows', async () => {
+    await create(IOS_JSON, iosMeal({ is_private: false }));
+    const l = await call('privacy.ios.list', list(IOS_JSON, 'page=1&limit=20'));
+    expect(iosList(l.body)).toEqual([]);
+    const d = await call('privacy.ios.detail', detail(IOS_JSON, IOS_MEAL_ID));
+    expect(iosDetail(d.body)).toEqual([]);
   });
 });

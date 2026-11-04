@@ -25,6 +25,7 @@ import {
 
 import { ChatNotificationService } from './chat-notification-service';
 import { ChatSafetyService } from './chat-safety-service';
+import { scrubbedMealPayload } from './food-entry-privacy';
 import { logIgnoredQueryError } from '@/lib/api/route-errors';
 
 /** A replacement this soon after the reactor's previous reaction does not push. */
@@ -924,10 +925,16 @@ export class CircleChatService {
 
     return rows.map((row) => {
       const sender = row.sender_id ? senderById.get(row.sender_id) ?? null : null;
-      const system = row.kind === 'system_event' ? this.buildSystemBlock(row, senderById) : null;
       // Deleted rows always serialize as tombstones (no body, no photo),
       // regardless of what the stored row still holds.
       const isDeleted = !!row.deleted_at;
+      // A retracted meal card (entry made private / deleted) carries nothing
+      // about the meal — older tombstones still hold it in the stored payload.
+      const systemRow =
+        isDeleted && row.system_event_type === 'meal_logged'
+          ? { ...row, system_payload: scrubbedMealPayload(row.system_payload) }
+          : row;
+      const system = row.kind === 'system_event' ? this.buildSystemBlock(systemRow, senderById) : null;
 
       return {
         id: row.id,

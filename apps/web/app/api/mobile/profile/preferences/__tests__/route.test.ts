@@ -186,6 +186,7 @@ describe('PUT /api/mobile/profile/preferences (iOS alias)', () => {
       show_progress: true,
       allow_team_invites: false,
       allow_challenge_invites: true,
+      share_meals_with_circles: false,
     });
     expect(user.preferences.display).toEqual({ theme: 'dark', language: 'en', units: 'metric' });
   });

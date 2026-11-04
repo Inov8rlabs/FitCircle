@@ -4,7 +4,7 @@ import { format } from 'date-fns';
 import { Camera, Loader2 } from 'lucide-react';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import {
   Dialog,
@@ -13,13 +13,17 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog';
+import { AnalyticsEvents, analytics } from '@/lib/analytics';
 import { trackedPhotoParse } from '@/lib/analytics/meal';
 import { nutritionClient, PHOTO_PARSE_MAX_IMAGES, type NutritionDraft, type NutritionDraftItem } from '@/lib/api/nutrition-client';
+import { canShareEntry, isEntryShared } from '@/lib/food-sharing';
 import { compressImagesForUpload } from '@/lib/utils/image-compression';
 import { cn } from '@/lib/utils';
 
 import { EstimateWithAi } from '../nutrition/AiTextEstimate';
 import { NutritionConfirm } from '../nutrition/NutritionConfirm';
+
+import { MealSharingControl } from './meal-sharing-control';
 
 type MealType = 'breakfast' | 'lunch' | 'dinner' | 'snack' | 'other';
 
@@ -105,6 +109,32 @@ export function NutritionDetailDialog({ entry, children }: { entry: any; childre
 
   // Only meals/snacks carry AI nutrition; don't offer it on water/supplement.
   const canAddPhoto = canAddPhotoFor(entry);
+
+  // "Share with my circles" for this saved meal (food entries only).
+  const canShare = canShareEntry(entry);
+  const storedShared = isEntryShared(entry);
+  const [shared, setShared] = useState(storedShared);
+  const [sharingBusy, setSharingBusy] = useState(false);
+  const [sharingError, setSharingError] = useState<string | null>(null);
+  useEffect(() => setShared(storedShared), [storedShared]);
+
+  const changeSharing = async (next: boolean) => {
+    if (!entry?.id || sharingBusy) return;
+    const prev = shared;
+    setShared(next);
+    setSharingBusy(true);
+    setSharingError(null);
+    try {
+      await nutritionClient.setEntrySharing(entry.id, next);
+      analytics.track(AnalyticsEvents.mealPrivacyChanged({ surface: 'entry_detail', to: next ? 'shared' : 'private' }));
+      router.refresh();
+    } catch (err) {
+      setShared(prev);
+      setSharingError(err instanceof Error ? err.message : 'Could not update sharing. Try again.');
+    } finally {
+      setSharingBusy(false);
+    }
+  };
 
   const resetAdd = () => {
     setSeedDraft(null);
@@ -197,7 +227,7 @@ export function NutritionDetailDialog({ entry, children }: { entry: any; childre
               draft={seedDraft}
               method={seedSource === 'text' ? 'manual' : 'photo_library'}
               initialImages={addFiles}
-              editEntry={{ id: entry.id, mealType: entry?.meal_type as MealType | undefined }}
+              editEntry={{ id: entry.id, mealType: entry?.meal_type as MealType | undefined, shared }}
               onCommitted={() => {
                 resetAdd();
                 setOpen(false);
@@ -280,6 +310,27 @@ export function NutritionDetailDialog({ entry, children }: { entry: any; childre
                 </div>
               ))}
             </div>
+          </div>
+        )}
+
+        {canShare && (
+          <div className="space-y-1">
+            <MealSharingControl
+              shared={shared}
+              onChange={(v) => void changeSharing(v)}
+              busy={sharingBusy}
+              testId="detail-sharing"
+              description={
+                shared
+                  ? 'Members of your circles can see this meal in chat.'
+                  : 'Only you can see this meal. Turning sharing on posts it to your circles.'
+              }
+            />
+            {sharingError && (
+              <p role="alert" className="text-xs text-red-400">
+                {sharingError}
+              </p>
+            )}
           </div>
         )}
 

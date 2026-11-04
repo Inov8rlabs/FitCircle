@@ -402,7 +402,18 @@ export interface CreateFoodLogEntry {
   logged_at?: string;
   visibility?: 'private' | 'shared' | 'circle';
   is_private?: boolean;
+  /**
+   * The user's explicit sharing choice (docs/FOOD_ENTRY_PRIVACY_SPEC.md §2.1/§2.2).
+   * Always sent for food entries; the server ignores legacy `is_private:false`.
+   */
+  share_with_circles?: boolean;
   water_ml?: number;
+}
+
+/** Result of "Make all past meals private" (POST /food-log/sharing/bulk). */
+export interface BulkMakePrivateResult {
+  entries_made_private: number;
+  posts_removed: number;
 }
 
 // --- envelope plumbing -----------------------------------------------------
@@ -703,6 +714,30 @@ export const nutritionClient = {
     authedFetch<{ id: string }>(`/api/mobile/food-log/${encodeURIComponent(id)}`, {
       method: 'PATCH',
       body: JSON.stringify(input),
+    }),
+
+  /** Change who can see one saved entry. The minimal body is valid on its own (§2.2). */
+  setEntrySharing: (id: string, share: boolean) =>
+    authedFetch<{ id: string; is_private?: boolean; visibility?: string }>(
+      `/api/mobile/food-log/${encodeURIComponent(id)}`,
+      { method: 'PATCH', body: JSON.stringify({ share_with_circles: share }) }
+    ),
+
+  /** "Share new meals with my circles" — the default for new food entries (§2.4). */
+  getMealSharingDefault: () =>
+    authedFetch<{ share_meals_with_circles: boolean }>('/api/mobile/food-log/sharing'),
+
+  setMealSharingDefault: (share: boolean) =>
+    authedFetch<{ share_meals_with_circles: boolean }>('/api/mobile/food-log/sharing', {
+      method: 'PUT',
+      body: JSON.stringify({ share_meals_with_circles: share }),
+    }),
+
+  /** "Make all past meals private" — server-side, idempotent (§2.5). */
+  makeAllMealsPrivate: () =>
+    authedFetch<BulkMakePrivateResult>('/api/mobile/food-log/sharing/bulk', {
+      method: 'POST',
+      body: JSON.stringify({ share_with_circles: false }),
     }),
 
   /**

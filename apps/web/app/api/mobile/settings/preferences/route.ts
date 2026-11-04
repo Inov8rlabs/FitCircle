@@ -27,6 +27,10 @@ const preferencesSchema = z.object({
       // `preferences.privacy` of the profile responses under these same names.
       allow_team_invites: z.boolean().optional(),
       allow_challenge_invites: z.boolean().optional(),
+      // "Share new meals with my circles" (docs/FOOD_ENTRY_PRIVACY_SPEC.md).
+      // Default OFF. Shipped clients never send it, so their whole-object
+      // saves keep the stored value (mergePrivacy merges).
+      share_meals_with_circles: z.boolean().optional(),
     })
     .optional(),
   display: z
@@ -135,6 +139,7 @@ export async function GET(request: NextRequest) {
           preferences.privacy?.allow_challenge_invites ??
           preferences.privacy?.allowChallengeInvites ??
           true,
+        share_meals_with_circles: preferences.privacy?.share_meals_with_circles === true,
       },
       display: {
         theme: preferences.display?.theme || 'dark',

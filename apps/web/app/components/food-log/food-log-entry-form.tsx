@@ -15,10 +15,12 @@ import { AnalyticsEvents, analytics, type MealType } from '@/lib/analytics';
 import type { NutritionDraft } from '@/lib/api/nutrition-client';
 import { announceStreakAutoClaim, clientTimezone, extractStreakMeta } from '@/lib/streaks/auto-claim-events';
 import { supabase } from '@/lib/supabase';
+import { useNewMealShareChoice } from '@/lib/food-sharing';
 import type { BeverageCustomizations } from '@/lib/types/beverage-log';
 
 import { BeverageTypeCard } from './beverage-type-card';
 import { CategoryCard, type CategoryId } from './category-card';
+import { MealSharingControl } from './meal-sharing-control';
 import { NutritionPreview } from './nutrition-preview';
 import { WaterPresetButton } from './water-preset-button';
 
@@ -94,7 +96,10 @@ export function FoodLogEntryForm({ variant = 'page', onSaved, header }: FoodLogE
   const [isLoading, setIsLoading] = useState(false);
   const [category, setCategory] = useState<CategoryId>('meal');
   const [notes, setNotes] = useState('');
+  // Beverage logs are never posted to circles; this is their own privacy flag.
   const [isPrivate, setIsPrivate] = useState(true);
+  // Meals / snacks: "Share with my circles", starting from the user's default (private when unknown).
+  const [shareMeal, setShareMeal] = useNewMealShareChoice();
 
   // Meal time — the time the user actually ate/drank. Drives the per-day
   // chronological sort (breakfast → lunch → dinner). Defaults to "now".
@@ -301,7 +306,9 @@ export function FoodLogEntryForm({ variant = 'page', onSaved, header }: FoodLogE
               }
             : {}),
           notes,
-          is_private: isPrivate,
+          share_with_circles: shareMeal,
+          // Old servers read is_private; current ones use share_with_circles.
+          is_private: !shareMeal,
           logged_at: loggedAtISO,
           entry_date: entryDate,
         });
@@ -314,6 +321,7 @@ export function FoodLogEntryForm({ variant = 'page', onSaved, header }: FoodLogE
             meal_type: category === 'snack' ? 'snack' : (mealType as MealType),
             has_photo: photos.length > 0,
             is_backfill: entryDate !== toLocalDateTimeInputValue(new Date()).slice(0, 10),
+            is_shared: shareMeal,
           })
         );
       } else if (category === 'water') {
@@ -322,7 +330,8 @@ export function FoodLogEntryForm({ variant = 'page', onSaved, header }: FoodLogE
           entry_type: 'water',
           water_ml: waterAmount,
           notes,
-          is_private: isPrivate,
+          // Water is never shared (the server forces it private).
+          is_private: true,
           logged_at: loggedAtISO,
           entry_date: entryDate,
         });
@@ -717,13 +726,21 @@ export function FoodLogEntryForm({ variant = 'page', onSaved, header }: FoodLogE
           </div>
         )}
 
-        <div className="flex items-center justify-between p-4 bg-muted/30 rounded-lg border">
-          <div className="space-y-0.5">
-            <Label>Private Entry</Label>
-            <p className="text-xs text-muted-foreground">Only visible to you</p>
+        {category === 'meal' || category === 'snack' ? (
+          <MealSharingControl shared={shareMeal} onChange={setShareMeal} />
+        ) : category === 'water' ? (
+          <p className="text-xs text-muted-foreground" data-testid="water-private-note">
+            Water logs are private. Only you can see them.
+          </p>
+        ) : (
+          <div className="flex items-center justify-between p-4 bg-muted/30 rounded-lg border">
+            <div className="space-y-0.5">
+              <Label htmlFor="beverage-private">Private entry</Label>
+              <p className="text-xs text-muted-foreground">Only visible to you</p>
+            </div>
+            <Switch id="beverage-private" checked={isPrivate} onCheckedChange={setIsPrivate} />
           </div>
-          <Switch checked={isPrivate} onCheckedChange={setIsPrivate} />
-        </div>
+        )}
       </section>
 
       <Button

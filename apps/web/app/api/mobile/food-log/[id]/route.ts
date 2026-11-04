@@ -193,7 +193,11 @@ export async function PATCH(
     }
 
     // Update entry
-    const result = await FoodLogService.updateEntry(entryId, user.id, validatedData, supabase);
+    // Privacy: `share_with_circles` flips the entry (going private pulls its
+    // meal cards before we answer); a legacy is_private:false never re-shares.
+    const result = await FoodLogService.updateEntry(entryId, user.id, validatedData, supabase, {
+      defer: (task) => runAfterResponse(task, 'food-log update side effect'),
+    });
 
     if (result.error || !result.data) {
       const failure = result.failure ?? 'DATABASE_ERROR';

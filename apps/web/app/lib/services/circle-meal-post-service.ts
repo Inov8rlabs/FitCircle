@@ -17,6 +17,9 @@ import { createAdminSupabase } from '../supabase-admin';
 
 import { ChatNotificationService, type SystemPushIntent } from './chat-notification-service';
 import { CircleChatService } from './circle-chat-service';
+import { isEntryPrivate, isRecentMeal, isShareableType, scrubbedMealPayload } from './food-entry-privacy';
+
+export { scrubbedMealPayload };
 import { FoodPrivacyService } from './food-privacy-service';
 import { logIgnoredQueryError } from '@/lib/api/route-errors';
 
@@ -60,11 +63,12 @@ export interface EntryLike {
   deleted_at?: string | null;
 }
 
-const SHAREABLE_VISIBILITY = new Set(['circle', 'shared']);
 // food_log_entries.entry_type is 'food' | 'water' | 'supplement' (the meal slot
 // lives in meal_type). 'meal'/'snack' are accepted for older rows/clients.
 // Shipped with only 'meal'/'snack' on 2026-09-22 → zero posts for a day.
-const MEAL_ENTRY_TYPES = new Set(['food', 'meal', 'snack']);
+// Privacy (docs/FOOD_ENTRY_PRIVACY_SPEC.md): a meal is shared only when BOTH
+// columns say so — is_private === false AND visibility in (circle, shared).
+
 
 export class CircleMealPostService {
   // ==========================================================================
@@ -74,9 +78,9 @@ export class CircleMealPostService {
   /** Only meals/snacks that the owner shares (not water/supplements, not private, not deleted). */
   static isShareableMeal(entry: EntryLike): boolean {
     if (!entry || entry.deleted_at) return false;
-    if (!MEAL_ENTRY_TYPES.has(entry.entry_type)) return false;
-    if (entry.is_private) return false;
-    return SHAREABLE_VISIBILITY.has(entry.visibility ?? '');
+    if (!isShareableType(entry.entry_type)) return false;
+    // Fail closed: a missing is_private is the column default (private).
+    return !isEntryPrivate(entry);
   }
 
   /** "Anki logged breakfast: Pancakes with fruit" — the plain-text fallback every client can show. */
@@ -153,10 +157,16 @@ export class CircleMealPostService {
   // HOOKS (fire-and-forget from the food-log write path)
   // ==========================================================================
 
-  /** A meal was created. Post it to every circle the owner shares meals with. */
-  static async onMealLogged(entry: EntryLike): Promise<void> {
+  /**
+   * A meal was created (or just became shared). Post it to every circle the
+   * owner shares meals with. Members get a push only when `notify` — by
+   * default, only for a meal eaten within the last 2 hours (a back-dated or
+   * old meal posts silently).
+   */
+  static async onMealLogged(entry: EntryLike, opts: { notify?: boolean } = {}): Promise<void> {
     try {
       if (!this.isShareableMeal(entry)) return;
+      const notify = opts.notify ?? isRecentMeal(entry.logged_at);
       const circleIds = await this.circlesSharingFull(entry.user_id);
       if (circleIds.length === 0) return;
 
@@ -202,7 +212,7 @@ export class CircleMealPostService {
         })
       );
       const posted = intents.filter((i): i is SystemPushIntent => i !== null);
-      if (posted.length > 0) void ChatNotificationService.notifySystemEvent(posted).catch(() => {});
+      if (notify && posted.length > 0) void ChatNotificationService.notifySystemEvent(posted).catch(() => {});
     } catch (err) {
       console.error('[CircleMealPostService.onMealLogged] swallowed:', err);
     }
@@ -245,11 +255,16 @@ export class CircleMealPostService {
       const posts = await this.postsFor(entry.id);
       if (posts.length === 0) {
         // Became shareable (e.g. private → circle) after creation: post it now.
-        if (this.isShareableMeal(entry)) await this.onMealLogged(entry);
+        // Push only for a meal eaten in the last 2 hours that was never posted
+        // before (re-sharing an old or once-retracted meal is silent).
+        if (this.isShareableMeal(entry)) {
+          const notify = isRecentMeal(entry.logged_at) && !(await this.everPosted(entry.id));
+          await this.onMealLogged(entry, { notify });
+        }
         return;
       }
       if (!this.isShareableMeal(entry)) {
-        await this.tombstone(posts.map((p) => p.id));
+        await this.tombstone(posts.map((p) => p.id), posts);
         return;
       }
       const actorName = await this.actorName(entry.user_id);
@@ -274,11 +289,45 @@ export class CircleMealPostService {
     }
   }
 
+  /**
+   * The entry went private: its cards disappear from every chat now. Unlike the
+   * other hooks this THROWS, so the caller can fail the request (and the client
+   * retry) rather than report "Private" while a card is still up.
+   */
+  static async retractMeal(entryId: string): Promise<number> {
+    const posts = await this.postsFor(entryId);
+    if (posts.length > 0) await this.tombstone(posts.map((p) => p.id), posts);
+    return posts.length;
+  }
+
+  /**
+   * Bulk "make all my meals private": retract every live meal card of these
+   * entries. Throws on failure. Returns how many cards were removed.
+   */
+  static async retractMeals(entryIds: string[]): Promise<number> {
+    let removed = 0;
+    for (let i = 0; i < entryIds.length; i += 200) {
+      const chunk = entryIds.slice(i, i + 200);
+      const supabaseAdmin = createAdminSupabase();
+      const { data, error } = await supabaseAdmin
+        .from('circle_messages')
+        .select('id, system_payload')
+        .eq('system_event_type', 'meal_logged')
+        .in('system_event_ref', chunk)
+        .is('deleted_at', null);
+      if (error) throw error;
+      const posts = (data ?? []) as Array<{ id: string; system_payload: Record<string, unknown> | null }>;
+      if (posts.length > 0) await this.tombstone(posts.map((p) => p.id), posts);
+      removed += posts.length;
+    }
+    return removed;
+  }
+
   /** The entry was deleted: its cards disappear from every chat. */
   static async onMealDeleted(entryId: string): Promise<void> {
     try {
       const posts = await this.postsFor(entryId);
-      if (posts.length > 0) await this.tombstone(posts.map((p) => p.id));
+      if (posts.length > 0) await this.tombstone(posts.map((p) => p.id), posts);
     } catch (err) {
       console.error('[CircleMealPostService.onMealDeleted] swallowed:', err);
     }
@@ -356,14 +405,48 @@ export class CircleMealPostService {
     return (data ?? []) as Array<{ id: string; system_payload: Record<string, unknown> | null }>;
   }
 
-  private static async tombstone(messageIds: string[]): Promise<void> {
+  /**
+   * Tombstone meal posts AND strip the meal from the stored row: members can
+   * read circle_messages directly (RLS member_select + Realtime UPDATE events),
+   * so a deleted_at alone would still ship the title, macros and photo path.
+   */
+  private static async tombstone(
+    messageIds: string[],
+    posts: Array<{ id: string; system_payload: Record<string, unknown> | null }> = []
+  ): Promise<void> {
     const supabaseAdmin = createAdminSupabase();
     const now = new Date().toISOString();
-    const { error } = await supabaseAdmin
+    const payloadById = new Map(posts.map((p) => [p.id, p.system_payload]));
+    // Group by scrubbed payload so the common case stays one UPDATE.
+    const groups = new Map<string, { payload: Record<string, unknown>; ids: string[] }>();
+    for (const id of messageIds) {
+      const payload = scrubbedMealPayload(payloadById.get(id));
+      const key = JSON.stringify(payload);
+      const g = groups.get(key) ?? { payload, ids: [] };
+      g.ids.push(id);
+      groups.set(key, g);
+    }
+    for (const { payload, ids } of groups.values()) {
+      const { error } = await supabaseAdmin
+        .from('circle_messages')
+        .update({ deleted_at: now, updated_at: now, body: null, system_payload: payload })
+        .in('id', ids);
+      if (error) throw error;
+    }
+  }
+
+  /** Was this entry ever posted to a chat (live or retracted)? */
+  private static async everPosted(entryId: string): Promise<boolean> {
+    const supabaseAdmin = createAdminSupabase();
+    const { data, error } = await supabaseAdmin
       .from('circle_messages')
-      .update({ deleted_at: now, updated_at: now })
-      .in('id', messageIds);
-    if (error) throw error;
+      .select('id')
+      .eq('system_event_type', 'meal_logged')
+      .eq('system_event_ref', entryId)
+      .limit(1);
+    // Unsure → treat as posted (no push): a missed push is better than a repeat.
+    if (error) return true;
+    return (data ?? []).length > 0;
   }
 
   private static async primaryImageId(entryId: string): Promise<string | null> {
