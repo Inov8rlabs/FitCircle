@@ -133,6 +133,21 @@ describe('GET rules (editor state)', () => {
 describe('POST preview (draft)', () => {
   const base = { platform: 'ios', version: '1.1.0' };
 
+  it('per platform: 1.1.2 builds get their own declaration (Android missing_days, both profile_completion) and the build is passed through', async () => {
+    const out: Record<string, any> = {};
+    for (const [platform, build] of [['ios', 89], ['android', 52]] as const) {
+      const { status, body } = await json(await previewPost(req('/api/admin/home-feed/preview', tools({ platform, version: '1.1.2', build, persona: 'typical' }))));
+      expect(status).toBe(200);
+      out[platform] = body.data;
+      expect(body.data.request).toMatchObject({ platform, version: '1.1.2', build, features: 'promo_style@1' });
+      expect(body.data.request.cards).toBe(defaultClientDeclaration(platform, '1.1.2', build).cards);
+      expect(ids(body.data.after.feed)).toContain('profile_completion');
+    }
+    expect(out.ios.request.cards).not.toContain('missing_days');
+    expect(out.android.request.cards).toContain('missing_days@1');
+    expect(ids(out.ios.after.feed)).not.toContain('missing_days');
+  });
+
   it('with no draft, before == after == what GET /api/mobile/home-feed would serve the same user', async () => {
     seedRule(GOALS_FIRST);
     seedRule(HIDE_CHARTS);

@@ -107,21 +107,40 @@ const atLeast = (version: string, min: number[]) => {
 };
 
 /**
- * The `cards=` / `actions=` / `promoLayouts=` a shipped build sends:
- * 1.0.8–1.0.9 = spec §2 lists (Android adds missing_days); 1.1.0+ also
- * declares promo@1 (+ actions/layouts) and circle_chat@1. Web: its own list.
+ * First build of 1.1.2 that sends `features=promo_style@1` (the feature was
+ * merged mid-1.1.2): iOS 382d5e0 is in build 89+ (the rating-prompt cut,
+ * 87694ec), Android 6ce7621 is in versionCode 51+ (49ca1a6). Earlier 1.1.2
+ * builds (iOS ≤ 88, Android vc50) don't declare it.
  */
-export function defaultClientDeclaration(platform: 'ios' | 'android' | 'web', version: string): { cards: string; actions: string | null; promoLayouts: string | null; features: string | null } {
+export const PROMO_STYLE_FIRST_112_BUILD = { ios: 89, android: 51 } as const;
+
+/**
+ * The `cards=` / `actions=` / `promoLayouts=` / `features=` a shipped build sends:
+ * 1.0.8–1.0.9 = spec §2 lists (Android adds missing_days); 1.1.0+ also
+ * declares promo@1 (+ actions/layouts) and circle_chat@1; 1.1.2+ declares
+ * profile_completion@1 (iOS HomeFeedCardType.profileCompletion, Android
+ * HomeFeedCardType.PROFILE_COMPLETION); promo_style@1 from 1.1.2
+ * (build ≥ PROMO_STYLE_FIRST_112_BUILD; no build = an early 1.1.2 build without it) and
+ * every 1.1.3+.
+ * Web: its own list.
+ */
+export function defaultClientDeclaration(
+  platform: 'ios' | 'android' | 'web',
+  version: string,
+  build?: number | null
+): { cards: string; actions: string | null; promoLayouts: string | null; features: string | null } {
   if (platform === 'web') return { cards: WEB_CARDS.map((t) => `${t}@1`).join(','), actions: null, promoLayouts: null, features: null };
   const types: string[] = platform === 'android' ? [...DEFAULT_ORDER] : [...IOS_108_CARDS];
   const v110 = atLeast(version, [1, 1, 0]);
   if (v110) types.push('promo', 'circle_chat');
+  if (atLeast(version, [1, 1, 2])) types.push('profile_completion');
+  // Server-controlled promo button styles + card surface (docs/PROMO_BUTTON_STYLE_SPEC.md).
+  const promoStyle = atLeast(version, [1, 1, 3]) || (atLeast(version, [1, 1, 2]) && build != null && build >= PROMO_STYLE_FIRST_112_BUILD[platform]);
   return {
     cards: types.map((t) => `${t}@${CATALOG[t]?.version ?? 1}`).join(','),
     actions: v110 ? PROMO_ACTIONS : null,
     promoLayouts: v110 ? PROMO_LAYOUTS : null,
-    // 1.1.3+ draw server-controlled button styles + card surface (docs/PROMO_BUTTON_STYLE_SPEC.md).
-    features: atLeast(version, [1, 1, 3]) ? `${PROMO_STYLE_FEATURE}@${PROMO_STYLE_VERSION}` : null,
+    features: promoStyle ? `${PROMO_STYLE_FEATURE}@${PROMO_STYLE_VERSION}` : null,
   };
 }
 
@@ -477,7 +496,7 @@ export class HomeFeedAdminService {
     }
 
     const subject = await this.resolveSubject(input, caller, now, opts);
-    const declared = defaultClientDeclaration(input.platform, input.version);
+    const declared = defaultClientDeclaration(input.platform, input.version, input.build);
     const cards = input.cards ?? declared.cards;
     const actions = input.actions ?? declared.actions;
     const promoLayouts = input.promoLayouts ?? declared.promoLayouts;

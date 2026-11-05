@@ -10,7 +10,7 @@ import { describe, expect, it } from 'vitest';
 
 import { DEFAULT_MEAL_REMINDER_PREFS } from '../../journey/meal-slots';
 import { ACTION_TYPES, SYSTEM_PROMOS, parsePromoClient, promosConfig, selectPromos, type JourneyContext } from '../../promos';
-import { defaultClientDeclaration } from '../../services/home-feed-admin-service';
+import { PROMO_STYLE_FIRST_112_BUILD, defaultClientDeclaration } from '../../services/home-feed-admin-service';
 import { parseClientCards } from '../candidates';
 import { composeFeed } from '../compose';
 import type { FeedRule } from '../rules';
@@ -106,5 +106,31 @@ describe('home feed order is the same on iOS and Android (admin_layout_everyone)
     const ios = feed('ios', defaultClientDeclaration('ios', '1.1.2').cards);
     const android = feed('android', defaultClientDeclaration('android', '1.1.2').cards);
     expect(ios).toEqual(common(android));
+  });
+});
+
+describe('defaultClientDeclaration matches what each shipped build sends', () => {
+  const set = (cards: string) => new Set(cards.split(','));
+
+  it('1.1.2: exactly the cards= of iOS HomeFeedCardType / Android HomeFeedCardType (profile_completion on both, missing_days on Android only)', () => {
+    expect(set(defaultClientDeclaration('ios', '1.1.2').cards)).toEqual(set(IOS_112_CARDS));
+    expect(set(defaultClientDeclaration('android', '1.1.2').cards)).toEqual(set(ANDROID_112_CARDS));
+  });
+
+  it('1.1.1 and older do not declare profile_completion', () => {
+    expect(set(defaultClientDeclaration('android', '1.1.1').cards)).toEqual(set(ANDROID_111_CARDS));
+    expect(defaultClientDeclaration('ios', '1.1.1').cards).not.toContain('profile_completion');
+  });
+
+  it('promo_style@1: 1.1.2 from iOS build 89 / Android vc51, every 1.1.3+, never 1.1.1', () => {
+    expect(PROMO_STYLE_FIRST_112_BUILD).toEqual({ ios: 89, android: 51 });
+    expect(defaultClientDeclaration('ios', '1.1.2', 88).features).toBeNull();
+    expect(defaultClientDeclaration('ios', '1.1.2', 89).features).toBe('promo_style@1');
+    expect(defaultClientDeclaration('android', '1.1.2', 50).features).toBeNull();
+    expect(defaultClientDeclaration('android', '1.1.2', 52).features).toBe('promo_style@1');
+    // No build: an early 1.1.2 (the promo-style editor's "today's apps" side relies on this).
+    expect(defaultClientDeclaration('ios', '1.1.2').features).toBeNull();
+    expect(defaultClientDeclaration('android', '1.1.3').features).toBe('promo_style@1');
+    expect(defaultClientDeclaration('ios', '1.1.1', 999).features).toBeNull();
   });
 });
