@@ -1,0 +1,10 @@
+{
+  "body" : {
+    "inviteId" : "44444444-4444-4444-8444-444444444444"
+  },
+  "expect" : {
+    "inviteId" : "44444444-4444-4444-8444-444444444444"
+  },
+  "method" : "POST",
+  "path" : "/api/mobile/referrals/nudge"
+}

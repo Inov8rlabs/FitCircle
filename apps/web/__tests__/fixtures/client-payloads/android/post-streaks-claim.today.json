@@ -1,0 +1,10 @@
+{
+  "body": {
+    "timezone": "America/Los_Angeles"
+  },
+  "expect": {
+    "timezone": "America/Los_Angeles"
+  },
+  "method": "POST",
+  "path": "/api/streaks/claim"
+}

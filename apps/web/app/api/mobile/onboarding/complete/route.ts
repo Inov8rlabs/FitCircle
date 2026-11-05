@@ -4,6 +4,7 @@ import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { AssessmentService } from '@/lib/services/assessment-service';
 import { MobileAPIService } from '@/lib/services/mobile-api-service';
 import { completeBodySchema, OnboardingFlowService } from '@/lib/services/onboarding-flow-service';
+import { safeParseLenient } from '@/lib/validation/lenient-parse';
 
 /**
  * POST /api/mobile/onboarding/complete
@@ -26,7 +27,7 @@ export async function POST(request: NextRequest) {
     }
     // Completing onboarding must never fail on the optional birth date: an
     // invalid one is ignored here (progress / plan return 400 for it instead).
-    const birth = completeBodySchema.safeParse(body && typeof body === 'object' && !Array.isArray(body) ? body : {});
+    const birth = safeParseLenient(completeBodySchema, body && typeof body === 'object' && !Array.isArray(body) ? body : {});
     if (birth.success) await OnboardingFlowService.saveBirthDate(user.id, birth.data);
 
     const result = await AssessmentService.completeOnboarding(user.id);

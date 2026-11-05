@@ -1,0 +1,17 @@
+{
+  "body": {
+    "context": "onboarding",
+    "messages": [
+      {
+        "content": "What should I eat?",
+        "role": "user"
+      }
+    ]
+  },
+  "expect": {
+    "context": "onboarding",
+    "messages.0.content": "What should I eat?"
+  },
+  "method": "POST",
+  "path": "/api/mobile/fitzy/chat"
+}

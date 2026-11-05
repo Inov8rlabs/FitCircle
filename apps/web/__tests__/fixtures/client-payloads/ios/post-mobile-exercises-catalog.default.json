@@ -1,0 +1,16 @@
+{
+  "body" : {
+    "equipment" : "sled",
+    "name" : "Sled push",
+    "primaryMuscle" : "legs",
+    "trackingType" : "distance_duration"
+  },
+  "expect" : {
+    "equipment" : "sled",
+    "name" : "Sled push",
+    "primaryMuscle" : "legs",
+    "trackingType" : "distance_duration"
+  },
+  "method" : "POST",
+  "path" : "/api/mobile/exercises/catalog"
+}

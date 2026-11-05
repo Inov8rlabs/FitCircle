@@ -1,0 +1,40 @@
+{
+  "body" : {
+    "beverage_type" : "latte",
+    "caffeine_mg" : 150,
+    "calories" : 190,
+    "category" : "coffee",
+    "customizations" : {
+      "milk_type" : "oat",
+      "shots" : 2,
+      "size" : "extraLarge",
+      "sweetener" : "sugar1",
+      "temperature" : "iced"
+    },
+    "favorite_name" : "Morning latte",
+    "is_favorite" : true,
+    "is_private" : false,
+    "logged_at" : "2026-01-15T12:00:00Z",
+    "sugar_g" : 17.5,
+    "volume_ml" : 590
+  },
+  "expect" : {
+    "beverage_type" : "latte",
+    "caffeine_mg" : 150,
+    "calories" : 190,
+    "category" : "coffee",
+    "customizations.milk_type" : "oat",
+    "customizations.shots" : 2,
+    "customizations.size" : "extraLarge",
+    "customizations.sweetener" : "sugar1",
+    "customizations.temperature" : "iced",
+    "favorite_name" : "Morning latte",
+    "is_favorite" : true,
+    "is_private" : false,
+    "logged_at" : "2026-01-15T12:00:00Z",
+    "sugar_g" : 17.5,
+    "volume_ml" : 590
+  },
+  "method" : "POST",
+  "path" : "/api/mobile/beverages"
+}

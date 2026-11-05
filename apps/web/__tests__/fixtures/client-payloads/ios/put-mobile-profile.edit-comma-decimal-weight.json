@@ -1,0 +1,12 @@
+{
+  "body" : {
+    "heightCm" : 175,
+    "weightKg" : 72.5
+  },
+  "expect" : {
+    "heightCm" : 175,
+    "weightKg" : 72.5
+  },
+  "method" : "PUT",
+  "path" : "/api/mobile/profile"
+}

@@ -1,0 +1,10 @@
+{
+  "body": {
+    "idToken": "fake-google-id-token"
+  },
+  "expect": {
+    "idToken": "fake-google-id-token"
+  },
+  "method": "POST",
+  "path": "/api/mobile/auth/google"
+}

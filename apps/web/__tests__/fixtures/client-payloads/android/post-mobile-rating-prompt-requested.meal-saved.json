@@ -1,0 +1,10 @@
+{
+  "body": {
+    "trigger": "meal_saved"
+  },
+  "expect": {
+    "trigger": "meal_saved"
+  },
+  "method": "POST",
+  "path": "/api/mobile/rating-prompt/requested"
+}

@@ -1,8 +1,9 @@
 import { type NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 
+import { absoluteToFraction, usesFractionProgress } from '@/lib/challenges/daily-progress-compat';
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
-import { DailyChallengeService } from '@/lib/services/daily-challenge-service';
+import { DailyChallengeService, type LeaderboardEntry } from '@/lib/services/daily-challenge-service';
 
 const idSchema = z.string().uuid();
 
@@ -39,11 +40,27 @@ export async function GET(
     const { searchParams } = new URL(request.url);
     const limit = parseLimit(searchParams.get('limit'));
 
-    const leaderboard = await DailyChallengeService.getLeaderboardWithViewer(
+    let leaderboard = await DailyChallengeService.getLeaderboardWithViewer(
       challengeId,
       limit,
       user.id
     );
+
+    // Shipped iOS draws each row's bar from `progress` as a 0..1 fraction (daily-progress-compat.ts).
+    if (usesFractionProgress(request)) {
+      const goal = await DailyChallengeService.getGoalAmount(challengeId);
+      if (goal !== null) {
+        const asFraction = (entry: LeaderboardEntry): LeaderboardEntry => ({
+          ...entry,
+          progress: absoluteToFraction(entry.progress, goal),
+        });
+        leaderboard = {
+          ...leaderboard,
+          entries: leaderboard.entries.map(asFraction),
+          user_entry: leaderboard.user_entry ? asFraction(leaderboard.user_entry) : null,
+        };
+      }
+    }
 
     const response = NextResponse.json({
       success: true,

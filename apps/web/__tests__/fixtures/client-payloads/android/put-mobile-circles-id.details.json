@@ -1,0 +1,14 @@
+{
+  "body": {
+    "description": "New text",
+    "end_date": "2026-01-15T12:00:00Z",
+    "name": "Evening Movers"
+  },
+  "expect": {
+    "description": "New text",
+    "end_date": "2026-01-15T12:00:00Z",
+    "name": "Evening Movers"
+  },
+  "method": "PUT",
+  "path": "/api/mobile/circles/22222222-2222-4222-8222-222222222222"
+}

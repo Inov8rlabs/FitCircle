@@ -1,0 +1,14 @@
+{
+  "body": {
+    "gender": "non_binary",
+    "heightCm": 175.0,
+    "weightKg": 80.5
+  },
+  "expect": {
+    "gender": "non_binary",
+    "heightCm": 175.0,
+    "weightKg": 80.5
+  },
+  "method": "PUT",
+  "path": "/api/mobile/profile"
+}

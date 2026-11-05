@@ -1,0 +1,24 @@
+{
+  "body": {
+    "circleId": "22222222-2222-4222-8222-222222222222",
+    "contacts": [
+      {
+        "email": "user@example.com",
+        "name": "Friend"
+      },
+      {
+        "channel": "sms",
+        "phone": "+15555550100"
+      }
+    ]
+  },
+  "expect": {
+    "circleId": "22222222-2222-4222-8222-222222222222",
+    "contacts.0.email": "user@example.com",
+    "contacts.0.name": "Friend",
+    "contacts.1.channel": "sms",
+    "contacts.1.phone": "+15555550100"
+  },
+  "method": "POST",
+  "path": "/api/mobile/referrals/invites"
+}

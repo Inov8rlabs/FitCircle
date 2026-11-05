@@ -3,7 +3,9 @@ import { z } from 'zod';
 
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { HealthNutritionService } from '@/lib/services/health-nutrition-service';
+import { createAdminSupabase } from '@/lib/supabase-admin';
 import { importNutritionRequestSchema } from '@/lib/types/health-nutrition';
+import { resolveEntryTimezone } from '@/lib/utils/entry-date';
 import { parseLenient, validationMessage } from '@/lib/validation/lenient-parse';
 
 /**
@@ -17,7 +19,11 @@ export async function POST(request: NextRequest) {
     const user = await requireMobileAuth(request);
     const body = await request.json();
     const req = parseLenient(importNutritionRequestSchema, body);
-    const result = await HealthNutritionService.importBatch(user.id, req);
+    // Each sample's day is its LOCAL day (header, then profile timezone), not the UTC
+    // date of loggedAt: both clients send UTC instants, so an 8pm meal in Los Angeles
+    // was filed under tomorrow.
+    const { timezone } = await resolveEntryTimezone(request, undefined, user.id, createAdminSupabase());
+    const result = await HealthNutritionService.importBatch(user.id, req, { timezone });
     return NextResponse.json({ success: true, data: result, meta: { requestTime: Date.now() - startTime }, error: null });
   } catch (error: any) {
     if (error?.message === 'Unauthorized') {

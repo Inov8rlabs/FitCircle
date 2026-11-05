@@ -1,0 +1,10 @@
+{
+  "body" : {
+    "name" : "apple"
+  },
+  "expect" : {
+    "name" : "apple"
+  },
+  "method" : "POST",
+  "path" : "/api/mobile/food/estimate-item"
+}

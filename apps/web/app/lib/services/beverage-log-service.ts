@@ -12,6 +12,7 @@
 
 import { type SupabaseClient } from '@supabase/supabase-js';
 
+import { logIgnoredQueryError } from '@/lib/api/route-errors';
 import type {
   BeverageLogEntry,
   BeverageLogStats,
@@ -24,7 +25,6 @@ import {
   toClientBeverageCustomizations,
   toClientBeverageEntry,
 } from '@/lib/validation/beverage-log-validation';
-import { logIgnoredQueryError } from '@/lib/api/route-errors';
 
 export class BeverageLogService {
   /**
@@ -204,6 +204,7 @@ export class BeverageLogService {
         updated_at: new Date().toISOString(),
       };
 
+      if (data.category !== undefined) updateData.category = data.category;
       if (data.beverage_type !== undefined) updateData.beverage_type = data.beverage_type;
       if (data.customizations !== undefined) {
         updateData.customizations = toClientBeverageCustomizations(data.customizations);

@@ -4,6 +4,7 @@ import { readRequestInfo, resolveTimezone } from '@/lib/home-feed/context';
 import { fail, feedFailFrom, readJson } from '@/lib/home-feed/http';
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { HomeFeedService, MAX_EVENTS_PER_BATCH, feedEventsBodySchema } from '@/lib/services/home-feed-service';
+import { safeParseLenient } from '@/lib/validation/lenient-parse';
 
 export const dynamic = 'force-dynamic';
 
@@ -18,7 +19,7 @@ export const dynamic = 'force-dynamic';
 export async function POST(request: NextRequest) {
   try {
     const user = await requireMobileAuth(request);
-    const parsed = feedEventsBodySchema.safeParse(await readJson(request));
+    const parsed = safeParseLenient(feedEventsBodySchema, await readJson(request));
     if (!parsed.success) {
       const issues = parsed.error.issues.map((i) => ({ path: i.path.join('.'), message: i.message }));
       return fail(400, 'VALIDATION_ERROR', `Invalid events body (max ${MAX_EVENTS_PER_BATCH} events per batch)`, { issues });

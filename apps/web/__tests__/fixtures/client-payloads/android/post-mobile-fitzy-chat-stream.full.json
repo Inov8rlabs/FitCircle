@@ -1,0 +1,26 @@
+{
+  "body": {
+    "circleId": "22222222-2222-4222-8222-222222222222",
+    "clientMessages": [
+      {
+        "content": "Hi",
+        "role": "user"
+      },
+      {
+        "content": "Hello!",
+        "role": "assistant"
+      }
+    ],
+    "conversationId": "33333333-3333-4333-8333-333333333333",
+    "message": "Plan my lunch"
+  },
+  "expect": {
+    "circleId": "22222222-2222-4222-8222-222222222222",
+    "clientMessages.0.role": "user",
+    "clientMessages.1.content": "Hello!",
+    "conversationId": "33333333-3333-4333-8333-333333333333",
+    "message": "Plan my lunch"
+  },
+  "method": "POST",
+  "path": "/api/mobile/fitzy/chat/stream"
+}

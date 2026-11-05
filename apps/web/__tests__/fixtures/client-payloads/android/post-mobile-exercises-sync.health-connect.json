@@ -1,0 +1,32 @@
+{
+  "body": {
+    "autoClaimStreak": false,
+    "exercises": [
+      {
+        "category": "cardio",
+        "date": "2026-01-15",
+        "durationMinutes": 32,
+        "exerciseType": "running",
+        "healthkitWorkoutId": "44444444-4444-4444-8444-444444444444",
+        "isIndoor": false,
+        "source": "healthkit",
+        "sourceDeviceName": "Test Watch",
+        "startedAt": "2026-01-15T07:10:00Z"
+      }
+    ]
+  },
+  "expect": {
+    "autoClaimStreak": false,
+    "exercises.0.category": "cardio",
+    "exercises.0.date": "2026-01-15",
+    "exercises.0.durationMinutes": 32,
+    "exercises.0.exerciseType": "running",
+    "exercises.0.healthkitWorkoutId": "44444444-4444-4444-8444-444444444444",
+    "exercises.0.isIndoor": false,
+    "exercises.0.source": "healthkit",
+    "exercises.0.sourceDeviceName": "Test Watch",
+    "exercises.0.startedAt": "2026-01-15T07:10:00Z"
+  },
+  "method": "POST",
+  "path": "/api/mobile/exercises/sync"
+}

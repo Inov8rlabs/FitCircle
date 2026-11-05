@@ -1,0 +1,12 @@
+{
+  "body" : {
+    "email" : "user@example.com",
+    "password" : "fake-password-1"
+  },
+  "expect" : {
+    "email" : "user@example.com",
+    "password" : "fake-password-1"
+  },
+  "method" : "POST",
+  "path" : "/api/mobile/auth/login"
+}

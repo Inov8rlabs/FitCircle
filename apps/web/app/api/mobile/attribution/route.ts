@@ -5,6 +5,7 @@ import { AdsAttributionService } from '@/lib/ads/services/attribution-service';
 import { readJson } from '@/lib/campaigns/http';
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { fail, ok } from '@/lib/referrals/http';
+import { safeParseLenient } from '@/lib/validation/lenient-parse';
 
 export const dynamic = 'force-dynamic';
 
@@ -25,7 +26,7 @@ export async function POST(request: NextRequest) {
   } catch {
     return fail(401, 'UNAUTHORIZED', 'Invalid or expired token');
   }
-  const parsed = attributionBodySchema.safeParse(await readJson(request));
+  const parsed = safeParseLenient(attributionBodySchema, await readJson(request));
   if (!parsed.success) {
     const issues = parsed.error.issues.map((i) => ({ path: i.path.join('.'), message: i.message }));
     return fail(400, 'VALIDATION_ERROR', 'Invalid request body', { issues });

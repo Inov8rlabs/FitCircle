@@ -3,6 +3,7 @@ import { type NextRequest, NextResponse } from 'next/server';
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { NutritionTrainingService } from '@/lib/services/nutrition-training-service';
 import { nutritionFeedbackSchema } from '@/lib/types/nutrition';
+import { safeParseLenient } from '@/lib/validation/lenient-parse';
 
 /**
  * POST /api/mobile/food/feedback — thumbs up/down on an AI draft (confirm card).
@@ -22,7 +23,7 @@ export async function POST(request: NextRequest) {
     } catch {
       body = null;
     }
-    const parsed = nutritionFeedbackSchema.safeParse(body);
+    const parsed = safeParseLenient(nutritionFeedbackSchema, body);
     if (!parsed.success) {
       return NextResponse.json(
         {

@@ -1,0 +1,26 @@
+{
+  "body" : {
+    "end_date" : "2026-02-14T12:00:00Z",
+    "lobby" : {
+      "minMembers" : 3
+    },
+    "min_participants" : 2,
+    "name" : "Crew",
+    "start_date" : "2026-01-15T12:00:00Z",
+    "type" : "weight",
+    "visibility" : "private"
+  },
+  "expect" : {
+    "end_date" : "2026-02-14T12:00:00Z",
+    "lobby.minMembers" : 3,
+    "name" : "Crew",
+    "start_date" : "2026-01-15T12:00:00Z",
+    "type" : "weight",
+    "visibility" : "private"
+  },
+  "knownMismatches" : {
+    "min_participants" : "Sent by iOS, not in createCircleSchema (stripped; no server column)."
+  },
+  "method" : "POST",
+  "path" : "/api/mobile/circles"
+}

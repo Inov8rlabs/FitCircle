@@ -1,0 +1,32 @@
+{
+  "body": {
+    "fitcircleId": "22222222-2222-4222-8222-222222222222",
+    "macros": {
+      "calories": 850.0,
+      "carbsG": 98.0,
+      "fatG": 32.0,
+      "proteinG": 34.0
+    },
+    "mealType": "dinner",
+    "name": "Margherita pizza",
+    "restaurantName": "Test Pizzeria",
+    "taggedUserIds": [
+      "44444444-4444-4444-8444-444444444444"
+    ]
+  },
+  "expect": {
+    "fitcircleId": "22222222-2222-4222-8222-222222222222",
+    "macros.calories": 850.0,
+    "macros.carbsG": 98.0,
+    "macros.fatG": 32.0,
+    "macros.proteinG": 34.0,
+    "mealType": "dinner",
+    "name": "Margherita pizza",
+    "restaurantName": "Test Pizzeria",
+    "taggedUserIds": [
+      "44444444-4444-4444-8444-444444444444"
+    ]
+  },
+  "method": "POST",
+  "path": "/api/mobile/group-meals"
+}

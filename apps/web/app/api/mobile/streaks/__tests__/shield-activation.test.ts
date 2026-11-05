@@ -3,8 +3,8 @@
  * Real handlers and services, in-memory database.
  */
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { NextRequest } from 'next/server';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { POST as claim } from '@/api/streaks/claim/route';
 import { POST as activateFreeze } from '@/api/streaks/freeze/activate/route';
@@ -175,12 +175,51 @@ describe('POST /api/streaks/freeze/activate', () => {
     expect(body.shieldsRemaining).toBe(0);
   });
 
-  it('keeps the rules for an explicit date: today is refused with FUTURE_DATE', async () => {
-    // This is what the iOS "Use Shield Now" button sends.
+  it("today (what the iOS \"Use shield now\" button sends) protects the most recent missed day", async () => {
+    // StreakClaimViewModel: `date ?? today` — this was always 400 FUTURE_DATE.
     seedUser({ claims: ['2026-09-26'] });
 
     const res = await activateFreeze(
       post('/api/streaks/freeze/activate', { date: TODAY, timezone: TZ })
+    );
+    const body = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(body.date).toBe(YESTERDAY);
+    expect(shieldsLeft()).toBe(0);
+    expect(freezeClaims()).toEqual([YESTERDAY]);
+  });
+
+  it('today with nothing to protect is a clear 400 the app shows, not FUTURE_DATE', async () => {
+    seedUser({ claims: [1, 2, 3, 4, 5, 6].map((n) => addDays(TODAY, -n)) });
+
+    const res = await activateFreeze(
+      post('/api/streaks/freeze/activate', { date: TODAY, timezone: TZ })
+    );
+    const body = await res.json();
+
+    expect(res.status).toBe(400);
+    expect(body.error.code).toBe('ALREADY_CLAIMED');
+    expect(body.error.details).toEqual({ reason: 'NO_MISSED_DAY' });
+    // iOS decodes {error:{code,message}} and shows the message.
+    expect(body.error.message).toMatch(/No missed day to protect/);
+    expect(shieldsLeft()).toBe(1);
+  });
+
+  it("the profile timezone's today, or one day ahead of it, also counts as today", async () => {
+    // Profile still on the 'UTC' default; no client timezone at all.
+    seedUser({ claims: ['2026-09-26'] });
+    const utcToday = '2026-09-28'; // 16:00Z
+    const res = await activateFreeze(post('/api/streaks/freeze/activate', { date: addDays(utcToday, 1) }));
+    expect(res.status).toBe(200);
+    expect((await res.json()).date).toBe('2026-09-27'); // the profile-timezone (UTC) yesterday
+  });
+
+  it('a date after today is still refused with FUTURE_DATE', async () => {
+    seedUser({ claims: ['2026-09-26'] });
+
+    const res = await activateFreeze(
+      post('/api/streaks/freeze/activate', { date: addDays(TODAY, 2), timezone: TZ })
     );
     const body = await res.json();
 

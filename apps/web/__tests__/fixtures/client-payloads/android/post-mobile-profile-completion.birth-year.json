@@ -1,0 +1,14 @@
+{
+  "body": {
+    "key": "birth_year",
+    "source": "home_card",
+    "value": 1990
+  },
+  "expect": {
+    "key": "birth_year",
+    "source": "home_card",
+    "value": 1990
+  },
+  "method": "POST",
+  "path": "/api/mobile/profile/completion"
+}

@@ -4,6 +4,7 @@ import { mobileFailFrom, ok, readJson } from '@/lib/experiments/http';
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { UserTargetsService } from '@/lib/services/user-targets-service';
 import { targetsPatchSchema } from '@/lib/targets/user-targets';
+import { parseLenient } from '@/lib/validation/lenient-parse';
 
 export const dynamic = 'force-dynamic';
 
@@ -38,7 +39,7 @@ async function update(request: NextRequest) {
   const startTime = Date.now();
   try {
     const user = await requireMobileAuth(request);
-    const patch = targetsPatchSchema.parse(await readJson(request));
+    const patch = parseLenient(targetsPatchSchema, await readJson(request));
     return ok(await UserTargetsService.update(user.id, patch), startTime);
   } catch (error) {
     return mobileFailFrom(error, 'targets PUT');

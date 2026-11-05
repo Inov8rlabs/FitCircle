@@ -1,0 +1,22 @@
+{
+  "body" : {
+    "authorization_code" : "fake-auth-code",
+    "email" : "user@example.com",
+    "full_name" : {
+      "family_name" : "User",
+      "given_name" : "Test"
+    },
+    "identity_token" : "fake.identity.token",
+    "user_identifier" : "000000.fakeappleuser.0000"
+  },
+  "expect" : {
+    "authorization_code" : "fake-auth-code",
+    "email" : "user@example.com",
+    "full_name.family_name" : "User",
+    "full_name.given_name" : "Test",
+    "identity_token" : "fake.identity.token",
+    "user_identifier" : "000000.fakeappleuser.0000"
+  },
+  "method" : "POST",
+  "path" : "/api/mobile/auth/apple"
+}

@@ -1,0 +1,10 @@
+{
+  "body" : {
+    "event" : "fitzy_intro_seen"
+  },
+  "expect" : {
+    "event" : "fitzy_intro_seen"
+  },
+  "method" : "POST",
+  "path" : "/api/mobile/me/journey/events"
+}

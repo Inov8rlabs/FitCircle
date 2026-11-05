@@ -1,0 +1,22 @@
+{
+  "body": {
+    "category": "strength",
+    "description": "Hold it",
+    "duration_days": 30,
+    "fitcircle_id": "22222222-2222-4222-8222-222222222222",
+    "goal_amount": 300.0,
+    "name": "Plank Month",
+    "unit": "minutes"
+  },
+  "expect": {
+    "category": "strength",
+    "description": "Hold it",
+    "duration_days": 30,
+    "fitcircle_id": "22222222-2222-4222-8222-222222222222",
+    "goal_amount": 300,
+    "name": "Plank Month",
+    "unit": "minutes"
+  },
+  "method": "POST",
+  "path": "/api/mobile/challenges/validate"
+}

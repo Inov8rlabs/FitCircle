@@ -1,0 +1,36 @@
+{
+  "body" : {
+    "adGroupId" : "542317095",
+    "adId" : "542317136",
+    "campaignId" : "542370539",
+    "clickDate" : "2026-01-15T11:58Z",
+    "country" : "US",
+    "keywordId" : "87675432",
+    "platform" : "ios",
+    "raw" : {
+      "adGroupId" : "542317095",
+      "adId" : "542317136",
+      "attribution" : true,
+      "campaignId" : "542370539",
+      "clickDate" : "2026-01-15T11:58Z",
+      "conversionType" : "Download",
+      "countryOrRegion" : "US",
+      "keywordId" : "87675432",
+      "orgId" : "40669820"
+    },
+    "source" : "apple_search_ads"
+  },
+  "expect" : {
+    "adGroupId" : "542317095",
+    "adId" : "542317136",
+    "campaignId" : "542370539",
+    "clickDate" : "2026-01-15T11:58Z",
+    "country" : "US",
+    "keywordId" : "87675432",
+    "platform" : "ios",
+    "raw.attribution" : true,
+    "source" : "apple_search_ads"
+  },
+  "method" : "POST",
+  "path" : "/api/mobile/attribution"
+}

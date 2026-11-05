@@ -1,0 +1,14 @@
+{
+  "body" : {
+    "skip_fallback_save" : true,
+    "source" : "text",
+    "transcript" : "a banana"
+  },
+  "expect" : {
+    "skip_fallback_save" : true,
+    "source" : "text",
+    "transcript" : "a banana"
+  },
+  "method" : "POST",
+  "path" : "/api/mobile/food/voice-parse"
+}

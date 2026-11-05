@@ -1,0 +1,12 @@
+{
+  "body" : {
+    "code" : "ABCD12",
+    "source" : "typed"
+  },
+  "expect" : {
+    "code" : "ABCD12",
+    "source" : "typed"
+  },
+  "method" : "POST",
+  "path" : "/api/mobile/referrals/claim"
+}

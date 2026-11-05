@@ -1,0 +1,10 @@
+{
+  "body": {
+    "share_meals_with_circles": true
+  },
+  "expect": {
+    "share_meals_with_circles": true
+  },
+  "method": "PUT",
+  "path": "/api/mobile/food-log/sharing"
+}

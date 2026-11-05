@@ -1,0 +1,32 @@
+{
+  "body" : {
+    "birthYear" : 1990,
+    "data" : {
+      "signUpMethod" : "email",
+      "useMetric" : true,
+      "v3" : {
+        "activity" : "light",
+        "body" : {
+          "birthYear" : 1990,
+          "heightCm" : 170,
+          "sex" : "female",
+          "targetWeightKg" : 72,
+          "useMetric" : true,
+          "weightKg" : 80
+        },
+        "goal" : "lose_weight"
+      }
+    },
+    "flow" : "v3",
+    "step" : "v3_welcome"
+  },
+  "expect" : {
+    "birthYear" : 1990,
+    "data.v3.body.heightCm" : 170,
+    "data.v3.goal" : "lose_weight",
+    "flow" : "v3",
+    "step" : "v3_welcome"
+  },
+  "method" : "PATCH",
+  "path" : "/api/mobile/onboarding/progress"
+}

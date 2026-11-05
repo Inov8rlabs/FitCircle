@@ -1,0 +1,10 @@
+{
+  "body" : {
+    "to_user_id" : "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
+  },
+  "expect" : {
+    "to_user_id" : "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
+  },
+  "method" : "POST",
+  "path" : "/api/fitcircles/22222222-2222-4222-8222-222222222222/challenges/33333333-3333-4333-8333-333333333333/high-fives"
+}

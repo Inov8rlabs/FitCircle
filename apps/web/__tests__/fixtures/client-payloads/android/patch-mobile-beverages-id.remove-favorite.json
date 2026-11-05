@@ -1,0 +1,10 @@
+{
+  "body": {
+    "is_favorite": false
+  },
+  "expect": {
+    "is_favorite": false
+  },
+  "method": "PATCH",
+  "path": "/api/mobile/beverages/33333333-3333-4333-8333-333333333333"
+}

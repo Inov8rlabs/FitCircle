@@ -1,0 +1,16 @@
+{
+  "body": {
+    "code": "FRIEND1",
+    "deviceId": "fake-device-id",
+    "ref": "REF1",
+    "source": "play_referrer"
+  },
+  "expect": {
+    "code": "FRIEND1",
+    "deviceId": "fake-device-id",
+    "ref": "REF1",
+    "source": "play_referrer"
+  },
+  "method": "POST",
+  "path": "/api/mobile/referrals/claim"
+}

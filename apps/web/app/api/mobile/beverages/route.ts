@@ -4,7 +4,6 @@
  * GET /api/mobile/beverages - Get user's beverage log entries (paginated)
  */
 
-import { resolveEntryDate } from '@/lib/utils/entry-date';
 import { type NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 
@@ -13,6 +12,7 @@ import { BeverageLogService } from '@/lib/services/beverage-log-service';
 import { StreakClaimingService } from '@/lib/services/streak-claiming-service';
 import { resolveClientTimezone } from '@/lib/streaks/client-timezone';
 import { createAdminSupabase } from '@/lib/supabase-admin';
+import { resolveEntryDate } from '@/lib/utils/entry-date';
 import {
   CreateBeverageLogSchema,
   BeverageLogQuerySchema,
@@ -192,7 +192,7 @@ export async function POST(request: NextRequest) {
 
     // Parse and validate request body
     const body = await request.json();
-    const validatedData = parseLenient(CreateBeverageLogSchema, body);
+    const validatedData = parseLenient(CreateBeverageLogSchema, body, { ignore: ['timezone'] }); // timezone: read below
 
     // Create entry
     // File the drink under the day it was logged in the person's timezone.

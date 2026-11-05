@@ -1,0 +1,12 @@
+{
+  "body" : {
+    "circleId" : "22222222-2222-4222-8222-222222222222",
+    "question" : "How much protein?"
+  },
+  "expect" : {
+    "circleId" : "22222222-2222-4222-8222-222222222222",
+    "question" : "How much protein?"
+  },
+  "method" : "POST",
+  "path" : "/api/mobile/nutrition-coach"
+}

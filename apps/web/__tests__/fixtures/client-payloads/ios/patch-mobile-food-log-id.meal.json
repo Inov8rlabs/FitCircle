@@ -1,0 +1,28 @@
+{
+  "body" : {
+    "entry_type" : "food",
+    "is_private" : false,
+    "logged_at" : "2026-01-15T12:00:00Z",
+    "meal_type" : "dinner",
+    "notes" : "Edited",
+    "nutrition_data" : {
+      "calories" : 600,
+      "carbs_g" : 55,
+      "fat_g" : 20,
+      "protein_g" : 40
+    },
+    "share_with_circles" : false
+  },
+  "expect" : {
+    "logged_at" : "2026-01-15T12:00:00Z",
+    "meal_type" : "dinner",
+    "notes" : "Edited",
+    "nutrition_data.calories" : 600,
+    "share_with_circles" : false
+  },
+  "knownMismatches" : {
+    "entry_type" : "UpdateFoodLogEntrySchema has no entry_type: the category sent on PATCH is ignored (a meal can't become a supplement by edit)."
+  },
+  "method" : "PATCH",
+  "path" : "/api/mobile/food-log/33333333-3333-4333-8333-333333333333"
+}

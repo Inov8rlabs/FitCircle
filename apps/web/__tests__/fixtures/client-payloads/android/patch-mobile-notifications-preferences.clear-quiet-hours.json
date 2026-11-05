@@ -1,0 +1,14 @@
+{
+  "body": {
+    "quiet_hours_end": null,
+    "quiet_hours_start": null,
+    "quiet_hours_timezone": "America/Los_Angeles"
+  },
+  "expect": {
+    "quiet_hours_end": null,
+    "quiet_hours_start": null,
+    "quiet_hours_timezone": "America/Los_Angeles"
+  },
+  "method": "PATCH",
+  "path": "/api/mobile/notifications/preferences"
+}

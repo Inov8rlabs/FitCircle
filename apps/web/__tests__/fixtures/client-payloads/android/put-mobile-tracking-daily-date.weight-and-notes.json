@@ -1,0 +1,12 @@
+{
+  "body": {
+    "notes": "Felt good",
+    "weightKg": 71.0
+  },
+  "expect": {
+    "notes": "Felt good",
+    "weightKg": 71.0
+  },
+  "method": "PUT",
+  "path": "/api/mobile/tracking/daily/2026-01-15"
+}

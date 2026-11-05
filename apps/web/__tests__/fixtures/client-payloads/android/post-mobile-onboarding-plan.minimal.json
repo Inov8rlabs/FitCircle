@@ -1,0 +1,12 @@
+{
+  "body": {
+    "goal": "stay_active",
+    "unitsSystem": "imperial"
+  },
+  "expect": {
+    "goal": "stay_active",
+    "unitsSystem": "imperial"
+  },
+  "method": "POST",
+  "path": "/api/mobile/onboarding/plan"
+}

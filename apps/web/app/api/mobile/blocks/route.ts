@@ -3,6 +3,7 @@ import { z } from 'zod';
 
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { ChatSafetyService } from '@/lib/services/chat-safety-service';
+import { parseLenient } from '@/lib/validation/lenient-parse';
 
 // Validation schema for POST
 const blockSchema = z.object({
@@ -43,7 +44,7 @@ export async function POST(request: NextRequest) {
     const user = await requireMobileAuth(request);
 
     const body = await request.json();
-    const { blockedId } = blockSchema.parse(body);
+    const { blockedId } = parseLenient(blockSchema, body);
 
     const result = await ChatSafetyService.blockMember(user.id, blockedId);
 

@@ -1,0 +1,19 @@
+{
+  "body" : {
+    "category" : "strength",
+    "description" : "Hold a plank daily",
+    "duration_days" : 14,
+    "fitcircle_id" : "22222222-2222-4222-8222-222222222222",
+    "goal_amount" : 60,
+    "name" : "Plank every day",
+    "unit" : "seconds"
+  },
+  "expect" : {
+
+  },
+  "knownMismatches" : {
+    "(route)" : "No POST /api/mobile/challenges/custom/validate route exists on the server (404). The client method is unused."
+  },
+  "method" : "POST",
+  "path" : "/api/mobile/challenges/custom/validate"
+}

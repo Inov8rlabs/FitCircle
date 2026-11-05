@@ -1,0 +1,56 @@
+{
+  "body": {
+    "created_at": "2026-01-15T12:00:00Z",
+    "entry_type": "food",
+    "id": "33333333-3333-4333-8333-333333333333",
+    "image_urls": [],
+    "is_private": false,
+    "logged_at": "2026-01-15T12:00:00Z",
+    "meal_type": "lunch",
+    "notes": "Chicken salad",
+    "nutrition_data": {
+      "calories": 520.0,
+      "carbs_g": 18.0,
+      "fat_g": 30.0,
+      "items": [
+        {
+          "calories": 248.0,
+          "carbs_g": null,
+          "fat_g": null,
+          "fiber_g": null,
+          "grams": 150.0,
+          "name": "Grilled chicken",
+          "protein_g": 46.0,
+          "quantity": null,
+          "serving_unit": null,
+          "sodium_mg": null,
+          "sugar_g": null
+        }
+      ],
+      "protein_g": 42.0
+    },
+    "share_with_circles": true,
+    "sync_status": "synced",
+    "timezone": "America/New_York",
+    "user_id": "11111111-1111-4111-8111-111111111111",
+    "visibility": "circle"
+  },
+  "expect": {
+    "entry_type": "food",
+    "id": "33333333-3333-4333-8333-333333333333",
+    "is_private": false,
+    "logged_at": "2026-01-15T12:00:00Z",
+    "meal_type": "lunch",
+    "notes": "Chicken salad",
+    "nutrition_data.calories": 520.0,
+    "nutrition_data.carbs_g": 18.0,
+    "nutrition_data.fat_g": 30.0,
+    "nutrition_data.items.0.name": "Grilled chicken",
+    "nutrition_data.protein_g": 42.0,
+    "share_with_circles": true,
+    "timezone": "America/New_York",
+    "visibility": "circle"
+  },
+  "method": "POST",
+  "path": "/api/mobile/food-log"
+}

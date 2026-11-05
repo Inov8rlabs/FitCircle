@@ -1,0 +1,10 @@
+{
+  "body": {
+    "inviteCode": "ABC123"
+  },
+  "expect": {
+    "inviteCode": "ABC123"
+  },
+  "method": "POST",
+  "path": "/api/mobile/circles/join"
+}

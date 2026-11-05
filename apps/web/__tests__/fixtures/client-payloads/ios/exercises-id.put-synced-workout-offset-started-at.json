@@ -1,0 +1,37 @@
+{
+  "description": "iOS ExerciseLogStructured init(enriching:) echoes started_at as PostgREST returned it (+00:00). Was 400 (.datetime() accepts only Z).",
+  "method": "PUT",
+  "path": "/api/mobile/exercises/33333333-3333-4333-8333-333333333333",
+  "seed": {
+    "exercise_logs": [
+      {
+        "id": "33333333-3333-4333-8333-333333333333",
+        "user_id": "11111111-1111-4111-8111-111111111111",
+        "exercise_type": "running",
+        "category": "cardio",
+        "duration_minutes": 32,
+        "source": "healthkit",
+        "started_at": "2026-11-05T13:02:11+00:00",
+        "exercise_date": "2026-11-05",
+        "is_deleted": false
+      }
+    ]
+  },
+  "body": {
+    "exerciseType": "running",
+    "category": "cardio",
+    "durationMinutes": 32,
+    "source": "healthkit",
+    "caloriesBurned": 310.5,
+    "startedAt": "2026-11-05T13:02:11+00:00",
+    "distanceMeters": 5012,
+    "healthkitWorkoutId": "44444444-4444-4444-8444-444444444444",
+    "sourceDeviceName": "Apple Watch"
+  },
+  "expect": {
+    "parsed": {
+      "startedAt": "2026-11-05T13:02:11+00:00",
+      "durationMinutes": 32
+    }
+  }
+}

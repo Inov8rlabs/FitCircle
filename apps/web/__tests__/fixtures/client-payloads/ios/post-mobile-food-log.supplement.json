@@ -1,0 +1,18 @@
+{
+  "body" : {
+    "entry_type" : "supplement",
+    "is_private" : true,
+    "logged_at" : "2026-01-15T12:00:00Z",
+    "supplement_dosage" : "1000 IU",
+    "supplement_name" : "Vitamin D"
+  },
+  "expect" : {
+    "entry_type" : "supplement",
+    "is_private" : true,
+    "logged_at" : "2026-01-15T12:00:00Z",
+    "supplement_dosage" : "1000 IU",
+    "supplement_name" : "Vitamin D"
+  },
+  "method" : "POST",
+  "path" : "/api/mobile/food-log"
+}

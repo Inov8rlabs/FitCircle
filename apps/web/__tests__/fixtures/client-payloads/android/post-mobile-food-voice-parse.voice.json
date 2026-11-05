@@ -1,0 +1,10 @@
+{
+  "body": {
+    "transcript": "two eggs and a slice of toast"
+  },
+  "expect": {
+    "transcript": "two eggs and a slice of toast"
+  },
+  "method": "POST",
+  "path": "/api/mobile/food/voice-parse"
+}

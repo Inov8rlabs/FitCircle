@@ -1,0 +1,12 @@
+{
+  "body": {
+    "daily_water_ml_target": 2000,
+    "starting_weight_kg": 82.0
+  },
+  "expect": {
+    "daily_water_ml_target": 2000,
+    "starting_weight_kg": 82.0
+  },
+  "method": "PUT",
+  "path": "/api/mobile/vitals/goals"
+}

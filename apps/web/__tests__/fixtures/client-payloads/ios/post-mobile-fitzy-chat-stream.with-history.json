@@ -1,0 +1,24 @@
+{
+  "body" : {
+    "clientMessages" : [
+      {
+        "content" : "Hi",
+        "role" : "user"
+      },
+      {
+        "content" : "Hello!",
+        "role" : "assistant"
+      }
+    ],
+    "conversationId" : "55555555-5555-4555-8555-555555555555",
+    "message" : "What should I eat?"
+  },
+  "expect" : {
+    "clientMessages.0.role" : "user",
+    "clientMessages.1.content" : "Hello!",
+    "conversationId" : "55555555-5555-4555-8555-555555555555",
+    "message" : "What should I eat?"
+  },
+  "method" : "POST",
+  "path" : "/api/mobile/fitzy/chat/stream"
+}

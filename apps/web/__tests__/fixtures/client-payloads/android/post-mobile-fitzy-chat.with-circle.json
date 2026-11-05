@@ -1,0 +1,27 @@
+{
+  "body": {
+    "circleId": "22222222-2222-4222-8222-222222222222",
+    "messages": [
+      {
+        "content": "Hi",
+        "role": "user"
+      },
+      {
+        "content": "Hello!",
+        "role": "assistant"
+      },
+      {
+        "content": "Plan my lunch",
+        "role": "user"
+      }
+    ]
+  },
+  "expect": {
+    "circleId": "22222222-2222-4222-8222-222222222222",
+    "messages.0.content": "Hi",
+    "messages.0.role": "user",
+    "messages.2.content": "Plan my lunch"
+  },
+  "method": "POST",
+  "path": "/api/mobile/fitzy/chat"
+}

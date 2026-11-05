@@ -1,0 +1,10 @@
+{
+  "body" : {
+    "progress" : 3.5
+  },
+  "expect" : {
+    "progress" : 3.5
+  },
+  "method" : "POST",
+  "path" : "/api/mobile/challenges/daily/44444444-4444-4444-8444-444444444444/progress"
+}

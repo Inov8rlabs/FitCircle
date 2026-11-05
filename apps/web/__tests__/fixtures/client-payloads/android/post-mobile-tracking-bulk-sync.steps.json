@@ -1,0 +1,26 @@
+{
+  "body": {
+    "source": "google_fit",
+    "steps_data": [
+      {
+        "date": "2026-01-14",
+        "steps": 6500
+      },
+      {
+        "date": "2026-01-15",
+        "is_override": true,
+        "steps": 9100
+      }
+    ]
+  },
+  "expect": {
+    "source": "google_fit",
+    "steps_data.0.date": "2026-01-14",
+    "steps_data.0.steps": 6500,
+    "steps_data.1.date": "2026-01-15",
+    "steps_data.1.is_override": true,
+    "steps_data.1.steps": 9100
+  },
+  "method": "POST",
+  "path": "/api/mobile/tracking/bulk-sync"
+}

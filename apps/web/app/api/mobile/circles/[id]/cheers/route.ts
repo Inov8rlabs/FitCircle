@@ -6,6 +6,7 @@ import { CheerError, CircleCheerService } from '@/lib/services/circle-cheer-serv
 import { resolveClientTimezone } from '@/lib/streaks/client-timezone';
 import { CHEER_MESSAGE_MAX_LENGTH, CHEER_SOURCES, type CheerSource } from '@/lib/types/circle-chat';
 import { isUuid, normalizeId } from '@/lib/validation/circle-validation';
+import { safeParseLenient } from '@/lib/validation/lenient-parse';
 
 const cheerSchema = z.object({
   to_user_id: z.string().uuid(),
@@ -41,7 +42,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     if (!isUuid(rawId)) return fail('INVALID_CIRCLE_ID', 'Invalid circle ID format', 400);
 
     const raw = await request.json().catch(() => null);
-    const parsed = cheerSchema.safeParse(raw ?? {});
+    const parsed = safeParseLenient(cheerSchema, raw ?? {});
     if (!parsed.success) {
       const details = parsed.error.errors.reduce<Record<string, string>>((acc, err) => {
         acc[err.path.join('.') || 'body'] = err.message;

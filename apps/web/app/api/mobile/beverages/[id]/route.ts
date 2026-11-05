@@ -12,6 +12,7 @@ import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { BeverageLogImageService } from '@/lib/services/beverage-log-image-service';
 import { BeverageLogService } from '@/lib/services/beverage-log-service';
 import { createAdminSupabase } from '@/lib/supabase-admin';
+import { resolveEntryDate } from '@/lib/utils/entry-date';
 import { UpdateBeverageLogSchema } from '@/lib/validation/beverage-log-validation';
 import { parseLenient, validationMessage } from '@/lib/validation/lenient-parse';
 
@@ -131,7 +132,19 @@ export async function PATCH(
 
     // Parse and validate request body
     const body = await request.json();
-    const validatedData = parseLenient(UpdateBeverageLogSchema, body);
+    const validatedData = parseLenient(UpdateBeverageLogSchema, body, { ignore: ['timezone'] }); // timezone: read below
+
+    // Re-timing a drink moves it to the day of its new time (local to the person),
+    // as food-log PATCH does. Android's edit screen sends a new logged_at with no
+    // entry_date; the drink used to stay on its old day.
+    if (validatedData.logged_at && !validatedData.entry_date) {
+      validatedData.entry_date = await resolveEntryDate(
+        request,
+        { logged_at: validatedData.logged_at, timezone: (body as { timezone?: unknown })?.timezone },
+        user.id,
+        supabase
+      );
+    }
 
     // Update entry
     const result = await BeverageLogService.updateEntry(entryId, user.id, validatedData, supabase);

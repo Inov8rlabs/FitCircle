@@ -42,7 +42,9 @@ function withSentimentAlias(body: Record<string, unknown>): Record<string, unkno
 
   const snake = body.previous_day_sentiment;
   if (typeof snake === 'string' && (SENTIMENTS as readonly string[]).includes(snake)) {
-    return { ...body, previousDaySentiment: snake };
+    // The snake_case key is consumed (not reported as a dropped key).
+    const { previous_day_sentiment: _consumed, ...rest } = body;
+    return { ...rest, previousDaySentiment: snake };
   }
   return body;
 }

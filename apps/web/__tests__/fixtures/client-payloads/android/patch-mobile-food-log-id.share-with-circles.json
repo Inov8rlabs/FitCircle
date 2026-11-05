@@ -1,0 +1,10 @@
+{
+  "body": {
+    "share_with_circles": true
+  },
+  "expect": {
+    "share_with_circles": true
+  },
+  "method": "PATCH",
+  "path": "/api/mobile/food-log/33333333-3333-4333-8333-333333333333"
+}

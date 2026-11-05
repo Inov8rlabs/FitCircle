@@ -1,0 +1,12 @@
+{
+  "body" : {
+    "identity_token" : "fake.identity.token",
+    "user_identifier" : "000000.fakeappleuser.0000"
+  },
+  "expect" : {
+    "identity_token" : "fake.identity.token",
+    "user_identifier" : "000000.fakeappleuser.0000"
+  },
+  "method" : "POST",
+  "path" : "/api/mobile/auth/apple"
+}

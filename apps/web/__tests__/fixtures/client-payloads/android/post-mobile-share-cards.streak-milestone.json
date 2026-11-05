@@ -1,0 +1,20 @@
+{
+  "body": {
+    "card_data": {
+      "display_name": "Test User",
+      "icon": "flame",
+      "milestone_title": "1-Week Warrior",
+      "streak_days": "7"
+    },
+    "card_type": "streak_milestone"
+  },
+  "expect": {
+    "card_data.display_name": "Test User",
+    "card_data.icon": "flame",
+    "card_data.milestone_title": "1-Week Warrior",
+    "card_data.streak_days": "7",
+    "card_type": "streak_milestone"
+  },
+  "method": "POST",
+  "path": "/api/mobile/share/cards"
+}

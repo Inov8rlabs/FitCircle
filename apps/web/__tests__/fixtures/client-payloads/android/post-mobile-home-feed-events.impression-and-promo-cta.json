@@ -1,0 +1,37 @@
+{
+  "body": {
+    "decision_id": "33333333-3333-4333-8333-333333333333",
+    "events": [
+      {
+        "at": "2026-01-15T12:00:00Z",
+        "card_id": "streak",
+        "card_type": "streak",
+        "event": "impression",
+        "position": 0
+      },
+      {
+        "at": "2026-01-15T12:00:00Z",
+        "button": "primary",
+        "card_id": "promo_pro",
+        "card_type": "promo",
+        "creative_id": "v1",
+        "event": "cta",
+        "position": 2,
+        "promo_id": "pro_trial"
+      }
+    ]
+  },
+  "expect": {
+    "decision_id": "33333333-3333-4333-8333-333333333333",
+    "events.0.at": "2026-01-15T12:00:00Z",
+    "events.0.card_id": "streak",
+    "events.0.card_type": "streak",
+    "events.0.event": "impression",
+    "events.0.position": 0,
+    "events.1.button": "primary",
+    "events.1.creative_id": "v1",
+    "events.1.promo_id": "pro_trial"
+  },
+  "method": "POST",
+  "path": "/api/mobile/home-feed/events"
+}

@@ -1,0 +1,10 @@
+{
+  "body": {
+    "tier": "summary"
+  },
+  "expect": {
+    "tier": "summary"
+  },
+  "method": "POST",
+  "path": "/api/mobile/circles/22222222-2222-4222-8222-222222222222/food-privacy"
+}

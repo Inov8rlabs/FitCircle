@@ -1,0 +1,31 @@
+{
+  "description": "iOS HealthKitManager dietaryWater sample -> ImportedNutritionItem with no macros (ImportedNutritionItem has no water field). Was an empty \"Apple Health nutrition\" food row; now skipped.",
+  "method": "POST",
+  "path": "/api/mobile/health/nutrition-import",
+  "body": {
+    "platform": "healthkit",
+    "items": [
+      {
+        "externalId": "BBBBBBBB-2222-4222-8222-222222222222",
+        "loggedAt": "2026-11-05T15:00:00Z",
+        "name": "Apple Health nutrition"
+      }
+    ]
+  },
+  "expect": {
+    "response": {
+      "success": true,
+      "data": {
+        "received": 1,
+        "imported": 0,
+        "skipped": 1,
+        "skippedEmpty": 1
+      }
+    },
+    "notStored": {
+      "food_log_entries": {
+        "source_external_id": "BBBBBBBB-2222-4222-8222-222222222222"
+      }
+    }
+  }
+}

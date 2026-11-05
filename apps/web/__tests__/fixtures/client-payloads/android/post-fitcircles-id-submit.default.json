@@ -1,0 +1,20 @@
+{
+  "body": {
+    "date": "2026-01-15",
+    "fitcircle_ids": [
+      "22222222-2222-4222-8222-222222222222"
+    ],
+    "steps": 9000,
+    "weight": 72.5
+  },
+  "expect": {
+    "date": "2026-01-15"
+  },
+  "knownMismatches": {
+    "fitcircle_ids": "Sent but not read: the circle comes from the URL.",
+    "steps": "Sent but not read: the route recomputes the submission from daily_tracking.",
+    "weight": "Sent but not read: the route recomputes the submission from daily_tracking."
+  },
+  "method": "POST",
+  "path": "/api/fitcircles/22222222-2222-4222-8222-222222222222/submit"
+}

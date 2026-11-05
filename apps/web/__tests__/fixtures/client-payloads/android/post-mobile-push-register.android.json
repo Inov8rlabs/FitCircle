@@ -1,0 +1,14 @@
+{
+  "body": {
+    "device_name": "Google Pixel 9",
+    "platform": "android",
+    "token": "fake-fcm-token"
+  },
+  "expect": {
+    "device_name": "Google Pixel 9",
+    "platform": "android",
+    "token": "fake-fcm-token"
+  },
+  "method": "POST",
+  "path": "/api/mobile/push/register"
+}

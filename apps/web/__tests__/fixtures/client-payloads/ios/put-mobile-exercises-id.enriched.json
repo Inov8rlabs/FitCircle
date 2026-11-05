@@ -1,0 +1,31 @@
+{
+  "body" : {
+    "caloriesBurned" : 280,
+    "category" : "cardio",
+    "distanceMeters" : 5000,
+    "durationMinutes" : 30,
+    "exercises" : [
+
+    ],
+    "exerciseType" : "running",
+    "isIndoor" : false,
+    "locationType" : "outdoor",
+    "source" : "manual",
+    "startedAt" : "2026-01-15T12:00:00Z"
+  },
+  "expect" : {
+    "caloriesBurned" : 280,
+    "category" : "cardio",
+    "distanceMeters" : 5000,
+    "durationMinutes" : 30,
+    "exercises" : [
+
+    ],
+    "exerciseType" : "running",
+    "isIndoor" : false,
+    "locationType" : "outdoor",
+    "startedAt" : "2026-01-15T12:00:00Z"
+  },
+  "method" : "PUT",
+  "path" : "/api/mobile/exercises/33333333-3333-4333-8333-333333333333"
+}

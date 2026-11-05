@@ -1,0 +1,16 @@
+{
+  "body" : {
+    "description" : "New description",
+    "end_date" : "2026-02-14T12:00:00Z",
+    "name" : "Renamed Circle",
+    "start_date" : "2026-01-15T12:00:00Z"
+  },
+  "expect" : {
+    "description" : "New description",
+    "end_date" : "2026-02-14T12:00:00Z",
+    "name" : "Renamed Circle",
+    "start_date" : "2026-01-15T12:00:00Z"
+  },
+  "method" : "PUT",
+  "path" : "/api/mobile/circles/22222222-2222-4222-8222-222222222222"
+}

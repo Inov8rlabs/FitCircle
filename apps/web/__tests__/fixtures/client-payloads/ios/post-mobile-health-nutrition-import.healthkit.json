@@ -1,0 +1,30 @@
+{
+  "body" : {
+    "cursor" : "2026-01-15T12:00:00.000Z",
+    "items" : [
+      {
+        "calories" : 420,
+        "carbsG" : 40.5,
+        "externalId" : "33333333-3333-4333-8333-333333333333",
+        "fatG" : 12,
+        "loggedAt" : "2026-01-15T12:00:00.000Z",
+        "name" : "Apple Health nutrition",
+        "proteinG" : 30
+      }
+    ],
+    "platform" : "healthkit"
+  },
+  "expect" : {
+    "cursor" : "2026-01-15T12:00:00.000Z",
+    "items.0.calories" : 420,
+    "items.0.carbsG" : 40.5,
+    "items.0.externalId" : "33333333-3333-4333-8333-333333333333",
+    "items.0.fatG" : 12,
+    "items.0.loggedAt" : "2026-01-15T12:00:00.000Z",
+    "items.0.name" : "Apple Health nutrition",
+    "items.0.proteinG" : 30,
+    "platform" : "healthkit"
+  },
+  "method" : "POST",
+  "path" : "/api/mobile/health/nutrition-import"
+}

@@ -1,0 +1,10 @@
+{
+  "body" : {
+    "paymentMethod" : "xp"
+  },
+  "expect" : {
+    "paymentMethod" : "xp"
+  },
+  "method" : "POST",
+  "path" : "/api/mobile/streaks/engagement/purchase-freeze"
+}

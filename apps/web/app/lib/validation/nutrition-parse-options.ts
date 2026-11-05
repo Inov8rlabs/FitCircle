@@ -64,6 +64,9 @@ function firstPresent(read: (key: string) => unknown, keys: string[]): unknown {
  * save off: the client has told us an entry already exists, so creating another one
  * can only ever produce the duplicate this option is there to prevent.
  */
+/** Body keys read by readParseFallbackOptions (outside any request schema). */
+export const PARSE_FALLBACK_KEYS = ['existing_entry_id', 'existingEntryId', 'skip_fallback_save', 'skipFallbackSave'] as const;
+
 export function readParseFallbackOptions(read: (key: string) => unknown): ParseFallbackOptions {
   const rawId = firstPresent(read, ['existing_entry_id', 'existingEntryId']);
   const idText = typeof rawId === 'string' ? rawId.trim() : '';

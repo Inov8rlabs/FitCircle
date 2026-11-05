@@ -1,0 +1,25 @@
+{
+  "description": "iOS FoodSearchFeature sends servingSizeG 0 when the field is 0; was 400 (.positive()). 0 now means not set.",
+  "method": "POST",
+  "path": "/api/mobile/foods/custom",
+  "body": {
+    "name": "Homemade granola",
+    "servingSizeG": 0,
+    "per100g": {
+      "calories": 450,
+      "proteinG": 10,
+      "carbsG": 60,
+      "fatG": 18
+    }
+  },
+  "expect": {
+    "status": 201,
+    "parsed": {
+      "name": "Homemade granola",
+      "per100g": {
+        "calories": 450,
+        "proteinG": 10
+      }
+    }
+  }
+}

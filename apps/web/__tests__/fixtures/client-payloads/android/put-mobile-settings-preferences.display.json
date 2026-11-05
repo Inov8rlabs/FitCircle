@@ -1,0 +1,16 @@
+{
+  "body": {
+    "display": {
+      "language": "en",
+      "theme": "system",
+      "units": "imperial"
+    }
+  },
+  "expect": {
+    "display.language": "en",
+    "display.theme": "system",
+    "display.units": "imperial"
+  },
+  "method": "PUT",
+  "path": "/api/mobile/settings/preferences"
+}

@@ -1,0 +1,10 @@
+{
+  "body" : {
+    "joined" : true
+  },
+  "expect" : {
+    "joined" : true
+  },
+  "method" : "POST",
+  "path" : "/api/mobile/campaigns/test-campaign/participation"
+}

@@ -1,0 +1,20 @@
+{
+  "body": {
+    "privacy": {
+      "allow_challenge_invites": true,
+      "allow_team_invites": true,
+      "profile_visibility": "private",
+      "show_progress": true,
+      "show_weight": false
+    }
+  },
+  "expect": {
+    "privacy.allow_challenge_invites": true,
+    "privacy.allow_team_invites": true,
+    "privacy.profile_visibility": "private",
+    "privacy.show_progress": true,
+    "privacy.show_weight": false
+  },
+  "method": "PUT",
+  "path": "/api/mobile/settings/preferences"
+}

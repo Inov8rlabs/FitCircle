@@ -1,0 +1,10 @@
+{
+  "body" : {
+    "blockedId" : "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
+  },
+  "expect" : {
+    "blockedId" : "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
+  },
+  "method" : "POST",
+  "path" : "/api/mobile/blocks"
+}

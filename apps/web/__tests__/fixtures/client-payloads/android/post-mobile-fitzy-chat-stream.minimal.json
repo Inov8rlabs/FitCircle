@@ -1,0 +1,10 @@
+{
+  "body": {
+    "message": "Hi"
+  },
+  "expect": {
+    "message": "Hi"
+  },
+  "method": "POST",
+  "path": "/api/mobile/fitzy/chat/stream"
+}

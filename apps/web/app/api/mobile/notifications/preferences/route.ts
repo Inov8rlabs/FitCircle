@@ -5,6 +5,7 @@ import { mealReminderPrefsFrom } from '@/lib/journey/meal-slots';
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { JourneyService } from '@/lib/services/journey-service';
 import { NotificationPreferencesService } from '@/lib/services/notification-preferences-service';
+import { parseLenient } from '@/lib/validation/lenient-parse';
 
 const updateSchema = z.object({
   journey_enabled: z.boolean().optional(),
@@ -88,7 +89,7 @@ export async function PATCH(request: NextRequest) {
   try {
     const user = await requireMobileAuth(request);
     const body = await request.json();
-    const { meal_reminders, ...validated } = updateSchema.parse(body);
+    const { meal_reminders, ...validated } = parseLenient(updateSchema, body);
 
     const mealReminders = meal_reminders
       ? await JourneyService.updateMealReminderPrefs(user.id, meal_reminders)

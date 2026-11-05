@@ -1,0 +1,70 @@
+{
+  "body": {
+    "autoClaimStreak": true,
+    "category": "strength",
+    "date": "2026-01-15",
+    "durationMinutes": 45,
+    "exerciseType": "strengthTraining",
+    "exercises": [
+      {
+        "exerciseId": "33333333-3333-4333-8333-333333333333",
+        "position": 0,
+        "restSeconds": 90,
+        "sets": [
+          {
+            "isCompleted": true,
+            "reps": 10,
+            "setNumber": 1,
+            "setType": "warmup",
+            "weightKg": 60.0
+          },
+          {
+            "isCompleted": true,
+            "reps": 8,
+            "rpe": 8.5,
+            "setNumber": 2,
+            "setType": "normal",
+            "weightKg": 80.0
+          }
+        ]
+      },
+      {
+        "customName": "Sled Push",
+        "position": 1,
+        "restSeconds": 90,
+        "sets": [
+          {
+            "distanceMeters": 20.0,
+            "durationSeconds": 45,
+            "isCompleted": true,
+            "setNumber": 1,
+            "setType": "normal"
+          }
+        ],
+        "trackingType": "distance_duration"
+      }
+    ],
+    "source": "manual"
+  },
+  "expect": {
+    "category": "strength",
+    "date": "2026-01-15",
+    "durationMinutes": 45,
+    "exerciseType": "strengthTraining",
+    "exercises.0.exerciseId": "33333333-3333-4333-8333-333333333333",
+    "exercises.0.position": 0,
+    "exercises.0.restSeconds": 90,
+    "exercises.0.sets.0.reps": 10,
+    "exercises.0.sets.0.setNumber": 1,
+    "exercises.0.sets.0.setType": "warmup",
+    "exercises.0.sets.0.weightKg": 60,
+    "exercises.0.sets.1.rpe": 8.5,
+    "exercises.1.customName": "Sled Push",
+    "exercises.1.position": 1,
+    "exercises.1.sets.0.distanceMeters": 20,
+    "exercises.1.sets.0.durationSeconds": 45,
+    "exercises.1.trackingType": "distance_duration"
+  },
+  "method": "POST",
+  "path": "/api/mobile/exercises"
+}

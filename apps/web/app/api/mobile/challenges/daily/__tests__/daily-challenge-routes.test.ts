@@ -3,8 +3,8 @@
  * service, in-memory database.
  */
 
-import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { NextRequest } from 'next/server';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { createAdminSupabase } from '@/lib/supabase-admin';
 
@@ -410,5 +410,95 @@ describe('POST /api/mobile/challenges/daily/[id]/join', () => {
     expect(again.status).toBe(201);
     expect((await again.json()).data.participant_count).toBe(1);
     expect(db.getRows('daily_challenge_participants')).toHaveLength(1);
+  });
+});
+
+describe('shipped iOS posts and reads progress as a 0..1 fraction (challenge_progress_abs)', () => {
+  // DailyChallengeFeature: `progress: min(entered / goal, 1.0)`; DailyChallengeProgress
+  // reads user_progress as a fraction; leaderboard rows read `progress` as one.
+  const IOS_OLD = { 'x-app-platform': 'ios', 'x-app-version': '1.1.1', 'x-client-features': 'icon_keys,reactions_v2' };
+  const IOS_PRE_HEADERS = { 'user-agent': 'FitCircle/66 CFNetwork/3826.500.111 Darwin/24.4.0' };
+  const IOS_FIXED = { 'x-app-platform': 'ios', 'x-client-features': 'icon_keys,challenge_progress_abs' };
+  const ANDROID = { 'x-app-platform': 'android', 'user-agent': 'okhttp/4.12.0' };
+
+  const req = (path: string, headers: Record<string, string>, body?: unknown) =>
+    new NextRequest(`http://localhost${path}`, {
+      method: body === undefined ? 'GET' : 'POST',
+      headers: { 'content-type': 'application/json', ...headers },
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
+  const post = (headers: Record<string, string>, progress: number) =>
+    postProgress(req(`/api/mobile/challenges/daily/${CHALLENGE}/progress`, headers, { progress }), params(CHALLENGE));
+  const stored = () => db.getRows('daily_challenge_participants').find((r) => r.user_id === ME)?.progress;
+
+  it('an old iOS build finishing the goal stores the goal and completes (was: stored 1)', async () => {
+    seedChallenge(10000);
+    seedParticipant(ME, 0);
+
+    const body = await (await post(IOS_OLD, 1.0)).json();
+
+    expect(stored()).toBe(10000);
+    expect(body.data.is_completed).toBe(true);
+    // The value iOS decodes comes back as the fraction it sent.
+    expect(body.data.user_progress).toBe(1);
+    expect(body.data.challenge_id).toBe(CHALLENGE);
+  });
+
+  it('a partial fraction is stored in absolute units', async () => {
+    seedChallenge(10000);
+    seedParticipant(ME, 0);
+    const body = await (await post(IOS_OLD, 0.42)).json();
+    expect(stored()).toBe(4200);
+    expect(body.data.is_completed).toBe(false);
+    expect(body.data.user_progress).toBe(0.42);
+  });
+
+  it('iOS builds from before the platform header are recognised by their User-Agent', async () => {
+    seedChallenge(8);
+    seedParticipant(ME, 0);
+    await post(IOS_PRE_HEADERS, 0.5);
+    expect(stored()).toBe(4);
+  });
+
+  it('a fixed iOS build (challenge_progress_abs) and Android are stored as sent', async () => {
+    seedChallenge(8);
+    seedParticipant(ME, 0);
+    const fixed = await (await post(IOS_FIXED, 1)).json();
+    expect(stored()).toBe(1);
+    expect(fixed.data.user_progress).toBe(1);
+
+    const android = await (await post(ANDROID, 0.5)).json();
+    expect(stored()).toBe(0.5);
+    expect(android.data.user_progress).toBe(0.5);
+  });
+
+  it('GET progress answers old iOS with a fraction and everyone else with absolute units', async () => {
+    seedChallenge(10000);
+    seedParticipant(ME, 2500);
+    const path = `/api/mobile/challenges/daily/${CHALLENGE}/progress`;
+
+    const ios = await (await getProgress(req(path, IOS_OLD), params(CHALLENGE))).json();
+    expect(ios.data.user_progress).toBe(0.25);
+    const fixed = await (await getProgress(req(path, IOS_FIXED), params(CHALLENGE))).json();
+    expect(fixed.data.user_progress).toBe(2500);
+    const android = await (await getProgress(req(path, ANDROID), params(CHALLENGE))).json();
+    expect(android.data.user_progress).toBe(2500);
+  });
+
+  it('the leaderboard answers old iOS with fractions (rows and its own entry), ranks unchanged', async () => {
+    seedChallenge(10000);
+    seedParticipant(ME, 2500, 'Me');
+    seedParticipant(userId(1), 10000, 'Done');
+    const path = `/api/mobile/challenges/daily/${CHALLENGE}/leaderboard`;
+
+    const ios = await (await getLeaderboard(req(path, IOS_OLD), params(CHALLENGE))).json();
+    expect(ios.data.map((r: { progress: number; rank: number }) => [r.progress, r.rank])).toEqual([
+      [1, 1],
+      [0.25, 2],
+    ]);
+    expect(ios.user_entry.progress).toBe(0.25);
+
+    const android = await (await getLeaderboard(req(path, ANDROID), params(CHALLENGE))).json();
+    expect(android.data.map((r: { progress: number }) => r.progress)).toEqual([10000, 2500]);
   });
 });

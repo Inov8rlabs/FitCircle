@@ -1,0 +1,27 @@
+{
+  "description": "iOS 1.1.1 dashboard check-in with no picked day: custom encode(to:) writes \"date\": null.",
+  "method": "POST",
+  "path": "/api/mobile/tracking/daily",
+  "body": {
+    "date": null,
+    "weightKg": 82.5,
+    "steps": 8421,
+    "notes": "felt good",
+    "stepsSource": "manual",
+    "isOverride": true
+  },
+  "expect": {
+    "stored": {
+      "daily_tracking": {
+        "tracking_date": "2026-11-05",
+        "weight_kg": 82.5,
+        "steps": 8421
+      }
+    },
+    "response": {
+      "meta": {
+        "tracking_date": "2026-11-05"
+      }
+    }
+  }
+}

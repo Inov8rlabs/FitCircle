@@ -1,0 +1,23 @@
+{
+  "description": "Android DailyGoalModels.kt CreateDailyGoalRequest (LocalDate start_date, encodeDefaults).",
+  "method": "POST",
+  "path": "/api/mobile/daily-goals",
+  "body": {
+    "goal_type": "steps",
+    "target_value": 8000.0,
+    "unit": "steps",
+    "start_date": "2026-11-05",
+    "frequency": "daily",
+    "is_primary": true,
+    "auto_adjust_enabled": false
+  },
+  "expect": {
+    "stored": {
+      "daily_goals": {
+        "goal_type": "steps",
+        "start_date": "2026-11-05",
+        "target_value": 8000
+      }
+    }
+  }
+}

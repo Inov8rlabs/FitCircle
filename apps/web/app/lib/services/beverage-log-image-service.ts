@@ -9,9 +9,10 @@
 import { type SupabaseClient } from '@supabase/supabase-js';
 import sharp from 'sharp';
 
+import { logIgnoredQueryError } from '@/lib/api/route-errors';
 import { ImageProcessingError, StorageError } from '@/lib/errors/food-log-errors';
 import type { BeverageLogImage } from '@/lib/types/beverage-log';
-import { logIgnoredQueryError } from '@/lib/api/route-errors';
+import { isGenericContentType, sniffImageType } from '@/lib/utils/image-sniff';
 
 const BUCKET = 'beverage-logs';
 const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/heic'] as const;
@@ -26,7 +27,7 @@ export class BeverageLogImageService {
     supabase: SupabaseClient
   ): Promise<{ success: boolean; image?: BeverageLogImage; error?: Error }> {
     try {
-      this.validateImage(file);
+      await this.validateImage(file);
 
       // Verify ownership
       const { data: entry, error: entryError } = await supabase
@@ -229,11 +230,17 @@ export class BeverageLogImageService {
     return images.map((img) => this.addImageUrls(img, baseUrl));
   }
 
-  private static validateImage(file: File): void {
+  private static async validateImage(file: File): Promise<void> {
     if (file.size > MAX_BYTES) throw new ImageProcessingError('File size exceeds 10MB limit');
-    if (!ALLOWED_TYPES.includes(file.type as typeof ALLOWED_TYPES[number])) {
-      throw new ImageProcessingError('Invalid file type. Only JPEG, PNG, WEBP, and HEIC allowed');
+    if (ALLOWED_TYPES.includes(file.type as typeof ALLOWED_TYPES[number])) return;
+    // Shipped Android labels beverage photos `image/*` (BeverageLogRepository), which
+    // was rejected here and swallowed client-side: the photo was never saved. A
+    // generic label is accepted when the bytes are one of the allowed formats.
+    if (isGenericContentType(file.type)) {
+      const head = new Uint8Array(await file.slice(0, 16).arrayBuffer());
+      if (sniffImageType(head)) return;
     }
+    throw new ImageProcessingError('Invalid file type. Only JPEG, PNG, WEBP, and HEIC allowed');
   }
 
   private static async cleanupStorageFiles(paths: string[], supabase: SupabaseClient): Promise<void> {

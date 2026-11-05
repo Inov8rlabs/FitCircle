@@ -1,0 +1,10 @@
+{
+  "body": {
+    "reaction": "clap"
+  },
+  "expect": {
+    "reaction": "clap"
+  },
+  "method": "PUT",
+  "path": "/api/mobile/messages/55555555-5555-4555-8555-555555555555/reactions"
+}

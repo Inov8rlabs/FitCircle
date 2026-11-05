@@ -1,0 +1,16 @@
+{
+  "body" : {
+    "code" : "FITABC123",
+    "deviceId" : "AAAAAAAA-BBBB-4CCC-8DDD-EEEEEEEEEEEE",
+    "ref" : "ABCD12",
+    "source" : "universal_link"
+  },
+  "expect" : {
+    "code" : "FITABC123",
+    "deviceId" : "AAAAAAAA-BBBB-4CCC-8DDD-EEEEEEEEEEEE",
+    "ref" : "ABCD12",
+    "source" : "universal_link"
+  },
+  "method" : "POST",
+  "path" : "/api/mobile/referrals/claim"
+}

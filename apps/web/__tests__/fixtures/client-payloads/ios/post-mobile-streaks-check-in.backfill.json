@@ -1,0 +1,18 @@
+{
+  "body" : {
+    "date" : "2026-01-15",
+    "notes" : "Backfilled",
+    "previous_day_sentiment" : "great",
+    "timezone" : "America/Los_Angeles",
+    "weight" : 72.5
+  },
+  "expect" : {
+    "date" : "2026-01-15",
+    "notes" : "Backfilled",
+    "previous_day_sentiment" : "great",
+    "timezone" : "America/Los_Angeles",
+    "weight" : 72.5
+  },
+  "method" : "POST",
+  "path" : "/api/mobile/streaks/check-in"
+}

@@ -1,0 +1,46 @@
+{
+  "body" : {
+    "brand" : "Home",
+    "name" : "House salad",
+    "per100g" : {
+      "calories" : 80,
+      "carbsG" : 9,
+      "fatG" : 4,
+      "fiberG" : 2,
+      "proteinG" : 3.5,
+      "sugarG" : 3
+    },
+    "recipeIngredients" : [
+      {
+        "grams" : 150,
+        "name" : "Lettuce"
+      },
+      {
+        "foodId" : "44444444-4444-4444-8444-444444444444",
+        "grams" : 50,
+        "name" : "Feta"
+      }
+    ],
+    "recipeServings" : 2,
+    "servingSizeG" : 250,
+    "servingUnit" : "bowl"
+  },
+  "expect" : {
+    "brand" : "Home",
+    "name" : "House salad",
+    "per100g.calories" : 80,
+    "per100g.carbsG" : 9,
+    "per100g.fatG" : 4,
+    "per100g.fiberG" : 2,
+    "per100g.proteinG" : 3.5,
+    "per100g.sugarG" : 3,
+    "recipeIngredients.0.grams" : 150,
+    "recipeIngredients.0.name" : "Lettuce",
+    "recipeIngredients.1.foodId" : "44444444-4444-4444-8444-444444444444",
+    "recipeServings" : 2,
+    "servingSizeG" : 250,
+    "servingUnit" : "bowl"
+  },
+  "method" : "POST",
+  "path" : "/api/mobile/foods/custom"
+}

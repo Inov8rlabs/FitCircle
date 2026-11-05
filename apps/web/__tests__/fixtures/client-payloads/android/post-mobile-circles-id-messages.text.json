@@ -1,0 +1,14 @@
+{
+  "body": {
+    "body": "Nice work!",
+    "clientId": "33333333-3333-4333-8333-333333333333",
+    "kind": "user_text"
+  },
+  "expect": {
+    "body": "Nice work!",
+    "clientId": "33333333-3333-4333-8333-333333333333",
+    "kind": "user_text"
+  },
+  "method": "POST",
+  "path": "/api/mobile/circles/22222222-2222-4222-8222-222222222222/messages"
+}

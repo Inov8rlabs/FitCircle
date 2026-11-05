@@ -1,0 +1,86 @@
+{
+  "body" : {
+    "autoClaimStreak" : true,
+    "avgHeartRate" : 128,
+    "caloriesBurned" : 320,
+    "category" : "strength",
+    "date" : "2026-01-15",
+    "durationMinutes" : 45,
+    "effortLevel" : 7,
+    "exercises" : [
+      {
+        "exerciseId" : "44444444-4444-4444-8444-444444444444",
+        "notes" : "Felt strong",
+        "position" : 0,
+        "restSeconds" : 90,
+        "sets" : [
+          {
+            "isCompleted" : true,
+            "reps" : 10,
+            "setNumber" : 1,
+            "setType" : "warmup",
+            "weightKg" : 40
+          },
+          {
+            "isCompleted" : true,
+            "reps" : 8,
+            "rpe" : 8.5,
+            "setNumber" : 2,
+            "setType" : "normal",
+            "weightKg" : 60
+          }
+        ]
+      },
+      {
+        "customName" : "Sled push",
+        "equipment" : "sled",
+        "position" : 1,
+        "primaryMuscle" : "legs",
+        "sets" : [
+          {
+            "distanceMeters" : 20,
+            "durationSeconds" : 45,
+            "isCompleted" : true,
+            "setNumber" : 1,
+            "setType" : "normal"
+          }
+        ],
+        "trackingType" : "distance_duration"
+      }
+    ],
+    "exerciseType" : "weight_training",
+    "isIndoor" : true,
+    "locationType" : "gym",
+    "notes" : "Leg day",
+    "source" : "manual",
+    "workoutCompanion" : "solo"
+  },
+  "expect" : {
+    "avgHeartRate" : 128,
+    "caloriesBurned" : 320,
+    "category" : "strength",
+    "date" : "2026-01-15",
+    "durationMinutes" : 45,
+    "effortLevel" : 7,
+    "exercises.0.exerciseId" : "44444444-4444-4444-8444-444444444444",
+    "exercises.0.position" : 0,
+    "exercises.0.restSeconds" : 90,
+    "exercises.0.sets.0.reps" : 10,
+    "exercises.0.sets.0.setNumber" : 1,
+    "exercises.0.sets.0.setType" : "warmup",
+    "exercises.0.sets.0.weightKg" : 40,
+    "exercises.0.sets.1.rpe" : 8.5,
+    "exercises.1.customName" : "Sled push",
+    "exercises.1.sets.0.distanceMeters" : 20,
+    "exercises.1.sets.0.durationSeconds" : 45,
+    "exercises.1.trackingType" : "distance_duration",
+    "exerciseType" : "weight_training",
+    "isIndoor" : true,
+    "locationType" : "gym",
+    "notes" : "Leg day",
+    "source" : "manual",
+    "workoutCompanion" : "solo"
+  },
+  "method" : "POST",
+  "path" : "/api/mobile/exercises"
+}

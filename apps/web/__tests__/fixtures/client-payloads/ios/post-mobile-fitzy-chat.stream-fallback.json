@@ -1,0 +1,29 @@
+{
+  "body" : {
+    "conversationId" : "55555555-5555-4555-8555-555555555555",
+    "message" : "What should I eat?",
+    "messages" : [
+      {
+        "content" : "Hi",
+        "role" : "user"
+      },
+      {
+        "content" : "Hello!",
+        "role" : "assistant"
+      },
+      {
+        "content" : "What should I eat?",
+        "role" : "user"
+      }
+    ]
+  },
+  "expect" : {
+    "conversationId" : "55555555-5555-4555-8555-555555555555",
+    "messages.0.content" : "Hi",
+    "messages.0.role" : "user",
+    "messages.2.content" : "What should I eat?",
+    "messages.2.role" : "user"
+  },
+  "method" : "POST",
+  "path" : "/api/mobile/fitzy/chat"
+}

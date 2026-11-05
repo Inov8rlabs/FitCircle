@@ -1,0 +1,14 @@
+{
+  "body": {
+    "key": "activity",
+    "source": "home_card",
+    "value": "very_active"
+  },
+  "expect": {
+    "key": "activity",
+    "source": "home_card",
+    "value": "very_active"
+  },
+  "method": "POST",
+  "path": "/api/mobile/profile/completion"
+}

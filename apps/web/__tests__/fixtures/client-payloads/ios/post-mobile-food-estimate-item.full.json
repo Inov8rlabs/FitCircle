@@ -1,0 +1,16 @@
+{
+  "body" : {
+    "grams" : 150,
+    "name" : "brown rice",
+    "quantity" : 1.5,
+    "servingUnit" : "cup"
+  },
+  "expect" : {
+    "grams" : 150,
+    "name" : "brown rice",
+    "quantity" : 1.5,
+    "servingUnit" : "cup"
+  },
+  "method" : "POST",
+  "path" : "/api/mobile/food/estimate-item"
+}

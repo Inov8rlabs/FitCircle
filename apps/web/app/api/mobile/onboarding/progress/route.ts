@@ -4,6 +4,7 @@ import { mobileFailFrom, ok, readJson } from '@/lib/experiments/http';
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { OnboardingFlowService, progressSchema } from '@/lib/services/onboarding-flow-service';
 import { recordTestDeviceSignal } from '@/lib/services/test-device-service';
+import { parseLenient } from '@/lib/validation/lenient-parse';
 
 export const dynamic = 'force-dynamic';
 
@@ -21,7 +22,7 @@ export async function PATCH(request: NextRequest) {
   const startTime = Date.now();
   try {
     const user = await requireMobileAuth(request);
-    const input = progressSchema.parse(await readJson(request));
+    const input = parseLenient(progressSchema, await readJson(request));
     await recordTestDeviceSignal(user.id, request.headers); // X-Test-Device: 1 (Test Lab robots)
     return ok(await OnboardingFlowService.saveProgress(user.id, input), startTime);
   } catch (error) {

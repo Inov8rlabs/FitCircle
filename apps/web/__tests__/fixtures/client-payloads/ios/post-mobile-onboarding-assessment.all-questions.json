@@ -1,0 +1,62 @@
+{
+  "body" : {
+    "responses" : [
+      {
+        "question_key" : "frequency",
+        "selected_values" : [
+          "3_4_week"
+        ]
+      },
+      {
+        "question_key" : "goals",
+        "selected_values" : [
+          "build_muscle"
+        ]
+      },
+      {
+        "question_key" : "activity_types",
+        "selected_values" : [
+          "running",
+          "weight_training"
+        ]
+      },
+      {
+        "question_key" : "time_available",
+        "selected_values" : [
+          "30_min"
+        ]
+      },
+      {
+        "question_key" : "fitness_level",
+        "selected_values" : [
+          "intermediate"
+        ]
+      }
+    ]
+  },
+  "expect" : {
+    "responses.0.question_key" : "frequency",
+    "responses.0.selected_values" : [
+      "3_4_week"
+    ],
+    "responses.1.question_key" : "goals",
+    "responses.1.selected_values" : [
+      "build_muscle"
+    ],
+    "responses.2.question_key" : "activity_types",
+    "responses.2.selected_values" : [
+      "running",
+      "weight_training"
+    ],
+    "responses.3.question_key" : "time_available",
+    "responses.3.selected_values" : [
+      "30_min"
+    ],
+    "responses.4.question_key" : "fitness_level",
+    "responses.4.selected_values" : [
+      "intermediate"
+    ]
+  },
+  "method" : "POST",
+  "path" : "/api/mobile/onboarding/assessment"
+}

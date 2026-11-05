@@ -5,6 +5,7 @@ import { MEAL_SLOTS } from '@/lib/journey/meal-slots';
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { fail, failFrom, ok } from '@/lib/referrals/http';
 import { JourneyService } from '@/lib/services/journey-service';
+import { safeParseLenient } from '@/lib/validation/lenient-parse';
 
 export const dynamic = 'force-dynamic';
 
@@ -47,7 +48,7 @@ export async function PATCH(request: NextRequest) {
     } catch {
       body = undefined;
     }
-    const parsed = patchSchema.safeParse(body);
+    const parsed = safeParseLenient(patchSchema, body);
     if (!parsed.success) return fail(400, 'VALIDATION_ERROR', 'Body must be { mealReminderPrefs: { breakfast?, lunch?, snack?, dinner? } } with booleans');
     const mealReminderPrefs = await JourneyService.updateMealReminderPrefs(user.id, parsed.data.mealReminderPrefs);
     return ok({ mealReminderPrefs });

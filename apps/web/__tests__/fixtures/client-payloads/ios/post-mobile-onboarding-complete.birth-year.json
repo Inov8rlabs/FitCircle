@@ -1,0 +1,10 @@
+{
+  "body" : {
+    "birthYear" : 1990
+  },
+  "expect" : {
+    "birthYear" : 1990
+  },
+  "method" : "POST",
+  "path" : "/api/mobile/onboarding/complete"
+}

@@ -1,0 +1,26 @@
+{
+  "body": {
+    "name": "Homemade granola",
+    "per100g": {
+      "calories": 471.0,
+      "carbsG": 64.0,
+      "fatG": 20.0,
+      "fiberG": 7.5,
+      "proteinG": 10.0
+    },
+    "servingSizeG": 45.0,
+    "servingUnit": "cup"
+  },
+  "expect": {
+    "name": "Homemade granola",
+    "per100g.calories": 471.0,
+    "per100g.carbsG": 64.0,
+    "per100g.fatG": 20.0,
+    "per100g.fiberG": 7.5,
+    "per100g.proteinG": 10.0,
+    "servingSizeG": 45.0,
+    "servingUnit": "cup"
+  },
+  "method": "POST",
+  "path": "/api/mobile/foods/custom"
+}

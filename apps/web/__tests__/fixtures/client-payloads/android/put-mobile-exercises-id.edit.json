@@ -1,0 +1,22 @@
+{
+  "body": {
+    "category": "cardio",
+    "durationMinutes": 40,
+    "exerciseType": "running",
+    "exercises": [],
+    "notes": "Edited",
+    "source": "manual"
+  },
+  "expect": {
+    "category": "cardio",
+    "durationMinutes": 40,
+    "exerciseType": "running",
+    "exercises": [],
+    "notes": "Edited"
+  },
+  "knownMismatches": {
+    "source": "Sent (\"manual\", from the shared create DTO) but updateExerciseSchema has no `source`: stripped by the server. Harmless — an edited synced workout keeps its stored source."
+  },
+  "method": "PUT",
+  "path": "/api/mobile/exercises/33333333-3333-4333-8333-333333333333"
+}

@@ -1,0 +1,12 @@
+{
+  "body": {
+    "enabled": true,
+    "platform": "healthconnect"
+  },
+  "expect": {
+    "enabled": true,
+    "platform": "healthconnect"
+  },
+  "method": "POST",
+  "path": "/api/mobile/health/nutrition-sync"
+}

@@ -1,0 +1,27 @@
+{
+  "body": {
+    "items": [
+      {
+        "externalId": "hc-weight-0001",
+        "measuredAt": "2026-01-15T12:00:00Z",
+        "weightKg": 80.5
+      },
+      {
+        "bodyFatPct": 18.2,
+        "externalId": "hc-bodyfat-0001",
+        "measuredAt": "2026-01-15T12:00:00Z"
+      }
+    ],
+    "platform": "health_connect"
+  },
+  "expect": {
+    "items.0.externalId": "hc-weight-0001",
+    "items.0.measuredAt": "2026-01-15T12:00:00Z",
+    "items.0.weightKg": 80.5,
+    "items.1.bodyFatPct": 18.2,
+    "items.1.externalId": "hc-bodyfat-0001",
+    "platform": "health_connect"
+  },
+  "method": "POST",
+  "path": "/api/mobile/body-comp/import"
+}

@@ -1,0 +1,22 @@
+{
+  "body" : {
+    "circle_enabled" : false,
+    "coach_enabled" : true,
+    "meal_reminders" : {
+      "lunch" : true
+    },
+    "quiet_hours_end" : "07:00",
+    "quiet_hours_start" : "22:00",
+    "quiet_hours_timezone" : "America/Chicago"
+  },
+  "expect" : {
+    "circle_enabled" : false,
+    "coach_enabled" : true,
+    "meal_reminders.lunch" : true,
+    "quiet_hours_end" : "07:00",
+    "quiet_hours_start" : "22:00",
+    "quiet_hours_timezone" : "America/Chicago"
+  },
+  "method" : "PATCH",
+  "path" : "/api/mobile/notifications/preferences"
+}

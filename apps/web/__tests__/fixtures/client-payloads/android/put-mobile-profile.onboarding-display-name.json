@@ -1,0 +1,10 @@
+{
+  "body": {
+    "displayName": "Test User"
+  },
+  "expect": {
+    "displayName": "Test User"
+  },
+  "method": "PUT",
+  "path": "/api/mobile/profile"
+}

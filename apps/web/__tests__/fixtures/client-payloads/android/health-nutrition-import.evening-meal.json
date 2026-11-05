@@ -1,0 +1,30 @@
+{
+  "description": "Android HealthConnectManager: loggedAt = Instant.toString() (UTC). Was filed under the UTC date.",
+  "method": "POST",
+  "path": "/api/mobile/health/nutrition-import",
+  "now": "2026-11-06T05:00:00Z",
+  "headers": {
+    "x-client-timezone": "America/Los_Angeles"
+  },
+  "body": {
+    "platform": "healthconnect",
+    "items": [
+      {
+        "externalId": "hc-abc",
+        "loggedAt": "2026-11-06T03:30:00Z",
+        "name": "Dinner",
+        "calories": 640.0,
+        "proteinG": 32.0
+      }
+    ]
+  },
+  "expect": {
+    "stored": {
+      "food_log_entries": {
+        "entry_date": "2026-11-05",
+        "source_external_id": "hc-abc",
+        "calories": 640
+      }
+    }
+  }
+}

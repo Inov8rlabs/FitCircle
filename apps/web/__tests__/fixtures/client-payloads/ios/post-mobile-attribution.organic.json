@@ -1,0 +1,16 @@
+{
+  "body" : {
+    "platform" : "ios",
+    "raw" : {
+      "attribution" : false
+    },
+    "source" : "organic"
+  },
+  "expect" : {
+    "platform" : "ios",
+    "raw.attribution" : false,
+    "source" : "organic"
+  },
+  "method" : "POST",
+  "path" : "/api/mobile/attribution"
+}

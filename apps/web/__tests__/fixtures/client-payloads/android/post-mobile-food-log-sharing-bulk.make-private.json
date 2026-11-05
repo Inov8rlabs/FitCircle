@@ -1,0 +1,10 @@
+{
+  "body": {
+    "share_with_circles": false
+  },
+  "expect": {
+    "share_with_circles": false
+  },
+  "method": "POST",
+  "path": "/api/mobile/food-log/sharing/bulk"
+}

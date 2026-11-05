@@ -3,27 +3,28 @@ import { z } from 'zod';
 
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { ExerciseService } from '@/lib/services/exercise-service';
+import { createAdminSupabase } from '@/lib/supabase-admin';
 import type { ExerciseLogCreateInput } from '@/lib/types/exercise';
 import { parseLenient, validationMessage } from '@/lib/validation/lenient-parse';
+import { isoInstant, optionalPositiveMeasure } from '@/lib/validators/exercise-fields';
 import {
   exercisesArraySchema,
   mapExercisesToInput,
 } from '@/lib/validators/exercise-nested';
-import { createAdminSupabase } from '@/lib/supabase-admin';
 
 const updateExerciseSchema = z.object({
   exerciseType: z.string().min(1).max(50).optional(),
   category: z.enum(['cardio', 'strength', 'flexibility', 'sports', 'outdoor', 'other']).optional(),
   durationMinutes: z.number().int().min(1).max(1440).optional(),
-  caloriesBurned: z.number().positive().optional(),
-  distanceMeters: z.number().positive().optional(),
+  caloriesBurned: optionalPositiveMeasure,
+  distanceMeters: optionalPositiveMeasure,
   avgHeartRate: z.number().int().min(1).max(300).optional(),
   effortLevel: z.number().int().min(1).max(10).optional(),
   locationType: z.enum(['home', 'gym', 'outdoor', 'studio']).nullable().optional(),
   workoutCompanion: z.enum(['solo', 'group', 'trainer', 'virtual_class']).nullable().optional(),
   isIndoor: z.boolean().nullable().optional(),
   notes: z.string().max(2000).nullable().optional(),
-  startedAt: z.string().datetime().nullable().optional(),
+  startedAt: isoInstant.nullable().optional(),
   // NEW: full desired state of the structured exercise log (replace semantics).
   exercises: exercisesArraySchema.optional(),
 });

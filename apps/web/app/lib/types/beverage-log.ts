@@ -144,6 +144,7 @@ export interface CreateBeverageLogInput {
  * Input for updating a beverage log entry
  */
 export interface UpdateBeverageLogInput {
+  category?: BeverageCategory;
   beverage_type?: string;
   customizations?: BeverageCustomizations;
   volume_ml?: number;

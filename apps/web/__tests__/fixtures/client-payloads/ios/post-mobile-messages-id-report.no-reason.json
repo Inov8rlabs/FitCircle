@@ -1,0 +1,10 @@
+{
+  "body" : {
+
+  },
+  "expect" : {
+
+  },
+  "method" : "POST",
+  "path" : "/api/mobile/messages/55555555-5555-4555-8555-555555555555/report"
+}

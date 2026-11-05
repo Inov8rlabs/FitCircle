@@ -10,6 +10,7 @@ import {
   type BodyCompImportSkippedItem,
   bodyCompImportItemSchema,
 } from '@/lib/types/body-composition';
+import { reportDroppedKeys } from '@/lib/validation/dropped-keys';
 import { parseLenient, validationMessage } from '@/lib/validation/lenient-parse';
 
 /**
@@ -43,6 +44,9 @@ const importItemIdentitySchema = z.object({
   externalId: z.string().min(1).max(255),
   measuredAt: z.string().datetime({ offset: true }),
 });
+
+// Dropped-key reporting only (never used to parse): the envelope with typed items.
+const importReportSchema = importEnvelopeSchema.extend({ items: z.array(bodyCompImportItemSchema) });
 
 const IMPORT_METRIC_KEYS = ['weightKg', 'bodyFatPct', 'leanBodyMassKg', 'bmrKcal'] as const;
 
@@ -86,6 +90,8 @@ export async function POST(request: NextRequest) {
     await EntitlementService.requireFeature(user.id, 'body_comp_logging');
     const body = await request.json();
     const envelope = parseLenient(importEnvelopeSchema, body);
+    // The envelope types items as unknown; report keys the per-item schema drops too.
+    reportDroppedKeys(importReportSchema, body);
 
     const received = envelope.items.length;
     const skippedItems: BodyCompImportSkippedItem[] = [];

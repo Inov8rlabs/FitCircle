@@ -1,0 +1,6 @@
+{
+  "body": {},
+  "expect": {},
+  "method": "POST",
+  "path": "/api/mobile/streaks/apply-freeze"
+}

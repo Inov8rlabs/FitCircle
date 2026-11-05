@@ -1,0 +1,34 @@
+{
+  "body" : {
+    "entry_type" : "food",
+    "id" : "AAAAAAAA-BBBB-4CCC-8DDD-EEEEEEEEEEEE",
+    "is_private" : false,
+    "logged_at" : "2026-01-15T12:00:00Z",
+    "meal_type" : "breakfast",
+    "notes" : "Oatmeal with berries",
+    "nutrition_data" : {
+      "calories" : 350,
+      "carbs_g" : 60,
+      "fat_g" : 7,
+      "protein_g" : 12.5
+    },
+    "share_with_circles" : true,
+    "timezone" : "America/New_York"
+  },
+  "expect" : {
+    "entry_type" : "food",
+    "id" : "AAAAAAAA-BBBB-4CCC-8DDD-EEEEEEEEEEEE",
+    "is_private" : false,
+    "logged_at" : "2026-01-15T12:00:00Z",
+    "meal_type" : "breakfast",
+    "notes" : "Oatmeal with berries",
+    "nutrition_data.calories" : 350,
+    "nutrition_data.carbs_g" : 60,
+    "nutrition_data.fat_g" : 7,
+    "nutrition_data.protein_g" : 12.5,
+    "share_with_circles" : true,
+    "timezone" : "America/New_York"
+  },
+  "method" : "POST",
+  "path" : "/api/mobile/food-log"
+}

@@ -1,0 +1,45 @@
+{
+  "description": "Android HealthConnectManager: a HydrationRecord is sent as {externalId, loggedAt, name:\"Water\"} with no volume (became an empty food row). Now skipped; the meal in the same batch still imports.",
+  "method": "POST",
+  "path": "/api/mobile/health/nutrition-import",
+  "now": "2026-11-05T20:00:00Z",
+  "body": {
+    "platform": "healthconnect",
+    "items": [
+      {
+        "externalId": "hc-meal-1",
+        "loggedAt": "2026-11-05T17:00:00Z",
+        "name": "Lunch",
+        "calories": 520.0,
+        "proteinG": 30.0
+      },
+      {
+        "externalId": "hc-water-1",
+        "loggedAt": "2026-11-05T18:00:00Z",
+        "name": "Water"
+      }
+    ]
+  },
+  "expect": {
+    "response": {
+      "success": true,
+      "data": {
+        "received": 2,
+        "imported": 1,
+        "skipped": 1,
+        "skippedEmpty": 1
+      }
+    },
+    "stored": {
+      "food_log_entries": {
+        "source_external_id": "hc-meal-1",
+        "calories": 520
+      }
+    },
+    "notStored": {
+      "food_log_entries": {
+        "source_external_id": "hc-water-1"
+      }
+    }
+  }
+}

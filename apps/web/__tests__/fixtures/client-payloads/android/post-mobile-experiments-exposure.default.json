@@ -1,0 +1,14 @@
+{
+  "body": {
+    "arm": "variantA",
+    "key": "onboarding_paywall",
+    "surface": "onboarding"
+  },
+  "expect": {
+    "arm": "variantA",
+    "key": "onboarding_paywall",
+    "surface": "onboarding"
+  },
+  "method": "POST",
+  "path": "/api/mobile/experiments/exposure"
+}

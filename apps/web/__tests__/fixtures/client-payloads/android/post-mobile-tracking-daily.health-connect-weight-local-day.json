@@ -1,0 +1,14 @@
+{
+  "body": {
+    "autoClaimStreak": false,
+    "trackingDate": "2026-01-14",
+    "weightKg": 80.0
+  },
+  "expect": {
+    "autoClaimStreak": false,
+    "trackingDate": "2026-01-14",
+    "weightKg": 80.0
+  },
+  "method": "POST",
+  "path": "/api/mobile/tracking/daily"
+}

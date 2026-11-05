@@ -1,0 +1,10 @@
+{
+  "body" : {
+    "isPublic" : false
+  },
+  "expect" : {
+    "isPublic" : false
+  },
+  "method" : "PUT",
+  "path" : "/api/mobile/tracking/daily/2026-01-15"
+}

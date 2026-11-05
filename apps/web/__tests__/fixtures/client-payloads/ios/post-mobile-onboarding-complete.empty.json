@@ -1,0 +1,10 @@
+{
+  "body" : {
+
+  },
+  "expect" : {
+
+  },
+  "method" : "POST",
+  "path" : "/api/mobile/onboarding/complete"
+}

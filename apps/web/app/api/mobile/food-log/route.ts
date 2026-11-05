@@ -260,7 +260,8 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const validatedData = parseLenient(
       CreateFoodLogEntrySchema,
-      normalizeFoodLogEntryAliases(body)
+      normalizeFoodLogEntryAliases(body),
+      { ignore: ['id', 'timezone'] } // read from the raw body below
     );
 
     // File the entry under the day it was eaten in the person's timezone AT LOG

@@ -1,0 +1,14 @@
+{
+  "body" : {
+    "key" : "sex",
+    "source" : "home_card",
+    "value" : "prefer_not_to_say"
+  },
+  "expect" : {
+    "key" : "sex",
+    "source" : "home_card",
+    "value" : "prefer_not_to_say"
+  },
+  "method" : "POST",
+  "path" : "/api/mobile/profile/completion"
+}

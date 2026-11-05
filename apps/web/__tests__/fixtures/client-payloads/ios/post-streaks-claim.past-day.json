@@ -1,0 +1,12 @@
+{
+  "body" : {
+    "claimDate" : "2026-01-15",
+    "timezone" : "America/New_York"
+  },
+  "expect" : {
+    "claimDate" : "2026-01-15",
+    "timezone" : "America/New_York"
+  },
+  "method" : "POST",
+  "path" : "/api/streaks/claim"
+}

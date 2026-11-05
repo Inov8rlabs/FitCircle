@@ -1,0 +1,22 @@
+{
+  "body" : {
+    "auto_adjust_enabled" : false,
+    "frequency" : "daily",
+    "goal_type" : "steps",
+    "is_primary" : true,
+    "start_date" : "2026-01-15T12:00:00Z",
+    "target_value" : 10000,
+    "unit" : "steps"
+  },
+  "expect" : {
+    "auto_adjust_enabled" : false,
+    "frequency" : "daily",
+    "goal_type" : "steps",
+    "is_primary" : true,
+    "start_date" : "2026-01-15T12:00:00Z",
+    "target_value" : 10000,
+    "unit" : "steps"
+  },
+  "method" : "POST",
+  "path" : "/api/mobile/daily-goals"
+}

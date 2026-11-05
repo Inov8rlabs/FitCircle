@@ -1,0 +1,22 @@
+{
+  "body" : {
+    "category" : "strength",
+    "description" : "Hold a plank daily",
+    "duration_days" : 14,
+    "fitcircle_id" : "22222222-2222-4222-8222-222222222222",
+    "goal_amount" : 60,
+    "name" : "Plank every day",
+    "unit" : "seconds"
+  },
+  "expect" : {
+    "category" : "strength",
+    "description" : "Hold a plank daily",
+    "duration_days" : 14,
+    "fitcircle_id" : "22222222-2222-4222-8222-222222222222",
+    "goal_amount" : 60,
+    "name" : "Plank every day",
+    "unit" : "seconds"
+  },
+  "method" : "POST",
+  "path" : "/api/mobile/challenges/custom"
+}

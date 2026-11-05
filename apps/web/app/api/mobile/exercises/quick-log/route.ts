@@ -2,8 +2,8 @@ import { type NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
-import { WorkoutLoggingService } from '@/lib/services/workout-logging-service';
 import { StreakClaimingService } from '@/lib/services/streak-claiming-service';
+import { WorkoutLoggingService } from '@/lib/services/workout-logging-service';
 import { resolveClientTimezone } from '@/lib/streaks/client-timezone';
 import { parseLenient, validationMessage } from '@/lib/validation/lenient-parse';
 import { quickLogCategorySchema } from '@/lib/validators/quick-log';
@@ -27,7 +27,7 @@ export async function POST(request: NextRequest) {
   try {
     const user = await requireMobileAuth(request);
     const body = await request.json();
-    const validated = parseLenient(quickLogSchema, body);
+    const validated = parseLenient(quickLogSchema, body, { ignore: ['timezone'] }); // timezone: read below
 
     const timezone = resolveClientTimezone(request, body?.timezone);
     const result = await WorkoutLoggingService.quickLog(user.id, {

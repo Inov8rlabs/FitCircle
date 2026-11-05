@@ -1,0 +1,13 @@
+{
+  "body" : {
+    "target_value" : 80000
+  },
+  "expect" : {
+    "target_value" : 80000
+  },
+  "knownMismatches" : {
+    "target_value" : "No PATCH /api/goals/weekly/[id] route exists (404)."
+  },
+  "method" : "PATCH",
+  "path" : "/api/goals/weekly/33333333-3333-4333-8333-333333333333"
+}

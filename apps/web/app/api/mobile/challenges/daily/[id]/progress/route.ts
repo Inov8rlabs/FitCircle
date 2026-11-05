@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 
+import { absoluteToFraction, fractionToAbsolute, usesFractionProgress } from '@/lib/challenges/daily-progress-compat';
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { DailyChallengeService } from '@/lib/services/daily-challenge-service';
 import { readJsonBody } from '@/lib/streaks/request-body';
@@ -37,7 +38,12 @@ export async function GET(
     const { id } = await params;
     const challengeId = idSchema.parse(id);
 
-    const progress = await DailyChallengeService.getUserProgress(user.id, challengeId);
+    let progress = await DailyChallengeService.getUserProgress(user.id, challengeId);
+    // Shipped iOS reads user_progress as a 0..1 fraction (daily-progress-compat.ts).
+    if (usesFractionProgress(request) && progress.user_joined) {
+      const goal = await DailyChallengeService.getGoalAmount(challengeId);
+      if (goal !== null) progress = { ...progress, user_progress: absoluteToFraction(progress.user_progress, goal) };
+    }
 
     const response = NextResponse.json({
       success: true,
@@ -74,6 +80,8 @@ export async function GET(
  * Update the authenticated user's progress on the given daily challenge.
  *
  * Body: { progress: number }   // absolute units, the new total
+ *   (shipped iOS without X-Client-Features: challenge_progress_abs posts a 0..1
+ *   fraction of the goal; it is converted, and user_progress is answered as a fraction)
  * Response data: { progress, is_completed, completed_at } plus the GET fields
  * (challenge_id, user_progress, rank) as additional keys.
  */
@@ -89,13 +97,19 @@ export async function POST(
     idIsValid = true;
 
     const body = await readJsonBody(request);
-    const { progress } = parseLenient(progressBodySchema, body);
+    const { progress: posted } = parseLenient(progressBodySchema, body);
+
+    // Shipped iOS posts a 0..1 fraction of the goal and reads user_progress back as one;
+    // the stored value is always absolute units (daily-progress-compat.ts).
+    const fractionClient = usesFractionProgress(request);
+    const goal = fractionClient ? await DailyChallengeService.getGoalAmount(challengeId) : null;
+    const progress = goal !== null ? fractionToAbsolute(posted, goal) : posted;
 
     const result = await DailyChallengeService.updateProgress(user.id, challengeId, progress);
 
     return NextResponse.json({
       success: true,
-      data: result,
+      data: goal !== null ? { ...result, user_progress: absoluteToFraction(result.user_progress, goal) } : result,
       error: null,
     });
   } catch (error: unknown) {

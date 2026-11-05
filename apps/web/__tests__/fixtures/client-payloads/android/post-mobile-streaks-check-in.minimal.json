@@ -1,0 +1,10 @@
+{
+  "body": {
+    "date": "2026-01-15"
+  },
+  "expect": {
+    "date": "2026-01-15"
+  },
+  "method": "POST",
+  "path": "/api/mobile/streaks/check-in"
+}

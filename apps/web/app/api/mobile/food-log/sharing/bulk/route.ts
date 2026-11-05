@@ -16,6 +16,7 @@ import { z } from 'zod';
 
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { FoodEntryPrivacyService } from '@/lib/services/food-entry-privacy-service';
+import { safeParseLenient } from '@/lib/validation/lenient-parse';
 
 const BodySchema = z.object({ share_with_circles: z.boolean() });
 
@@ -31,7 +32,7 @@ export async function POST(request: NextRequest) {
     const user = await requireMobileAuth(request);
     // Invalid JSON reads as no body → VALIDATION_ERROR below.
     const body: unknown = await request.json().catch(() => undefined);
-    const parsed = BodySchema.safeParse(body);
+    const parsed = safeParseLenient(BodySchema, body);
     if (!parsed.success) {
       return errorResponse('VALIDATION_ERROR', 'share_with_circles (boolean) is required', 400);
     }

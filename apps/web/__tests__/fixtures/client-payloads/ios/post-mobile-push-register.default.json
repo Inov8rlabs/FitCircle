@@ -1,0 +1,14 @@
+{
+  "body" : {
+    "device_name" : "Test iPhone",
+    "platform" : "ios",
+    "token" : "fake-fcm-token"
+  },
+  "expect" : {
+    "device_name" : "Test iPhone",
+    "platform" : "ios",
+    "token" : "fake-fcm-token"
+  },
+  "method" : "POST",
+  "path" : "/api/mobile/push/register"
+}

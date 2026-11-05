@@ -1,0 +1,26 @@
+{
+  "body": {
+    "category": "strength",
+    "description": "100 a day",
+    "ends_at": "2026-01-22T08:00:00Z",
+    "goal_amount": 700.0,
+    "is_open": true,
+    "logging_prompt": "How many pushups?",
+    "name": "Pushup Week",
+    "starts_at": "2026-01-15T08:00:00Z",
+    "unit": "reps"
+  },
+  "expect": {
+    "category": "strength",
+    "description": "100 a day",
+    "ends_at": "2026-01-22T08:00:00Z",
+    "goal_amount": 700,
+    "is_open": true,
+    "logging_prompt": "How many pushups?",
+    "name": "Pushup Week",
+    "starts_at": "2026-01-15T08:00:00Z",
+    "unit": "reps"
+  },
+  "method": "POST",
+  "path": "/api/fitcircles/22222222-2222-4222-8222-222222222222/challenges"
+}

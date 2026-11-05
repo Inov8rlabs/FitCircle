@@ -1,0 +1,15 @@
+{
+  "body" : {
+    "client_id" : "55555555-5555-4555-8555-555555555555",
+    "reaction" : "🔥",
+    "source" : "leaderboard_long_press",
+    "to_user_id" : "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
+  },
+  "expect" : {
+    "reaction" : "🔥",
+    "source" : "leaderboard_long_press",
+    "to_user_id" : "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
+  },
+  "method" : "POST",
+  "path" : "/api/mobile/circles/22222222-2222-4222-8222-222222222222/cheers"
+}

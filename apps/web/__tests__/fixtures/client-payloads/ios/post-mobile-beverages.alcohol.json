@@ -1,0 +1,40 @@
+{
+  "body" : {
+    "beverage_type" : "beer",
+    "caffeine_mg" : 0,
+    "calories" : 300,
+    "category" : "alcohol",
+    "customizations" : {
+      "abv_percent" : 4.5,
+      "alcohol_type" : "beer",
+      "brand" : "Test Lager",
+      "milk_type" : "none",
+      "serving_count" : 2,
+      "serving_size_ml" : 355,
+      "size" : "medium",
+      "sweetener" : "none",
+      "temperature" : "hot"
+    },
+    "is_favorite" : false,
+    "is_private" : true,
+    "logged_at" : "2026-01-15T12:00:00Z",
+    "notes" : "Dinner",
+    "sugar_g" : 0,
+    "volume_ml" : 710
+  },
+  "expect" : {
+    "beverage_type" : "beer",
+    "category" : "alcohol",
+    "customizations.abv_percent" : 4.5,
+    "customizations.alcohol_type" : "beer",
+    "customizations.brand" : "Test Lager",
+    "customizations.serving_count" : 2,
+    "customizations.serving_size_ml" : 355,
+    "is_private" : true,
+    "logged_at" : "2026-01-15T12:00:00Z",
+    "notes" : "Dinner",
+    "volume_ml" : 710
+  },
+  "method" : "POST",
+  "path" : "/api/mobile/beverages"
+}

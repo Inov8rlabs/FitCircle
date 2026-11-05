@@ -3,17 +3,18 @@ import { z } from 'zod';
 
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { ExerciseService } from '@/lib/services/exercise-service';
-import { createAdminSupabase } from '@/lib/supabase-admin';
 import { resolveClientTimezone } from '@/lib/streaks/client-timezone';
+import { createAdminSupabase } from '@/lib/supabase-admin';
 import { parseLenient, validationMessage } from '@/lib/validation/lenient-parse';
+import { isoInstant, optionalPositiveMeasure } from '@/lib/validators/exercise-fields';
 import { exerciseSourceInputSchema, resolveExerciseSource } from '@/lib/validators/exercise-source';
 
 const exerciseItemSchema = z.object({
   exerciseType: z.string().min(1).max(50),
   category: z.enum(['cardio', 'strength', 'flexibility', 'sports', 'outdoor', 'other']),
   durationMinutes: z.number().int().min(1).max(1440),
-  caloriesBurned: z.number().positive().optional(),
-  distanceMeters: z.number().positive().optional(),
+  caloriesBurned: optionalPositiveMeasure,
+  distanceMeters: optionalPositiveMeasure,
   avgHeartRate: z.number().int().min(1).max(300).optional(),
   effortLevel: z.number().int().min(1).max(10).optional(),
   locationType: z.enum(['home', 'gym', 'outdoor', 'studio']).optional(),
@@ -21,7 +22,7 @@ const exerciseItemSchema = z.object({
   isIndoor: z.boolean().optional(),
   notes: z.string().max(500).optional(),
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
-  startedAt: z.string().datetime().optional(),
+  startedAt: isoInstant.optional(),
   healthkitWorkoutId: z.string().max(100),
   sourceDeviceName: z.string().max(100).optional(),
   // Accepts health_connect / google_fit too; the row is stored as 'healthkit' and the
@@ -45,7 +46,7 @@ export async function POST(request: NextRequest) {
   try {
     const user = await requireMobileAuth(request);
     const body = await request.json();
-    const validated = parseLenient(bulkSyncSchema, body);
+    const validated = parseLenient(bulkSyncSchema, body, { ignore: ['timezone'] }); // timezone: read below
 
     const supabaseAdmin = createAdminSupabase();
 

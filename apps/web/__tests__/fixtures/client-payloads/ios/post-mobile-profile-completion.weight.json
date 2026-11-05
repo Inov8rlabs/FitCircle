@@ -1,0 +1,14 @@
+{
+  "body" : {
+    "key" : "weight",
+    "source" : "home_card",
+    "value" : 72.5
+  },
+  "expect" : {
+    "key" : "weight",
+    "source" : "home_card",
+    "value" : 72.5
+  },
+  "method" : "POST",
+  "path" : "/api/mobile/profile/completion"
+}

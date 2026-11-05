@@ -1,0 +1,10 @@
+{
+  "body": {
+    "resume_date": "2026-01-20"
+  },
+  "expect": {
+    "resume_date": "2026-01-20"
+  },
+  "method": "POST",
+  "path": "/api/mobile/streaks/engagement/pause"
+}

@@ -1,0 +1,12 @@
+{
+  "body": {
+    "trackingDate": "2026-01-15",
+    "weightKg": 72.5
+  },
+  "expect": {
+    "trackingDate": "2026-01-15",
+    "weightKg": 72.5
+  },
+  "method": "POST",
+  "path": "/api/mobile/tracking/daily"
+}

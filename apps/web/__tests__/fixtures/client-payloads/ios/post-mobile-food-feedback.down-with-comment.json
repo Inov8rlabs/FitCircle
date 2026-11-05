@@ -1,0 +1,14 @@
+{
+  "body" : {
+    "comment" : "Portion too big",
+    "parseHash" : "parsehash-0001",
+    "rating" : "down"
+  },
+  "expect" : {
+    "comment" : "Portion too big",
+    "parseHash" : "parsehash-0001",
+    "rating" : "down"
+  },
+  "method" : "POST",
+  "path" : "/api/mobile/food/feedback"
+}

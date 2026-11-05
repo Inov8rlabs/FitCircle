@@ -1,0 +1,24 @@
+{
+  "body" : {
+    "description" : "Contract test circle",
+    "end_date" : "2026-02-14T12:00:00Z",
+    "min_participants" : 2,
+    "name" : "Test Circle",
+    "start_date" : "2026-01-15T12:00:00Z",
+    "type" : "step_count",
+    "visibility" : "private"
+  },
+  "expect" : {
+    "description" : "Contract test circle",
+    "end_date" : "2026-02-14T12:00:00Z",
+    "name" : "Test Circle",
+    "start_date" : "2026-01-15T12:00:00Z",
+    "type" : "step_count",
+    "visibility" : "private"
+  },
+  "knownMismatches" : {
+    "min_participants" : "Sent by iOS, not in createCircleSchema (stripped; no server column)."
+  },
+  "method" : "POST",
+  "path" : "/api/mobile/circles"
+}

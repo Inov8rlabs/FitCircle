@@ -5,7 +5,6 @@
  * DELETE /api/mobile/food-log/[id] - Delete entry
  */
 
-import { resolveEntryDate } from '@/lib/utils/entry-date';
 import { type NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 
@@ -15,6 +14,7 @@ import { FoodLogService } from '@/lib/services/food-log-service';
 import { VitalsService } from '@/lib/services/vitals-service';
 import { createAdminSupabase } from '@/lib/supabase-admin';
 import { runAfterResponse } from '@/lib/utils/after-response';
+import { resolveEntryDate } from '@/lib/utils/entry-date';
 import {
   UpdateFoodLogEntrySchema,
   normalizeFoodLogEntryAliases,
@@ -179,7 +179,8 @@ export async function PATCH(
     }
     const validatedData = parseLenient(
       UpdateFoodLogEntrySchema,
-      normalizeFoodLogEntryAliases(body)
+      normalizeFoodLogEntryAliases(body),
+      { ignore: ['timezone'] } // read from the raw body below
     );
 
     // Re-timing a meal moves it to the day of its new time (local to the person).

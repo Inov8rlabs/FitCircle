@@ -1,0 +1,10 @@
+{
+  "body": {
+    "target_value": 9000.0
+  },
+  "expect": {
+    "target_value": 9000
+  },
+  "method": "PATCH",
+  "path": "/api/mobile/daily-goals/33333333-3333-4333-8333-333333333333"
+}

@@ -1,3 +1,6 @@
+import { logIgnoredQueryError } from '@/lib/api/route-errors';
+import { localDayOf } from '@/lib/streaks/streak-calculator';
+
 import { createAdminSupabase } from '../supabase-admin';
 import {
   type HealthNutritionSyncState,
@@ -5,7 +8,6 @@ import {
   type ImportNutritionRequest,
   type ImportNutritionResult,
 } from '../types/health-nutrition';
-import { logIgnoredQueryError } from '@/lib/api/route-errors';
 
 /**
  * HealthNutritionService — server side of HealthKit / Health Connect nutrition sync (PRD §6.2).
@@ -61,7 +63,12 @@ export class HealthNutritionService {
    * Idempotent batch import. Inserts only items whose externalId hasn't been imported before
    * (by user+platform), skips the rest, advances cursor + last_sync_at.
    */
-  static async importBatch(userId: string, req: ImportNutritionRequest): Promise<ImportNutritionResult> {
+  static async importBatch(
+    userId: string,
+    req: ImportNutritionRequest,
+    /** Zone that dates each sample (its local day). Absent: the UTC date, as before. */
+    options: { timezone?: string } = {}
+  ): Promise<ImportNutritionResult> {
     const supabase = createAdminSupabase();
     const nowISO = new Date().toISOString();
 
@@ -70,8 +77,21 @@ export class HealthNutritionService {
       return { received: 0, imported: 0, skipped: 0, lastSyncAt: nowISO };
     }
 
+    // An item with no macros carries nothing to log: the item contract has no water
+    // volume, and shipped clients send Health Connect HydrationRecords / HealthKit
+    // dietaryWater samples as bare `{ name: "Water" }` items, which became empty food
+    // rows. Skip them (counted in `skipped` / `skippedEmpty`), keep the rest of the batch.
+    const hasMacros = (i: ImportNutritionRequest['items'][number]) =>
+      [i.calories, i.proteinG, i.carbsG, i.fatG].some((v) => v !== null && v !== undefined);
+    const loggable = req.items.filter(hasMacros);
+    const skippedEmpty = req.items.length - loggable.length;
+    if (loggable.length === 0) {
+      await this.touchSync(userId, req.platform, req.cursor ?? null, nowISO);
+      return { received: req.items.length, imported: 0, skipped: req.items.length, skippedEmpty, lastSyncAt: nowISO };
+    }
+
     // Which externalIds are already imported for this (user, platform)?
-    const externalIds = req.items.map((i) => i.externalId);
+    const externalIds = loggable.map((i) => i.externalId);
     const { data: existing, error: existingError } = await supabase
       .from('food_log_entries')
       .select('source_external_id')
@@ -81,7 +101,7 @@ export class HealthNutritionService {
     logIgnoredQueryError('HealthNutritionService.importBatch', existingError);
     const seen = new Set((existing ?? []).map((r) => r.source_external_id as string));
 
-    const fresh = req.items.filter((i) => !seen.has(i.externalId));
+    const fresh = loggable.filter((i) => !seen.has(i.externalId));
 
     if (fresh.length > 0) {
       const rows = fresh.map((i) => ({
@@ -89,7 +109,7 @@ export class HealthNutritionService {
         entry_type: 'food',
         title: i.name,
         logged_at: i.loggedAt,
-        entry_date: i.loggedAt.slice(0, 10),
+        entry_date: options.timezone ? localDayOf(i.loggedAt, options.timezone) : i.loggedAt.slice(0, 10),
         meal_type: i.mealType ?? 'other',
         calories: i.calories ?? null,
         protein_g: i.proteinG ?? null,
@@ -115,6 +135,7 @@ export class HealthNutritionService {
       received: req.items.length,
       imported: fresh.length,
       skipped: req.items.length - fresh.length,
+      skippedEmpty,
       lastSyncAt: nowISO,
     };
   }

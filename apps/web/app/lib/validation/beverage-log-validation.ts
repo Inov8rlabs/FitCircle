@@ -208,6 +208,10 @@ export const CreateBeverageLogSchema = z
  */
 export const UpdateBeverageLogSchema = z
   .object({
+    // Android's edit screen sends the (possibly changed) category with every PATCH; it
+    // used to be stripped, so coffee→tea kept category=coffee while beverage_type changed.
+    // An unrecognised category is ignored (as before), never a 400.
+    category: BeverageCategoryEnum.optional().catch(undefined),
     beverage_type: z.string().min(1).max(200).optional(),
     customizations: BeverageCustomizationsSchema.optional(),
     volume_ml: z.number().int().min(1).max(10000).optional(),

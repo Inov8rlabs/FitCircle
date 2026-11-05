@@ -3,6 +3,7 @@ import { type NextRequest } from 'next/server';
 import { mobileFailFrom, ok, readJson } from '@/lib/experiments/http';
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { gateSchema, OnboardingFlowService } from '@/lib/services/onboarding-flow-service';
+import { parseLenient } from '@/lib/validation/lenient-parse';
 
 export const dynamic = 'force-dynamic';
 
@@ -19,7 +20,7 @@ export async function POST(request: NextRequest) {
   const startTime = Date.now();
   try {
     const user = await requireMobileAuth(request);
-    gateSchema.parse(await readJson(request));
+    parseLenient(gateSchema, await readJson(request));
     return ok(await OnboardingFlowService.reachPaywall(user.id), startTime);
   } catch (error) {
     return mobileFailFrom(error, 'onboarding/gate');

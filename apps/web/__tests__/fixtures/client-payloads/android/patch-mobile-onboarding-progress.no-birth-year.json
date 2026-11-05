@@ -1,0 +1,13 @@
+{
+  "body": {
+    "data": {},
+    "flow": "v1",
+    "step": "welcome"
+  },
+  "expect": {
+    "flow": "v1",
+    "step": "welcome"
+  },
+  "method": "PATCH",
+  "path": "/api/mobile/onboarding/progress"
+}

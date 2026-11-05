@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { VitalsService } from '@/lib/services/vitals-service';
 import { resolveClientTimezone } from '@/lib/streaks/client-timezone';
+import { parseLenient } from '@/lib/validation/lenient-parse';
 
 const goalsSchema = z
   .object({
@@ -25,7 +26,7 @@ const goalsSchema = z
 export async function PUT(request: NextRequest) {
   try {
     const user = await requireMobileAuth(request);
-    const body = goalsSchema.parse(await request.json());
+    const body = parseLenient(goalsSchema, await request.json());
 
     await VitalsService.updateGoals(user.id, body);
     const data = await VitalsService.getSummary(user.id, { days: 7, timezone: resolveClientTimezone(request) });

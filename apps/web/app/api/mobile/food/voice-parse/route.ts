@@ -6,7 +6,7 @@ import { NutritionIntelligenceService } from '@/lib/services/nutrition-intellige
 import { NutritionTrainingService } from '@/lib/services/nutrition-training-service';
 import { UpgradeRequiredError } from '@/lib/services/usage-service';
 import { safeParseLenient } from '@/lib/validation/lenient-parse';
-import { readParseFallbackOptionsFromJson } from '@/lib/validation/nutrition-parse-options';
+import { PARSE_FALLBACK_KEYS, readParseFallbackOptionsFromJson } from '@/lib/validation/nutrition-parse-options';
 
 // LLM parse can exceed the platform default function timeout; give it room.
 export const maxDuration = 60;
@@ -63,7 +63,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const parsed = safeParseLenient(bodySchema, json);
+    // The fallback keys are read beside the schema (readParseFallbackOptionsFromJson).
+    const parsed = safeParseLenient(bodySchema, json, { ignore: PARSE_FALLBACK_KEYS });
     // Both absent (every shipped client today) → the Option-B save below is unchanged.
     const fallback = readParseFallbackOptionsFromJson(json);
     if (!parsed.success) {

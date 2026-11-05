@@ -1,0 +1,10 @@
+{
+  "body": {
+    "reminders": false
+  },
+  "expect": {
+    "reminders": false
+  },
+  "method": "POST",
+  "path": "/api/mobile/campaigns/holiday-test/participation"
+}

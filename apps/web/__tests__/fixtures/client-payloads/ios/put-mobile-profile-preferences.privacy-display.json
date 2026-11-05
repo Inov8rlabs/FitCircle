@@ -1,0 +1,43 @@
+{
+  "body" : {
+    "preferences" : {
+      "display" : {
+        "language" : "en",
+        "theme" : "system",
+        "units" : "imperial"
+      },
+      "notifications" : {
+        "achievement" : true,
+        "challenge_invite" : true,
+        "check_in_reminder" : true,
+        "comment" : true,
+        "email" : true,
+        "leaderboard_update" : true,
+        "push" : true,
+        "reaction" : true,
+        "sms" : false,
+        "team_invite" : true,
+        "weekly_insights" : true
+      },
+      "privacy" : {
+        "allow_challenge_invites" : true,
+        "allow_team_invites" : true,
+        "profile_visibility" : "friends",
+        "show_progress" : true,
+        "show_weight" : false
+      }
+    }
+  },
+  "expect" : {
+    "preferences.display.language" : "en",
+    "preferences.display.theme" : "system",
+    "preferences.display.units" : "imperial",
+    "preferences.privacy.allow_challenge_invites" : true,
+    "preferences.privacy.allow_team_invites" : true,
+    "preferences.privacy.profile_visibility" : "friends",
+    "preferences.privacy.show_progress" : true,
+    "preferences.privacy.show_weight" : false
+  },
+  "method" : "PUT",
+  "path" : "/api/mobile/profile/preferences"
+}

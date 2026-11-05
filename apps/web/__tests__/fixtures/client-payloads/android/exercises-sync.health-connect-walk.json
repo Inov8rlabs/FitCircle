@@ -1,0 +1,31 @@
+{
+  "description": "Android HealthConnectManager workout sync (source still \"healthkit\").",
+  "method": "POST",
+  "path": "/api/mobile/exercises/sync",
+  "body": {
+    "exercises": [
+      {
+        "exerciseType": "walking",
+        "category": "cardio",
+        "durationMinutes": 25,
+        "healthkitWorkoutId": "hc-rec-1",
+        "source": "healthkit",
+        "date": "2026-11-05",
+        "startedAt": "2026-11-05T14:00:00Z",
+        "isIndoor": false,
+        "sourceDeviceName": "Pixel Watch"
+      }
+    ],
+    "autoClaimStreak": false
+  },
+  "expect": {
+    "stored": {
+      "exercise_logs": {
+        "exercise_type": "walking",
+        "exercise_date": "2026-11-05",
+        "duration_minutes": 25,
+        "source": "healthkit"
+      }
+    }
+  }
+}

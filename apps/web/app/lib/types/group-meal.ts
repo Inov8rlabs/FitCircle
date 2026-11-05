@@ -123,7 +123,10 @@ export function normalizeGroupMealBody(body: unknown): unknown {
     }
   }
   if (Object.keys(macros).length === 0) return body;
-  return { ...input, macros };
+  // The flat keys are consumed into `macros` (not reported as dropped keys).
+  const rest = { ...input };
+  for (const key of FLAT_MACRO_KEYS) delete rest[key];
+  return { ...rest, macros };
 }
 
 export const createGroupMealSchema = z.object({

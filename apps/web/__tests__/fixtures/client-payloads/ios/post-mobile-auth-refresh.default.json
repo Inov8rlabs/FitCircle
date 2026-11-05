@@ -1,0 +1,10 @@
+{
+  "body" : {
+    "refresh_token" : "fake-refresh-token"
+  },
+  "expect" : {
+    "refresh_token" : "fake-refresh-token"
+  },
+  "method" : "POST",
+  "path" : "/api/mobile/auth/refresh"
+}

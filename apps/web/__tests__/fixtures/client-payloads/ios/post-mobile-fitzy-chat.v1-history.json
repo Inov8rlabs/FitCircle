@@ -1,0 +1,26 @@
+{
+  "body" : {
+    "messages" : [
+      {
+        "content" : "Plan my week",
+        "role" : "user"
+      },
+      {
+        "content" : "Sure!",
+        "role" : "assistant"
+      },
+      {
+        "content" : "More cardio",
+        "role" : "user"
+      }
+    ]
+  },
+  "expect" : {
+    "messages.0.content" : "Plan my week",
+    "messages.0.role" : "user",
+    "messages.1.role" : "assistant",
+    "messages.2.content" : "More cardio"
+  },
+  "method" : "POST",
+  "path" : "/api/mobile/fitzy/chat"
+}

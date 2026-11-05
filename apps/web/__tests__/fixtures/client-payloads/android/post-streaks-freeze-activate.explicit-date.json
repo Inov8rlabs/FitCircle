@@ -1,0 +1,12 @@
+{
+  "body": {
+    "date": "2026-01-15",
+    "timezone": "America/Los_Angeles"
+  },
+  "expect": {
+    "date": "2026-01-15",
+    "timezone": "America/Los_Angeles"
+  },
+  "method": "POST",
+  "path": "/api/streaks/freeze/activate"
+}

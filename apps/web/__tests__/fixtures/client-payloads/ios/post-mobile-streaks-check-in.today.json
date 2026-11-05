@@ -1,0 +1,12 @@
+{
+  "body" : {
+    "previous_day_sentiment" : "ok",
+    "timezone" : "America/Los_Angeles"
+  },
+  "expect" : {
+    "previous_day_sentiment" : "ok",
+    "timezone" : "America/Los_Angeles"
+  },
+  "method" : "POST",
+  "path" : "/api/mobile/streaks/check-in"
+}

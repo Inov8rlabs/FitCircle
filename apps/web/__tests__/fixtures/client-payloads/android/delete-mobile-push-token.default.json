@@ -1,0 +1,10 @@
+{
+  "body": {
+    "token": "fake-fcm-token"
+  },
+  "expect": {
+    "token": "fake-fcm-token"
+  },
+  "method": "DELETE",
+  "path": "/api/mobile/push/token"
+}

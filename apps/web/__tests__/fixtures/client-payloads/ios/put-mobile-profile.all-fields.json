@@ -1,0 +1,22 @@
+{
+  "body" : {
+    "avatarUrl" : "https://example.com/avatar.jpg",
+    "bio" : "Just testing",
+    "dateOfBirth" : "2026-01-15T12:00:00Z",
+    "displayName" : "Test User",
+    "gender" : "non_binary",
+    "heightCm" : 175,
+    "weightKg" : 72.5
+  },
+  "expect" : {
+    "avatarUrl" : "https://example.com/avatar.jpg",
+    "bio" : "Just testing",
+    "dateOfBirth" : "2026-01-15T12:00:00Z",
+    "displayName" : "Test User",
+    "gender" : "non_binary",
+    "heightCm" : 175,
+    "weightKg" : 72.5
+  },
+  "method" : "PUT",
+  "path" : "/api/mobile/profile"
+}

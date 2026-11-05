@@ -39,7 +39,9 @@ export type ImportNutritionRequest = z.infer<typeof importNutritionRequestSchema
 export interface ImportNutritionResult {
   received: number;
   imported: number;   // newly inserted (deduped)
-  skipped: number;    // already present (external id seen before)
+  skipped: number;    // not inserted: already present (external id seen before) or empty
+  /** Of `skipped`: items with no macros (the contract has no water volume), so nothing to log. Additive. */
+  skippedEmpty?: number;
   lastSyncAt: string;
 }
 

@@ -1,0 +1,12 @@
+{
+  "body" : {
+    "calories" : 2100,
+    "origin" : "settings"
+  },
+  "expect" : {
+    "calories" : 2100,
+    "origin" : "settings"
+  },
+  "method" : "PUT",
+  "path" : "/api/mobile/targets"
+}

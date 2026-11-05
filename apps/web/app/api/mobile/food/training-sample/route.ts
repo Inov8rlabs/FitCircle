@@ -3,6 +3,7 @@ import { z } from 'zod';
 
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { NutritionTrainingService } from '@/lib/services/nutrition-training-service';
+import { safeParseLenient } from '@/lib/validation/lenient-parse';
 
 /**
  * POST /api/mobile/food/training-sample
@@ -48,7 +49,7 @@ export async function POST(request: NextRequest) {
     } catch {
       return NextResponse.json({ success: false, error: { code: 'VALIDATION_ERROR', message: 'Invalid sample JSON' } }, { status: 400 });
     }
-    const sample = sampleSchema.safeParse(parsedSample);
+    const sample = safeParseLenient(sampleSchema, parsedSample);
     if (!sample.success) {
       return NextResponse.json({ success: false, error: { code: 'VALIDATION_ERROR', message: sample.error.issues[0]?.message ?? 'Invalid sample' } }, { status: 400 });
     }

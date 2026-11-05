@@ -3,6 +3,7 @@ import { z } from 'zod';
 
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { PushService } from '@/lib/services/push-service';
+import { parseLenient } from '@/lib/validation/lenient-parse';
 
 const deleteSchema = z.object({
   token: z.string().min(1),
@@ -16,7 +17,7 @@ export async function DELETE(request: NextRequest) {
   try {
     await requireMobileAuth(request);
     const body = await request.json();
-    const validated = deleteSchema.parse(body);
+    const validated = parseLenient(deleteSchema, body);
 
     await PushService.removeToken(validated.token);
 

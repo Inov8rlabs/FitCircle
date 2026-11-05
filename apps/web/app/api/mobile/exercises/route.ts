@@ -6,20 +6,21 @@ import { ExerciseService } from '@/lib/services/exercise-service';
 import { StreakClaimingService } from '@/lib/services/streak-claiming-service';
 import { resolveClientTimezone } from '@/lib/streaks/client-timezone';
 import { workoutCountsForStreak } from '@/lib/streaks/workout-claim-policy';
+import { createAdminSupabase } from '@/lib/supabase-admin';
 import { parseLenient, validationMessage } from '@/lib/validation/lenient-parse';
+import { isoInstant, optionalPositiveMeasure } from '@/lib/validators/exercise-fields';
 import {
   exercisesArraySchema,
   mapExercisesToInput,
 } from '@/lib/validators/exercise-nested';
-import { createAdminSupabase } from '@/lib/supabase-admin';
 import { exerciseSourceInputSchema, resolveExerciseSource } from '@/lib/validators/exercise-source';
 
 const createExerciseSchema = z.object({
   exerciseType: z.string().min(1).max(50),
   category: z.enum(['cardio', 'strength', 'flexibility', 'sports', 'outdoor', 'other']),
   durationMinutes: z.number().int().min(1).max(1440),
-  caloriesBurned: z.number().positive().optional(),
-  distanceMeters: z.number().positive().optional(),
+  caloriesBurned: optionalPositiveMeasure,
+  distanceMeters: optionalPositiveMeasure,
   avgHeartRate: z.number().int().min(1).max(300).optional(),
   effortLevel: z.number().int().min(1).max(10).optional(),
   locationType: z.enum(['home', 'gym', 'outdoor', 'studio']).optional(),
@@ -27,7 +28,7 @@ const createExerciseSchema = z.object({
   isIndoor: z.boolean().optional(),
   notes: z.string().max(2000).optional(),
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
-  startedAt: z.string().datetime().optional(),
+  startedAt: isoInstant.optional(),
   healthkitWorkoutId: z.string().max(100).optional(),
   sourceDeviceName: z.string().max(100).optional(),
   // Accepts health_connect / google_fit too; stored as 'healthkit' + source_platform
@@ -47,7 +48,7 @@ export async function POST(request: NextRequest) {
   try {
     const user = await requireMobileAuth(request);
     const body = await request.json();
-    const validated = parseLenient(createExerciseSchema, body);
+    const validated = parseLenient(createExerciseSchema, body, { ignore: ['timezone'] }); // timezone: read below
     const { source, sourcePlatform } = resolveExerciseSource(validated.source, 'manual');
 
     const supabaseAdmin = createAdminSupabase();

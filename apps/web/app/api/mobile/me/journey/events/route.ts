@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { fail, failFrom, ok } from '@/lib/referrals/http';
 import { JOURNEY_EVENTS, JourneyService } from '@/lib/services/journey-service';
+import { safeParseLenient } from '@/lib/validation/lenient-parse';
 
 export const dynamic = 'force-dynamic';
 
@@ -33,7 +34,7 @@ export async function POST(request: NextRequest) {
     } catch {
       body = undefined;
     }
-    const parsed = bodySchema.safeParse(body);
+    const parsed = safeParseLenient(bodySchema, body);
     if (!parsed.success) return fail(400, 'VALIDATION_ERROR', `event must be one of ${JOURNEY_EVENTS.join(', ')}`);
     const { event, placement, automatic } = parsed.data;
     const stored = await JourneyService.recordEvent(user.id, event, { placement, automatic, profile: user });

@@ -14,7 +14,9 @@
  * It never invents values and never loosens any other rule: types, ranges, enums and
  * required fields are validated exactly as before.
  */
-import { z, type ZodTypeAny } from 'zod';
+import { type z, type ZodTypeAny } from 'zod';
+
+import { type DroppedKeyOptions, reportDroppedKeys } from './dropped-keys';
 
 type AnyDef = { typeName?: string; [key: string]: unknown };
 
@@ -119,16 +121,30 @@ export function stripRejectedNulls(schema: ZodTypeAny, value: unknown): unknown 
   return value;
 }
 
-/** `schema.parse`, tolerant of explicit nulls for fields that are merely optional. */
-export function parseLenient<S extends ZodTypeAny>(schema: S, value: unknown): z.infer<S> {
+/**
+ * `schema.parse`, tolerant of explicit nulls for fields that are merely optional.
+ *
+ * Also the guarded path for request bodies: keys the schema would strip are reported
+ * (`[api-dropped-keys]` log + Sentry, key names only, rate-limited) — see dropped-keys.ts.
+ * Reporting never changes the result. `options.route` labels the report (defaults to the
+ * calling route file); `options.ignore` lists keys a route knowingly ignores.
+ */
+export function parseLenient<S extends ZodTypeAny>(
+  schema: S,
+  value: unknown,
+  options?: DroppedKeyOptions
+): z.infer<S> {
+  reportDroppedKeys(schema, value, options);
   return schema.parse(stripRejectedNulls(schema, value));
 }
 
-/** `schema.safeParse`, tolerant of explicit nulls for fields that are merely optional. */
+/** `schema.safeParse`, tolerant of explicit nulls for fields that are merely optional. Reports dropped keys like `parseLenient`. */
 export function safeParseLenient<S extends ZodTypeAny>(
   schema: S,
-  value: unknown
+  value: unknown,
+  options?: DroppedKeyOptions
 ): z.SafeParseReturnType<z.input<S>, z.infer<S>> {
+  reportDroppedKeys(schema, value, options);
   return schema.safeParse(stripRejectedNulls(schema, value));
 }
 

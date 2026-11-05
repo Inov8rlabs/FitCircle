@@ -1,0 +1,12 @@
+{
+  "body" : {
+    "context" : "onboarding",
+    "message" : "How much protein?"
+  },
+  "expect" : {
+    "context" : "onboarding",
+    "message" : "How much protein?"
+  },
+  "method" : "POST",
+  "path" : "/api/mobile/fitzy/chat/stream"
+}

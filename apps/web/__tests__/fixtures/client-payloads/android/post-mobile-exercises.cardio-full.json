@@ -1,0 +1,36 @@
+{
+  "body": {
+    "autoClaimStreak": true,
+    "avgHeartRate": 148,
+    "caloriesBurned": 320.0,
+    "category": "cardio",
+    "date": "2026-01-15",
+    "distanceMeters": 5000.0,
+    "durationMinutes": 35,
+    "effortLevel": 7,
+    "exerciseType": "running",
+    "isIndoor": false,
+    "locationType": "outdoor",
+    "notes": "Easy run",
+    "source": "manual",
+    "workoutCompanion": "solo"
+  },
+  "expect": {
+    "autoClaimStreak": true,
+    "avgHeartRate": 148,
+    "caloriesBurned": 320,
+    "category": "cardio",
+    "date": "2026-01-15",
+    "distanceMeters": 5000,
+    "durationMinutes": 35,
+    "effortLevel": 7,
+    "exerciseType": "running",
+    "isIndoor": false,
+    "locationType": "outdoor",
+    "notes": "Easy run",
+    "source": "manual",
+    "workoutCompanion": "solo"
+  },
+  "method": "POST",
+  "path": "/api/mobile/exercises"
+}

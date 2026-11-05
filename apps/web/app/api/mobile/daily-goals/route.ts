@@ -4,6 +4,8 @@ import { z } from 'zod';
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { addAutoRefreshHeaders } from '@/lib/middleware/mobile-auto-refresh';
 import { DailyGoalService } from '@/lib/services/daily-goals';
+import { resolveClientTimezone } from '@/lib/streaks/client-timezone';
+import { localDayOf } from '@/lib/streaks/streak-calculator';
 import { createAdminSupabase } from '@/lib/supabase-admin';
 import { safeParseLenient, validationMessage } from '@/lib/validation/lenient-parse';
 import { normalizeCreateGoalBody } from '@/lib/validators/daily-goals';
@@ -140,10 +142,18 @@ export async function POST(request: NextRequest) {
     const today = new Date().toISOString().split('T')[0];
     const goalData = validationResult.data;
 
-    // Normalize date strings (iOS sends full timestamps, we need YYYY-MM-DD)
+    // Normalize date strings to YYYY-MM-DD. Shipped iOS encodes `start_date` as a full
+    // instant (`Date()` through an .iso8601 encoder, e.g. "2026-11-06T02:00:00Z" for 6pm
+    // in Los Angeles). Its UTC date is the member's TOMORROW, so the new goal was hidden
+    // and tracked nothing for the rest of the day. An instant is read as the member's
+    // local day (X-Client-Timezone, sent on every request); a plain date, or an instant
+    // with no known timezone, is used as before.
+    const clientTimezone = resolveClientTimezone(request);
     const normalizeDate = (dateStr: string | undefined | null): string | null => {
       if (!dateStr) return null;
-      // Extract date part from ISO8601 timestamp or use as-is if already a date
+      if (clientTimezone && dateStr.includes('T') && !Number.isNaN(Date.parse(dateStr))) {
+        return localDayOf(dateStr, clientTimezone);
+      }
       return dateStr.split('T')[0];
     };
 

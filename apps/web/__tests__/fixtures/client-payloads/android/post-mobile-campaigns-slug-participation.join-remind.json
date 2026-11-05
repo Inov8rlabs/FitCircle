@@ -1,0 +1,12 @@
+{
+  "body": {
+    "joined": true,
+    "reminders": true
+  },
+  "expect": {
+    "joined": true,
+    "reminders": true
+  },
+  "method": "POST",
+  "path": "/api/mobile/campaigns/holiday-test/participation"
+}

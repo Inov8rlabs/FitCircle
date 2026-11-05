@@ -1,0 +1,16 @@
+{
+  "body": {
+    "grams": 118.0,
+    "name": "Banana",
+    "quantity": 1.0,
+    "servingUnit": "medium"
+  },
+  "expect": {
+    "grams": 118.0,
+    "name": "Banana",
+    "quantity": 1.0,
+    "servingUnit": "medium"
+  },
+  "method": "POST",
+  "path": "/api/mobile/food/estimate-item"
+}

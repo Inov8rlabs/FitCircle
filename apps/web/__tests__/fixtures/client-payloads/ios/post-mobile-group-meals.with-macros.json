@@ -1,0 +1,30 @@
+{
+  "body" : {
+    "calories" : 800,
+    "carbsG" : 90,
+    "fatG" : 35,
+    "fitcircleId" : "22222222-2222-4222-8222-222222222222",
+    "mealType" : "dinner",
+    "name" : "Pizza night",
+    "proteinG" : 30,
+    "restaurantName" : "Test Pizzeria",
+    "taggedUserIds" : [
+      "44444444-4444-4444-8444-444444444444"
+    ]
+  },
+  "expect" : {
+    "calories" : 800,
+    "carbsG" : 90,
+    "fatG" : 35,
+    "fitcircleId" : "22222222-2222-4222-8222-222222222222",
+    "mealType" : "dinner",
+    "name" : "Pizza night",
+    "proteinG" : 30,
+    "restaurantName" : "Test Pizzeria",
+    "taggedUserIds" : [
+      "44444444-4444-4444-8444-444444444444"
+    ]
+  },
+  "method" : "POST",
+  "path" : "/api/mobile/group-meals"
+}

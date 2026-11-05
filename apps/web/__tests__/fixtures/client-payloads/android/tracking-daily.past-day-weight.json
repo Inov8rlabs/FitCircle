@@ -1,0 +1,23 @@
+{
+  "description": "Android DailyTracking.kt CreateDailyTrackingRequest (trackingDate LocalDate, nulls omitted).",
+  "method": "POST",
+  "path": "/api/mobile/tracking/daily",
+  "body": {
+    "trackingDate": "2026-11-03",
+    "weightKg": 81.2,
+    "autoClaimStreak": false
+  },
+  "expect": {
+    "stored": {
+      "daily_tracking": {
+        "tracking_date": "2026-11-03",
+        "weight_kg": 81.2
+      }
+    },
+    "notStored": {
+      "daily_tracking": {
+        "tracking_date": "2026-11-05"
+      }
+    }
+  }
+}

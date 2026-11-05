@@ -1,0 +1,46 @@
+{
+  "description": "iOS HealthKitSyncService sends totalEnergyBurned / totalDistance as-is; 0.0 was a 400 for the whole batch.",
+  "method": "POST",
+  "path": "/api/mobile/exercises/sync",
+  "body": {
+    "exercises": [
+      {
+        "exerciseType": "yoga",
+        "category": "flexibility",
+        "durationMinutes": 20,
+        "caloriesBurned": 0,
+        "distanceMeters": 0,
+        "date": "2026-11-05",
+        "startedAt": "2026-11-05T12:00:00Z",
+        "healthkitWorkoutId": "55555555-5555-4555-8555-555555555555",
+        "sourceDeviceName": "iPhone",
+        "source": "healthkit"
+      },
+      {
+        "exerciseType": "running",
+        "category": "cardio",
+        "durationMinutes": 30,
+        "caloriesBurned": 300.5,
+        "distanceMeters": 5000,
+        "date": "2026-11-05",
+        "startedAt": "2026-11-05T13:00:00Z",
+        "healthkitWorkoutId": "66666666-6666-4666-8666-666666666666",
+        "source": "healthkit"
+      }
+    ],
+    "autoClaimStreak": false
+  },
+  "expect": {
+    "parsed": {
+      "exercises": [
+        {
+          "healthkitWorkoutId": "55555555-5555-4555-8555-555555555555",
+          "durationMinutes": 20
+        },
+        {
+          "caloriesBurned": 300.5
+        }
+      ]
+    }
+  }
+}

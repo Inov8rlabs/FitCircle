@@ -8,6 +8,7 @@ import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { FitzyPlanService } from '@/lib/services/fitzy-plan-service';
 import { FitzyService } from '@/lib/services/fitzy-service';
 import { UsageService } from '@/lib/services/usage-service';
+import { parseLenient } from '@/lib/validation/lenient-parse';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
@@ -37,7 +38,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const user = await requireMobileAuth(request);
-    const { goal } = bodySchema.parse(await readJson(request));
+    const { goal } = parseLenient(bodySchema, await readJson(request));
     const tz = request.headers.get('x-client-timezone');
     const today = todayFor(tz);
     const tier = await UsageService.fitzyTier(user.id);

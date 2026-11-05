@@ -1,0 +1,325 @@
+{
+  "android/post-mobile-circles-id-cheers.with-message.json": {
+    "knownMismatches": {
+      "reaction": "Test data sends reaction \"fire\". The server accepts the named kind \"flame\" (or the emoji); the shipped Android cheer chips send ReactionKind.FLAME.wire = \"flame\" (MemberCheer.kt), so no shipped build sends \"fire\". Fix the client test data."
+    }
+  },
+  "android/post-mobile-circles-id-leave.no-body.json": {
+    "note": "Seeds a circle the caller is a member of.",
+    "seed": {
+      "fitcircle_members": [
+        {
+          "dropped_at": null,
+          "fitcircle_id": "22222222-2222-4222-8222-222222222222",
+          "id": "66666666-6666-4666-8666-666666666666",
+          "role": "member",
+          "status": "active",
+          "user_id": "11111111-1111-4111-8111-111111111111"
+        }
+      ],
+      "fitcircles": [
+        {
+          "creator_id": "55555555-5555-4555-8555-555555555555",
+          "end_date": "2026-02-20",
+          "id": "22222222-2222-4222-8222-222222222222",
+          "name": "Test Circle",
+          "participant_count": 2,
+          "start_date": "2026-01-10",
+          "status": "active",
+          "type": "custom",
+          "visibility": "private"
+        }
+      ]
+    }
+  },
+  "android/post-mobile-circles-join.no-ref.json": {
+    "note": "Seeds the circle behind invite code ABC123 (the code the Android client tests use).",
+    "seed": {
+      "fitcircles": [
+        {
+          "allow_late_join": true,
+          "creator_id": "55555555-5555-4555-8555-555555555555",
+          "end_date": "2026-02-20",
+          "id": "22222222-2222-4222-8222-222222222222",
+          "invite_code": "ABC123",
+          "late_join_deadline": 30,
+          "name": "Test Circle",
+          "participant_count": 1,
+          "start_date": "2026-01-10",
+          "status": "active",
+          "type": "custom",
+          "visibility": "private"
+        }
+      ],
+      "profiles": [
+        {
+          "display_name": "Circle Owner",
+          "id": "55555555-5555-4555-8555-555555555555",
+          "timezone": "America/Toronto"
+        }
+      ]
+    }
+  },
+  "android/post-mobile-circles-join.with-ref.json": {
+    "note": "Seeds the circle behind invite code ABC123 (the code the Android client tests use).",
+    "seed": {
+      "fitcircles": [
+        {
+          "allow_late_join": true,
+          "creator_id": "55555555-5555-4555-8555-555555555555",
+          "end_date": "2026-02-20",
+          "id": "22222222-2222-4222-8222-222222222222",
+          "invite_code": "ABC123",
+          "late_join_deadline": 30,
+          "name": "Test Circle",
+          "participant_count": 1,
+          "start_date": "2026-01-10",
+          "status": "active",
+          "type": "custom",
+          "visibility": "private"
+        }
+      ],
+      "profiles": [
+        {
+          "display_name": "Circle Owner",
+          "id": "55555555-5555-4555-8555-555555555555",
+          "timezone": "America/Toronto"
+        }
+      ]
+    }
+  },
+  "android/put-mobile-circles-id.details.json": {
+    "note": "The body moves end_date to 2026-01-15: seed the caller's own circle starting 2026-01-12 and run before it starts (an end date can't change once a circle has started).",
+    "now": "2026-01-10T12:00:00Z",
+    "seed": {
+      "fitcircle_members": [
+        {
+          "dropped_at": null,
+          "fitcircle_id": "22222222-2222-4222-8222-222222222222",
+          "id": "66666666-6666-4666-8666-666666666666",
+          "role": "owner",
+          "status": "active",
+          "user_id": "11111111-1111-4111-8111-111111111111"
+        }
+      ],
+      "fitcircles": [
+        {
+          "creator_id": "11111111-1111-4111-8111-111111111111",
+          "end_date": "2026-02-20",
+          "id": "22222222-2222-4222-8222-222222222222",
+          "invite_code": "FITABC123",
+          "name": "Test Circle",
+          "participant_count": 1,
+          "start_date": "2026-01-12",
+          "status": "upcoming",
+          "type": "custom",
+          "visibility": "private"
+        }
+      ]
+    }
+  },
+  "android/put-mobile-circles-id.type.json": {
+    "note": "Seeds the caller's own upcoming circle.",
+    "seed": {
+      "fitcircle_members": [
+        {
+          "dropped_at": null,
+          "fitcircle_id": "22222222-2222-4222-8222-222222222222",
+          "id": "66666666-6666-4666-8666-666666666666",
+          "role": "owner",
+          "status": "active",
+          "user_id": "11111111-1111-4111-8111-111111111111"
+        }
+      ],
+      "fitcircles": [
+        {
+          "creator_id": "11111111-1111-4111-8111-111111111111",
+          "end_date": "2026-02-20",
+          "id": "22222222-2222-4222-8222-222222222222",
+          "invite_code": "FITABC123",
+          "name": "Test Circle",
+          "participant_count": 1,
+          "start_date": "2026-01-20",
+          "status": "upcoming",
+          "type": "custom",
+          "visibility": "private"
+        }
+      ]
+    }
+  },
+  "ios/post-mobile-challenges-custom.with-circle.json": {
+    "knownMismatches": {
+      "unit": "Test data uses unit \"seconds\", which is not in the server's unit list. No iOS UI calls createCustomChallenge (APIClient only) and \"seconds\" appears nowhere in the iOS app. Fix the client test data, or add \"seconds\" to the units if it is ever offered."
+    }
+  },
+  "ios/post-mobile-circles-id-leave.no-body.json": {
+    "note": "Seeds a circle the caller is a member of.",
+    "seed": {
+      "fitcircle_members": [
+        {
+          "dropped_at": null,
+          "fitcircle_id": "22222222-2222-4222-8222-222222222222",
+          "id": "66666666-6666-4666-8666-666666666666",
+          "role": "member",
+          "status": "active",
+          "user_id": "11111111-1111-4111-8111-111111111111"
+        }
+      ],
+      "fitcircles": [
+        {
+          "creator_id": "55555555-5555-4555-8555-555555555555",
+          "end_date": "2026-02-20",
+          "id": "22222222-2222-4222-8222-222222222222",
+          "name": "Test Circle",
+          "participant_count": 2,
+          "start_date": "2026-01-10",
+          "status": "active",
+          "type": "custom",
+          "visibility": "private"
+        }
+      ]
+    }
+  },
+  "ios/post-mobile-circles-join.no-ref.json": {
+    "note": "Seeds the circle behind invite code FIT-ABC123 (the code the client tests use).",
+    "seed": {
+      "fitcircles": [
+        {
+          "allow_late_join": true,
+          "creator_id": "55555555-5555-4555-8555-555555555555",
+          "end_date": "2026-02-20",
+          "id": "22222222-2222-4222-8222-222222222222",
+          "invite_code": "FIT-ABC123",
+          "late_join_deadline": 30,
+          "name": "Test Circle",
+          "participant_count": 1,
+          "start_date": "2026-01-10",
+          "status": "active",
+          "type": "custom",
+          "visibility": "private"
+        }
+      ],
+      "profiles": [
+        {
+          "display_name": "Circle Owner",
+          "id": "55555555-5555-4555-8555-555555555555",
+          "timezone": "America/Toronto"
+        }
+      ]
+    }
+  },
+  "ios/post-mobile-circles-join.with-ref.json": {
+    "note": "Seeds the circle behind invite code FIT-ABC123 (the code the client tests use).",
+    "seed": {
+      "fitcircles": [
+        {
+          "allow_late_join": true,
+          "creator_id": "55555555-5555-4555-8555-555555555555",
+          "end_date": "2026-02-20",
+          "id": "22222222-2222-4222-8222-222222222222",
+          "invite_code": "FIT-ABC123",
+          "late_join_deadline": 30,
+          "name": "Test Circle",
+          "participant_count": 1,
+          "start_date": "2026-01-10",
+          "status": "active",
+          "type": "custom",
+          "visibility": "private"
+        }
+      ],
+      "profiles": [
+        {
+          "display_name": "Circle Owner",
+          "id": "55555555-5555-4555-8555-555555555555",
+          "timezone": "America/Toronto"
+        }
+      ]
+    }
+  },
+  "ios/post-mobile-circles.wizard-lobby.json": {
+    "expect": {
+      "type": "weight_loss"
+    },
+    "note": "iOS sends the legacy circle type \"weight\"; the server canonicalises it to weight_loss (CIRCLE_TYPE_ALIASES). Understood, stored canonically."
+  },
+  "ios/post-mobile-streaks-engagement-resume.no-body.json": {
+    "note": "Seeds a paused engagement streak (resume needs one).",
+    "seed": {
+      "engagement_streaks": [
+        {
+          "current_streak": 5,
+          "last_engagement_date": "2026-01-11",
+          "longest_streak": 9,
+          "pause_end_date": "2026-01-20",
+          "pause_start_date": "2026-01-12",
+          "paused": true,
+          "streak_freezes_available": 1,
+          "user_id": "11111111-1111-4111-8111-111111111111"
+        }
+      ]
+    }
+  },
+  "ios/post-streaks-recovery-start.standard.json": {
+    "knownMismatches": {
+      "type": "iOS sends the recovery kind as `type` (standard|premium), which the server drops; it requires recoveryType (weekend_warrior|purchased). Nothing in the app calls it; client fix or delete."
+    }
+  },
+  "ios/put-mobile-circles-id.details.json": {
+    "note": "Seeds the caller's own upcoming circle (the route checks creator_id).",
+    "seed": {
+      "fitcircle_members": [
+        {
+          "dropped_at": null,
+          "fitcircle_id": "22222222-2222-4222-8222-222222222222",
+          "id": "66666666-6666-4666-8666-666666666666",
+          "role": "owner",
+          "status": "active",
+          "user_id": "11111111-1111-4111-8111-111111111111"
+        }
+      ],
+      "fitcircles": [
+        {
+          "creator_id": "11111111-1111-4111-8111-111111111111",
+          "end_date": "2026-02-20",
+          "id": "22222222-2222-4222-8222-222222222222",
+          "invite_code": "FITABC123",
+          "name": "Test Circle",
+          "participant_count": 1,
+          "start_date": "2026-01-20",
+          "status": "upcoming",
+          "type": "custom",
+          "visibility": "private"
+        }
+      ]
+    }
+  },
+  "ios/put-mobile-circles-id.type-only.json": {
+    "note": "Seeds the caller's own upcoming circle.",
+    "seed": {
+      "fitcircle_members": [
+        {
+          "dropped_at": null,
+          "fitcircle_id": "22222222-2222-4222-8222-222222222222",
+          "id": "66666666-6666-4666-8666-666666666666",
+          "role": "owner",
+          "status": "active",
+          "user_id": "11111111-1111-4111-8111-111111111111"
+        }
+      ],
+      "fitcircles": [
+        {
+          "creator_id": "11111111-1111-4111-8111-111111111111",
+          "end_date": "2026-02-20",
+          "id": "22222222-2222-4222-8222-222222222222",
+          "invite_code": "FITABC123",
+          "name": "Test Circle",
+          "participant_count": 1,
+          "start_date": "2026-01-20",
+          "status": "upcoming",
+          "type": "custom",
+          "visibility": "private"
+        }
+      ]
+    }
+  }
+}

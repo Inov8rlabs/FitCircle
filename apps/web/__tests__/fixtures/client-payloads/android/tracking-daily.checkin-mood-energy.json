@@ -1,0 +1,23 @@
+{
+  "description": "Android dashboard check-in with mood/energy and Health Connect steps.",
+  "method": "POST",
+  "path": "/api/mobile/tracking/daily",
+  "body": {
+    "trackingDate": "2026-11-05",
+    "steps": 6500,
+    "moodScore": 7,
+    "energyLevel": 6,
+    "stepsSource": "google_fit",
+    "stepsSyncedAt": "2026-11-05T16:59:00.123Z"
+  },
+  "expect": {
+    "stored": {
+      "daily_tracking": {
+        "tracking_date": "2026-11-05",
+        "steps": 6500,
+        "mood_score": 7,
+        "energy_level": 6
+      }
+    }
+  }
+}

@@ -1,0 +1,26 @@
+{
+  "body" : {
+    "activityLevel" : "light",
+    "age" : 36,
+    "birthYear" : 1990,
+    "goal" : "lose_weight",
+    "heightCm" : 170,
+    "sex" : "female",
+    "targetWeightKg" : 72,
+    "unitsSystem" : "metric",
+    "weightKg" : 80
+  },
+  "expect" : {
+    "activityLevel" : "light",
+    "age" : 36,
+    "birthYear" : 1990,
+    "goal" : "lose_weight",
+    "heightCm" : 170,
+    "sex" : "female",
+    "targetWeightKg" : 72,
+    "unitsSystem" : "metric",
+    "weightKg" : 80
+  },
+  "method" : "POST",
+  "path" : "/api/mobile/onboarding/plan"
+}

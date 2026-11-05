@@ -1,0 +1,10 @@
+{
+  "body": {
+    "goal": "Lose 2 kg"
+  },
+  "expect": {
+    "goal": "Lose 2 kg"
+  },
+  "method": "POST",
+  "path": "/api/mobile/fitzy/plan"
+}

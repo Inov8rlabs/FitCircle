@@ -1,0 +1,37 @@
+{
+  "body": {
+    "cursor": "2026-01-15T12:00:00Z",
+    "items": [
+      {
+        "calories": 540.0,
+        "carbsG": 61.5,
+        "externalId": "hc-nutrition-0001",
+        "fatG": 18.0,
+        "loggedAt": "2026-01-15T12:00:00Z",
+        "name": "Nutrition",
+        "proteinG": 32.0
+      },
+      {
+        "externalId": "hc-hydration-0001",
+        "loggedAt": "2026-01-15T12:00:00Z",
+        "name": "Water"
+      }
+    ],
+    "platform": "healthconnect"
+  },
+  "expect": {
+    "cursor": "2026-01-15T12:00:00Z",
+    "items.0.calories": 540.0,
+    "items.0.carbsG": 61.5,
+    "items.0.externalId": "hc-nutrition-0001",
+    "items.0.fatG": 18.0,
+    "items.0.loggedAt": "2026-01-15T12:00:00Z",
+    "items.0.name": "Nutrition",
+    "items.0.proteinG": 32.0,
+    "items.1.externalId": "hc-hydration-0001",
+    "items.1.name": "Water",
+    "platform": "healthconnect"
+  },
+  "method": "POST",
+  "path": "/api/mobile/health/nutrition-import"
+}

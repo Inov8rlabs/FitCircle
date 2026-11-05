@@ -1,0 +1,38 @@
+{
+  "body": {
+    "celebration_enabled": true,
+    "challenge_enabled": true,
+    "circle_enabled": true,
+    "coach_enabled": true,
+    "journey_enabled": true,
+    "meal_reminders": {
+      "breakfast": true,
+      "dinner": true,
+      "lunch": false,
+      "snack": false
+    },
+    "momentum_enabled": false,
+    "quiet_hours_end": "07:00",
+    "quiet_hours_start": "22:00",
+    "quiet_hours_timezone": "America/Los_Angeles",
+    "social_enabled": false
+  },
+  "expect": {
+    "celebration_enabled": true,
+    "challenge_enabled": true,
+    "circle_enabled": true,
+    "coach_enabled": true,
+    "journey_enabled": true,
+    "meal_reminders.breakfast": true,
+    "meal_reminders.dinner": true,
+    "meal_reminders.lunch": false,
+    "meal_reminders.snack": false,
+    "momentum_enabled": false,
+    "quiet_hours_end": "07:00",
+    "quiet_hours_start": "22:00",
+    "quiet_hours_timezone": "America/Los_Angeles",
+    "social_enabled": false
+  },
+  "method": "PATCH",
+  "path": "/api/mobile/notifications/preferences"
+}

@@ -1,0 +1,10 @@
+{
+  "body" : {
+    "target_weight_kg" : null
+  },
+  "expect" : {
+    "target_weight_kg" : null
+  },
+  "method" : "PUT",
+  "path" : "/api/mobile/vitals/goals"
+}

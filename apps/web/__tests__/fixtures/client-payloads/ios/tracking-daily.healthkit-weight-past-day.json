@@ -1,0 +1,36 @@
+{
+  "description": "iOS 1.1.1 HealthKitSyncService 7-day weight sync (DailyTrackingCreate, CodingKey trackingDate = \"date\"). Before 2d3b427 this was saved to today.",
+  "method": "POST",
+  "path": "/api/mobile/tracking/daily",
+  "body": {
+    "date": "2026-11-02",
+    "weightKg": 80.4,
+    "isOverride": false,
+    "autoClaimStreak": false
+  },
+  "expect": {
+    "parsed": {
+      "date": "2026-11-02",
+      "weightKg": 80.4
+    },
+    "stored": {
+      "daily_tracking": {
+        "user_id": "11111111-1111-4111-8111-111111111111",
+        "tracking_date": "2026-11-02",
+        "weight_kg": 80.4
+      }
+    },
+    "notStored": {
+      "daily_tracking": {
+        "tracking_date": "2026-11-05"
+      }
+    },
+    "response": {
+      "success": true,
+      "meta": {
+        "tracking_date": "2026-11-02",
+        "is_backfill": true
+      }
+    }
+  }
+}

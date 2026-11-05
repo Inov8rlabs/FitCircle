@@ -1,0 +1,14 @@
+{
+  "body" : {
+    "keys" : [
+      "onboarding_paywall"
+    ]
+  },
+  "expect" : {
+    "keys" : [
+      "onboarding_paywall"
+    ]
+  },
+  "method" : "POST",
+  "path" : "/api/mobile/experiments/assign"
+}

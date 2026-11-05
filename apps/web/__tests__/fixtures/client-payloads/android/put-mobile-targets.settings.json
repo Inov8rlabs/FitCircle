@@ -1,0 +1,18 @@
+{
+  "body": {
+    "calories": 1900,
+    "origin": "settings",
+    "proteinG": 140,
+    "steps": 9000,
+    "waterMl": 2500
+  },
+  "expect": {
+    "calories": 1900,
+    "origin": "settings",
+    "proteinG": 140,
+    "steps": 9000,
+    "waterMl": 2500
+  },
+  "method": "PUT",
+  "path": "/api/mobile/targets"
+}

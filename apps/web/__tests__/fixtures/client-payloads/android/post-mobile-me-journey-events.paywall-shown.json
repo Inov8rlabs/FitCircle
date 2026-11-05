@@ -1,0 +1,14 @@
+{
+  "body": {
+    "automatic": true,
+    "event": "paywall_shown",
+    "placement": "first_meal_aha"
+  },
+  "expect": {
+    "automatic": true,
+    "event": "paywall_shown",
+    "placement": "first_meal_aha"
+  },
+  "method": "POST",
+  "path": "/api/mobile/me/journey/events"
+}

@@ -1,0 +1,12 @@
+{
+  "body" : {
+    "date" : "2026-01-15",
+    "done" : true
+  },
+  "expect" : {
+    "date" : "2026-01-15",
+    "done" : true
+  },
+  "method" : "POST",
+  "path" : "/api/mobile/fitzy/plan/commitments/33333333-3333-4333-8333-333333333333/check"
+}

@@ -1,0 +1,28 @@
+{
+  "description": "iOS DailyGoal.swift CreateDailyGoalRequest: start_date is Date() through the .iso8601 encoder. 6pm in Los Angeles = 02:00Z tomorrow; was stored as the UTC date (tomorrow).",
+  "method": "POST",
+  "path": "/api/mobile/daily-goals",
+  "now": "2026-11-06T02:00:00Z",
+  "headers": {
+    "x-client-timezone": "America/Los_Angeles"
+  },
+  "body": {
+    "goal_type": "steps",
+    "target_value": 8000,
+    "unit": "steps",
+    "start_date": "2026-11-06T02:00:00Z",
+    "frequency": "daily",
+    "is_primary": true,
+    "auto_adjust_enabled": false
+  },
+  "expect": {
+    "stored": {
+      "daily_goals": {
+        "user_id": "11111111-1111-4111-8111-111111111111",
+        "goal_type": "steps",
+        "target_value": 8000,
+        "start_date": "2026-11-05"
+      }
+    }
+  }
+}

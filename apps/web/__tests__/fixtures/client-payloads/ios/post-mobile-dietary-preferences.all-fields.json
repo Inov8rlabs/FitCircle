@@ -1,0 +1,18 @@
+{
+  "body" : {
+    "allergens" : [
+      "peanuts"
+    ],
+    "diet" : "vegetarian",
+    "units" : "imperial"
+  },
+  "expect" : {
+    "allergens" : [
+      "peanuts"
+    ],
+    "diet" : "vegetarian",
+    "units" : "imperial"
+  },
+  "method" : "POST",
+  "path" : "/api/mobile/dietary-preferences"
+}

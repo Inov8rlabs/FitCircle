@@ -1,0 +1,19 @@
+{
+  "body" : {
+    "goal_type" : "steps",
+    "target_value" : 70000,
+    "week_start" : "2026-01-15T12:00:00Z"
+  },
+  "expect" : {
+    "goal_type" : "steps",
+    "target_value" : 70000,
+    "week_start" : "2026-01-15"
+  },
+  "knownMismatches" : {
+    "goal_type" : "POST /api/goals/weekly generates goals; it never reads goal_type.",
+    "target_value" : "POST /api/goals/weekly generates goals; it never reads target_value.",
+    "week_start" : "iOS sends an ISO-8601 datetime (2026-01-15T12:00:00Z); the route uses it as a YYYY-MM-DD week start."
+  },
+  "method" : "POST",
+  "path" : "/api/goals/weekly"
+}

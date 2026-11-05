@@ -89,13 +89,18 @@ export interface FoodSearchParams {
 export const createCustomFoodSchema = z.object({
   name: z.string().min(1).max(200),
   brand: z.string().max(200).optional(),
-  servingSizeG: z.number().positive().optional(),
+  // Shipped iOS sends whatever the serving-size field parses to; 0 means "not set"
+  // (was a 400). Any other non-positive value still fails.
+  servingSizeG: z.preprocess((v) => (v === 0 ? undefined : v), z.number().positive().optional()),
   servingUnit: z.string().max(60).optional(),
   per100g: z.object({
-    calories: z.number().nonnegative(),
-    proteinG: z.number().nonnegative(),
-    carbsG: z.number().nonnegative(),
-    fatG: z.number().nonnegative(),
+    // Shipped iOS omits a macro whose field was left blank (Double("") is nil, and
+    // synthesized Encodable skips nils), which used to 400 the whole save. A blank
+    // macro is 0, the same thing Android sends for a blank field.
+    calories: z.number().nonnegative().default(0),
+    proteinG: z.number().nonnegative().default(0),
+    carbsG: z.number().nonnegative().default(0),
+    fatG: z.number().nonnegative().default(0),
     fiberG: z.number().nonnegative().optional(),
     sugarG: z.number().nonnegative().optional(),
   }),

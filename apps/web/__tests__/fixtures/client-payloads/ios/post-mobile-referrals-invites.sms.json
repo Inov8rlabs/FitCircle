@@ -1,0 +1,16 @@
+{
+  "body" : {
+    "contacts" : [
+      {
+        "channel" : "sms",
+        "phone" : "+15555550100"
+      }
+    ]
+  },
+  "expect" : {
+    "contacts.0.channel" : "sms",
+    "contacts.0.phone" : "+15555550100"
+  },
+  "method" : "POST",
+  "path" : "/api/mobile/referrals/invites"
+}

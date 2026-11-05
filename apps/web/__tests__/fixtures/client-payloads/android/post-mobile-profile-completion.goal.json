@@ -1,0 +1,14 @@
+{
+  "body": {
+    "key": "goal",
+    "source": "home_card",
+    "value": "build_muscle"
+  },
+  "expect": {
+    "key": "goal",
+    "source": "home_card",
+    "value": "build_muscle"
+  },
+  "method": "POST",
+  "path": "/api/mobile/profile/completion"
+}

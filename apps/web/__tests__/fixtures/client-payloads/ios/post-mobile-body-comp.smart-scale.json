@@ -1,0 +1,40 @@
+{
+  "body" : {
+    "bmrKcal" : 1650,
+    "bodyFatPct" : 18.199999999999999,
+    "bodyWaterKg" : 41,
+    "boneMassKg" : 3.2000000000000002,
+    "measuredAt" : "2026-01-15T12:00:00Z",
+    "notes" : "Morning",
+    "segmental" : {
+      "leftArm" : {
+        "leanKg" : 3.1000000000000001
+      },
+      "trunk" : {
+        "leanKg" : 25.399999999999999,
+        "pctOfIdeal" : 102
+      }
+    },
+    "skeletalMuscleMassKg" : 33.100000000000001,
+    "source" : "smart_scale",
+    "visceralFatLevel" : 6,
+    "weightKg" : 72.5
+  },
+  "expect" : {
+    "bmrKcal" : 1650,
+    "bodyFatPct" : 18.199999999999999,
+    "bodyWaterKg" : 41,
+    "boneMassKg" : 3.2000000000000002,
+    "measuredAt" : "2026-01-15T12:00:00Z",
+    "notes" : "Morning",
+    "segmental.leftArm.leanKg" : 3.1000000000000001,
+    "segmental.trunk.leanKg" : 25.399999999999999,
+    "segmental.trunk.pctOfIdeal" : 102,
+    "skeletalMuscleMassKg" : 33.100000000000001,
+    "source" : "smart_scale",
+    "visceralFatLevel" : 6,
+    "weightKg" : 72.5
+  },
+  "method" : "POST",
+  "path" : "/api/mobile/body-comp"
+}

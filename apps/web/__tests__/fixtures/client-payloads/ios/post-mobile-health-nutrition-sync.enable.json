@@ -1,0 +1,12 @@
+{
+  "body" : {
+    "enabled" : true,
+    "platform" : "healthkit"
+  },
+  "expect" : {
+    "enabled" : true,
+    "platform" : "healthkit"
+  },
+  "method" : "POST",
+  "path" : "/api/mobile/health/nutrition-sync"
+}

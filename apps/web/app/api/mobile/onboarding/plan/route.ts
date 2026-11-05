@@ -3,6 +3,7 @@ import { type NextRequest } from 'next/server';
 import { mobileFailFrom, ok, readJson } from '@/lib/experiments/http';
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { OnboardingFlowService, planWithBirthDateSchema } from '@/lib/services/onboarding-flow-service';
+import { parseLenient } from '@/lib/validation/lenient-parse';
 
 export const dynamic = 'force-dynamic';
 
@@ -21,7 +22,7 @@ export async function POST(request: NextRequest) {
   const startTime = Date.now();
   try {
     const user = await requireMobileAuth(request);
-    const input = planWithBirthDateSchema.parse(await readJson(request));
+    const input = parseLenient(planWithBirthDateSchema, await readJson(request));
     await OnboardingFlowService.saveBirthDate(user.id, input);
     return ok(OnboardingFlowService.plan(user, input), startTime);
   } catch (error) {

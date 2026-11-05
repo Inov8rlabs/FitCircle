@@ -1,0 +1,16 @@
+{
+  "body" : {
+    "card_data" : {
+      "days" : "7",
+      "milestone_name" : "Week Warrior"
+    },
+    "card_type" : "streak_milestone"
+  },
+  "expect" : {
+    "card_data.days" : "7",
+    "card_data.milestone_name" : "Week Warrior",
+    "card_type" : "streak_milestone"
+  },
+  "method" : "POST",
+  "path" : "/api/mobile/share/cards"
+}

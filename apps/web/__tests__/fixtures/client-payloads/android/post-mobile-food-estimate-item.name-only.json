@@ -1,0 +1,10 @@
+{
+  "body": {
+    "name": "Greek yogurt"
+  },
+  "expect": {
+    "name": "Greek yogurt"
+  },
+  "method": "POST",
+  "path": "/api/mobile/food/estimate-item"
+}

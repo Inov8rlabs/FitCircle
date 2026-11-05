@@ -1,0 +1,16 @@
+{
+  "body" : {
+    "existing_entry_id" : "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+    "skip_fallback_save" : true,
+    "source" : "text",
+    "transcript" : "a bowl of ramen"
+  },
+  "expect" : {
+    "existing_entry_id" : "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+    "skip_fallback_save" : true,
+    "source" : "text",
+    "transcript" : "a bowl of ramen"
+  },
+  "method" : "POST",
+  "path" : "/api/mobile/food/voice-parse"
+}

@@ -1,0 +1,25 @@
+{
+  "description": "iOS FoodSearchFeature: blank macro fields are Double(\"\") = nil and omitted by synthesized Encodable. Was 400 (per100g.proteinG required).",
+  "method": "POST",
+  "path": "/api/mobile/foods/custom",
+  "body": {
+    "name": "Protein bar",
+    "servingSizeG": 60,
+    "per100g": {
+      "calories": 380
+    }
+  },
+  "expect": {
+    "status": 201,
+    "parsed": {
+      "name": "Protein bar",
+      "servingSizeG": 60,
+      "per100g": {
+        "calories": 380,
+        "proteinG": 0,
+        "carbsG": 0,
+        "fatG": 0
+      }
+    }
+  }
+}

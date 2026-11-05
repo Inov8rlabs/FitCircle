@@ -5,6 +5,7 @@ import { mobileFailFrom, ok, readJson } from '@/lib/experiments/http';
 import { ARM_KEY_PATTERN } from '@/lib/experiments/model';
 import { ExperimentService } from '@/lib/experiments/service';
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
+import { parseLenient } from '@/lib/validation/lenient-parse';
 
 export const dynamic = 'force-dynamic';
 
@@ -27,7 +28,7 @@ export async function POST(request: NextRequest) {
   const startTime = Date.now();
   try {
     const user = await requireMobileAuth(request);
-    const { key, arm, surface } = bodySchema.parse(await readJson(request));
+    const { key, arm, surface } = parseLenient(bodySchema, await readJson(request));
     await ExperimentService.recordExposure(user.id, key, arm, surface);
     return ok({ ok: true }, startTime);
   } catch (error) {

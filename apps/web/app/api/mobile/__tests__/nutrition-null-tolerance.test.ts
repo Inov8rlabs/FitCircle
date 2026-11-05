@@ -14,6 +14,14 @@ const record = (name: string, args: any[]) => {
 vi.mock('@/lib/middleware/mobile-auth', () => ({
   requireMobileAuth: async () => ({ id: 'user-1' }),
 }));
+// nutrition-import resolves the member's timezone (header, then profile) to date samples.
+vi.mock('@/lib/supabase-admin', () => ({
+  createAdminSupabase: () => ({
+    from: () => ({
+      select: () => ({ eq: () => ({ single: async () => ({ data: { timezone: 'UTC' }, error: null }) }) }),
+    }),
+  }),
+}));
 vi.mock('@/lib/services/usage-service', () => {
   class UpgradeRequiredError extends Error {
     constructor(
@@ -199,8 +207,14 @@ describe('custom food', () => {
     expect(calls.createCustomFood[0][1]).toEqual(body);
   });
 
-  it('a required macro that is null is still a 400, now with a readable message', async () => {
+  it('a core macro that is null or absent is a blank field: 0 (shipped iOS omits blanks; was a 400)', async () => {
     const res = await customFood(req({ name: 'Granola', per100g: { ...per100g, calories: null } }));
+    expect(res.status).toBe(201);
+    expect(calls.createCustomFood[0][1].per100g.calories).toBe(0);
+  });
+
+  it('an invalid macro is still a 400, with a readable message', async () => {
+    const res = await customFood(req({ name: 'Granola', per100g: { ...per100g, calories: -5 } }));
     expect(res.status).toBe(400);
     const body = await res.json();
     expect(body.error.code).toBe('VALIDATION_ERROR');

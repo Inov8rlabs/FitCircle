@@ -31,6 +31,8 @@ function applyAliases(body: unknown, aliases: Record<string, string>): unknown {
   for (const [alias, canonical] of Object.entries(aliases)) {
     if (out[canonical] === undefined && out[alias] !== undefined) {
       out[canonical] = out[alias];
+      // Consumed: not reported as a dropped key (the schema would strip it anyway).
+      delete out[alias];
     }
   }
   return out;

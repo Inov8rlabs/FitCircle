@@ -14,6 +14,7 @@ import { readExperimentRequestInfo } from '@/lib/experiments/request-info';
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { fail, ok } from '@/lib/referrals/http';
 import { RatingPromptService } from '@/lib/services/rating-prompt-service';
+import { safeParseLenient } from '@/lib/validation/lenient-parse';
 
 export const dynamic = 'force-dynamic';
 
@@ -33,7 +34,7 @@ export async function POST(request: NextRequest) {
   } catch {
     body = undefined;
   }
-  const parsed = bodySchema.safeParse(body);
+  const parsed = safeParseLenient(bodySchema, body);
   if (!parsed.success) return fail(400, 'VALIDATION_ERROR', 'trigger is required (snake_case key)');
   const info = readExperimentRequestInfo(request);
   try {

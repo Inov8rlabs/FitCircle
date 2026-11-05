@@ -1,0 +1,12 @@
+{
+  "body": {
+    "security": {
+      "biometric_auth_enabled": true
+    }
+  },
+  "expect": {
+    "security.biometric_auth_enabled": true
+  },
+  "method": "PUT",
+  "path": "/api/mobile/settings/preferences"
+}

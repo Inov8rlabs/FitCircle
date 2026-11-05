@@ -1,0 +1,28 @@
+{
+  "body": {
+    "allowLateJoin": true,
+    "description": "Walk every day",
+    "endDate": "2026-02-14",
+    "lateJoinDeadline": 3,
+    "lobby": {
+      "minMembers": 3
+    },
+    "name": "Morning Movers",
+    "startDate": "2026-01-15",
+    "type": "step_count",
+    "visibility": "invite_only"
+  },
+  "expect": {
+    "allowLateJoin": true,
+    "description": "Walk every day",
+    "endDate": "2026-02-14",
+    "lateJoinDeadline": 3,
+    "lobby.minMembers": 3,
+    "name": "Morning Movers",
+    "startDate": "2026-01-15",
+    "type": "step_count",
+    "visibility": "invite_only"
+  },
+  "method": "POST",
+  "path": "/api/mobile/circles"
+}

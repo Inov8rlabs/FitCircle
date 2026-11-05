@@ -1,0 +1,27 @@
+{
+  "body" : {
+    "items" : [
+      {
+        "externalId" : "33333333-3333-4333-8333-333333333333",
+        "measuredAt" : "2026-01-15T12:00:00Z",
+        "weightKg" : 72.5
+      },
+      {
+        "bmrKcal" : 1650,
+        "externalId" : "44444444-4444-4444-8444-444444444444",
+        "measuredAt" : "2026-01-15T12:00:00Z"
+      }
+    ],
+    "platform" : "healthkit"
+  },
+  "expect" : {
+    "items.0.externalId" : "33333333-3333-4333-8333-333333333333",
+    "items.0.measuredAt" : "2026-01-15T12:00:00Z",
+    "items.0.weightKg" : 72.5,
+    "items.1.bmrKcal" : 1650,
+    "items.1.externalId" : "44444444-4444-4444-8444-444444444444",
+    "platform" : "healthkit"
+  },
+  "method" : "POST",
+  "path" : "/api/mobile/body-comp/import"
+}

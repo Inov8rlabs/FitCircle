@@ -1,0 +1,14 @@
+{
+  "body" : {
+    "is_active" : true,
+    "is_primary" : true,
+    "target_value" : 12000
+  },
+  "expect" : {
+    "is_active" : true,
+    "is_primary" : true,
+    "target_value" : 12000
+  },
+  "method" : "PATCH",
+  "path" : "/api/mobile/daily-goals/33333333-3333-4333-8333-333333333333"
+}

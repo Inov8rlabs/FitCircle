@@ -1,9 +1,10 @@
 import { type NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 
-import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { CLIENT_FEATURES_HEADER } from '@/lib/design/icon-compat';
+import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { PushService, parseClientFeatures } from '@/lib/services/push-service';
+import { parseLenient } from '@/lib/validation/lenient-parse';
 
 const registerSchema = z.object({
   token: z.string().min(1),
@@ -19,7 +20,7 @@ export async function POST(request: NextRequest) {
   try {
     const user = await requireMobileAuth(request);
     const body = await request.json();
-    const validated = registerSchema.parse(body);
+    const validated = parseLenient(registerSchema, body);
 
     const tokenRecord = await PushService.registerToken(
       user.id,

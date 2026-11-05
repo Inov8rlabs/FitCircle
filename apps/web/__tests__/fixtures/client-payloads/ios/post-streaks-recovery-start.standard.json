@@ -1,0 +1,15 @@
+{
+  "body" : {
+    "brokenDate" : "2026-01-15",
+    "type" : "standard"
+  },
+  "expect" : {
+    "brokenDate" : "2026-01-15",
+    "recoveryType" : "weekend_warrior"
+  },
+  "knownMismatches" : {
+    "recoveryType" : "iOS sends `type: \"standard\"|\"premium\"`; the server requires `recoveryType: \"weekend_warrior\"|\"purchased\"` (400). No UI calls it today."
+  },
+  "method" : "POST",
+  "path" : "/api/streaks/recovery/start"
+}

@@ -1,0 +1,12 @@
+{
+  "body": {
+    "platform": "android",
+    "source": "organic"
+  },
+  "expect": {
+    "platform": "android",
+    "source": "organic"
+  },
+  "method": "POST",
+  "path": "/api/mobile/attribution"
+}

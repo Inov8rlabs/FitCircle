@@ -1,0 +1,18 @@
+{
+  "body": {
+    "client_id": "33333333-3333-4333-8333-333333333333",
+    "message": "Keep going",
+    "reaction": "fire",
+    "source": "member_sheet",
+    "to_user_id": "44444444-4444-4444-8444-444444444444"
+  },
+  "expect": {
+    "client_id": "33333333-3333-4333-8333-333333333333",
+    "message": "Keep going",
+    "reaction": "fire",
+    "source": "member_sheet",
+    "to_user_id": "44444444-4444-4444-8444-444444444444"
+  },
+  "method": "POST",
+  "path": "/api/mobile/circles/22222222-2222-4222-8222-222222222222/cheers"
+}

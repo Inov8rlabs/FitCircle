@@ -1,5 +1,6 @@
-import { createAdminSupabase } from '../supabase-admin';
 import { logIgnoredQueryError } from '@/lib/api/route-errors';
+
+import { createAdminSupabase } from '../supabase-admin';
 
 // ============================================================================
 // TYPES
@@ -404,6 +405,12 @@ export class DailyChallengeService {
       rank: await this.getRankForProgress(challengeId, progress),
       user_joined: true,
     };
+  }
+
+  /** The challenge's goal in its own units, or null when the challenge does not exist. */
+  static async getGoalAmount(challengeId: string): Promise<number | null> {
+    const challenge = await this.getChallengeById(challengeId);
+    return challenge ? toNumber(challenge.goal_amount) : null;
   }
 
   /** Number of users who joined the challenge (exact, from the participant rows). */

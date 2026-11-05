@@ -121,6 +121,8 @@ function applyAliases(body: unknown, aliases: Record<string, string>): unknown {
     const hasCanonical = out[canonical] !== undefined && out[canonical] !== null;
     if (!hasCanonical && out[alias] !== undefined && out[alias] !== null) {
       out[canonical] = out[alias];
+      // Consumed: not reported as a dropped key (the schema would strip it anyway).
+      delete out[alias];
     }
   }
   return out;

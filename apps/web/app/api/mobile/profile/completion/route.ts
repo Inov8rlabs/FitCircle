@@ -5,6 +5,7 @@ import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { profileAnswerSchema } from '@/lib/profile-completion/model';
 import { ProfileCompletionService } from '@/lib/services/profile-completion-service';
 import { resolveClientTimezone } from '@/lib/streaks/client-timezone';
+import { parseLenient } from '@/lib/validation/lenient-parse';
 
 export const dynamic = 'force-dynamic';
 
@@ -40,7 +41,7 @@ export async function POST(request: NextRequest) {
   const startTime = Date.now();
   try {
     const user = await requireMobileAuth(request);
-    const answer = profileAnswerSchema.parse(await readJson(request));
+    const answer = parseLenient(profileAnswerSchema, await readJson(request));
     return ok(await ProfileCompletionService.answer(user.id, answer, { timezone: resolveClientTimezone(request) }), startTime);
   } catch (error) {
     return mobileFailFrom(error, 'profile/completion');
