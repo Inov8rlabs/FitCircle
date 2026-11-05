@@ -5,7 +5,7 @@ import { motion } from 'framer-motion';
 import { AlertCircle, ArrowRight, Loader2, Lock, Mail, MailCheck } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { useEffect, useState, Suspense } from 'react';
+import { useCallback, useEffect, useState, Suspense } from 'react';
 import { useForm } from 'react-hook-form';
 import * as z from 'zod';
 
@@ -13,11 +13,14 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { LogoIcon } from '@/components/ui/logo';
+import { EMAIL_INPUT_ATTRS, EmailSuggestionChip, useAuthEmailField } from '@/hooks/useAuthEmailField';
 import { useAuthStore } from '@/stores/auth-store';
 import { useUIStore } from '@/stores/ui-store';
 
 const loginSchema = z.object({
-  email: z.string().email('Invalid email address'),
+  // Checked (and cleaned) by useAuthEmailField: a stray space from the keyboard
+  // must never block sign-in.
+  email: z.string(),
   password: z.string().min(6, 'Password must be at least 6 characters'),
   remember: z.boolean().optional(),
 });
@@ -60,6 +63,12 @@ function LoginForm() {
     },
   });
 
+  const setEmail = useCallback(
+    (value: string) => setValue('email', value, { shouldDirty: true }),
+    [setValue]
+  );
+  const emailField = useAuthEmailField('log_in', setEmail);
+
   // Reset transient store error when the user starts typing again so the
   // banner doesn't linger after they've already begun retrying.
   useEffect(() => {
@@ -85,7 +94,7 @@ function LoginForm() {
   };
 
   const handleResendConfirmation = async () => {
-    const email = getValues('email');
+    const email = emailField.resolveForSubmit(getValues('email'));
     if (!email) {
       setFocus('email');
       return;
@@ -126,16 +135,27 @@ function LoginForm() {
 
           <Card className="bg-surface-raised/50 border-hairline backdrop-blur-xl">
             <CardContent className="p-6">
-            <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+            <form
+              noValidate
+              onSubmit={(e) => {
+                const email = emailField.resolveForSubmit(getValues('email'));
+                return handleSubmit((data) => (email ? onSubmit({ ...data, email }) : undefined))(e);
+              }}
+              className="space-y-4"
+            >
               <div>
                 <Input
-                  {...register('email')}
-                  type="email"
+                  {...register('email', {
+                    onChange: (e) => emailField.onChange(e.target.value),
+                    onBlur: (e) => emailField.onBlur(e.target.value),
+                  })}
+                  {...EMAIL_INPUT_ATTRS}
                   placeholder="Email address"
                   leftIcon={<Mail className="h-4 w-4" />}
-                  error={errors.email?.message}
-                  autoComplete="email"
+                  error={emailField.hint?.message ?? errors.email?.message}
+                  data-testid="login-email"
                 />
+                <EmailSuggestionChip suggestion={emailField.hint?.suggestion} onApply={emailField.applySuggestion} />
               </div>
 
               <div>

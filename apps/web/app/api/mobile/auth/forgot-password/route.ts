@@ -3,10 +3,11 @@ import { type NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 
 import { createRateLimiter, getIdentifier, applyRateLimit } from '@/lib/middleware/rate-limit';
+import { authEmailSchema } from '@/lib/validation/auth-email';
 import { parseLenient } from '@/lib/validation/lenient-parse';
 
 const forgotPasswordSchema = z.object({
-  email: z.string().email(),
+  email: authEmailSchema('Invalid email'),
 });
 
 const forgotPasswordRateLimiter = createRateLimiter({

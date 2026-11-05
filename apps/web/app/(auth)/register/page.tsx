@@ -17,7 +17,7 @@ import {
   Loader2,
 } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { useState, useEffect, useMemo, Suspense } from 'react';
+import { useState, useEffect, useMemo, useCallback, Suspense } from 'react';
 import { useForm } from 'react-hook-form';
 import * as z from 'zod';
 
@@ -26,6 +26,7 @@ import { TermsModal } from '@/components/legal/TermsModal';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { LogoIcon } from '@/components/ui/logo';
+import { EMAIL_INPUT_ATTRS, EmailSuggestionChip, useAuthEmailField } from '@/hooks/useAuthEmailField';
 import { useFormPersistence } from '@/hooks/useFormPersistence';
 import { AnalyticsEvents, analytics } from '@/lib/analytics';
 import { normalizeCode } from '@/lib/referrals/links';
@@ -40,7 +41,9 @@ import { useAuthStore } from '@/stores/auth-store';
 import { useUIStore } from '@/stores/ui-store';
 
 const registerSchema = z.object({
-  email: z.string().email('Please enter a valid email'),
+  // Checked (and cleaned) by useAuthEmailField: keyboard artefacts like
+  // `gmail com` are fixed, a likely typo is flagged once.
+  email: z.string(),
   password: z.string().min(8, 'Password must be at least 8 characters'),
   name: z.string().min(2, 'Name must be at least 2 characters'),
   termsAccepted: z.boolean().refine((val) => val === true, {
@@ -91,6 +94,7 @@ function RegisterForm() {
     handleSubmit,
     watch,
     setValue,
+    getValues,
     formState: { errors, isSubmitting, isDirty },
   } = useForm<RegisterFormData>({
     resolver: zodResolver(registerSchema),
@@ -101,6 +105,12 @@ function RegisterForm() {
       termsAccepted: false,
     },
   });
+
+  const setEmail = useCallback(
+    (value: string) => setValue('email', value, { shouldDirty: true }),
+    [setValue]
+  );
+  const emailField = useAuthEmailField('sign_up', setEmail);
 
   const name = watch('name');
   const email = watch('email');
@@ -277,7 +287,14 @@ function RegisterForm() {
             )}
 
             {/* Registration Form */}
-            <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+            <form
+              noValidate
+              onSubmit={(e) => {
+                const cleaned = emailField.resolveForSubmit(getValues('email'));
+                return handleSubmit((data) => (cleaned ? onSubmit({ ...data, email: cleaned }) : undefined))(e);
+              }}
+              className="space-y-4"
+            >
               <div className="space-y-4">
                 <div>
                   <label htmlFor="name" className="block text-sm font-medium mb-2 text-gray-300">
@@ -306,13 +323,21 @@ function RegisterForm() {
                       <Mail className="h-5 w-5 text-gray-500" />
                     </div>
                     <input
-                      {...register('email')}
-                      type="email"
+                      {...register('email', {
+                        onChange: (e) => emailField.onChange(e.target.value),
+                        onBlur: (e) => emailField.onBlur(e.target.value),
+                      })}
+                      {...EMAIL_INPUT_ATTRS}
+                      id="email"
+                      data-testid="register-email"
                       className="block w-full pl-10 pr-3 py-3 border border-slate-700 rounded-lg bg-slate-900/50 text-white placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
                       placeholder="you@example.com"
                     />
                   </div>
-                  {errors.email && <p className="mt-1 text-sm text-red-500">{errors.email.message}</p>}
+                  {(emailField.hint?.message ?? errors.email?.message) && (
+                    <p className="mt-1 text-sm text-red-500">{emailField.hint?.message ?? errors.email?.message}</p>
+                  )}
+                  <EmailSuggestionChip suggestion={emailField.hint?.suggestion} onApply={emailField.applySuggestion} />
                 </div>
 
                 <div>

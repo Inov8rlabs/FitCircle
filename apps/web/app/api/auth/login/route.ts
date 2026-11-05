@@ -3,10 +3,11 @@ import { type NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 
 import { authRateLimiter, getIdentifier, applyRateLimit } from '@/lib/middleware/rate-limit';
+import { authEmailSchema } from '@/lib/validation/auth-email';
 
 // Validation schema
 const loginSchema = z.object({
-  email: z.string().email('Invalid email address'),
+  email: authEmailSchema(),
   password: z.string().min(1, 'Password is required'),
 });
 

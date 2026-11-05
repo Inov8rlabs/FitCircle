@@ -237,6 +237,9 @@ export function InviteByContactForm({ smsBody, focusSignal, source, onSent }: Pr
             aria-invalid={Boolean(fieldError)}
             autoComplete="off"
             inputMode="email"
+            autoCapitalize="off"
+            autoCorrect="off"
+            spellCheck={false}
             className="min-w-0 flex-[2] rounded-xl border border-slate-700 bg-slate-950/60 px-4 py-3 text-white placeholder:text-gray-500 focus:border-purple-500 focus:outline-none"
           />
           <input

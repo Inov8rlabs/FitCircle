@@ -12,10 +12,11 @@ import {
   ensureUniqueUsername,
 } from '@/lib/services/username-service';
 import { triggerWelcomeEmail } from '@/lib/services/welcome-email-service';
+import { authEmailSchema } from '@/lib/validation/auth-email';
 
 // Validation schema
 const registerSchema = z.object({
-  email: z.string().email('Invalid email address'),
+  email: authEmailSchema(),
   password: z.string().min(8, 'Password must be at least 8 characters'),
   fullName: z.string().min(2, 'Full name is required'),
   // Optional: derived from the email when the form doesn't collect one.

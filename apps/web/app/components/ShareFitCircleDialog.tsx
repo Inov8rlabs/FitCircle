@@ -419,6 +419,11 @@ Let's do this! 🚀`;
                     <div className="flex-1">
                       <Input
                         type="email"
+                        inputMode="email"
+                        autoComplete="off"
+                        autoCapitalize="off"
+                        autoCorrect="off"
+                        spellCheck={false}
                         placeholder={`friend${index + 1}@example.com`}
                         value={email}
                         onChange={(e) => handleEmailChange(index, e.target.value)}

@@ -14,12 +14,13 @@ import {
   ensureUniqueUsername,
 } from '@/lib/services/username-service';
 import { triggerWelcomeEmail } from '@/lib/services/welcome-email-service';
+import { authEmailSchema } from '@/lib/validation/auth-email';
 import { coerceDisplayName } from '@/lib/validation/display-name';
 import { parseLenient } from '@/lib/validation/lenient-parse';
 
 // Validation schema
 const registerSchema = z.object({
-  email: z.string().email('Invalid email address'),
+  email: authEmailSchema(),
   password: z.string().min(8, 'Password must be at least 8 characters'),
   // Optional: clients that don't collect a username (iOS) omit it and the
   // server derives a valid, unique one from the email. When provided it must

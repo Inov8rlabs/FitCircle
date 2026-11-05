@@ -5,11 +5,12 @@ import { z } from 'zod';
 import { authRateLimiter, getIdentifier, applyRateLimit } from '@/lib/middleware/rate-limit';
 import { MobileAPIService } from '@/lib/services/mobile-api-service';
 import { toMobileUser } from '@/lib/services/mobile-profile-response';
+import { authEmailSchema } from '@/lib/validation/auth-email';
 import { parseLenient, validationMessage } from '@/lib/validation/lenient-parse';
 
 // Validation schema
 const loginSchema = z.object({
-  email: z.string().email('Invalid email address'),
+  email: authEmailSchema(),
   password: z.string().min(1, 'Password is required'),
 });
 

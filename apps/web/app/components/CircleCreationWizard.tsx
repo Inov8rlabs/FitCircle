@@ -1379,6 +1379,12 @@ export default function CircleCreationWizard({ isOpen, onClose, onSuccess, initi
                       <Mail className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
                       <Input
                         placeholder="friend@example.com"
+                        type="email"
+                        inputMode="email"
+                        autoComplete="off"
+                        autoCapitalize="off"
+                        autoCorrect="off"
+                        spellCheck={false}
                         value={emailInput}
                         onChange={(e) => setEmailInput(e.target.value)}
                         onKeyDown={(e) => {

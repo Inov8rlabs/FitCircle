@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 // --- Supabase stub: profiles lookup + auth.signUp + profiles insert -------------
-const state = { taken: new Set<string>(), inserted: [] as any[] };
+const state = { taken: new Set<string>(), inserted: [] as any[], signUpEmails: [] as string[] };
 const stub = {
   from: (table: string) => ({
     select: () => ({
@@ -15,7 +15,7 @@ const stub = {
     },
   }),
   auth: {
-    signUp: async ({ email }: { email: string }) => ({ data: { user: { id: 'user-1', email } }, error: null }),
+    signUp: async ({ email }: { email: string }) => (state.signUpEmails.push(email), { data: { user: { id: 'user-1', email } }, error: null }),
     admin: { deleteUser: async () => ({}) },
   },
 };
@@ -37,7 +37,7 @@ const post = (body: unknown) =>
   POST(new Request('http://localhost/api/mobile/auth/register', { method: 'POST', body: JSON.stringify(body), headers: { 'content-type': 'application/json' } }) as any);
 
 describe('POST /api/mobile/auth/register', () => {
-  beforeEach(() => { state.taken = new Set(); state.inserted = []; process.env.NEXT_PUBLIC_SUPABASE_URL = 'http://x'; process.env.SUPABASE_SERVICE_ROLE_KEY = 'k'; });
+  beforeEach(() => { state.taken = new Set(); state.inserted = []; state.signUpEmails = []; process.env.NEXT_PUBLIC_SUPABASE_URL = 'http://x'; process.env.SUPABASE_SERVICE_ROLE_KEY = 'k'; });
 
   it('derives a valid username from a dotted email when none is sent (the production bug)', async () => {
     const res = await post({ email: 'fitcircle.user@gmail.com', password: 'password123', displayName: 'Fitcircle User' });
@@ -66,5 +66,20 @@ describe('POST /api/mobile/auth/register', () => {
     const res = await post({ email: 'a@b.com', password: 'password123', displayName: 'A', username: 'Anki' });
     expect(res.status).toBe(409);
     expect((await res.json()).code).toBe('USERNAME_EXISTS');
+  });
+
+  it('accepts an address with keyboard artefacts and stores it cleaned and lower-cased', async () => {
+    const res = await post({ email: ' Abajirao.Apps@Gmail com\n', password: 'password123', displayName: 'A' });
+    expect(res.status).toBe(201);
+    expect(state.signUpEmails).toEqual(['abajirao.apps@gmail.com']);
+    const profile = state.inserted.find((i) => i.table === 'profiles')?.row;
+    expect(profile.email).toBe('abajirao.apps@gmail.com');
+    expect(profile.username).toBe('abajirao.apps');
+  });
+
+  it('still rejects an address that is not well-formed', async () => {
+    const res = await post({ email: 'john smith@gmail', password: 'password123', displayName: 'A' });
+    expect(res.status).toBe(400);
+    expect((await res.json()).code).toBe('VALIDATION_ERROR');
   });
 });

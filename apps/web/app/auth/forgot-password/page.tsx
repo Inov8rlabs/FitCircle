@@ -5,7 +5,7 @@ import { motion } from 'framer-motion';
 import { AlertCircle, ArrowRight, Mail, MailCheck } from 'lucide-react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-import { useState, Suspense } from 'react';
+import { useCallback, useState, Suspense } from 'react';
 import { useForm } from 'react-hook-form';
 import * as z from 'zod';
 
@@ -13,10 +13,12 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { LogoIcon } from '@/components/ui/logo';
+import { EMAIL_INPUT_ATTRS, EmailSuggestionChip, useAuthEmailField } from '@/hooks/useAuthEmailField';
 import { useAuthStore } from '@/stores/auth-store';
 
 const forgotPasswordSchema = z.object({
-  email: z.string().email('Invalid email address'),
+  // Checked (and cleaned) by useAuthEmailField.
+  email: z.string(),
 });
 
 type ForgotPasswordFormData = z.infer<typeof forgotPasswordSchema>;
@@ -31,6 +33,8 @@ function ForgotPasswordForm() {
   const {
     register,
     handleSubmit,
+    setValue,
+    getValues,
     formState: { errors, isSubmitting },
   } = useForm<ForgotPasswordFormData>({
     resolver: zodResolver(forgotPasswordSchema),
@@ -38,6 +42,11 @@ function ForgotPasswordForm() {
       email: prefillEmail,
     },
   });
+  const setEmail = useCallback(
+    (value: string) => setValue('email', value, { shouldDirty: true }),
+    [setValue]
+  );
+  const emailField = useAuthEmailField('reset', setEmail);
 
   const onSubmit = async (data: ForgotPasswordFormData) => {
     setError(null);
@@ -91,16 +100,27 @@ function ForgotPasswordForm() {
                   </p>
                 </div>
               ) : (
-                <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+                <form
+                  noValidate
+                  onSubmit={(e) => {
+                    const email = emailField.resolveForSubmit(getValues('email'));
+                    return handleSubmit((data) => (email ? onSubmit({ ...data, email }) : undefined))(e);
+                  }}
+                  className="space-y-4"
+                >
                   <div>
                     <Input
-                      {...register('email')}
-                      type="email"
+                      {...register('email', {
+                        onChange: (e) => emailField.onChange(e.target.value),
+                        onBlur: (e) => emailField.onBlur(e.target.value),
+                      })}
+                      {...EMAIL_INPUT_ATTRS}
                       placeholder="Email address"
                       leftIcon={<Mail className="h-4 w-4" />}
-                      error={errors.email?.message}
-                      autoComplete="email"
+                      error={emailField.hint?.message ?? errors.email?.message}
+                      data-testid="forgot-email"
                     />
+                    <EmailSuggestionChip suggestion={emailField.hint?.suggestion} onApply={emailField.applySuggestion} />
                   </div>
 
                   {error && (
