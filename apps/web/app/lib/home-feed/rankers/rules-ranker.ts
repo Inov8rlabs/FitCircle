@@ -8,16 +8,47 @@
  *  3. Score the final set with the default scores + boosts and sort.
  *  4. Apply `move` actions, in rule order, to the sorted list.
  * Guardrails run afterwards (compose.ts), so no rule can break them.
+ *
+ * Anchors a client doesn't have. Rules are written against the whole catalog
+ * (the Admin Tools editor chains "X after <the card above it>"), but each
+ * client only gets the cards it declares and is eligible for. A move whose
+ * anchor is a catalog card missing from THIS feed (not declared — iOS has no
+ * `missing_days` — or hint-suppressed / hidden) must still land where that
+ * anchor would have been, or the same rule orders the feed differently per
+ * platform. So steps 3–4 also carry a placeholder ("ghost") for every absent
+ * catalog type, scored like the real card; ghosts are dropped after the moves.
+ * Each client's feed is then the full layout filtered to what it can show.
  */
 import { clientSupports } from '../candidates';
-import { cardMatchesRef, catalogEntry } from '../catalog';
+import { CATALOG, DEFAULT_ORDER, EXTRA_CARDS, cardMatchesRef, catalogEntry } from '../catalog';
 import { selectRules, type FeedRule, type RuleAction } from '../rules';
 import type { Candidate, ScoredCard } from '../types';
 
-import { DefaultRanker, scoreDefault, sortScored } from './default-ranker';
+import { DefaultRanker, SLOT_POINTS, baseScore, scoreDefault, sortScored } from './default-ranker';
 import type { RankInput, RankOutput, Ranker } from './types';
 
 type MoveAction = Extract<RuleAction, { op: 'move' }>;
+
+/** Id prefix of an anchor placeholder (never a valid card id: ids are snake_case / `promo:` / `campaign:`). */
+const GHOST_PREFIX = '\u0000ghost:';
+const isGhost = (c: { id: string }) => c.id.startsWith(GHOST_PREFIX);
+
+/** Default-order slot of every single-instance catalog card (EXTRA_CARDS sit just below their `after`). */
+const CATALOG_SLOTS: ReadonlyArray<{ type: string; baseScore?: number }> = [
+  ...DEFAULT_ORDER.map((type) => ({ type })),
+  ...EXTRA_CARDS.map((e) => ({ type: e.type, baseScore: baseScore(e.after) - SLOT_POINTS / 2 })),
+];
+
+/** Placeholders for the catalog cards this feed doesn't carry (see the header comment). */
+export function anchorGhosts(present: readonly Candidate[]): Candidate[] {
+  const have = new Set(present.map((c) => c.type));
+  return CATALOG_SLOTS.filter((s) => !have.has(s.type) && CATALOG[s.type]).map((s) => ({
+    id: `${GHOST_PREFIX}${s.type}`,
+    type: s.type,
+    version: CATALOG[s.type].version,
+    ...(s.baseScore !== undefined ? { baseScore: s.baseScore } : {}),
+  }));
+}
 
 /** Move the first card matching `move.card` (type or `promo:<key>` id). */
 export function applyMove(cards: ScoredCard[], move: MoveAction): ScoredCard[] {
@@ -96,7 +127,9 @@ export class RulesRanker implements Ranker {
       }
     }
 
-    const scored = scoreDefault(present).map((c) => {
+    // Real cards decide the campaign-leads tweak; ghosts only hold anchor slots.
+    const campaignPresent = present.some((c) => c.type === 'campaign');
+    const scored = scoreDefault([...present, ...anchorGhosts(present)], campaignPresent).map((c) => {
       const boost = boosts.reduce((sum, [ref, by]) => (cardMatchesRef(c, ref) ? sum + by : sum), 0);
       // Last matching variant action wins (rules apply in ascending priority).
       const variant = variants.filter(([ref]) => cardMatchesRef(c, ref)).pop()?.[1];
@@ -104,6 +137,7 @@ export class RulesRanker implements Ranker {
     });
     let cards = sortScored(scored);
     for (const move of moves) cards = applyMove(cards, move);
+    cards = cards.filter((c) => !isGhost(c));
 
     const experiment = applied.find((r) => r.experiment)?.experiment ?? null;
     return {

@@ -18,9 +18,11 @@ export function baseScore(type: string): number {
   return 1000 - SLOT_POINTS * defaultIndex(type);
 }
 
-/** Default scores for a set of present cards (campaign-leads tweak included). */
-export function scoreDefault(cards: readonly Candidate[]): ScoredCard[] {
-  const campaignPresent = cards.some((c) => c.type === 'campaign');
+/**
+ * Default scores for a set of present cards (campaign-leads tweak included).
+ * `campaignPresent` defaults to "a campaign card is among `cards`".
+ */
+export function scoreDefault(cards: readonly Candidate[], campaignPresent: boolean = cards.some((c) => c.type === 'campaign')): ScoredCard[] {
   return cards.map((c) => ({
     ...c,
     score:

@@ -58,6 +58,36 @@ describe('RulesRanker', () => {
     expect(types(rulesRank([rule({ key: 'm', actions: [{ op: 'move', card: 'charts', after: 'nope' }] })], free).cards)).toEqual(base);
   });
 
+  describe('a move whose anchor this feed lacks lands where the anchor would be (same order on every platform)', () => {
+    const iosSupport = parseClientCards([...SPEC_SUPPORT.keys()].filter((t) => t !== 'missing_days').map((t) => `${t}@1`).join(','));
+    const campaignAfterMissingDays = rule({ key: 'm', actions: [{ op: 'move', card: 'campaign', after: 'missing_days' }] });
+    const ctx = makeCtx(withCampaign());
+
+    it('undeclared anchor (iOS has no missing_days): iOS = Android minus missing_days', () => {
+      const android = types(rulesRank([campaignAfterMissingDays], ctx).cards);
+      const ios = types(rulesRank([campaignAfterMissingDays], ctx, iosSupport).cards);
+      expect(android.indexOf('campaign')).toBe(android.indexOf('missing_days') + 1);
+      expect(ios).toEqual(android.filter((t) => t !== 'missing_days'));
+      expect(ios.indexOf('campaign')).toBeGreaterThan(ios.indexOf('hydration'));
+    });
+
+    it('anchor hidden by a rule or suppressed by a hint: same slot', () => {
+      const shown = types(rulesRank([rule({ key: 'm', actions: [{ op: 'move', card: 'charts', after: 'referral' }] })], ctx).cards);
+      const hidden = types(
+        rulesRank([rule({ key: 'm', actions: [{ op: 'hide', card: 'referral' }, { op: 'move', card: 'charts', after: 'referral' }] })], ctx).cards
+      );
+      expect(hidden).toEqual(shown.filter((t) => t !== 'referral'));
+      const noReferrals = makeCtx({ ...withCampaign(), referralProgramEnabled: false });
+      expect(types(rulesRank([rule({ key: 'm', actions: [{ op: 'move', card: 'charts', after: 'referral' }] })], noReferrals).cards)).toEqual(hidden);
+    });
+
+    it('placeholders never reach the output, and moving an absent card changes nothing', () => {
+      const out = rulesRank([rule({ key: 'm', actions: [{ op: 'move', card: 'missing_days', toTop: true }] })], ctx, iosSupport);
+      expect(out.cards.every((c: any) => !c.id.includes('ghost'))).toBe(true);
+      expect(types(out.cards)).toEqual(types(rulesRank([], ctx, iosSupport).cards));
+    });
+  });
+
   it('hide removes; show restores a hidden or hint-suppressed card', () => {
     const hidden = rulesRank([rule({ key: 'h', actions: [{ op: 'hide', card: 'charts' }] })], free);
     expect(types(hidden.cards)).not.toContain('charts');
