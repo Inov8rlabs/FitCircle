@@ -1,8 +1,9 @@
 import { type NextRequest, NextResponse } from 'next/server';
 
+import { toLegacyWeightEntries } from '@/lib/circles/member-progress';
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { addAutoRefreshHeaders } from '@/lib/middleware/mobile-auto-refresh';
-import { UserService } from '@/lib/services/user-service';
+import { CircleNotFoundError, MemberProgressService } from '@/lib/services/member-progress-service';
 import { normalizeId } from '@/lib/validation/circle-validation';
 
 /**
@@ -12,6 +13,14 @@ import { normalizeId } from '@/lib/validation/circle-validation';
  * Privacy: when the owner hides their progress the answer is 200 with
  * `can_view: false` and no entries. It used to be an empty list with
  * `can_view: true`, which the apps showed as "no check-ins yet".
+ *
+ * Shipped iOS (1.1.0/1.1.1) and Android (1.1.1) render `entries[].weight` as a
+ * weight in kg, so this route only ever puts a real weight there: a weight
+ * circle's weigh-ins (respecting show_weight and per-row is_public, no 0 /
+ * future rows); any other circle answers `entries: []`. It used to put a steps
+ * circle's daily step totals in `weight` ("10,109 steps" → "22,286.5 lbs").
+ * `metric` / `unit` are additive. New clients read `/circle-progress`
+ * (docs/MEMBER_PROGRESS_CONTRACT.md), which carries every metric.
  *
  * Query params:
  * - limit: number (default: 30, max: 100)
@@ -23,26 +32,35 @@ export async function GET(
 ) {
   try {
     const user = await requireMobileAuth(request);
-    const { id: circleId, userId: rawUserId } = await params;
+    const { id: rawCircleId, userId: rawUserId } = await params;
     // iOS sends uppercase uuids in the path; the owner check compares strings.
     const userId = normalizeId(rawUserId);
+    const circleId = normalizeId(rawCircleId);
 
     // Get query params
     const { searchParams } = new URL(request.url);
-    const limit = Math.min(parseInt(searchParams.get('limit') || '30'), 100);
-    const offset = parseInt(searchParams.get('offset') || '0');
+    const parsedLimit = parseInt(searchParams.get('limit') || '30');
+    const parsedOffset = parseInt(searchParams.get('offset') || '0');
+    const limit = Number.isFinite(parsedLimit) && parsedLimit > 0 ? Math.min(parsedLimit, 100) : 30;
+    const offset = Number.isFinite(parsedOffset) && parsedOffset > 0 ? parsedOffset : 0;
 
     console.log(`[Circle User History] User ${user.id} viewing history ${userId} in circle ${circleId} (limit: ${limit}, offset: ${offset})`);
 
-    // Get user history with circle context
-    const { can_view_history: canView } = await UserService.getSectionVisibility(userId, user.id);
-    const history = canView
-      ? await UserService.getUserHistory(userId, user.id, {
-          circleId,
-          limit,
-          offset,
-        })
-      : { entries: [], total_count: 0, has_more: false };
+    const progress = await MemberProgressService.getMemberCircleProgress(userId, user.id, circleId);
+    const isWeight = progress.metric === 'weight';
+    // Non-weight circles: nothing in the weight-shaped list. Hidden progress
+    // (incl. weight hidden by show_weight) is can_view false.
+    const canView = progress.can_view;
+    const all = canView && isWeight ? toLegacyWeightEntries(progress.entries) : [];
+    const page = all.slice(offset, offset + limit);
+    const history = {
+      entries: page,
+      total_count: all.length,
+      has_more: all.length > offset + limit,
+      metric: 'weight' as const,
+      unit: 'kg' as const,
+      circle_metric: progress.metric,
+    };
 
     const response = NextResponse.json(
       {
@@ -83,6 +101,18 @@ export async function GET(
           meta: null,
         },
         { status: 401 }
+      );
+    }
+
+    if (error instanceof CircleNotFoundError) {
+      return NextResponse.json(
+        {
+          success: false,
+          data: null,
+          error: { code: 'NOT_FOUND', message: error.message, details: {}, timestamp: new Date().toISOString() },
+          meta: null,
+        },
+        { status: 404 }
       );
     }
 

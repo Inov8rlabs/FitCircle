@@ -275,3 +275,44 @@ describe('POST /api/mobile/tracking/bulk-sync — source alias', () => {
     expect(body.error.message).toContain('source');
   });
 });
+
+describe('POST /api/mobile/tracking/bulk-sync — 0-step "tomorrow" rows (old iOS builds)', () => {
+  const post = (body: unknown) => bulkSync(json('http://localhost/api/mobile/tracking/bulk-sync', body, 'POST'));
+  // Local today is mocked as 2026-09-28.
+
+  it('skips a 0-step entry dated after the member\'s local today, keeps the real days', async () => {
+    upsertDailyTracking.mockImplementation(async (_u: string, date: string, data: { steps: number }) => ({
+      ...ROW,
+      tracking_date: date,
+      steps: data.steps,
+      created_at: 'a',
+      updated_at: 'a',
+    }));
+    const res = await post({
+      steps_data: [
+        { date: '2026-09-27', steps: 9130, is_override: false },
+        { date: '2026-09-28', steps: 1587, is_override: false },
+        { date: '2026-09-29', steps: 0, is_override: false },
+      ],
+      source: 'healthkit',
+    });
+    const body = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(upsertDailyTracking.mock.calls.map((c) => c[1])).toEqual(['2026-09-27', '2026-09-28']);
+    expect(body.results).toContainEqual({ date: '2026-09-29', success: true, action: 'skipped', reason: 'future_zero' });
+    expect(body.failed_count).toBe(0);
+  });
+
+  it('a 0 for today or the past is still passed through (merge rules decide)', async () => {
+    upsertDailyTracking.mockResolvedValue({ ...ROW, steps: 0, created_at: 'a', updated_at: 'a' });
+    await post({ steps_data: [{ date: '2026-09-28', steps: 0, is_override: false }], source: 'healthkit' });
+    expect(upsertDailyTracking).toHaveBeenCalledTimes(1);
+  });
+
+  it('positive steps dated tomorrow are kept (a traveller ahead of their profile timezone)', async () => {
+    upsertDailyTracking.mockResolvedValue({ ...ROW, steps: 412, created_at: 'a', updated_at: 'a' });
+    await post({ steps_data: [{ date: '2026-09-29', steps: 412, is_override: false }], source: 'healthkit' });
+    expect(upsertDailyTracking).toHaveBeenCalledTimes(1);
+  });
+});

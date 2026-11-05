@@ -6,6 +6,8 @@ import { ChallengeStepsSyncService } from '@/lib/services/challenge-steps-sync-s
 import { MobileAPIService } from '@/lib/services/mobile-api-service';
 import type { BulkSyncResult } from '@/lib/types/tracking';
 import { runAfterResponse } from '@/lib/utils/after-response';
+import { isFutureZeroSteps } from '@/lib/utils/steps-sync-guard';
+import { getTodayInTimezone, getUserTimezone } from '@/lib/utils/timezone';
 import { parseLenient, validationMessage } from '@/lib/validation/lenient-parse';
 import { platformStepsSourceSchema } from '@/lib/validators/steps-source';
 
@@ -80,10 +82,24 @@ export async function POST(request: NextRequest) {
       `[Bulk Sync] User ${user.id} syncing ${validatedData.steps_data.length} days from ${validatedData.source}`
     );
 
+    // A 0-step day after the member's local today is never a real count. iOS
+    // builds before 1.1.1 enumerated HealthKit one day past today and sent it as
+    // a 0-step "tomorrow" row, which member profiles then listed as a check-in
+    // (docs/MEMBER_PROGRESS_CONTRACT.md). Only looked up when a 0 is present.
+    let localToday: string | null = null;
+    if (validatedData.steps_data.some((e) => e.steps === 0)) {
+      const { createAdminSupabase } = await import('@/lib/supabase-admin');
+      localToday = getTodayInTimezone(await getUserTimezone(user.id, createAdminSupabase()));
+    }
+
     // Process each entry
     // NOTE: Bulk sync from HealthKit/Google Fit does NOT automatically claim streaks
     // Users must explicitly claim streaks or claim them via manual data entry
     for (const entry of validatedData.steps_data) {
+      if (isFutureZeroSteps(entry, localToday)) {
+        results.push({ date: entry.date, success: true, action: 'skipped', reason: 'future_zero' });
+        continue;
+      }
       try {
         const trackingEntry = await MobileAPIService.upsertDailyTracking(
           user.id,

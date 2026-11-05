@@ -2,6 +2,7 @@ import { type NextRequest, NextResponse } from 'next/server';
 
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { addAutoRefreshHeaders } from '@/lib/middleware/mobile-auto-refresh';
+import { CircleNotFoundError, MemberProgressService } from '@/lib/services/member-progress-service';
 import { UserService } from '@/lib/services/user-service';
 import { normalizeId } from '@/lib/validation/circle-validation';
 
@@ -30,6 +31,13 @@ function isPrivacyDenial(error: unknown): boolean {
  * `can_view: false` and empty values (it used to be 403). Both apps render their
  * "Weight data is private" card from `can_view == false`; iOS 1.0 swallowed the
  * 403 and rendered nothing at all.
+ *
+ * This is the WEIGHT card. A circle that tracks something else (steps, workout
+ * minutes, a custom challenge) answers `success: true, data: null`: shipped iOS
+ * and Android then render no weight card (iOS throws on a nil `data` and
+ * swallows it; Android treats it as unavailable). They used to show an empty
+ * "Weight progress" card on a steps circle. New clients read `/circle-progress`.
+ * `metric` / `unit` are additive.
  */
 export async function GET(
   request: NextRequest,
@@ -37,20 +45,40 @@ export async function GET(
 ) {
   try {
     const user = await requireMobileAuth(request);
-    const { id: circleId, userId: rawUserId } = await params;
+    const { id: rawCircleId, userId: rawUserId } = await params;
     // iOS sends uppercase uuids in the path; the owner check compares strings.
     const userId = normalizeId(rawUserId);
+    const circleId = normalizeId(rawCircleId);
 
     console.log(`[Circle User Progress] User ${user.id} viewing progress ${userId} in circle ${circleId}`);
 
-    // Get user progress with circle context
-    let canView = true;
+    const described = await MemberProgressService.describe(userId, user.id, circleId);
+    if (described.metric !== 'weight') {
+      const response = NextResponse.json(
+        {
+          success: true,
+          data: null,
+          error: null,
+          meta: { requestTime: Date.now(), metric: described.metric, unit: described.unit },
+        },
+        { headers: { 'Cache-Control': 'private, no-store' } }
+      );
+      return await addAutoRefreshHeaders(request, response, user);
+    }
+
+    // Weight circle. Hidden (show_weight / show_progress off, private profile,
+    // viewer not in the circle) → can_view false with empty values.
+    let canView = described.can_view;
     let progress;
-    try {
-      progress = await UserService.getUserProgress(userId, user.id, circleId);
-    } catch (progressError) {
-      if (!isPrivacyDenial(progressError)) throw progressError;
-      canView = false;
+    if (canView) {
+      try {
+        progress = await UserService.getUserProgress(userId, user.id, circleId);
+      } catch (progressError) {
+        if (!isPrivacyDenial(progressError)) throw progressError;
+        canView = false;
+        progress = PRIVATE_PROGRESS;
+      }
+    } else {
       progress = PRIVATE_PROGRESS;
     }
 
@@ -61,6 +89,8 @@ export async function GET(
           ...progress,
           weight_unit: 'kg',
           can_view: canView,
+          metric: 'weight',
+          unit: 'kg',
         },
         error: null,
         meta: {
@@ -92,6 +122,18 @@ export async function GET(
           meta: null,
         },
         { status: 401 }
+      );
+    }
+
+    if (error instanceof CircleNotFoundError) {
+      return NextResponse.json(
+        {
+          success: false,
+          data: null,
+          error: { code: 'NOT_FOUND', message: error.message, details: {}, timestamp: new Date().toISOString() },
+          meta: null,
+        },
+        { status: 404 }
       );
     }
 

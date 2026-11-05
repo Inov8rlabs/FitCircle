@@ -1,94 +1,57 @@
 import { type NextRequest, NextResponse } from 'next/server';
 
+import { CircleNotFoundError, MemberProgressService } from '@/lib/services/member-progress-service';
 import { createServerSupabase } from '@/lib/supabase-server';
 
+/**
+ * GET /api/fitcircles/[id]/progress/[userId] — the web circle's participant sheet.
+ *
+ * `progress` is the member's progress in the circle's own metric (steps,
+ * weight, workout minutes, a custom challenge unit) with privacy applied:
+ * docs/MEMBER_PROGRESS_CONTRACT.md. `entries` keeps the old shape for the
+ * owner's weight-entry editor and only ever holds WEIGHTS (kg): it used to hold
+ * a steps circle's step totals, which the sheet rendered as kilograms, and it
+ * ignored "Show weight" / "Show progress".
+ */
 export async function GET(
-  request: NextRequest,
+  _request: NextRequest,
   context: { params: Promise<{ id: string; userId: string }> }
 ) {
   try {
     const supabase = await createServerSupabase();
-    const resolvedParams = await context.params;
-    const challengeId = resolvedParams.id;
-    const userId = resolvedParams.userId;
+    const { id: circleId, userId } = await context.params;
 
-    // Verify user is authenticated
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    const {
+      data: { user },
+      error: authError,
+    } = await supabase.auth.getUser();
     if (authError || !user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Get challenge details to know date range and type
-    const { data: challenge, error: challengeError } = await supabase
-      .from('fitcircles')
-      .select('type, start_date, end_date')
-      .eq('id', challengeId)
-      .single();
+    const progress = await MemberProgressService.getMemberCircleProgress(
+      userId.toLowerCase(),
+      user.id,
+      circleId.toLowerCase()
+    );
 
-    if (challengeError || !challenge) {
+    const entries =
+      progress.metric === 'weight' && progress.can_view
+        ? progress.entries.map((e) => ({ tracking_date: e.date, value: e.value, is_public: e.is_public }))
+        : [];
+
+    return NextResponse.json(
+      { entries, total: entries.length, progress },
+      { headers: { 'Cache-Control': 'private, no-store' } }
+    );
+  } catch (error) {
+    if (error instanceof CircleNotFoundError) {
       return NextResponse.json({ error: 'Challenge not found' }, { status: 404 });
     }
-
-    // Map challenge type to daily_tracking column
-    const columnMap: Record<string, string> = {
-      weight_loss: 'weight_kg',
-      step_count: 'steps',
-      workout_frequency: 'workout_minutes',
-      custom: 'weight_kg',
-    };
-
-    const column = columnMap[challenge.type] || 'weight_kg';
-
-    console.log('Fetching progress entries:', {
-      userId,
-      challengeId,
-      challengeType: challenge.type,
-      column,
-      startDate: challenge.start_date,
-      endDate: challenge.end_date
-    });
-
-    // Fetch tracking entries for this user within challenge period
-    const { data: entries, error: entriesError } = await supabase
-      .from('daily_tracking')
-      .select(`tracking_date, ${column}, is_public`)
-      .eq('user_id', userId)
-      .gte('tracking_date', challenge.start_date)
-      .lte('tracking_date', challenge.end_date)
-      .not(column, 'is', null)
-      .order('tracking_date', { ascending: false });
-
-    console.log('Entries result:', {
-      count: entries?.length || 0,
-      error: entriesError,
-      firstEntry: entries?.[0]
-    });
-
-    if (entriesError) {
-      console.error('Error fetching entries:', entriesError);
-      return NextResponse.json({
-        error: 'Failed to fetch entries',
-        details: entriesError.message
-      }, { status: 500 });
+    if (error instanceof Error && error.message === 'User not found') {
+      return NextResponse.json({ error: 'User not found' }, { status: 404 });
     }
-
-    // Transform entries to match expected format
-    const progressEntries = (entries || []).map((entry: any) => ({
-      tracking_date: entry.tracking_date,
-      value: entry[column],
-      is_public: entry.is_public ?? true, // Default to public if not set
-    }));
-
-    return NextResponse.json({
-      entries: progressEntries,
-      total: progressEntries.length,
-    });
-
-  } catch (error) {
     console.error('Error in progress API:', error);
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }

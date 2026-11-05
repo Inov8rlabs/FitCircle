@@ -40,6 +40,8 @@ import { CheerSheet, type CheerTarget } from '@/components/circles/CheerSheet';
 import { CircleDetailSkeleton } from '@/components/circles/CircleDetailSkeleton';
 import { CircleStreakLiveCard } from '@/components/circles/CircleStreakLiveCard';
 import { LeaderboardRow } from '@/components/circles/LeaderboardRow';
+import type { MemberCircleProgress } from '@/components/circles/member-progress-format';
+import { MemberProgressPanel } from '@/components/circles/MemberProgressPanel';
 import { StepsLeaderboard } from '@/components/circles/StepsLeaderboard';
 import { circleTypeLabel, durationLabel } from '@/components/circles/types';
 import { useCircleStreak } from '@/components/circles/useCircleStreak';
@@ -111,6 +113,8 @@ interface Participant {
   is_current_user?: boolean;
   checked_in_today?: boolean;
   entries?: ProgressEntry[];
+  /** Progress in the circle's own metric (docs/MEMBER_PROGRESS_CONTRACT.md). */
+  memberProgress?: MemberCircleProgress;
 }
 
 interface ProgressEntry {
@@ -692,7 +696,8 @@ export default function FitCirclePage() {
           console.log('Progress history data:', data);
           setSelectedParticipant({
             ...participant,
-            entries: data.entries || []
+            entries: data.entries || [],
+            memberProgress: data.progress,
           });
         } else {
           const errorText = await response.text();
@@ -1352,6 +1357,14 @@ export default function FitCirclePage() {
               {/* Scrollable Content */}
               <div className="flex-1 overflow-y-auto p-6">
 
+              {/* Progress in the circle's own metric. The owner of a weight
+                  circle keeps the editable weight goal / entries view below. */}
+              {selectedParticipant.memberProgress &&
+              !(selectedParticipant.user_id === user?.id && selectedParticipant.memberProgress.metric === 'weight') ? (
+                <MemberProgressPanel progress={selectedParticipant.memberProgress} unitSystem={unitSystem} />
+              ) : selectedParticipant.user_id === user?.id &&
+                (!selectedParticipant.memberProgress || selectedParticipant.memberProgress.metric === 'weight') ? (
+              <>
               {/* Progress Overview - Redesigned */}
               <div className="mb-6 p-6 bg-gradient-to-br from-slate-800/40 to-slate-800/20 rounded-xl border border-slate-700/50">
                 <div className="flex items-center justify-between mb-6">
@@ -1568,6 +1581,11 @@ export default function FitCirclePage() {
                   </div>
                 )}
               </div>
+
+              </>
+              ) : (
+                <p className="text-gray-400">Progress isn&apos;t available right now.</p>
+              )}
 
               {/* Privacy Notice */}
               {selectedParticipant.user_id !== user?.id && (

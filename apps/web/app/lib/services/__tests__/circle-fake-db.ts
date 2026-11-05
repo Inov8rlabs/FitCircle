@@ -48,7 +48,11 @@ export const CIRCLE_TABLE_COLUMNS: Record<string, string[]> = {
   ],
   daily_tracking: [
     'id', 'user_id', 'tracking_date', 'weight_kg', 'steps', 'steps_source', 'steps_synced_at',
-    'created_at', 'updated_at',
+    'is_public', 'notes', 'created_at', 'updated_at',
+  ],
+  exercise_logs: [
+    'id', 'user_id', 'exercise_type', 'duration_minutes', 'exercise_date', 'started_at', 'is_public',
+    'is_deleted', 'notes', 'created_at', 'updated_at',
   ],
   circle_quests: [
     'id', 'fitcircle_id', 'challenge_id', 'template_id', 'quest_name', 'quest_description',
@@ -77,6 +81,7 @@ export class CircleFakeDb {
     daily_tracking: [],
     challenge_participants: [],
     challenge_logs: [],
+    exercise_logs: [],
   };
 
   /** Every statement that reached the database, for assertions. */

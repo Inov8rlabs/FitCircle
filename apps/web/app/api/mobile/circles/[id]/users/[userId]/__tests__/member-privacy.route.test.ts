@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { CircleFakeDb, getCircleDb, setCircleDb } from '@/lib/services/__tests__/circle-fake-db';
 
@@ -10,7 +10,6 @@ import {
 
 const requireMobileAuth = vi.fn();
 const getUserProgress = vi.fn();
-const getUserHistory = vi.fn();
 
 vi.mock('@/lib/middleware/mobile-auth', () => ({
   requireMobileAuth: (...args: unknown[]) => requireMobileAuth(...args),
@@ -19,13 +18,12 @@ vi.mock('@/lib/middleware/mobile-auto-refresh', () => ({
   addAutoRefreshHeaders: async (_request: unknown, response: unknown) => response,
 }));
 vi.mock('@/lib/supabase-admin', () => ({ createAdminSupabase: () => getCircleDb().client() }));
-// The real privacy switch (getSectionVisibility) runs against the fake database;
-// only the two heavy readers are replaced.
+// The real privacy switches (MemberProgressService) run against the fake
+// database; only the weight-goal derivation is replaced.
 vi.mock('@/lib/services/user-service', async (importOriginal) => {
   const original = await importOriginal<typeof import('@/lib/services/user-service')>();
   class TestUserService extends original.UserService {
     static getUserProgress = (...args: unknown[]) => getUserProgress(...args);
-    static getUserHistory = (...args: unknown[]) => getUserHistory(...args);
   }
   return { ...original, UserService: TestUserService };
 });
@@ -55,16 +53,19 @@ const PROGRESS = {
 
 const HISTORY = {
   entries: [
-    { id: 'c1', date: '2026-09-27', weight: 89, weight_change: -0.5, is_public: true, note: 'ok' },
-    { id: 'c2', date: '2026-09-26', weight: 89.5, weight_change: null, is_public: true, note: null },
+    { id: 'c1', date: '2026-09-27', weight: 89, weight_change: -0.5, is_public: true, note: 'ok', notes: 'ok' },
+    { id: 'c2', date: '2026-09-26', weight: 89.5, weight_change: null, is_public: true, note: null, notes: null },
   ],
   total_count: 2,
   has_more: false,
+  metric: 'weight',
+  unit: 'kg',
+  circle_metric: 'weight',
 };
 
 let db: CircleFakeDb;
 const setPreferences = (preferences: Record<string, unknown> | null) => {
-  db.tables.profiles = [{ id: OWNER, display_name: 'Owner', preferences }];
+  db.tables.profiles = [{ id: OWNER, display_name: 'Owner', preferences, timezone: 'UTC' }];
 };
 
 beforeEach(() => {
@@ -72,9 +73,28 @@ beforeEach(() => {
   db = new CircleFakeDb();
   setCircleDb(db);
   setPreferences({});
+  // A weight circle both are active members of, with the owner's two weigh-ins.
+  db.tables.fitcircles = [
+    { id: CIRCLE, type: 'weight_loss', start_date: '2026-09-01 00:00:00+00', end_date: '2026-10-31 00:00:00+00' },
+  ];
+  db.tables.fitcircle_members = [OWNER, VIEWER].map((user_id) => ({
+    id: db.newId(),
+    fitcircle_id: CIRCLE,
+    user_id,
+    status: 'active',
+  }));
+  db.tables.daily_tracking = [
+    { id: 'c2', user_id: OWNER, tracking_date: '2026-09-26', weight_kg: 89.5, steps: null, is_public: true, notes: null },
+    { id: 'c1', user_id: OWNER, tracking_date: '2026-09-27', weight_kg: 89, steps: 9000, is_public: true, notes: 'ok' },
+  ];
+  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.setSystemTime(new Date('2026-09-28T12:00:00Z'));
   requireMobileAuth.mockResolvedValue({ id: VIEWER });
   getUserProgress.mockResolvedValue(PROGRESS);
-  getUserHistory.mockResolvedValue(HISTORY);
+});
+
+afterEach(() => {
+  vi.useRealTimers();
 });
 
 describe('GET .../users/[userId]/progress', () => {
@@ -83,7 +103,7 @@ describe('GET .../users/[userId]/progress', () => {
     const body = await res.json();
 
     expect(res.status).toBe(200);
-    expect(body.data).toEqual({ ...PROGRESS, weight_unit: 'kg', can_view: true });
+    expect(body.data).toEqual({ ...PROGRESS, weight_unit: 'kg', can_view: true, metric: 'weight', unit: 'kg' });
     expect(iosWeightProgressProblems(body.data)).toEqual([]);
   });
 
@@ -105,6 +125,8 @@ describe('GET .../users/[userId]/progress', () => {
       last_updated: null,
       weight_unit: 'kg',
       can_view: false,
+      metric: 'weight',
+      unit: 'kg',
     });
   });
 
@@ -124,7 +146,7 @@ describe('GET .../users/[userId]/progress', () => {
   });
 
   it('other failures are still 500, and 401 is still 401', async () => {
-    getUserProgress.mockRejectedValue(new Error('User not found'));
+    getUserProgress.mockRejectedValue(new Error('Database timeout'));
     expect((await call(getProgress, 'progress', OWNER)).status).toBe(500);
 
     requireMobileAuth.mockRejectedValue(new Error('Unauthorized'));
@@ -140,7 +162,6 @@ describe('GET .../users/[userId]/history', () => {
     expect(res.status).toBe(200);
     expect(body.data).toEqual({ ...HISTORY, can_view: true });
     expect(body.meta).toMatchObject({ limit: 10, offset: 0 });
-    expect(getUserHistory).toHaveBeenCalledWith(OWNER, VIEWER, { circleId: CIRCLE, limit: 10, offset: 0 });
     expect(iosCheckInHistoryProblems(body.data)).toEqual([]);
   });
 
@@ -150,18 +171,19 @@ describe('GET .../users/[userId]/history', () => {
     const body = await res.json();
 
     expect(res.status).toBe(200);
-    expect(body.data).toEqual({ entries: [], total_count: 0, has_more: false, can_view: false });
-    expect(getUserHistory).not.toHaveBeenCalled();
+    expect(body.data).toMatchObject({ entries: [], total_count: 0, has_more: false, can_view: false });
     expect(iosEnvelopeProblems(body)).toEqual([]);
     expect(iosCheckInHistoryProblems(body.data)).toEqual([]);
   });
 
-  it('hiding only the weight does not hide the history', async () => {
+  it('hiding the weight hides a weight history too (its entries ARE weights)', async () => {
+    // It used to stay visible and list every weigh-in despite "Show weight" off.
     setPreferences({ show_weight: false });
     const body = await (await call(getHistory, 'history', OWNER)).json();
 
-    expect(body.data.can_view).toBe(true);
-    expect(body.data.entries).toHaveLength(2);
+    expect(body.data.can_view).toBe(false);
+    expect(body.data.entries).toEqual([]);
+    expect(iosCheckInHistoryProblems(body.data)).toEqual([]);
   });
 
   it('the owner always sees their own history, also with an uppercase id in the path', async () => {
@@ -170,7 +192,7 @@ describe('GET .../users/[userId]/history', () => {
     const body = await (await call(getHistory, 'history', OWNER.toUpperCase())).json();
 
     expect(body.data.can_view).toBe(true);
-    expect(getUserHistory).toHaveBeenCalledWith(OWNER, OWNER, expect.anything());
+    expect(body.data.entries).toHaveLength(2);
   });
 
   it('a user who never set preferences is visible (defaults)', async () => {
@@ -178,9 +200,13 @@ describe('GET .../users/[userId]/history', () => {
     expect((await (await call(getHistory, 'history', OWNER)).json()).data.can_view).toBe(true);
   });
 
-  it('an unknown user is still 500, and 401 is still 401', async () => {
+  it('an unknown user is still 500, an unknown circle 404, and 401 is still 401', async () => {
     db.tables.profiles = [];
     expect((await call(getHistory, 'history', OWNER)).status).toBe(500);
+
+    setPreferences({});
+    db.tables.fitcircles = [];
+    expect((await call(getHistory, 'history', OWNER)).status).toBe(404);
 
     requireMobileAuth.mockRejectedValue(new Error('Unauthorized'));
     expect((await call(getHistory, 'history', OWNER)).status).toBe(401);

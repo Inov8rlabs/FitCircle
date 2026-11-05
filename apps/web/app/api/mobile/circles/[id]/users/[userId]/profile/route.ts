@@ -2,11 +2,18 @@ import { type NextRequest, NextResponse } from 'next/server';
 
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { addAutoRefreshHeaders } from '@/lib/middleware/mobile-auto-refresh';
+import { MemberProgressService } from '@/lib/services/member-progress-service';
 import { UserService } from '@/lib/services/user-service';
+import { normalizeId } from '@/lib/validation/circle-validation';
 
 /**
  * GET /api/mobile/circles/[id]/users/[userId]/profile
  * Get user profile within circle context
+ *
+ * The weight fields are only filled in a weight circle the viewer may see the
+ * weight of; `progress_percentage` follows the circle's metric (a steps
+ * circle's goal %, not a weight %). Shipped apps show it as the "% Complete"
+ * badge.
  */
 export async function GET(
   request: NextRequest,
@@ -14,17 +21,29 @@ export async function GET(
 ) {
   try {
     const user = await requireMobileAuth(request);
-    const { id: circleId, userId } = await params;
+    const { id: rawCircleId, userId: rawUserId } = await params;
+    const circleId = normalizeId(rawCircleId);
+    const userId = normalizeId(rawUserId);
 
     console.log(`[Circle User Profile] User ${user.id} viewing profile ${userId} in circle ${circleId}`);
 
     // Get user profile with circle context
     const profile = await UserService.getUserPublicProfile(userId, user.id);
 
-    // Get user progress to include weight data in profile
-    let progressData = null;
+    // Progress in the circle's own metric. Optional: the header renders without it.
+    let progressPercentage: number | null = null;
+    let weights: { current: number | null; starting: number | null; target: number | null } | null = null;
     try {
-      progressData = await UserService.getUserProgress(userId, user.id, circleId);
+      const progress = await MemberProgressService.getMemberCircleProgress(userId, user.id, circleId);
+      if (progress.can_view) {
+        if (progress.metric === 'weight') {
+          const weight = await UserService.getUserProgress(userId, user.id, circleId);
+          weights = { current: weight.current_weight, starting: weight.starting_weight, target: weight.target_weight };
+          progressPercentage = weight.progress_percentage || null;
+        } else {
+          progressPercentage = progress.summary.progress_percentage || null;
+        }
+      }
     } catch (error) {
       // Progress data is optional, ignore errors
       console.warn(`[Circle User Profile] Could not fetch progress data: ${error}`);
@@ -39,11 +58,11 @@ export async function GET(
           avatar_url: profile.avatar_url,
           is_current_user: userId === user.id,
           privacy_settings: profile.privacy,
-          progress_percentage: progressData?.progress_percentage || null,
-          current_weight: progressData?.current_weight || null,
-          starting_weight: progressData?.starting_weight || null,
-          target_weight: progressData?.target_weight || null,
-          weight_unit: progressData ? 'kg' : null,
+          progress_percentage: progressPercentage,
+          current_weight: weights?.current || null,
+          starting_weight: weights?.starting || null,
+          target_weight: weights?.target || null,
+          weight_unit: weights ? 'kg' : null,
         },
         error: null,
         meta: {
@@ -52,7 +71,7 @@ export async function GET(
       },
       {
         headers: {
-          'Cache-Control': 'private, no-store', // 5 minutes
+          'Cache-Control': 'private, no-store'
         },
       }
     );

@@ -487,101 +487,44 @@ export class UserService {
       };
     }
 
-    // Fetch challenge type if circleId provided to filter data appropriately
-    let challengeType: string | null = null;
-    let challengeStartDate: string | null = null;
-    let challengeEndDate: string | null = null;
+    // Every entry here is a WEIGHT (kg): clients render `weight` as one. It used
+    // to carry a steps circle's step totals (10,109 steps → "22,286.5 lbs").
+    if (!privacy.show_weight && userId !== requesterId) {
+      console.log(`[UserService.getUserHistory] Weight is private`);
+      return { entries: [], total_count: 0, has_more: false };
+    }
 
+    // In a circle: the circle's own metric decides; only a weight circle has
+    // weight entries (docs/MEMBER_PROGRESS_CONTRACT.md).
     if (circleId) {
-      const { data: challenge, error: challengeError } = await supabaseAdmin
-        .from('fitcircles')
-        .select('type, start_date, end_date')
-        .eq('id', circleId)
-        .single();
-      logIgnoredQueryError('UserService.getUserHistory', challengeError);
+      const { MemberProgressService } = await import('./member-progress-service');
+      const { toLegacyWeightEntries } = await import('@/lib/circles/member-progress');
+      const progress = await MemberProgressService.getMemberCircleProgress(userId, requesterId, circleId);
+      const all = progress.can_view && progress.metric === 'weight' ? toLegacyWeightEntries(progress.entries) : [];
+      return {
+        entries: all.slice(offset, offset + limit),
+        total_count: all.length,
+        has_more: all.length > offset + limit,
+      };
+    }
 
-      if (challenge) {
-        challengeType = challenge.type;
-        challengeStartDate = challenge.start_date;
-        challengeEndDate = challenge.end_date;
-        console.log(`[UserService.getUserHistory] Challenge type: ${challengeType}`);
+    if (userId !== requesterId && privacy.profile_visibility === 'friends') {
+      const areFriends = await this.areInSameCircle(userId, requesterId);
+      if (!areFriends) {
+        console.log(`[UserService.getUserHistory] Not friends, returning empty history`);
+        return { entries: [], total_count: 0, has_more: false };
       }
     }
 
-    // Determine which column to filter by based on challenge type
-    const columnMap: Record<string, 'weight_kg' | 'steps'> = {
-      weight_loss: 'weight_kg',
-      step_count: 'steps',
-      workout_frequency: 'steps',
-      custom: 'weight_kg',
-    };
-
-    const dataColumn = challengeType ? columnMap[challengeType] || 'weight_kg' : 'weight_kg';
-
-    // Build query for circle check-ins if circleId provided
-    if (circleId) {
-      const query = supabaseAdmin
-        .from('circle_check_ins')
-        .select('id, check_in_date, check_in_value, note, created_at', { count: 'exact' })
-        .eq('user_id', userId)
-        .eq('circle_id', circleId)
-        .order('check_in_date', { ascending: false })
-        .range(offset, offset + limit - 1);
-
-      const { data: checkIns, error, count } = await query;
-
-      if (error) {
-        console.error(`[UserService.getUserHistory] Error fetching circle check-ins:`, error);
-        throw error;
-      }
-
-      // If we have circle check-ins, return them
-      if (checkIns && checkIns.length > 0) {
-        // Calculate weight changes
-        const entries: UserHistoryEntry[] = [];
-        for (let i = 0; i < checkIns.length; i++) {
-          const checkIn = checkIns[i];
-          const prevCheckIn = i < checkIns.length - 1 ? checkIns[i + 1] : null;
-
-          entries.push({
-            id: checkIn.id,
-            date: checkIn.check_in_date,
-            weight: checkIn.check_in_value,
-            weight_change: prevCheckIn
-              ? Math.round((checkIn.check_in_value - prevCheckIn.check_in_value) * 100) / 100
-              : null,
-            is_public: true, // Circle check-ins are visible to circle members
-            note: checkIn.note,
-            notes: checkIn.note, // the key iOS CheckInEntry reads
-          });
-        }
-
-        console.log(`[UserService.getUserHistory] Returning ${entries.length} circle check-in entries`);
-
-        return {
-          entries,
-          total_count: count || 0,
-          has_more: (count || 0) > offset + limit,
-        };
-      }
-
-      // No circle check-ins found, fall through to daily_tracking with filtering
-      console.log(`[UserService.getUserHistory] No circle check-ins found, falling back to daily_tracking with column: ${dataColumn}`);
-    }
-
-    // Build query for daily tracking (fallback or no circleId)
+    // Real weigh-ins only (> 0); rows the member marked private only for them.
     let query = supabaseAdmin
       .from('daily_tracking')
-      .select(`id, tracking_date, ${dataColumn}, notes, created_at`, { count: 'exact' })
+      .select('id, tracking_date, weight_kg, notes, is_public, created_at', { count: 'exact' })
       .eq('user_id', userId)
-      .not(dataColumn, 'is', null) // Only entries with the relevant metric
+      .gt('weight_kg', 0)
       .order('tracking_date', { ascending: false })
       .range(offset, offset + limit - 1);
-
-    // If we have challenge date range, filter by it
-    if (challengeStartDate && challengeEndDate) {
-      query = query.gte('tracking_date', challengeStartDate).lte('tracking_date', challengeEndDate);
-    }
+    if (userId !== requesterId) query = query.eq('is_public', true);
 
     const { data: trackingData, error, count } = await query;
 
@@ -590,45 +533,30 @@ export class UserService {
       throw error;
     }
 
-    // If not the user, filter by is_public flag
-    const filteredData = trackingData || [];
-    if (userId !== requesterId) {
-      // For now, we don't have an is_public flag in daily_tracking
-      // We'll assume all entries are visible to friends (people in same circles)
-      const areFriends = await this.areInSameCircle(userId, requesterId);
-      if (!areFriends && privacy.profile_visibility === 'friends') {
-        console.log(`[UserService.getUserHistory] Not friends, returning empty history`);
-        return {
-          entries: [],
-          total_count: 0,
-          has_more: false,
-        };
-      }
-    }
+    const rows = (trackingData || []) as Array<{
+      id: string;
+      tracking_date: string;
+      weight_kg: number | string;
+      notes: string | null;
+      is_public: boolean | null;
+    }>;
 
-    // Calculate weight changes
-    const entries: UserHistoryEntry[] = [];
-    for (let i = 0; i < filteredData.length; i++) {
-      const entry = filteredData[i] as any;
-      const prevEntry = i < filteredData.length - 1 ? (filteredData[i + 1] as any) : null;
-
-      const currentValue = entry[dataColumn] as number | null;
-      const prevValue = prevEntry ? (prevEntry[dataColumn] as number | null) : null;
-
-      entries.push({
+    // Newest first; change = this weigh-in − the older one (negative = lost).
+    const entries: UserHistoryEntry[] = rows.map((entry, i) => {
+      const current = Number(entry.weight_kg);
+      const older = i < rows.length - 1 ? Number(rows[i + 1].weight_kg) : null;
+      return {
         id: entry.id,
         date: entry.tracking_date,
-        weight: currentValue,
-        weight_change: prevValue && currentValue
-          ? Math.round((currentValue - prevValue) * 100) / 100
-          : null,
-        is_public: true, // For now, all entries are considered public to friends
+        weight: current,
+        weight_change: older != null ? Math.round((current - older) * 100) / 100 : null,
+        is_public: entry.is_public !== false,
         note: entry.notes,
         notes: entry.notes, // the key iOS CheckInEntry reads
-      });
-    }
+      };
+    });
 
-    console.log(`[UserService.getUserHistory] Returning ${entries.length} daily tracking entries (column: ${dataColumn})`);
+    console.log(`[UserService.getUserHistory] Returning ${entries.length} weight entries`);
 
     return {
       entries,
