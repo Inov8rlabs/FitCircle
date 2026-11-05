@@ -12,9 +12,9 @@
  * Test / internal / reviewer / Play pre-launch sign-ups are excluded with the
  * Ads Console classifier (lib/ads/test-users.ts).
  */
-import { type AdRevenueMetrics, type AdRevenueRow, sumRevenue } from './ad-revenue';
 import { emailBrandHeader } from '../email/brand-shell';
 
+import { type AdRevenueMetrics, type AdRevenueRow, sumRevenue } from './ad-revenue';
 import { addDays, ymdInTz } from './dates';
 import { ratio, sumDelivery } from './metrics';
 import type { TestUserReason } from './test-users';
@@ -535,8 +535,8 @@ export function renderHtml(r: AdsEmailReport): string {
   parts.push(h2('Funnel — FitCircle database', 'All sources (paid + organic), real users only; outcomes as of now'));
   parts.push(htmlTable(FUNNEL_ROWS, windowCols(r, (k) => r.funnel[k])));
   parts.push(
-    `<p style="margin:16px 0"><a href="${esc(r.consoleUrl)}" style="display:inline-block;padding:8px 14px;background:#7c3aed;color:#ffffff;border-radius:6px;text-decoration:none;font-size:13px">Open the Ads Console</a></p>`
+    `<p style="margin:16px 0"><a href="${esc(r.consoleUrl)}" style="display:inline-block;padding:10px 16px;border:2px solid #6D28D9;color:#5B21B6;border-radius:8px;text-decoration:none;font-size:14px;font-weight:600">Open the Ads Console</a></p>`
   );
   parts.push(`<div style="font-size:11px;color:#6b7280"><div style="font-weight:600;margin-bottom:2px">Data notes</div><ul style="margin:0;padding-left:16px">${DATA_NOTES.map((n) => `<li>${esc(n)}</li>`).join('')}</ul></div>`);
-  return `<!doctype html><html><body style="margin:0;padding:20px;background:#ffffff;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif"><div style="max-width:720px">${parts.join('')}</div></body></html>`;
+  return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light dark"><meta name="supported-color-schemes" content="light dark"></head><body style="margin:0;padding:20px;background:#ffffff;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif"><div style="max-width:720px">${parts.join('')}</div></body></html>`;
 }

@@ -81,6 +81,40 @@ These rules live in `brand-shell.ts` and apply to every template:
 - one or two lines of 15 px body text;
 - a secondary button.
 
+### Dark mode
+
+**The bug (2026-11-04).** In Gmail iOS dark mode, Gmail "fully inverted" the password-reset email:
+- the page and card turned light and the headline turned dark;
+- the white button label became dark on the (uninverted) purple gradient.
+
+**The fix** (`brand-shell.ts`, applies to every `emailShell` email):
+
+1. **Locked backgrounds.** Every dark surface (page, card, tiles, secondary buttons, step badges, info boxes) carries `background-image: linear-gradient(c,c)` next to `background-color` (`solidBg`). Gmail doesn't invert background images. The `bgcolor` attributes stay for Outlook.
+2. **Protected text.** Every text run is wrapped in Gmail's blend spans (`gmailText`): `u + .body .fc-gs {background:#000; mix-blend-mode:screen}` around `u + .body .fc-gd {background:#000; mix-blend-mode:difference}`. `protectTextForGmail()` wraps all p, h1–h3 and button labels automatically. Td text (wordmark, step titles, badges, info boxes, footer) is wrapped explicitly. The selector only matches inside Gmail, and where Gmail doesn't invert, the two blends cancel out.
+3. **Neutral text colours.** The blend trick restores neutral greys and white faithfully but can shift saturated hues, so text is white or grey only. Brand colour stays in the locked surfaces (buttons, badges, gradients). The pink eyebrow and the coloured tile values are now neutral, and links are white and underlined.
+4. **Borders.** Borders can't be locked, so:
+   - the card's 1px frame is a padded cell with a locked background;
+   - dividers are locked 1px rows;
+   - other hairlines (`.fc-line`, the invite tiles) are dropped in Gmail rather than flipped to white.
+5. **Colour scheme and Outlook.com.** The `color-scheme` and `supported-color-schemes` meta and `:root` are set to `light dark`, so Apple Mail and iOS Mail never auto-invert. Outlook.com gets `[data-ogsb]` and `[data-ogsc]` overrides for the page, card, surface-2, button labels, h1, wordmark and paragraphs.
+6. **Ads report.** It is a white layout, so Gmail's normal inversion keeps it readable; it is not protected. Its solid purple button is now an outlined button (`#5B21B6` text with a `#6D28D9` border), which stays readable whether or not it's inverted.
+
+**Contrast.** White on the button gradient is 4.60:1 to 5.71:1 across the whole button (about 5.5:1 behind the centred label). Secondary buttons are 15:1.
+
+**Not verified in real clients.** Gmail Android, Outlook Windows/Mac/iOS dark mode and Outlook.com were not checked; that needs Litmus, Email on Acid or real devices. Outlook Windows' VML buttons can't take the blend trick.
+
+**Simulation.** `gmail-dark-before-*.png` and `gmail-dark-after-*.png` in `email-shots/` are a **simulation**, not real Gmail:
+- the HSL lightness of every background and text colour is inverted, background images are left alone, and Gmail's `<u></u><div class="body">` wrapper is added;
+- it reproduces the owner's report exactly ("before");
+- it can't prove how Gmail's exact algorithm treats saturated colours.
+
+**Tests.** `lib/email/__tests__/brand.test.ts` checks every template for:
+- the `light dark` meta and the Gmail blend and Outlook.com rules;
+- every dark inline background locked with its gradient;
+- the primary button gradient locked and its label protected;
+- no visible text outside a protected run, and no border hairlines;
+- no saturated text colours.
+
 ### Supabase Auth templates
 
 The repo has no Supabase Auth templates: `[auth.email.template.*]` is commented out in `supabase/config.toml`. They are managed only in the Supabase dashboard. I didn't read or change them there; the dashboard needs owner access.

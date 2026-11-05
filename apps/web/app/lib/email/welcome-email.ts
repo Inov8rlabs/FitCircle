@@ -24,7 +24,7 @@
 import { APEX_HOST, getAppHref, openPath, type Utm } from '../app-links';
 import { INVITE_HOST } from '../referrals/links';
 
-import { EMAIL_FONT, EMAIL_TOKENS as T, P, cardRow, emailButton, emailButtonSecondary, emailShell, emailStepBadge, esc } from './brand-shell';
+import { EMAIL_FONT, EMAIL_TOKENS as T, P, cardRow, dividerRow, emailButton, emailButtonSecondary, emailShell, emailStepBadge, esc, gmailText } from './brand-shell';
 
 export const WELCOME_TEMPLATE = 'welcome@4';
 
@@ -125,10 +125,10 @@ function steps(links: WelcomeLinks, platform: WelcomePlatform): Step[] {
 
 /** One flat row per step (no card-in-card): badge on the title line, short body, secondary button. */
 function stepRow(s: Step): string {
-  return `<tr><td class="px" style="padding:20px 28px;border-top:1px solid ${T.border};font-family:${EMAIL_FONT};">
+  return `${dividerRow()}<tr><td class="px" style="padding:20px 28px;font-family:${EMAIL_FONT};">
 <table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>
 <td valign="middle" style="padding:0 10px 0 0;">${emailStepBadge(s.n)}</td>
-<td valign="middle" style="font-family:${EMAIL_FONT};font-size:18px;line-height:24px;font-weight:600;color:${T.textPrimary};">${esc(s.title)}</td>
+<td valign="middle" style="font-family:${EMAIL_FONT};font-size:18px;line-height:24px;font-weight:600;color:${T.textPrimary};">${gmailText(esc(s.title))}</td>
 </tr></table>
 <p style="margin:8px 0 14px 0;font-size:15px;line-height:22px;color:${T.textSecondary};">${esc(s.body)}</p>
 ${emailButtonSecondary(s.url, s.linkLabel)}
@@ -145,14 +145,14 @@ export function welcomeEmail(i: WelcomeEmailInput): RenderedWelcome {
 
   const body = [
     cardRow(
-      `<p style="margin:0 0 8px 0;font-size:12px;line-height:16px;font-weight:700;letter-spacing:1.4px;color:${T.pink};">WELCOME TO FITCIRCLE</p>
+      `<p style="margin:0 0 8px 0;font-size:12px;line-height:16px;font-weight:700;letter-spacing:1.4px;color:${T.textSecondary};">WELCOME TO FITCIRCLE</p>
 <h1 class="h1" style="margin:0 0 8px 0;font-size:28px;line-height:34px;font-weight:800;letter-spacing:-0.5px;color:${T.textPrimary};">${esc(name ? `You're in, ${name}.` : "You're in.")}</h1>
 ${P('Healthy habits stick better with friends. Here are three easy ways to start this week.', T.textSecondary, 16)}`,
       '28px 28px 0 28px'
     ),
     cardRow(emailButton(links.open, primaryLabel), '4px 28px 24px 28px'),
     ...list.map(stepRow),
-    `<tr><td class="px" style="padding:20px 28px 24px 28px;border-top:1px solid ${T.border};font-family:${EMAIL_FONT};">${P('Questions or ideas? Just reply to this email. A real person on the team reads every one.', T.textTertiary, 14).replace('margin:0 0 14px 0', 'margin:0')}</td></tr>`,
+    `${dividerRow()}<tr><td class="px" style="padding:20px 28px 24px 28px;font-family:${EMAIL_FONT};">${P('Questions or ideas? Just reply to this email. A real person on the team reads every one.', T.textTertiary, 14).replace('margin:0 0 14px 0', 'margin:0')}</td></tr>`,
   ].join('\n');
 
   const footerLinks = i.unsubscribeUrl ? [{ label: 'Unsubscribe from FitCircle tips and updates', url: i.unsubscribeUrl }] : [];

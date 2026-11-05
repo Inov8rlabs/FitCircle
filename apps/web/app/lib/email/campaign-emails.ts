@@ -41,8 +41,8 @@ ${emoji}
 <h1 style="margin:8px 0 4px 0;font-size:24px;line-height:30px;font-weight:800;color:#ffffff;text-align:center;">${esc(i.heading)}</h1>
 ${paras}
 ${button(i.ctaUrl, i.ctaLabel)}
-<p style="margin:0;text-align:center;font-size:12px;color:#7d87a8;">or open <a href="${esc(i.ctaUrl)}" style="color:#a78bfa;">${esc(i.ctaUrl.replace(/^https:\/\//, ''))}</a></p>`;
-  const footer = `You're getting this because you have a FitCircle account. <a href="${esc(i.unsubscribeUrl)}" style="color:#a78bfa;">Unsubscribe from FitCircle updates</a>.`;
+<p style="margin:0;text-align:center;font-size:12px;color:#AEB6CC;">or open <a href="${esc(i.ctaUrl)}" style="color:#F5F7FF;text-decoration:underline;">${esc(i.ctaUrl.replace(/^https:\/\//, ''))}</a></p>`;
+  const footer = `You're getting this because you have a FitCircle account. <a href="${esc(i.unsubscribeUrl)}" style="color:#F5F7FF;text-decoration:underline;">Unsubscribe from FitCircle updates</a>.`;
 
   const html = emailShell({
     title: i.subject,

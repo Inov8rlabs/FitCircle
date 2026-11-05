@@ -38,11 +38,12 @@ describe('brand mark in every email', () => {
   it.each(EMAILS)('%s uses the hosted app icon (2x PNG, fixed size, alt) + live wordmark, and no invented mark', (_name, html) => {
     const img = new RegExp(`<img src="${EMAIL_LOGO_URL.replace(/[.?]/g, '\\$&')}" width="${EMAIL_LOGO_PX}" height="${EMAIL_LOGO_PX}" alt="${EMAIL_LOGO_ALT}"`);
     expect(html).toMatch(img);
-    expect(html).toMatch(/>FitCircle<\/td>/);
+    expect(html).toMatch(/class="fc-wm">(<span class="fc-gs"><span class="fc-gd">)?FitCircle(<\/span><\/span>)?<\/td>/);
     expect(html).not.toMatch(/<svg/i);
     expect(html).not.toMatch(/Georgia|font-style:\s*italic/i);
     expect(html).not.toMatch(/>\s*[fF]\s*</); // a lone "f"/"F" glyph standing in for the icon
-    expect(html).not.toMatch(/linear-gradient\([^)]*\)[^"]*"[^>]*>\s*<span/); // gradient header band with a drawn mark
+    // No gradient header band (the brand gradient is for CTAs/badges only): the brand row has no background.
+    expect(html).not.toMatch(/linear-gradient\([^)]*\)[^"]*"[^>]*>\s*(<span[^>]*>)*\s*FitCircle/);
     expect(html).not.toContain('icons/icon-96x96.png');
   });
 
@@ -64,3 +65,64 @@ describe('brand mark in every email', () => {
     }
   });
 });
+
+/**
+ * Dark-mode hardening (docs/EMAIL_QUALITY.md "Dark mode"): Gmail iOS inverted our
+ * dark design and left the primary button label dark-on-purple (2026-11-04).
+ */
+describe('dark-mode hardening in every dark email', () => {
+  const darkSurfaces = ['#070A1A', '#11162A', '#1A2036'];
+
+  it.each(EMAILS)('%s: color-scheme light dark + Gmail blend + Outlook.com overrides', (_n, html) => {
+    expect(html).toContain('<meta name="color-scheme" content="light dark">');
+    expect(html).toContain('<meta name="supported-color-schemes" content="light dark">');
+    expect(html).toMatch(/<body class="body"/);
+    expect(html).toContain('u + .body .fc-gs{background:#000;mix-blend-mode:screen;}');
+    expect(html).toContain('u + .body .fc-gd{background:#000;mix-blend-mode:difference;}');
+    expect(html).toMatch(/\[data-ogsb\] \.fc-bg\{background-color:#070A1A!important;\}/);
+    expect(html).toMatch(/\[data-ogsc\] \.btn,\[data-ogsc\] \.btn2\{color:#FFFFFF!important;\}/);
+  });
+
+  it.each(EMAILS)('%s: every dark background-color is gradient-locked (Gmail never inverts background-image)', (_n, html) => {
+    for (const c of darkSurfaces) {
+      const plain = new RegExp(`background(-color)?:${c};(?!background-image:linear-gradient\\(${c},${c}\\))`, 'gi');
+      // In inline styles, a dark background-color must be followed by its locking gradient.
+      const inline = [...html.matchAll(/style="([^"]*)"/g)].map((m) => m[1]).join('\n');
+      expect(inline.match(plain) ?? [], c).toEqual([]);
+    }
+  });
+
+  it.each(EMAILS)('%s: primary button has a locked gradient and a protected white label', (_n, html) => {
+    const buttons = [...html.matchAll(/<td align="center" bgcolor="#7C3AED" style="([^"]*)">[\s\S]*?<a [^>]*class="btn"[^>]*>([\s\S]*?)<\/a>/g)];
+    for (const [, style, label] of buttons) {
+      expect(style).toContain('background-image:linear-gradient(135deg,#7C3AED 0%,#DB2777 100%)');
+      expect(label).toMatch(/^<span class="fc-gs"><span class="fc-gd">[^<]+<\/span><\/span>$/);
+    }
+  });
+
+  it.each(EMAILS)('%s: text colours are neutral (saturated hues don\'t survive the Gmail blend fix)', (_n, html) => {
+    const body = html.slice(html.indexOf('<body'));
+    for (const c of ['#F472B6', '#A78BFA', '#22C55E', '#22D3EE', '#F97316', '#a78bfa', '#c4b5fd']) expect(body).not.toContain(`;color:${c}`);
+  });
+
+  it.each(EMAILS)('%s: no visible text outside a protected run (every p / h1–h3 / button label is wrapped)', (_n, html) => {
+    const body = html.slice(html.indexOf('<body'));
+    for (const m of body.matchAll(/<(h1|h2|h3|p)\b[^>]*>([\s\S]*?)<\/\1>/g)) {
+      if (m[2].trim()) expect(m[2].startsWith('<span class="fc-gs">'), m[0].slice(0, 80)).toBe(true);
+    }
+    for (const m of body.matchAll(/<a\b[^>]*class="btn2?"[^>]*>([\s\S]*?)<\/a>/g)) expect(m[1].startsWith('<span class="fc-gs">')).toBe(true);
+    // Nothing visible is left once protected runs, comments (Outlook VML), <head> and the hidden
+    // preheader are removed: any leftover text would be inverted to dark-on-dark by Gmail.
+    const leftover = body
+      .replace(/<!--[\s\S]*?-->/g, '')
+      .replace(/<div style="display:none;[\s\S]*?<\/div>/, '')
+      .replace(/<span class="fc-gs"><span class="fc-gd">[\s\S]*?<\/span><\/span>/g, '')
+      .replace(/<[^>]+>/g, '')
+      .replace(/&nbsp;|&#847;|&zwnj;/g, '')
+      .trim();
+    expect(leftover).toBe('');
+    // No border-top/bottom hairlines that Gmail would flip to white (dividers are locked 1px rows).
+    expect(body).not.toMatch(/border-(top|bottom):1px solid/);
+  });
+});
+
