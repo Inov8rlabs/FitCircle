@@ -1,9 +1,10 @@
 import { type NextRequest } from 'next/server';
 import { z } from 'zod';
 
+import { parseFitzyContext } from '@/lib/fitzy/context';
 import { describeFitzyError, fitzyFail, readJson } from '@/lib/fitzy/http';
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
-import { parseFitzyContext } from '@/lib/fitzy/context';
+import { ConsentService } from '@/lib/services/consent-service';
 import { FitzyService, type FitzyStreamEvent } from '@/lib/services/fitzy-service';
 import { JourneyService } from '@/lib/services/journey-service';
 import { runAfterResponse } from '@/lib/utils/after-response';
@@ -83,7 +84,7 @@ export async function POST(request: NextRequest) {
       };
       const sendError = (error: unknown) => {
         const d = describeFitzyError(error, 'mobile/fitzy/chat/stream');
-        write(frame('error', { code: d.code, message: d.message, ...(d.paywall ? { paywall: d.paywall } : {}) }));
+        write(frame('error', { code: d.code, message: d.message, ...(d.paywall ? { paywall: d.paywall } : {}), ...(d.details && d.code === 'AI_CONSENT_REQUIRED' ? { details: d.details } : {}) }));
       };
 
       try {
@@ -96,6 +97,7 @@ export async function POST(request: NextRequest) {
             clientMessages: body.conversationId ? undefined : body.clientMessages,
             timezone: request.headers.get('x-client-timezone'),
             ...(parseFitzyContext(body.context) ? { context: parseFitzyContext(body.context) } : {}),
+            assertAiConsent: () => ConsentService.assertUserAi(user.id, request, 'fitzy_chat'),
           },
           (e: FitzyStreamEvent) => write(frame(e.event, e.data)),
           request.signal

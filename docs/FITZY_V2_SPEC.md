@@ -84,7 +84,7 @@ Existing blocks + (Pro) memory items + current plan progress ("2 of 3 walks done
 ## 6. Free vs Pro
 | | Free | Pro |
 |---|---|---|
-| Chat | 5 messages/day (existing TIER_LIMITS), Haiku | unlimited (200/day safety cap), Haiku |
+| Chat | 0 messages/day since trial-first (remote config `free_fitzy_messages_per_day`; first send → UPGRADE_REQUIRED + trial-first paywall, docs/TRIAL_FIRST_SPEC.md §1) | unlimited (200/day safety cap), Haiku |
 | Daily focus | yes (full) | yes + Sunday recap (Sonnet) |
 | Weekly plan | preview: goal + first commitment + "N more" | full plan, check-offs, recap |
 | Memory | locked teaser | yes, view/delete |

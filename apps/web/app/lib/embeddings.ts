@@ -1,5 +1,7 @@
 import { embed, embedMany } from 'ai';
 
+import { gatewayCallOptions } from './ai/gateway-options';
+
 /**
  * Food-name embeddings via the Vercel AI Gateway. text-embedding-3-small → 1536 dims:
  * cheap (~$0.02/1M tokens), strong for short food names, and within pgvector's HNSW
@@ -10,13 +12,13 @@ export const FOOD_EMBEDDING_MODEL = 'openai/text-embedding-3-small';
 export const FOOD_EMBEDDING_DIMS = 1536;
 
 export async function embedText(text: string): Promise<number[]> {
-  const { embedding } = await embed({ model: FOOD_EMBEDDING_MODEL, value: text });
+  const { embedding } = await embed({ model: FOOD_EMBEDDING_MODEL, value: text, ...gatewayCallOptions() });
   return embedding;
 }
 
 export async function embedTexts(texts: string[]): Promise<number[][]> {
   if (texts.length === 0) return [];
-  const { embeddings } = await embedMany({ model: FOOD_EMBEDDING_MODEL, values: texts });
+  const { embeddings } = await embedMany({ model: FOOD_EMBEDDING_MODEL, values: texts, ...gatewayCallOptions() });
   return embeddings;
 }
 

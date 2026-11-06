@@ -157,12 +157,13 @@ describe('profileAnswerSchema', () => {
     expect(ok({ key: 'goal', value: 'lose_weight', source: 'push' })).toBe(false);
   });
 
-  it('birth year: age 13–100 this calendar year, issue on `value`', () => {
+  it('birth year: age 18–100 this calendar year; under 18 is an AGE_REQUIREMENT issue on `value`', () => {
     const year = new Date().getUTCFullYear();
-    expect(ok({ key: 'birth_year', value: year - 13 })).toBe(true);
-    const tooYoung = profileAnswerSchema.safeParse({ key: 'birth_year', value: year - 12 });
+    expect(ok({ key: 'birth_year', value: year - 18 })).toBe(true);
+    const tooYoung = profileAnswerSchema.safeParse({ key: 'birth_year', value: year - 17 });
     expect(tooYoung.success).toBe(false);
     expect(tooYoung.error?.issues[0].path).toEqual(['value']);
+    expect((tooYoung.error?.issues[0] as any).params?.code).toBe('AGE_REQUIREMENT');
     expect(ok({ key: 'birth_year', value: year - 101 })).toBe(false);
   });
 });

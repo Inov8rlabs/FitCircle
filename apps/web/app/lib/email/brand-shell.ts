@@ -21,6 +21,8 @@
  * Colours are the app tokens (DESIGN_LANGUAGE.md §3).
  */
 
+import { emailPostalAddress } from './compliance';
+
 export const EMAIL_TOKENS = {
   bg: '#070A1A',
   surface1: '#11162A',
@@ -162,7 +164,7 @@ export interface ShellFooter {
   html?: string;
   /** Unsubscribe links (engagement email only). */
   links?: Array<{ label: string; url: string }>;
-  /** CAN-SPAM postal address (EMAIL_POSTAL_ADDRESS). */
+  /** CAN-SPAM / CASL postal address. Omitted → EMAIL_POSTAL_ADDRESS (lib/email/compliance.ts); null → none. */
   postalAddress?: string | null;
 }
 
@@ -178,6 +180,7 @@ const PREHEADER_PAD = '&#847;&zwnj;&nbsp;'.repeat(40);
 
 /** Full HTML document around a card body. */
 export function emailShell(i: ShellInput): string {
+  const postalAddress = i.footer.postalAddress === undefined ? emailPostalAddress() : i.footer.postalAddress;
   const links = (i.footer.links ?? [])
     .map((l) => `<a href="${esc(l.url)}" style="color:${T.textSecondary};text-decoration:underline;">${esc(l.label)}</a>`)
     .join('&nbsp;&nbsp;·&nbsp;&nbsp;');
@@ -249,7 +252,7 @@ ${i.body}
 </td></tr>
 <tr><td class="px" style="padding:24px 28px 0 28px;font-family:${EMAIL_FONT};font-size:13px;line-height:20px;color:${T.textTertiary};text-align:center;">
 ${gmailText(`${i.footer.html ?? `${esc(i.footer.reason)}${links ? `<br><br>${links}` : ''}`}
-<br><br>FitCircle by Inov8r Labs${i.footer.postalAddress ? `<br>${esc(i.footer.postalAddress)}` : ''}`)}
+<br><br>FitCircle by Inov8r Labs Inc.${postalAddress ? `<br>${esc(postalAddress)}` : ''}`)}
 </td></tr>
 </table>
 <!--[if mso]></td></tr></table><![endif]-->

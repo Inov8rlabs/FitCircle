@@ -1,7 +1,10 @@
 import { type NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 
+import { aiConsentFail } from '@/lib/consents/http';
+import { foodAiUpgradeDetails, foodAiUpgradeMessage } from '@/lib/fitzy/paywall';
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
+import { AiConsentRequiredError, ConsentService } from '@/lib/services/consent-service';
 import { NutritionIntelligenceService } from '@/lib/services/nutrition-intelligence-service';
 import { UpgradeRequiredError } from '@/lib/services/usage-service';
 import { safeParseLenient } from '@/lib/validation/lenient-parse';
@@ -70,6 +73,7 @@ export async function POST(request: NextRequest) {
     }
 
     try {
+      await ConsentService.assertUserAi(user.id, request, 'food_estimate');
       const item = await NutritionIntelligenceService.estimateItem(
         user.id,
         parsed.data.name,
@@ -85,6 +89,7 @@ export async function POST(request: NextRequest) {
         error: null,
       });
     } catch (estimateError: any) {
+      if (estimateError instanceof AiConsentRequiredError) return aiConsentFail(estimateError);
       // Free-tier quota hit (gate live) → 429 UPGRADE_REQUIRED, the contextual paywall trigger.
       if (estimateError instanceof UpgradeRequiredError) {
         return NextResponse.json(
@@ -93,12 +98,9 @@ export async function POST(request: NextRequest) {
             data: null,
             error: {
               code: 'UPGRADE_REQUIRED',
-              message: `You've used your ${estimateError.limit} free AI estimates today — go Pro for unlimited.`,
-              details: {
-                feature: estimateError.feature,
-                used: estimateError.used,
-                limit: estimateError.limit,
-              },
+              message: foodAiUpgradeMessage(estimateError.limit, estimateError.trialEligible === true),
+              // Trial-first (TRIAL_FIRST_SPEC §5): legacy {feature, used, limit} + additive paywall.
+              details: foodAiUpgradeDetails(estimateError),
               timestamp: new Date().toISOString(),
             },
             meta: { requestTime: Date.now() - startTime },

@@ -1,3 +1,5 @@
+import { logIgnoredQueryError } from '@/lib/api/route-errors';
+
 import type { CampaignRow } from '../campaigns/model';
 import { TIER_LIMITS, LEGACY_LIMITS } from '../config/tier-limits';
 import { activeOffer, memberSinceFrom, MEMBER_EVENT_TYPES, proBadgeFor, type SubscriptionEventRow } from '../entitlements/pro-badge';
@@ -14,7 +16,7 @@ import {
 
 import { CampaignService } from './campaign-service';
 import { FeatureFlagService } from './feature-flag-service';
-import { logIgnoredQueryError } from '@/lib/api/route-errors';
+import { UsageService } from './usage-service';
 
 /**
  * EntitlementService — server-driven feature gating (BODY_COMP_BUILD_CONTRACT §2).
@@ -86,12 +88,30 @@ export class EntitlementService {
       if (!features[key]) features[key] = { allowed: true, requiredTier: 'free' };
     }
 
+    // Free-tier limits from remote config (TRIAL_FIRST_SPEC §5–§6): only resolved for free users
+    // with the gate live; the food allowance adds one count query.
+    const live = (k: string) => features[k]?.requiredTier === 'premium';
+    const [fitzyFree, foodAi] = await Promise.all([
+      tier === 'free' && live('fitzy_unlimited')
+        ? UsageService.freeFitzyLimit(userId).catch(() => TIER_LIMITS.free.fitzyMessagesPerDay)
+        : Promise.resolve(null),
+      UsageService.foodAiAllowance(userId, tier, live('food_ai_unlimited')).catch(() => ({
+        total: tier === 'free' && live('food_ai_unlimited') ? TIER_LIMITS.free.foodAiAnalysesTotal : null,
+        remaining: null,
+      })),
+    ]);
+
     const subscriptionsEnabled = flag.enabled === true;
     const trial = trialState(tier, profile?.subscription_status, profile?.subscription_expires_at, trialGate.trialEndsAt);
     return {
       tier,
       features,
-      limits: computeLimits(tier, features),
+      limits: {
+        ...computeLimits(tier, features),
+        ...(fitzyFree !== null ? { fitzyMessagesPerDay: fitzyFree } : {}),
+        foodAiAnalysesTotal: foodAi.total,
+        foodAiAnalysesRemaining: foodAi.remaining,
+      },
       // Additive (1.1.0): the Home crown marker + "member since" for Pro status.
       proBadge: proBadgeFor({
         offer: extras.offer,

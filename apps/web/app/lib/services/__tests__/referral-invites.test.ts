@@ -44,6 +44,9 @@ import {
 } from '../referral-invite-service';
 import { ReferralService } from '../referral-service';
 
+// Marketing email is only sent with a postal address (lib/email/compliance.ts); these tests cover other behaviour.
+process.env.EMAIL_POSTAL_ADDRESS = process.env.EMAIL_POSTAL_ADDRESS || '123 Test Street, Testville, CA 94000, USA';
+
 const DAY = 86_400_000;
 const MAYA = '11111111-1111-4111-8111-111111111111';
 const SAM = '22222222-2222-4222-8222-222222222222';

@@ -7,6 +7,7 @@
  * Every write is best-effort and runs after the response; nothing here may
  * fail a feed, a food log, a webhook or a Fitzy request.
  */
+import { fitzyPlanPreviewReady, warmFitzyPlanPreview } from '@/lib/fitzy/plan-warmup';
 import { swrCache } from '@/lib/home-feed/cache';
 import { localClock } from '@/lib/journey/meal-slots';
 import { LIFECYCLE_PROMO_KEY_SET, type LifecycleFeedInput } from '@/lib/pro-lifecycle';
@@ -31,7 +32,7 @@ export type ConversionKind = 'meal_logged' | 'subscription_started' | 'fitzy_ope
 export const CONVERSIONS: Record<ConversionKind, readonly string[]> = {
   meal_logged: ['first_meal', 'log_meal_now'],
   // The Pro lifecycle cards (pro_expiring / pro_expired / trial_expiring) open the paywall too.
-  subscription_started: ['pro_value', ...LIFECYCLE_PROMO_KEY_SET],
+  subscription_started: ['pro_value', 'fitzy_recommendations', ...LIFECYCLE_PROMO_KEY_SET],
   fitzy_opened: ['meet_fitzy'],
 };
 
@@ -155,6 +156,10 @@ export interface PromoLoaders {
   proLifecycle?(profile: Record<string, any> & { id: string }, timezone: string, now: Date): Promise<LifecycleRound>;
   /** System promo looks (only called for promo_style@1 clients). */
   promoStyles?(): Promise<PromoStylesConfig>;
+  /** Trial-first teaser: does a real Fitzy weekly-plan preview exist (this or last week)? Free + ready users only. */
+  fitzyPlanReady?(userId: string, localDate: string): Promise<boolean>;
+  /** Produce the free plan preview after the response when it's missing (best-effort). */
+  warmFitzyPlan?(userId: string, timezone: string): Promise<unknown>;
 }
 
 /** What the promo round learns about the Pro lifecycle prompts. */
@@ -203,6 +208,8 @@ export const defaultPromoLoaders: PromoLoaders = {
   async promoStyles() {
     return (await promoStylesCache.get()).config;
   },
+  fitzyPlanReady: (userId, localDate) => fitzyPlanPreviewReady(userId, localDate),
+  warmFitzyPlan: (userId, timezone) => warmFitzyPlanPreview(userId, timezone),
 };
 
 export class PromoService {

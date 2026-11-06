@@ -1,5 +1,7 @@
 import { createHash } from 'crypto';
 
+import { logIgnoredQueryError } from '@/lib/api/route-errors';
+
 import { createAdminSupabase } from '../supabase-admin';
 import type { NutritionDraftDTO } from '../types/nutrition';
 
@@ -9,7 +11,6 @@ import {
   normalizeTotals,
   type Totals,
 } from './nutrition-draft-reconcile';
-import { logIgnoredQueryError } from '@/lib/api/route-errors';
 
 /**
  * Captures (image, original AI draft, user-confirmed labels) so corrections become a
@@ -25,9 +26,11 @@ import { logIgnoredQueryError } from '@/lib/api/route-errors';
  * Gated by NUTRITION_TRAINING_CAPTURE === 'true' (off by default). Everything here is
  * best-effort / failure-isolated — a capture problem must never affect the user's food log.
  *
- * Privacy: the server-driven path stores NO images. AI data-sharing consent is held
- * client-side only (iOS AIConsent, UserDefaults) — there is no server-side flag to check,
- * so photos are only ever stored by the client route, which the apps call only with consent.
+ * Privacy: the server-driven path stores NO images. AI consent is checked server-side
+ * (ConsentService, docs/PRIVACY_COMPLIANCE_SPEC.md §4): `captureDraft` only runs after a parse
+ * that passed the consent gate, `reconcileEntry` only links to such a draft, and the client
+ * route (which may carry a photo) checks consent itself. Disclosed in Privacy Policy v1.3
+ * (AI accuracy samples, 12-month retention proposed).
  */
 export class NutritionTrainingService {
   /** How long after a parse a saved entry may still be linked to it. */

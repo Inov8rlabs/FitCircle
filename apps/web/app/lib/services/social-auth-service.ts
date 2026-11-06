@@ -8,6 +8,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 import { logIgnoredQueryError } from '@/lib/api/route-errors';
+import { REGION_NOT_AVAILABLE_MESSAGE } from '@/lib/geo/region-restriction';
 import { coerceDisplayName } from '@/lib/validation/display-name';
 
 import { deriveUsernameBase, ensureUniqueUsername } from './username-service';
@@ -21,6 +22,11 @@ export interface SocialUserInput {
   provider: SocialProvider;
   /** The provider's stable user id (Apple `sub`, Google `sub`). */
   providerUserId: string;
+  /**
+   * EU/EEA restriction (lib/geo/region-restriction.ts): when true, an EXISTING account still
+   * signs in, but no new account is created (SocialAuthError REGION_NOT_AVAILABLE → 403).
+   */
+  blockNewAccount?: boolean;
 }
 
 export interface SocialUserResult {
@@ -33,7 +39,7 @@ export interface SocialUserResult {
 export class SocialAuthError extends Error {
   constructor(
     message: string,
-    public readonly code: 'USER_CREATION_FAILED' | 'PROFILE_CREATION_FAILED'
+    public readonly code: 'USER_CREATION_FAILED' | 'PROFILE_CREATION_FAILED' | 'REGION_NOT_AVAILABLE'
   ) {
     super(message);
     this.name = 'SocialAuthError';
@@ -83,6 +89,12 @@ export async function findOrCreateSocialUser(
 
   if (existingProfile?.id) {
     return { userId: existingProfile.id, profile: existingProfile, isNewUser: false };
+  }
+
+  // 1b. Region-restricted sign-in: only an existing account may continue (an auth user without
+  //     a profile email resolves through the collision path below).
+  if (input.blockNewAccount && !(await findAuthUserIdByEmail(supabase, email))) {
+    throw new SocialAuthError(REGION_NOT_AVAILABLE_MESSAGE, 'REGION_NOT_AVAILABLE');
   }
 
   // 2. Create the auth user. A collision here means an account exists without

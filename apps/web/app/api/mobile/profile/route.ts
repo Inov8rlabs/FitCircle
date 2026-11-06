@@ -5,6 +5,7 @@ import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { MobileAPIService } from '@/lib/services/mobile-api-service';
 import { toProfileUpdateResponse } from '@/lib/services/mobile-profile-response';
 import { resolveClientTimezone } from '@/lib/streaks/client-timezone';
+import { AgeRequirementError, ageRequirementBody, isUnderMinimumAge } from '@/lib/validation/age-requirement';
 import { isFutureCalendarDate, normalizeDateOfBirth } from '@/lib/validation/date-of-birth';
 import { cleanDisplayName, validateDisplayName } from '@/lib/validation/display-name';
 import { parseLenient, validationMessage } from '@/lib/validation/lenient-parse';
@@ -153,6 +154,12 @@ export async function PUT(request: NextRequest) {
       if (isFutureCalendarDate(dateOfBirth)) {
         throw fieldError('dateOfBirth', 'Date of birth cannot be in the future');
       }
+      // 18+ (lib/validation/age-requirement.ts). An unchanged echo of the stored date is not
+      // re-checked, so accounts created before the gate can still edit their profile.
+      const storedDob = typeof user.date_of_birth === 'string' ? user.date_of_birth.slice(0, 10) : null;
+      if (dateOfBirth !== storedDob && isUnderMinimumAge(dateOfBirth)) {
+        throw new AgeRequirementError('dateOfBirth');
+      }
       updates.date_of_birth = dateOfBirth;
     }
 
@@ -207,6 +214,10 @@ export async function PUT(request: NextRequest) {
         },
         { status: 401 }
       );
+    }
+
+    if (error instanceof AgeRequirementError) {
+      return NextResponse.json(ageRequirementBody(error.field), { status: 400 });
     }
 
     if (error instanceof z.ZodError) {

@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { normalizeAssumptions, textParseResultSchema } from '../../types/nutrition';
 import { NutritionIntelligenceService } from '../nutrition-intelligence-service';
-import { UsageService } from '../usage-service';
+import { UpgradeRequiredError, UsageService } from '../usage-service';
 
 const parsedItem = {
   name: 'Chicken biryani',
@@ -62,6 +62,7 @@ describe('NutritionIntelligenceService.estimateItem', () => {
     const service = NutritionIntelligenceService as any;
     vi.spyOn(service, 'getCachedResult').mockResolvedValue(null);
     vi.spyOn(UsageService, 'assertFoodAiQuota').mockResolvedValue(undefined);
+    vi.spyOn(UsageService, 'reserveFoodAi').mockResolvedValue({ id: 'r1', release: vi.fn() });
     vi.spyOn(service, 'recordParse').mockResolvedValue(undefined);
     vi.spyOn(service, 'finalizeEstimatedItem').mockResolvedValue(parsedItem);
     const callModel = vi
@@ -119,10 +120,11 @@ describe('normalizeAssumptions / textParseResultSchema.assumptions', () => {
 describe('NutritionIntelligenceService.parseVoice', () => {
   afterEach(() => vi.restoreAllMocks());
 
+  let releaseSpy = vi.fn();
   const stub = (assumptions?: unknown) => {
+    releaseSpy = vi.fn();
     const service = NutritionIntelligenceService as any;
-    vi.spyOn(UsageService, 'assertFoodAiQuota').mockResolvedValue(undefined);
-    vi.spyOn(service, 'recordParseLog').mockResolvedValue(undefined);
+    vi.spyOn(UsageService, 'reserveFoodAi').mockResolvedValue({ id: 'r1', release: releaseSpy });
     vi.spyOn(service, 'groundItemsByMode').mockImplementation(async (...args: unknown[]) => ({
       items: (args[1] as any[]).map((it) => ({ ...it, matchedFoodId: null, itemSource: 'llm_vision', unitOptions: [] })),
     }));
@@ -161,6 +163,24 @@ describe('NutritionIntelligenceService.parseVoice', () => {
     expect(call).toHaveBeenNthCalledWith(2, 'google/gemini-3-flash', 'user-1', 'latte', 20_000, 'text');
   });
 
+  it('success keeps the reserved credit; both models failing releases it (success-only counting)', async () => {
+    const call = stub([]);
+    await NutritionIntelligenceService.parseVoice('user-1', 'latte');
+    expect(UsageService.reserveFoodAi).toHaveBeenCalledWith('user-1', expect.any(String));
+    expect(releaseSpy).not.toHaveBeenCalled();
+
+    call.mockRejectedValueOnce(new Error('a')).mockRejectedValueOnce(new Error('b'));
+    await expect(NutritionIntelligenceService.parseVoice('user-1', 'latte')).rejects.toThrow('ParseFailed');
+    expect(releaseSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('refused (free allowance used) → no model call at all', async () => {
+    const call = stub([]);
+    vi.mocked(UsageService.reserveFoodAi).mockRejectedValueOnce(new UpgradeRequiredError('food_ai_unlimited', 5, 5, true));
+    await expect(NutritionIntelligenceService.parseVoice('user-1', 'latte')).rejects.toBeInstanceOf(UpgradeRequiredError);
+    expect(call).not.toHaveBeenCalled();
+  });
+
   it('the typed-text prompt talks about a description, not a transcript or speech', () => {
     const text = NutritionIntelligenceService.textParsePrompt('text');
     const voice = NutritionIntelligenceService.textParsePrompt('voice');
@@ -180,5 +200,75 @@ describe('NutritionIntelligenceService.parseVoice', () => {
     expect(repaired?.items[0].name).toBe('eggs');
     expect(repaired?.assumptions).toEqual(['2 large eggs']);
     expect(NutritionIntelligenceService.repairTextJson('[{"name":"latte","calories":190}]')?.assumptions).toEqual([]);
+  });
+});
+
+describe('NutritionIntelligenceService.parsePhoto — lifetime free allowance (TRIAL_FIRST_SPEC §5)', () => {
+  afterEach(() => vi.restoreAllMocks());
+  const img = [{ bytes: Buffer.from([1, 2, 3]), mimeType: 'image/jpeg' }];
+  const setup = () => {
+    const service = NutritionIntelligenceService as any;
+    const release = vi.fn();
+    vi.spyOn(UsageService, 'assertFoodAiQuota').mockResolvedValue(undefined);
+    const reserve = vi.spyOn(UsageService, 'reserveFoodAi').mockResolvedValue({ id: 'r1', release });
+    vi.spyOn(service, 'getCachedResult').mockResolvedValue(null);
+    const record = vi.spyOn(service, 'recordParse').mockResolvedValue(undefined);
+    vi.spyOn(service, 'toDraft').mockResolvedValue({ items: [], dbKcalPer100g: undefined });
+    const model = vi.spyOn(service, 'callPhotoModel').mockResolvedValue({ result: { items: [parsedItem], overallConfidence: 0.9, notes: null }, usage: {} });
+    return { service, release, reserve, record, model };
+  };
+
+  it('success: the reserved credit is kept and not logged twice', async () => {
+    const { release, reserve, record } = setup();
+    await NutritionIntelligenceService.parsePhoto('user-1', img, null);
+    expect(reserve).toHaveBeenCalledTimes(1);
+    expect(release).not.toHaveBeenCalled();
+    expect(record).toHaveBeenCalledWith('user-1', expect.any(String), expect.anything(), { logged: true });
+  });
+
+  it('both models fail → credit released, ParseFailed (the route then saves the photo)', async () => {
+    const { release, model } = setup();
+    model.mockRejectedValue(new Error('down'));
+    await expect(NutritionIntelligenceService.parsePhoto('user-1', img, null)).rejects.toThrow('ParseFailed');
+    expect(release).toHaveBeenCalledTimes(1);
+  });
+
+  it('over the allowance: refused even for a cached result, and no model call', async () => {
+    const { service, model, reserve } = setup();
+    vi.mocked(UsageService.assertFoodAiQuota).mockRejectedValue(new UpgradeRequiredError('food_ai_unlimited', 5, 5, true));
+    const cached = vi.mocked(service.getCachedResult);
+    cached.mockResolvedValue({ items: [parsedItem], overallConfidence: 0.9, notes: null });
+    await expect(NutritionIntelligenceService.parsePhoto('user-1', img, null)).rejects.toBeInstanceOf(UpgradeRequiredError);
+    expect(cached).not.toHaveBeenCalled();
+    expect(model).not.toHaveBeenCalled();
+    expect(reserve).not.toHaveBeenCalled();
+  });
+
+  it('a "Fix" (refine) is a real analysis: reserved and kept', async () => {
+    const { reserve, release, record } = setup();
+    vi.spyOn(NutritionIntelligenceService as any, 'refinePromptBlock').mockReturnValue('fix');
+    await NutritionIntelligenceService.parsePhoto('user-1', img, null, { refine: { correction: 'it was tofu', items: [] } as any });
+    expect(reserve).toHaveBeenCalledTimes(1);
+    expect(release).not.toHaveBeenCalled();
+    expect(record).not.toHaveBeenCalled(); // never cached
+  });
+});
+
+describe('NutritionIntelligenceService.estimateItem — allowance', () => {
+  afterEach(() => vi.restoreAllMocks());
+  it('both models fail → released; over allowance → refused before the cache', async () => {
+    const service = NutritionIntelligenceService as any;
+    const release = vi.fn();
+    const assert = vi.spyOn(UsageService, 'assertFoodAiQuota').mockResolvedValue(undefined);
+    vi.spyOn(UsageService, 'reserveFoodAi').mockResolvedValue({ id: 'r1', release });
+    const cache = vi.spyOn(service, 'getCachedResult').mockResolvedValue(null);
+    vi.spyOn(service, 'callItemModel').mockRejectedValue(new Error('down'));
+    await expect(NutritionIntelligenceService.estimateItem('user-1', 'Rice', 100)).rejects.toThrow('ParseFailed');
+    expect(release).toHaveBeenCalledTimes(1);
+
+    assert.mockRejectedValue(new UpgradeRequiredError('food_ai_unlimited', 5, 5, false));
+    cache.mockClear();
+    await expect(NutritionIntelligenceService.estimateItem('user-1', 'Rice', 100)).rejects.toBeInstanceOf(UpgradeRequiredError);
+    expect(cache).not.toHaveBeenCalled();
   });
 });

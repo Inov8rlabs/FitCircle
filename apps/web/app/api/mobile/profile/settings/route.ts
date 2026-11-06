@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { addAutoRefreshHeaders } from '@/lib/middleware/mobile-auto-refresh';
 import { createAdminSupabase } from '@/lib/supabase-admin';
+import { ageRequirementBody, isUnderMinimumAge } from '@/lib/validation/age-requirement';
 import { parseLenient, validationMessage } from '@/lib/validation/lenient-parse';
 
 /**
@@ -31,7 +32,7 @@ const settingsSchema = z.object({
  * Validation:
  * - Height: 50-250cm
  * - Weight: 20-500kg
- * - Age: Must be 13+ years old
+ * - Age: Must be 18+ years old (400 AGE_REQUIREMENT)
  */
 export async function PUT(request: NextRequest) {
   try {
@@ -41,32 +42,13 @@ export async function PUT(request: NextRequest) {
     // Validate input
     const validatedData = parseLenient(settingsSchema, body);
 
-    // Additional validation: Check age if date_of_birth provided
+    // 18+ (lib/validation/age-requirement.ts). An unchanged echo of the stored date is not
+    // re-checked, so accounts created before the gate can still save other settings.
     if (validatedData.date_of_birth) {
-      const dob = new Date(validatedData.date_of_birth);
-      const today = new Date();
-      const age = today.getFullYear() - dob.getFullYear();
-      const monthDiff = today.getMonth() - dob.getMonth();
-
-      if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < dob.getDate())) {
-        // Birthday hasn't occurred this year yet
-      }
-
-      if (age < 13) {
-        return NextResponse.json(
-          {
-            success: false,
-            data: null,
-            error: {
-              code: 'VALIDATION_ERROR',
-              message: 'You must be at least 13 years old to use FitCircle',
-              details: {},
-              timestamp: new Date().toISOString(),
-            },
-            meta: null,
-          },
-          { status: 400 }
-        );
+      const dob = validatedData.date_of_birth.slice(0, 10);
+      const storedDob = typeof user.date_of_birth === 'string' ? user.date_of_birth.slice(0, 10) : null;
+      if (dob !== storedDob && isUnderMinimumAge(dob)) {
+        return NextResponse.json(ageRequirementBody('date_of_birth'), { status: 400 });
       }
     }
 

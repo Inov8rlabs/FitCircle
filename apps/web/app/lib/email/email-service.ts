@@ -17,6 +17,7 @@
 
 import { Resend } from 'resend';
 
+import { checkMarketingEmail } from './compliance';
 import { findSuppressedAddresses, normalizeAddress } from './suppression';
 import { generateInvitationEmail } from './templates';
 
@@ -150,7 +151,8 @@ export interface SendEmailResult {
    * Resend's error name (e.g. `rate_limit_exceeded`, `validation_error`) so
    * callers can tell a transient failure from a permanent one;
    * `not_configured` without a key; `suppressed` when every recipient is on
-   * the bounce/complaint suppression list (nothing was sent).
+   * the bounce/complaint suppression list (nothing was sent); `compliance_blocked`
+   * when a marketing email lacks the postal address or unsubscribe (lib/email/compliance.ts).
    */
   errorName?: string;
   /** Recipients dropped because they're suppressed (normalised). */
@@ -193,6 +195,7 @@ export async function sendEmail({
   const recipients = (Array.isArray(to) ? to : [to]).map((r) => r.trim()).filter(Boolean);
   if (recipients.length === 0) return { success: false, error: 'No recipient', errorName: 'validation_error' };
 
+
   const blocked = await findSuppressedAddresses(recipients);
   const allowed = recipients.filter((r) => !blocked.has(normalizeAddress(r)));
   const suppressed = recipients.filter((r) => blocked.has(normalizeAddress(r))).map(normalizeAddress);
@@ -201,6 +204,13 @@ export async function sendEmail({
   }
   if (allowed.length === 0) {
     return { success: false, error: 'All recipients are suppressed (bounced or complained)', errorName: 'suppressed', suppressed };
+  }
+
+  // Marketing / lifecycle mail: postal address + unsubscribe or it is not sent (lib/email/compliance.ts).
+  const problem = checkMarketingEmail({ category, html, text, headers });
+  if (problem) {
+    console.error(`[email-compliance] ${category}: not sent (${problem})`);
+    return { success: false, error: `Email blocked: ${problem}`, errorName: 'compliance_blocked' };
   }
 
   const resend = getResend();

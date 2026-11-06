@@ -2,6 +2,7 @@ import { type NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
+import { ConsentService } from '@/lib/services/consent-service';
 import { NutritionTrainingService } from '@/lib/services/nutrition-training-service';
 import { safeParseLenient } from '@/lib/validation/lenient-parse';
 
@@ -36,6 +37,11 @@ export async function POST(request: NextRequest) {
     if (!NutritionTrainingService.enabled) {
       return new NextResponse(null, { status: 204 });
     }
+
+    // Training capture keeps AI output tied to the user: only with AI consent
+    // (docs/PRIVACY_COMPLIANCE_SPEC.md §4). Without it → 204, the same "stop sending" no-op.
+    const ai = await ConsentService.aiDecision(user.id, { feature: 'training_capture', initiator: 'user', request });
+    if (!ai.allowed) return new NextResponse(null, { status: 204 });
 
     const formData = await request.formData();
 

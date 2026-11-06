@@ -9,6 +9,8 @@
  * workout/custom circles fell through to the member's weigh-ins.
  */
 
+import { PRIVACY_DEFAULTS } from '../privacy/defaults';
+
 export type CircleTypeWire = 'step_count' | 'weight_loss' | 'workout_minutes' | 'custom';
 export type MemberMetric = 'steps' | 'weight' | 'workout_minutes' | 'custom' | 'none';
 export type Aggregation = 'daily_total' | 'measurement';
@@ -102,9 +104,9 @@ export function parsePrivacyPrefs(preferences: unknown): PrivacyPrefs {
   const p = (preferences && typeof preferences === 'object' ? preferences : {}) as Record<string, unknown>;
   const visibility = p.profile_visibility;
   return {
-    profile_visibility: visibility === 'private' || visibility === 'friends' ? visibility : 'public',
-    show_weight: p.show_weight !== false,
-    show_progress: p.show_progress !== false,
+    profile_visibility: visibility === 'private' || visibility === 'friends' || visibility === 'public' ? visibility : PRIVACY_DEFAULTS.profileVisibility,
+    show_weight: typeof p.show_weight === 'boolean' ? p.show_weight : PRIVACY_DEFAULTS.showWeight,
+    show_progress: typeof p.show_progress === 'boolean' ? p.show_progress : PRIVACY_DEFAULTS.showProgress,
   };
 }
 

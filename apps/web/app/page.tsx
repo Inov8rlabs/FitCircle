@@ -160,11 +160,11 @@ function StoreRow({ params, placement, center = false }: { params: Omit<GetAppPa
 
 /** lib/config/tier-limits.ts (free) and the live premium feature gates. */
 const FREE_PLAN = [
-  '5 AI-analyzed meals a day, unlimited manual logging',
+  '5 free AI meal analyses, unlimited manual and photo logging',
   'Daily streaks and streak shields',
   'Create up to 2 circles, join as many as you like',
   'Circle chat and challenges',
-  'Fitzy’s daily focus and 5 messages a day',
+  'Fitzy’s daily focus (chat with Fitzy is Pro, with a free trial)',
   'Apple Health and Health Connect sync',
   '14 days of history in trends and insights',
   'Includes ads in the app',
@@ -662,6 +662,7 @@ export default async function LandingPage({ searchParams }: Props) {
             <ul className="space-y-2 text-subhead text-fg-secondary">
               <li><Link href="/terms" className="hover:text-white">Terms</Link></li>
               <li><Link href="/privacy" className="hover:text-white">Privacy</Link></li>
+              <li><Link href="/privacy-choices" className="hover:text-white">Your Privacy Choices</Link></li>
             </ul>
           </nav>
         </div>

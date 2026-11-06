@@ -3,6 +3,7 @@ import { type NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 
 import { parseClientPlatform } from '@/lib/experiments/request-info';
+import { isRegionRestricted, regionNotAvailableBody } from '@/lib/geo/region-restriction';
 import { registerRateLimiter, getIdentifier, applyRateLimit } from '@/lib/middleware/rate-limit';
 import { MobileAPIService } from '@/lib/services/mobile-api-service';
 import { toMobileUser } from '@/lib/services/mobile-profile-response';
@@ -30,6 +31,8 @@ const registerSchema = z.object({
 });
 
 export async function POST(request: NextRequest) {
+  // EU/EEA: no new accounts (WEB_EU_SIGNUP_BLOCK, default on; lib/geo/region-restriction.ts).
+  if (isRegionRestricted(request)) return NextResponse.json(regionNotAvailableBody(), { status: 403 });
   try {
     // Apply rate limiting (3 registrations per day per IP)
     const identifier = getIdentifier(request);

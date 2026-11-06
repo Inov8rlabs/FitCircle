@@ -8,6 +8,7 @@ import { PhotoThumb, fileKey } from '@/components/nutrition/PhotoThumb';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { useAiConsent } from '@/hooks/useAiConsent';
 import { AnalyticsEvents, analytics, isUpgradeRequired } from '@/lib/analytics';
 import {
   BODY_COMP_LOW_CONFIDENCE_THRESHOLD,
@@ -99,6 +100,8 @@ export function BodyCompScan({ unitSystem, onLowConfidence, onSaved }: BodyCompS
   const inputRef = useRef<HTMLInputElement>(null);
   const [pending, setPending] = useState<File[]>([]);
   const [parsing, setParsing] = useState(false);
+  // Server-side AI consent (docs/PRIVACY_COMPLIANCE_SPEC.md §4), asked before the first scan.
+  const aiConsent = useAiConsent();
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [draft, setDraft] = useState<BodyCompDraft | null>(null);
@@ -118,6 +121,10 @@ export function BodyCompScan({ unitSystem, onLowConfidence, onSaved }: BodyCompS
 
   const analyze = async (files: File[]) => {
     if (files.length === 0) return;
+    if (!(await aiConsent.ensure())) {
+      setError("AI features are off, so we can't read this report. Log the numbers manually, or allow AI features to try again.");
+      return;
+    }
     setParsing(true);
     setError(null);
     try {
@@ -135,6 +142,7 @@ export function BodyCompScan({ unitSystem, onLowConfidence, onSaved }: BodyCompS
       setMeasuredAt(toLocalDateTimeInputValue(Number.isNaN(when.getTime()) ? new Date() : when));
       setEditingKey(null);
     } catch (err) {
+      if (err instanceof BodyCompApiError && err.code === 'AI_CONSENT_REQUIRED') aiConsent.invalidate();
       // Daily scan quota (RATE_LIMITED) or the Pro gate (UPGRADE/PREMIUM_REQUIRED).
       if (isUpgradeRequired(err) || (err instanceof BodyCompApiError && err.code === 'RATE_LIMITED')) {
         analytics.track(AnalyticsEvents.aiLimitReached({ feature: 'body_scan', source: 'body_scan' }));
@@ -441,6 +449,7 @@ export function BodyCompScan({ unitSystem, onLowConfidence, onSaved }: BodyCompS
       )}
 
       {error && <p className="mt-2 text-sm text-amber-300">{error}</p>}
+      {aiConsent.dialog}
     </div>
   );
 }

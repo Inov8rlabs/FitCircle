@@ -3,6 +3,7 @@ import { z } from 'zod';
 
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { addAutoRefreshHeaders } from '@/lib/middleware/mobile-auto-refresh';
+import { PRIVACY_DEFAULTS } from '@/lib/privacy/defaults';
 import { createAdminSupabase } from '@/lib/supabase-admin';
 import { parseLenient, validationMessage } from '@/lib/validation/lenient-parse';
 
@@ -130,9 +131,9 @@ export async function GET(request: NextRequest) {
         check_in_reminder: preferences.notifications?.check_in_reminder ?? true,
       },
       privacy: {
-        profile_visibility: preferences.privacy?.profile_visibility || 'public',
-        show_weight: preferences.privacy?.show_weight ?? true,
-        show_progress: preferences.privacy?.show_progress ?? true,
+        profile_visibility: preferences.privacy?.profile_visibility || PRIVACY_DEFAULTS.profileVisibility,
+        show_weight: preferences.privacy?.show_weight ?? PRIVACY_DEFAULTS.showWeight,
+        show_progress: preferences.privacy?.show_progress ?? PRIVACY_DEFAULTS.showProgress,
         allow_team_invites:
           preferences.privacy?.allow_team_invites ?? preferences.privacy?.allowTeamInvites ?? true,
         allow_challenge_invites:

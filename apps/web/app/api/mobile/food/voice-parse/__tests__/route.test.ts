@@ -10,6 +10,8 @@ const state = {
   draft: { items: [], totals: {}, overallConfidence: 0.9 } as Record<string, unknown>,
 };
 
+// AI consent gate: allow-all here; the rule itself is tested in consent-service / ai-consent-routes tests.
+vi.mock('@/lib/services/consent-service', async (orig) => (await import('@/lib/services/__tests__/consent-stub')).allowAllConsentModule(orig));
 vi.mock('next/server', async (importOriginal) => {
   const original: Record<string, unknown> = await importOriginal();
   return {
@@ -28,7 +30,8 @@ vi.mock('@/lib/services/usage-service', () => {
     constructor(
       public readonly feature: string,
       public readonly used: number,
-      public readonly limit: number
+      public readonly limit: number,
+      public readonly trialEligible?: boolean
     ) {
       super('UPGRADE_REQUIRED');
     }
@@ -59,6 +62,8 @@ vi.mock('@/lib/services/nutrition-intelligence-service', () => ({
     },
   },
 }));
+
+import { UpgradeRequiredError } from '@/lib/services/usage-service';
 
 import { POST } from '../route';
 
@@ -219,5 +224,33 @@ describe('POST /api/mobile/food/voice-parse — source + assumptions', () => {
     const body = await res.json();
     expect(body.error.message).toBe("You've reached today's AI-estimate limit — you can add the details yourself.");
     expect(state.captures).toEqual([]);
+  });
+});
+
+describe('trial-first food AI allowance on voice/describe (TRIAL_FIRST_SPEC §5)', () => {
+  beforeEach(() => {
+    state.saveCalls = [];
+  });
+
+  it('blocked: same 429 UPGRADE_REQUIRED envelope + additive paywall; the note is saved', async () => {
+    state.parseError = new UpgradeRequiredError('food_ai_unlimited', 5, 5, true);
+    const res = await post({ transcript: 'two eggs' });
+    expect(res.status).toBe(429);
+    const body = await res.json();
+    expect(body.error).toMatchObject({
+      code: 'UPGRADE_REQUIRED',
+      message: expect.stringContaining("You've used your 5 free AI food analyses."),
+      details: { savedEntryId: NEW_ENTRY, feature: 'food_ai_unlimited', used: 5, limit: 5, paywall: { trigger: 'food_ai', cta: 'Start free trial', trialEligible: true } },
+    });
+    expect(state.saveCalls).toEqual(['two eggs']);
+  });
+
+  it('text describe (skip_fallback_save) → nothing saved, non-trial copy when not eligible', async () => {
+    state.parseError = new UpgradeRequiredError('food_ai_unlimited', 5, 5, false);
+    const res = await post({ transcript: 'latte', source: 'text', skip_fallback_save: true });
+    const body = await res.json();
+    expect(body.error.message).toBe("You've used your 5 free AI food analyses. Upgrade to Pro to keep logging with AI.");
+    expect(body.error.details).toMatchObject({ fallbackSaved: false, paywall: { cta: 'Continue with Pro', trialEligible: false } });
+    expect(state.saveCalls).toEqual([]);
   });
 });

@@ -1,7 +1,9 @@
 import { type NextRequest, NextResponse } from 'next/server';
 
+import { aiConsentFail } from '@/lib/consents/http';
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { BodyCompPhotoService } from '@/lib/services/body-comp-photo-service';
+import { AiConsentRequiredError, ConsentService } from '@/lib/services/consent-service';
 import { EntitlementService } from '@/lib/services/entitlement-service';
 import { BODY_COMP_PHOTO_PARSE_MAX_IMAGES } from '@/lib/types/body-composition';
 
@@ -38,6 +40,8 @@ export async function POST(request: NextRequest) {
   try {
     const user = await requireMobileAuth(request);
     await EntitlementService.requireFeature(user.id, 'body_comp_photo_scan');
+    // Server-side AI consent after the Pro gate (docs/PRIVACY_COMPLIANCE_SPEC.md §4).
+    await ConsentService.assertUserAi(user.id, request, 'body_comp_scan');
 
     const formData = await request.formData();
     const files = formData.getAll('image').filter((f): f is File => typeof f !== 'string');
@@ -166,6 +170,7 @@ export async function POST(request: NextRequest) {
       );
     }
   } catch (error: any) {
+    if (error instanceof AiConsentRequiredError) return aiConsentFail(error);
     if (error?.message === 'Unauthorized') {
       return NextResponse.json(
         { success: false, data: null, error: { code: 'UNAUTHORIZED', message: 'Invalid or expired token', details: {}, timestamp: new Date().toISOString() }, meta: null },

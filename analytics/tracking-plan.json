@@ -1,7 +1,7 @@
 {
   "$schema": "./tracking-plan.schema.json",
-  "version": 28,
-  "updated": "2026-11-04",
+  "version": 29,
+  "updated": "2026-11-06",
   "conventions": {
     "eventNames": "Title Case, '<Object> <Past-tense verb>' (e.g. 'Meal Logged'). Names are frozen once shipped: rename in the analytics tool, never in code.",
     "propertyNames": "snake_case. Enum values are lowercase snake_case.",
@@ -2188,7 +2188,7 @@
           "name": "source",
           "type": "string",
           "required": true,
-          "description": "Snake_case trigger id: ai_limit, pro_card, settings, circle_limit, history_limit, remove_ads, body_scan, milestone, streak_shield, locked_feature, pricing_page, onboarding, landing, landing_footer (web), first_meal_aha (post-first-meal soft paywall), feed_pro_value (home feed pro_value promo), pro_expiring_card / pro_expired_card / trial_expiring_card (Pro lifecycle home card: free Pro ending, ended, store trial ending — PRO_LIFECYCLE_PROMPTS.md; Android prefixes promo sources with 'promo:'). Never camelCase."
+          "description": "Snake_case trigger id: ai_limit, pro_card, settings, circle_limit, history_limit, remove_ads, body_scan, milestone, streak_shield, locked_feature, pricing_page, onboarding, landing, landing_footer (web), first_meal_aha (post-first-meal soft paywall), feed_pro_value (home feed pro_value promo), pro_expiring_card / pro_expired_card / trial_expiring_card (Pro lifecycle home card: free Pro ending, ended, store trial ending — PRO_LIFECYCLE_PROMPTS.md; Android prefixes promo sources with 'promo:'), fitzy (a locked Fitzy Pro feature or the Fitzy Pro card), fitzy_send (trial-first: a free user tried to SEND a Fitzy message, from the pre-send gate or the server's UPGRADE_REQUIRED; TRIAL_FIRST_SPEC §1), fitzy_recommendations (home feed fitzy_recommendations teaser; TRIAL_FIRST_SPEC §3), food_ai (the free lifetime AI food analysis allowance is used up; TRIAL_FIRST_SPEC §5). Never camelCase."
         },
         {
           "name": "is_hard",
@@ -2224,7 +2224,7 @@
           "name": "source",
           "type": "string",
           "required": true,
-          "description": "Snake_case trigger id: ai_limit, pro_card, settings, circle_limit, history_limit, remove_ads, body_scan, milestone, streak_shield, locked_feature, pricing_page, onboarding, landing, landing_footer (web), first_meal_aha (post-first-meal soft paywall), feed_pro_value (home feed pro_value promo), pro_expiring_card / pro_expired_card / trial_expiring_card (Pro lifecycle home card: free Pro ending, ended, store trial ending — PRO_LIFECYCLE_PROMPTS.md; Android prefixes promo sources with 'promo:'). Never camelCase."
+          "description": "Snake_case trigger id: ai_limit, pro_card, settings, circle_limit, history_limit, remove_ads, body_scan, milestone, streak_shield, locked_feature, pricing_page, onboarding, landing, landing_footer (web), first_meal_aha (post-first-meal soft paywall), feed_pro_value (home feed pro_value promo), pro_expiring_card / pro_expired_card / trial_expiring_card (Pro lifecycle home card: free Pro ending, ended, store trial ending — PRO_LIFECYCLE_PROMPTS.md; Android prefixes promo sources with 'promo:'), fitzy, fitzy_send, fitzy_recommendations, food_ai (trial-first sources; see Paywall Viewed.source). Never camelCase."
         },
         {
           "name": "plan",
@@ -2272,7 +2272,7 @@
           "name": "source",
           "type": "string",
           "required": true,
-          "description": "Snake_case trigger id: ai_limit, pro_card, settings, circle_limit, history_limit, remove_ads, body_scan, milestone, streak_shield, locked_feature, pricing_page, onboarding, landing, landing_footer (web), first_meal_aha (post-first-meal soft paywall), feed_pro_value (home feed pro_value promo), pro_expiring_card / pro_expired_card / trial_expiring_card (Pro lifecycle home card: free Pro ending, ended, store trial ending — PRO_LIFECYCLE_PROMPTS.md; Android prefixes promo sources with 'promo:'). Never camelCase."
+          "description": "Snake_case trigger id: ai_limit, pro_card, settings, circle_limit, history_limit, remove_ads, body_scan, milestone, streak_shield, locked_feature, pricing_page, onboarding, landing, landing_footer (web), first_meal_aha (post-first-meal soft paywall), feed_pro_value (home feed pro_value promo), pro_expiring_card / pro_expired_card / trial_expiring_card (Pro lifecycle home card: free Pro ending, ended, store trial ending — PRO_LIFECYCLE_PROMPTS.md; Android prefixes promo sources with 'promo:'), fitzy, fitzy_send, fitzy_recommendations, food_ai (trial-first sources; see Paywall Viewed.source). Never camelCase."
         },
         {
           "name": "is_hard",
@@ -4115,7 +4115,9 @@
             "memory",
             "history",
             "recap",
-            "quota"
+            "quota",
+            "send",
+            "recommendations"
           ],
           "required": true
         }
@@ -4138,7 +4140,9 @@
             "memory",
             "history",
             "recap",
-            "quota"
+            "quota",
+            "send",
+            "recommendations"
           ],
           "required": true
         }

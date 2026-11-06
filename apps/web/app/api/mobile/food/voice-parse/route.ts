@@ -1,7 +1,9 @@
 import { after, type NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 
+import { foodAiUpgradeDetails, foodAiUpgradeMessage } from '@/lib/fitzy/paywall';
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
+import { AI_CONSENT_MESSAGE, AiConsentRequiredError, ConsentService, aiConsentErrorDetails } from '@/lib/services/consent-service';
 import { NutritionIntelligenceService } from '@/lib/services/nutrition-intelligence-service';
 import { NutritionTrainingService } from '@/lib/services/nutrition-training-service';
 import { UpgradeRequiredError } from '@/lib/services/usage-service';
@@ -85,6 +87,8 @@ export async function POST(request: NextRequest) {
     }
 
     try {
+      // Server-side AI consent (docs/PRIVACY_COMPLIANCE_SPEC.md §4); refused → 403 + Option-B save.
+      await ConsentService.assertUserAi(user.id, request, parsed.data.source === 'text' ? 'food_text' : 'food_voice');
       const draft = await NutritionIntelligenceService.parseVoice(user.id, parsed.data.transcript, {
         source: parsed.data.source,
       });
@@ -113,7 +117,8 @@ export async function POST(request: NextRequest) {
       // the user into that entry to finish manually.
       const isUpgrade = parseError instanceof UpgradeRequiredError;
       const isRate = parseError?.message === 'RateLimited' || isUpgrade;
-      if (!isRate && parseError?.message !== 'ParseFailed') {
+      const isConsent = parseError instanceof AiConsentRequiredError;
+      if (!isRate && !isConsent && parseError?.message !== 'ParseFailed') {
         throw parseError; // Unauthorized / unexpected → outer catch
       }
 
@@ -139,7 +144,7 @@ export async function POST(request: NextRequest) {
       // Route-level correlation log for a real analysis failure (rate-limits skipped).
       // The service logs WHY the parse failed ([nutrition-parse-failure]); this ties it
       // to the saved entry the user sees, plus request latency.
-      if (!isRate) {
+      if (!isRate && !isConsent) {
         console.error(
           '[nutrition-parse-failure:route]',
           JSON.stringify({
@@ -155,16 +160,37 @@ export async function POST(request: NextRequest) {
         );
       }
 
+      if (isConsent) {
+        return NextResponse.json(
+          {
+            success: false,
+            data: null,
+            error: {
+              code: 'AI_CONSENT_REQUIRED',
+              message: saved && !fallback.skipFallbackSave ? `${AI_CONSENT_MESSAGE} We saved your note so you can add the details.` : AI_CONSENT_MESSAGE,
+              details: {
+                ...aiConsentErrorDetails(parseError.feature),
+                ...(saved ? { savedEntryId: saved.entryId } : {}),
+                ...(fallback.skipFallbackSave ? { fallbackSaved: false } : {}),
+              },
+              timestamp: new Date().toISOString(),
+            },
+            meta: { requestTime: Date.now() - startTime },
+          },
+          { status: 403 }
+        );
+      }
+
       // Nothing was saved when the fallback is skipped, so the copy must not claim it was.
       const limitName = parsed.data.source === 'text' ? 'AI-estimate' : 'voice-estimate';
       const message = fallback.skipFallbackSave
         ? isUpgrade
-          ? `You've used your ${parseError.limit} free AI logs today — go Pro for unlimited.`
+          ? foodAiUpgradeMessage(parseError.limit, parseError.trialEligible === true)
           : isRate
             ? `You've reached today's ${limitName} limit — you can add the details yourself.`
             : "Couldn't understand that — you can add the details yourself."
         : isUpgrade
-          ? `You've used your ${parseError.limit} free AI logs today — go Pro for unlimited. We saved your note so you can add the details.`
+          ? `${foodAiUpgradeMessage(parseError.limit, parseError.trialEligible === true)} We saved your note so you can add the details.`
           : isRate
             ? `You've reached today's ${limitName} limit — we saved your note so you can add the details.`
             : "Couldn't understand that — we saved your note so you can add the details.";
@@ -181,13 +207,8 @@ export async function POST(request: NextRequest) {
               // Only present when the client asked for the fallback to be skipped:
               // tells it that `savedEntryId` (if any) is ITS OWN entry, not a new copy.
               ...(fallback.skipFallbackSave ? { fallbackSaved: false } : {}),
-              ...(isUpgrade
-                ? {
-                    feature: (parseError as UpgradeRequiredError).feature,
-                    used: (parseError as UpgradeRequiredError).used,
-                    limit: (parseError as UpgradeRequiredError).limit,
-                  }
-                : {}),
+              // Trial-first (TRIAL_FIRST_SPEC §5): legacy {feature, used, limit} + additive paywall.
+              ...(isUpgrade ? foodAiUpgradeDetails(parseError) : {}),
             },
             timestamp: new Date().toISOString(),
           },

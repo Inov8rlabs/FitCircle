@@ -20,6 +20,8 @@
  */
 import { isProfileGender } from '@/lib/validation/profile-validation';
 
+import { PRIVACY_DEFAULTS } from '../privacy/defaults';
+
 type Json = Record<string, any>;
 
 function asObject(value: unknown): Json {
@@ -120,13 +122,13 @@ export function withPreferenceDefaults(stored: unknown): Json {
   const privacyOut: Json = {
     ...privacy,
     profile_visibility:
-      oneOf(VISIBILITY, privacy.profile_visibility) ?? oneOf(VISIBILITY, privacy.profileVisibility) ?? 'public',
-    show_weight: bool(privacy.show_weight, bool(privacy.showWeight, true)),
-    show_progress: bool(privacy.show_progress, bool(privacy.showProgress, true)),
+      oneOf(VISIBILITY, privacy.profile_visibility) ?? oneOf(VISIBILITY, privacy.profileVisibility) ?? PRIVACY_DEFAULTS.profileVisibility,
+    show_weight: bool(privacy.show_weight, bool(privacy.showWeight, PRIVACY_DEFAULTS.showWeight)),
+    show_progress: bool(privacy.show_progress, bool(privacy.showProgress, PRIVACY_DEFAULTS.showProgress)),
     allow_team_invites: bool(privacy.allow_team_invites, bool(privacy.allowTeamInvites, true)),
     allow_challenge_invites: bool(privacy.allow_challenge_invites, bool(privacy.allowChallengeInvites, true)),
     // New meals are private unless the user turned this on (FOOD_ENTRY_PRIVACY_SPEC).
-    share_meals_with_circles: privacy.share_meals_with_circles === true,
+    share_meals_with_circles: typeof privacy.share_meals_with_circles === 'boolean' ? privacy.share_meals_with_circles : PRIVACY_DEFAULTS.shareMealsWithCircles,
   };
 
   const displayOut: Json = {

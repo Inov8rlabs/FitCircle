@@ -429,6 +429,14 @@ interface ApiEnvelope<T> {
  * Error that preserves the API envelope's `code` + `details` (plain Error loses them).
  * Lets callers act on e.g. PARSE_FAILED with details.savedEntryId (Option B fallback).
  */
+/** Capabilities the web client declares on AI-capable requests. */
+export const WEB_CLIENT_FEATURES = 'consents_v1';
+
+/** True for the 403 the server returns when an AI feature runs without AI consent. */
+export function isAiConsentRequired(err: unknown): boolean {
+  return (err as any)?.code === 'AI_CONSENT_REQUIRED';
+}
+
 export class ApiError extends Error {
   code: string;
   details: Record<string, unknown> | null;
@@ -454,6 +462,9 @@ async function authedFetchEnvelope<T>(path: string, init?: RequestInit): Promise
       Authorization: `Bearer ${authToken()}`,
       'Content-Type': 'application/json',
       'x-client-timezone': clientTimezone() ?? '',
+      // The web syncs AI consent with the server and handles 403 AI_CONSENT_REQUIRED
+      // (docs/PRIVACY_COMPLIANCE_SPEC.md §4), so it never gets the shipped-app compat pass.
+      'X-Client-Features': WEB_CLIENT_FEATURES,
       ...(init?.headers ?? {}),
     },
     credentials: 'include',
@@ -479,7 +490,7 @@ async function authedFetch<T>(path: string, init?: RequestInit): Promise<T> {
 async function authedFetchForm<T>(path: string, form: FormData): Promise<T> {
   const res = await fetch(path, {
     method: 'POST',
-    headers: { Authorization: `Bearer ${authToken()}` },
+    headers: { Authorization: `Bearer ${authToken()}`, 'X-Client-Features': WEB_CLIENT_FEATURES },
     body: form,
     credentials: 'include',
   });

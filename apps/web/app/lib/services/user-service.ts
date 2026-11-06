@@ -1,7 +1,9 @@
+import { logIgnoredQueryError } from '@/lib/api/route-errors';
+
+import { PRIVACY_DEFAULTS } from '../privacy/defaults';
 import { createAdminSupabase } from '../supabase-admin';
 
 import { LeaderboardService } from './leaderboard-service';
-import { logIgnoredQueryError } from '@/lib/api/route-errors';
 
 /** A weight only counts when it is a real positive number; 0 / null / '' mean "not set". */
 function positiveOrNull(value: unknown): number | null {
@@ -70,9 +72,9 @@ export class UserService {
    */
   private static getDefaultPrivacySettings(): UserPrivacySettings {
     return {
-      profile_visibility: 'public',
-      show_weight: true,
-      show_progress: true,
+      profile_visibility: PRIVACY_DEFAULTS.profileVisibility,
+      show_weight: PRIVACY_DEFAULTS.showWeight,
+      show_progress: PRIVACY_DEFAULTS.showProgress,
     };
   }
 
@@ -85,9 +87,9 @@ export class UserService {
     }
 
     return {
-      profile_visibility: preferences.profile_visibility || 'public',
-      show_weight: preferences.show_weight !== false, // Default true
-      show_progress: preferences.show_progress !== false, // Default true
+      profile_visibility: preferences.profile_visibility || PRIVACY_DEFAULTS.profileVisibility,
+      show_weight: typeof preferences.show_weight === 'boolean' ? preferences.show_weight : PRIVACY_DEFAULTS.showWeight,
+      show_progress: typeof preferences.show_progress === 'boolean' ? preferences.show_progress : PRIVACY_DEFAULTS.showProgress,
     };
   }
 

@@ -19,6 +19,7 @@ import { useEffect, useState, Suspense } from 'react';
 import { toast } from 'sonner';
 
 import Celebration from '@/components/Celebration';
+import { CONSENT_COPY } from '@/components/privacy/ConsentDialog';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { DatePicker } from '@/components/ui/date-picker';
@@ -27,7 +28,9 @@ import { Progress } from '@/components/ui/progress';
 import { useProfile } from '@/hooks/useProfile';
 import { AnalyticsEvents, analytics } from '@/lib/analytics';
 import { useTrackOnce } from '@/lib/analytics/react';
+import { consentClient } from '@/lib/api/consent-client';
 import { postSignupReturnUrl, readPendingInviteFromCookieHeader } from '@/lib/referrals/web';
+import { AGE_REQUIREMENT_MESSAGE, isUnderMinimumAge } from '@/lib/validation/age-requirement';
 import { useAuthStore } from '@/stores/auth-store';
 
 
@@ -138,7 +141,10 @@ function OnboardingForm() {
     units: 'metric',
     notifications: true,
     privacy: 'friends',
+    // Explicit, unbundled health-data consent (docs/PRIVACY_COMPLIANCE_SPEC.md §3), recorded server-side.
+    healthConsent: false,
   });
+  const [healthConsentRecorded, setHealthConsentRecorded] = useState(false);
 
   const progress = ((currentStep + 1) / steps.length) * 100;
 
@@ -158,6 +164,26 @@ function OnboardingForm() {
     );
 
   const handleNext = async () => {
+    if (currentStep === 0) {
+      if (!formData.healthConsent) {
+        toast.error('Please review and accept the health data consent to continue.');
+        return;
+      }
+      // 18+ (neutral message, no hint). The server enforces it too (PUT /api/mobile/profile).
+      if (formData.dateOfBirth && isUnderMinimumAge(formData.dateOfBirth)) {
+        toast.error(AGE_REQUIREMENT_MESSAGE);
+        return;
+      }
+      if (!healthConsentRecorded) {
+        try {
+          await consentClient.set('health_data', true);
+          setHealthConsentRecorded(true);
+        } catch (err) {
+          toast.error(err instanceof Error ? err.message : 'We could not save your choice. Please try again.');
+          return;
+        }
+      }
+    }
     if (currentStep < steps.length - 1) {
       trackStepCompleted();
       setCurrentStep(currentStep + 1);
@@ -186,9 +212,25 @@ function OnboardingForm() {
           ? weightValue
           : Math.round(weightValue * 0.453592 * 100) / 100; // Convert lbs to kg
 
+        // Date of birth goes through the API (18+ check server-side; migration 131 makes the
+        // column server-only), never straight to the profiles table.
+        if (formData.dateOfBirth) {
+          const res = await fetch('/api/mobile/profile', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'same-origin',
+            body: JSON.stringify({ dateOfBirth: formData.dateOfBirth }),
+          });
+          if (!res.ok) {
+            const body = await res.json().catch(() => null);
+            toast.error(body?.error?.code === 'AGE_REQUIREMENT' ? AGE_REQUIREMENT_MESSAGE : 'Failed to save profile. Please try again.');
+            setIsSaving(false);
+            return;
+          }
+        }
+
         const profileData = {
           display_name: formData.displayName,
-          date_of_birth: formData.dateOfBirth,
           height_cm: heightCm,
           weight_kg: weightKg,
           goals: formData.goals,
@@ -322,6 +364,29 @@ function OnboardingForm() {
                 {/* Step 1: Personal Information */}
                 {currentStep === 0 && (
                   <div className="space-y-4">
+                    <div className="rounded-xl border border-slate-700/60 bg-slate-900/60 p-4" data-testid="health-consent">
+                      <p className="font-semibold text-white mb-1">{CONSENT_COPY.health_data.title}</p>
+                      {CONSENT_COPY.health_data.body.map((p) => (
+                        <p key={p} className="text-sm text-slate-300 mb-2">{p}</p>
+                      ))}
+                      <label className="flex items-start gap-2 text-sm text-white">
+                        <input
+                          type="checkbox"
+                          className="mt-0.5 rounded border-slate-700 bg-slate-900"
+                          checked={formData.healthConsent}
+                          onChange={(e) => updateFormData('healthConsent', e.target.checked)}
+                        />
+                        <span>
+                          {CONSENT_COPY.health_data.agree}.{' '}
+                          <a href="/privacy" target="_blank" rel="noreferrer" className="text-cyan-400 hover:underline">
+                            Privacy Policy
+                          </a>
+                        </span>
+                      </label>
+                      <p className="mt-2 text-xs text-slate-400">
+                        FitCircle needs this to track your progress. If you prefer not to agree, you can delete your account in Settings &gt; Privacy.
+                      </p>
+                    </div>
                     <div>
                       <label className="text-sm font-medium mb-2 block">Display Name</label>
                       <Input

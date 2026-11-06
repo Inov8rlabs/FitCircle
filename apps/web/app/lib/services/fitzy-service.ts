@@ -1,6 +1,8 @@
 import type { ModelMessage } from 'ai';
 import { after } from 'next/server';
 
+import { logIgnoredQueryError } from '@/lib/api/route-errors';
+
 import {
   chatMaxOutputTokens,
   chatMaxWords,
@@ -9,6 +11,7 @@ import {
   type FitzyChatContext,
 } from '../fitzy/context';
 import { todayFor } from '../fitzy/dates';
+import { FITZY_UNAVAILABLE, onboardingFallbackAnswer } from '../fitzy/fallback-answers';
 import {
   assembleGrounding,
   bodyCompBlock,
@@ -23,13 +26,12 @@ import {
   type GroundingExtras,
 } from '../fitzy/grounding';
 import { META_MARKER, applyGuardrails, growthNudgeAllowed, parseMeta, splitMeta, staticSuggestions } from '../fitzy/meta';
-import { chatModel, fallbackFor, generateWithFallback, streamFrom, systemMessages } from '../fitzy/models';
-import { FITZY_UNAVAILABLE, onboardingFallbackAnswer } from '../fitzy/fallback-answers';
 import { recoverMeta } from '../fitzy/meta-recovery';
-import { capAtSentence, trimTrailingNoise } from '../fitzy/text';
-import { hasEmoji, stripEmoji } from '../text/strip-emoji';
+import { chatModel, fallbackFor, generateWithFallback, streamFrom, systemMessages } from '../fitzy/models';
 import { StreamGuard, type GuardEvent } from '../fitzy/stream-guard';
+import { capAtSentence, trimTrailingNoise } from '../fitzy/text';
 import { createAdminSupabase } from '../supabase-admin';
+import { hasEmoji, stripEmoji } from '../text/strip-emoji';
 import type { FitzyAction, FitzyChatResponse, FitzyMessage, FitzyTier, IFitzyService } from '../types/fitzy';
 
 import { BodyCompTrendsService, extractBodyFatGoal } from './body-comp-trends-service';
@@ -39,7 +41,6 @@ import { FitzyConversationService, HISTORY_TURNS, LEGACY_REUSE_HOURS } from './f
 import { FitzyMemoryService } from './fitzy-memory-service';
 import { FitzyPlanService } from './fitzy-plan-service';
 import { UsageService } from './usage-service';
-import { logIgnoredQueryError } from '@/lib/api/route-errors';
 
 /**
  * FitzyService — "Fitzy", the FitCircle AI coach (full fitness + nutrition).
@@ -203,6 +204,12 @@ export interface TurnInput {
   timezone?: string | null;
   /** `onboarding` → short onboarding answer (addendum + lower token cap). */
   context?: FitzyChatContext | null;
+  /**
+   * Server-side AI consent gate (ConsentService.assertUserAi), run AFTER the quota gate (so a
+   * free user sees the paywall first) and BEFORE anything is recorded or sent to a model.
+   * Throws AiConsentRequiredError. Routes always pass it; optional for service-level callers/tests.
+   */
+  assertAiConsent?: () => Promise<void>;
 }
 
 export interface PreparedTurn {
@@ -267,7 +274,12 @@ export class FitzyService implements IFitzyService {
     userId: string,
     messages: FitzyMessage[],
     circleId?: string,
-    opts: { conversationId?: string | null; timezone?: string | null; context?: FitzyChatContext | null } = {}
+    opts: {
+      conversationId?: string | null;
+      timezone?: string | null;
+      context?: FitzyChatContext | null;
+      assertAiConsent?: () => Promise<void>;
+    } = {}
   ): Promise<FitzyChatResponse> {
     const turns = (messages ?? [])
       .filter((m) => m && typeof m.content === 'string' && m.content.trim().length > 0)
@@ -285,6 +297,7 @@ export class FitzyService implements IFitzyService {
       legacyHistory: opts.conversationId ? undefined : turns.slice(0, -1),
       timezone: opts.timezone,
       context: opts.context ?? null,
+      assertAiConsent: opts.assertAiConsent,
     });
 
     let raw = '';
@@ -439,7 +452,8 @@ export class FitzyService implements IFitzyService {
     const message = (input.message ?? '').trim();
     // Tier-aware daily quota. Recording happens BEFORE the model call so the check/insert
     // race can't be exploited to overshoot the quota.
-    await UsageService.assertFitzyQuota(userId);
+    await UsageService.assertFitzyQuota(userId, { onboarding: input.context === 'onboarding' });
+    if (input.assertAiConsent) await input.assertAiConsent();
     await UsageService.recordFitzyMessage(userId);
     const allowance = await UsageService.fitzyAllowance(userId);
 

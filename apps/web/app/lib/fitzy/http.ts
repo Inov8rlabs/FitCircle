@@ -3,11 +3,12 @@ import { type NextResponse } from 'next/server';
 
 import { reportRouteError } from '../api/route-errors';
 import { fail, ok } from '../referrals/http';
+import { AiConsentRequiredError, aiConsentErrorDetails } from '../services/consent-service';
 import { FitzyLockedError, FitzyNotFoundError } from '../services/fitzy-conversation-service';
 import { UpgradeRequiredError } from '../services/usage-service';
 import type { FitzyPaywall } from '../types/fitzy';
 
-import { paywallFor } from './paywall';
+import { fitzyUpgradeMessage, paywallFor } from './paywall';
 
 export { ok, fail };
 
@@ -25,10 +26,13 @@ export function describeFitzyError(error: unknown, label = 'fitzy'): FitzyErrorB
     return {
       status: 429,
       code: 'UPGRADE_REQUIRED',
-      message: "You've used today's free Fitzy messages — go Pro for unlimited coaching.",
-      paywall: paywallFor('fitzy_quota'),
+      message: fitzyUpgradeMessage(error.limit, error.trialEligible === true),
+      paywall: paywallFor('fitzy_quota', { trialEligible: error.trialEligible === true }),
       details: { feature: error.feature, used: error.used, limit: error.limit },
     };
+  }
+  if (error instanceof AiConsentRequiredError) {
+    return { status: 403, code: error.code, message: error.message, details: aiConsentErrorDetails(error.feature) };
   }
   if (error instanceof FitzyLockedError) {
     return { status: 403, code: 'UPGRADE_REQUIRED', message: 'This is a Fitzy Pro feature.', paywall: paywallFor(error.trigger) };
@@ -45,6 +49,8 @@ export function describeFitzyError(error: unknown, label = 'fitzy'): FitzyErrorB
 
 export function fitzyFail(error: unknown, label = 'fitzy'): NextResponse {
   const d = describeFitzyError(error, label);
+  // AI consent: details in error.details (the standard place), like every other AI route.
+  if (d.code === 'AI_CONSENT_REQUIRED') return fail(d.status, d.code, d.message, null, d.details ?? {});
   return fail(d.status, d.code, d.message, d.paywall ? { paywall: d.paywall, ...(d.details ?? {}) } : (d.details ?? null));
 }
 

@@ -11,6 +11,7 @@ import { type NextResponse } from 'next/server';
 import { requireAdsAdmin } from '../ads/http';
 import { CampaignError, campaignFailFrom } from '../campaigns/http';
 import { fail, failFrom } from '../referrals/http';
+import { AgeRequirementError, ageErrorField, ageRequirementBody, isAgeRequirementZodError } from '../validation/age-requirement';
 
 import { ExperimentValidationError } from './model';
 
@@ -27,6 +28,10 @@ function zodIssues(error: any) {
 /** Mobile routes: 401 / 400 VALIDATION_ERROR {issues} / typed errors / 500. */
 export function mobileFailFrom(error: unknown, label: string): NextResponse {
   if (error instanceof CampaignError) return fail(error.status, error.code, error.message, error.data);
+  if (error instanceof AgeRequirementError || isAgeRequirementZodError(error)) {
+    const b = ageRequirementBody(ageErrorField(error));
+    return fail(400, b.error.code, b.error.message, null, b.error.details);
+  }
   if ((error as any)?.name === 'ZodError') return fail(400, 'VALIDATION_ERROR', 'Invalid request body', { issues: zodIssues(error) });
   return failFrom(error, label);
 }

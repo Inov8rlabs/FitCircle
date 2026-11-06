@@ -41,6 +41,14 @@ vi.mock('@/lib/services/feature-flag-service', () => ({
 vi.mock('@/lib/services/entitlement-service', () => ({
   normalizeTier: (raw: string | null | undefined) => (raw === 'premium' || raw === 'enterprise' ? 'premium' : 'free'),
 }));
+const warm = vi.hoisted(() => ({ calls: [] as string[] }));
+vi.mock('@/lib/fitzy/plan-warmup', async (orig) => ({
+  ...(await orig<Record<string, unknown>>()),
+  warmFitzyPlanPreview: async (userId: string) => {
+    warm.calls.push(userId);
+    return true;
+  },
+}));
 vi.mock('@/lib/services/vitals-service', () => ({
   VitalsService: { getHydrationToday: async () => ({ todayMl: 0, goalMl: 2000, date: '2026-10-26' }) },
 }));
@@ -147,6 +155,67 @@ describe('GET /api/mobile/home-feed — promo@1', () => {
     expect(ids(body)).toContain('promo:pro_value');
     const fitzy = body.cards.find((c: any) => c.id === 'promo:meet_fitzy');
     if (fitzy) expect(fitzy.props.primary.action.params).toEqual({ screen: 'fitzy', prompt: 'What do you think of my snack: Wrap?' });
+  });
+
+  it('trial-first: a free user with goals gets fitzy_recommendations INSTEAD of pro_value (one paywall card)', async () => {
+    Object.assign(db.rows('profiles').find((p) => p.id === ACTIVE_USER)!, { onboarding_completed: true, goals: ['weight_loss'], trial_started_at: null, subscription_platform: null });
+    // No real plan preview yet → no teaser, and one is produced after the response.
+    warm.calls.length = 0;
+    const before = await (await GET(req(ACTIVE_USER, PROMO_QUERY))).json();
+    expect(ids(before)).not.toContain('promo:fitzy_recommendations');
+    await flushAfter();
+    expect(warm.calls).toEqual([ACTIVE_USER]);
+    // A fallback-only preview (model failed → model null) is not "real" either.
+    db.rows('fitzy_plans').push({ user_id: ACTIVE_USER, week_of: '2026-10-26', is_preview: true, model: null, commitments: [{ id: 'c' }] });
+    expect(ids(await (await GET(req(ACTIVE_USER, PROMO_QUERY))).json())).not.toContain('promo:fitzy_recommendations');
+    db.rows('fitzy_plans').length = 0;
+    db.rows('fitzy_plans').push({ user_id: ACTIVE_USER, week_of: '2026-10-26', is_preview: true, model: 'anthropic/claude-haiku-5.5', commitments: [{ id: 'c1' }, { id: 'c2' }, { id: 'c3' }] });
+    const body = await (await GET(req(ACTIVE_USER, PROMO_QUERY))).json();
+    const promos = body.cards.filter((c: any) => c.type === 'promo');
+    expect(promos.map((c: any) => c.id)).toEqual(['promo:log_meal_now', 'promo:fitzy_recommendations']);
+    expect(promos[1].props).toMatchObject({
+      promoId: 'fitzy_recommendations',
+      creativeId: 'fitzy_recs_trial',
+      title: 'Fitzy has recommendations for you',
+      body: 'Start your free 3-day trial to get your personalized plan.',
+      primary: { label: 'Start free trial', action: { type: 'paywall', params: { placement: 'fitzy_recommendations' } } },
+    });
+    expect(violations(body.cards.slice(1), { promoV1: true })).toEqual([]);
+
+    // Already trialed → Pro copy.
+    Object.assign(db.rows('profiles').find((p) => p.id === ACTIVE_USER)!, { trial_started_at: '2026-10-12T00:00:00Z' });
+    HomeFeedService.clearCaches();
+    const again = await (await GET(req(ACTIVE_USER, PROMO_QUERY))).json();
+    expect(again.cards.find((c: any) => c.id === 'promo:fitzy_recommendations').props).toMatchObject({ creativeId: 'fitzy_recs_pro', primary: { label: 'See Pro' } });
+
+    // No goals → pro_value is back.
+    Object.assign(db.rows('profiles').find((p) => p.id === ACTIVE_USER)!, { goals: [] });
+    const noGoals = await (await GET(req(ACTIVE_USER, PROMO_QUERY))).json();
+    expect(ids(noGoals)).toContain('promo:pro_value');
+    expect(ids(noGoals)).not.toContain('promo:fitzy_recommendations');
+  });
+
+  it('trial-first: shows from session 1 — minutes after sign-up, before any meal', async () => {
+    Object.assign(db.rows('profiles').find((p) => p.id === NEW_USER)!, { onboarding_completed: true, goals: ['health'], trial_started_at: null, subscription_platform: null });
+    db.rows('fitzy_plans').push({ user_id: NEW_USER, week_of: '2026-10-26', is_preview: true, model: 'anthropic/claude-haiku-5.5', commitments: [{ id: 'c1' }] });
+    const body = await (await GET(req(NEW_USER, PROMO_QUERY))).json();
+    expect(ids(body).filter((id: string) => id.startsWith('promo:'))).toEqual(['promo:first_meal', 'promo:fitzy_recommendations']);
+    expect(violations(body.cards.slice(1), { promoV1: true })).toEqual([]);
+  });
+
+  it('trial-first: no plan read and no warm-up for users who can never see the teaser', async () => {
+    warm.calls.length = 0;
+    await GET(req(ACTIVE_USER, PROMO_QUERY)); // no goals / onboarding not complete
+    await flushAfter();
+    expect(db.queries.fitzy_plans ?? 0).toBe(0);
+    expect(warm.calls).toEqual([]);
+  });
+
+  it('trial-first: Pro / trialing users never see the teaser', async () => {
+    Object.assign(db.rows('profiles').find((p) => p.id === ACTIVE_USER)!, { onboarding_completed: true, goals: ['health'], subscription_tier: 'premium', subscription_status: 'trialing' });
+    const body = await (await GET(req(ACTIVE_USER, PROMO_QUERY))).json();
+    expect(ids(body)).not.toContain('promo:fitzy_recommendations');
+    expect(ids(body)).not.toContain('promo:pro_value');
   });
 
   it('legacy 1.0.8 request (no promo@1): unchanged — pro_upsell, no promo cards, no promo reads', async () => {

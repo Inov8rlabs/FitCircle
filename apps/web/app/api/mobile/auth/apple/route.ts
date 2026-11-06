@@ -3,6 +3,7 @@ import { after, type NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 
 import { parseClientPlatform } from '@/lib/experiments/request-info';
+import { isRegionRestricted } from '@/lib/geo/region-restriction';
 import { authRateLimiter, getIdentifier, applyRateLimit } from '@/lib/middleware/rate-limit';
 import { AppleTokenService } from '@/lib/services/apple-token-service';
 import { MobileAPIService } from '@/lib/services/mobile-api-service';
@@ -103,6 +104,8 @@ export async function POST(request: NextRequest) {
       firstName,
       lastName,
       provider: 'apple',
+      // EU/EEA: existing accounts sign in; no new ones (WEB_EU_SIGNUP_BLOCK, lib/geo/region-restriction.ts).
+      blockNewAccount: isRegionRestricted(request),
       providerUserId: userIdentifier,
     });
 
@@ -156,7 +159,7 @@ export async function POST(request: NextRequest) {
           error: { code: error.code, message: error.message, details: {}, timestamp: new Date().toISOString() },
           meta: null,
         },
-        { status: 500 }
+        { status: error.code === 'REGION_NOT_AVAILABLE' ? 403 : 500 }
       );
     }
 

@@ -141,5 +141,5 @@ export function lifecyclePromoDefinitions(input: LifecycleFeedInput | null, conf
 /** Promo keys that make the evergreen Pro upsells step aside while present. */
 export const LIFECYCLE_PROMO_KEY_SET: ReadonlySet<string> = new Set(Object.values(PRO_LIFECYCLE_PROMO_KEYS));
 /** Upsells suppressed while a lifecycle card is in the feed. */
-export const SUPERSEDED_PROMO_KEYS: ReadonlySet<string> = new Set(['pro_value']);
+export const SUPERSEDED_PROMO_KEYS: ReadonlySet<string> = new Set(['pro_value', 'fitzy_recommendations']);
 export const SUPERSEDED_CARD_TYPES: ReadonlySet<string> = new Set(['pro_upsell']);

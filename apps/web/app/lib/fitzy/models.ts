@@ -9,6 +9,8 @@
  */
 import { generateText, streamText, type ModelMessage } from 'ai';
 
+import { gatewayCallOptions } from '../ai/gateway-options';
+
 export const DEFAULT_CHAT_MODEL = 'anthropic/claude-haiku-5.5';
 export const DEFAULT_DEEP_MODEL = 'anthropic/claude-sonnet-5.5';
 export const MODEL_TIMEOUT_MS = 25_000;
@@ -155,7 +157,8 @@ export function callOptions(model: string, call: ModelCall) {
     timeout: MODEL_TIMEOUT_MS,
     ...(call.abortSignal ? { abortSignal: call.abortSignal } : {}),
     ...(call.maxOutputTokens ? { maxOutputTokens: call.maxOutputTokens } : {}),
-    ...thinkingOptions(model, call.thinking ?? true),
+    // Thinking switch + gateway zero data retention (lib/ai/gateway-options.ts).
+    ...gatewayCallOptions(thinkingOptions(model, call.thinking ?? true).providerOptions),
   };
 }
 

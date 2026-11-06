@@ -5,6 +5,7 @@ import { todayFor } from '@/lib/fitzy/dates';
 import { fitzyFail, ok, readJson } from '@/lib/fitzy/http';
 import { paywallFor } from '@/lib/fitzy/paywall';
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
+import { ConsentService } from '@/lib/services/consent-service';
 import { FitzyPlanService } from '@/lib/services/fitzy-plan-service';
 import { FitzyService } from '@/lib/services/fitzy-service';
 import { UsageService } from '@/lib/services/usage-service';
@@ -26,6 +27,8 @@ export async function GET(request: NextRequest) {
     const today = todayFor(tz);
     const tier = await UsageService.fitzyTier(user.id);
     if (tier === 'pro') return ok({ plan: await FitzyPlanService.current(user.id, today), locked: false });
+    // The free teaser is server-initiated AI: FitzyPlanService.preview returns the static default
+    // commitments (no model call) without a consent record / chat evidence (lib/fitzy/ai-consent.ts).
     const grounding = await FitzyService.grounding(user.id, tier, { timezone: tz });
     const preview = await FitzyPlanService.preview(user.id, today, null, grounding, FitzyService.guard);
     return ok({ plan: null, locked: true, preview, paywall: paywallFor('weekly_plan') });
@@ -34,7 +37,10 @@ export async function GET(request: NextRequest) {
   }
 }
 
-/** POST /api/mobile/fitzy/plan { goal? } → Pro: { plan } (Sonnet, 3–5 commitments); Free: { locked: true, preview, paywall }. */
+/**
+ * POST /api/mobile/fitzy/plan { goal? } → Pro: { plan } (Sonnet, 3–5 commitments); Free: { locked: true, preview, paywall }.
+ * User-initiated AI ("Plan my week"): 403 AI_CONSENT_REQUIRED without consent (docs/PRIVACY_COMPLIANCE_SPEC.md §4).
+ */
 export async function POST(request: NextRequest) {
   try {
     const user = await requireMobileAuth(request);
@@ -42,6 +48,8 @@ export async function POST(request: NextRequest) {
     const tz = request.headers.get('x-client-timezone');
     const today = todayFor(tz);
     const tier = await UsageService.fitzyTier(user.id);
+    // Shipped apps never prompted for consent here, so old clients get the evidence rule, not a pass.
+    await ConsentService.assertUserAi(user.id, request, 'fitzy_plan', { legacyFallback: 'evidence' });
     const grounding = await FitzyService.grounding(user.id, tier, { timezone: tz });
     if (tier === 'pro') return ok({ plan: await FitzyPlanService.create(user.id, today, goal ?? null, grounding, FitzyService.guard), locked: false });
     const preview = await FitzyPlanService.preview(user.id, today, goal ?? null, grounding, FitzyService.guard);

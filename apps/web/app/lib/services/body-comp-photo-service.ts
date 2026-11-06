@@ -4,6 +4,9 @@ import * as Sentry from '@sentry/nextjs';
 import { generateText, Output } from 'ai';
 import { z } from 'zod';
 
+import { logIgnoredQueryError } from '@/lib/api/route-errors';
+
+import { gatewayCallOptions } from '../ai/gateway-options';
 import { createAdminSupabase } from '../supabase-admin';
 import {
   type BodyCompDraft,
@@ -14,7 +17,6 @@ import {
   bodyCompParseResultSchema,
   segmentalDataSchema,
 } from '../types/body-composition';
-import { logIgnoredQueryError } from '@/lib/api/route-errors';
 
 /**
  * BodyCompPhotoService — vision parse of a body-composition report into a DRAFT
@@ -364,6 +366,7 @@ export class BodyCompPhotoService {
   ): Promise<BodyCompParseResult> {
     const { output } = await generateText({
       model,
+      ...gatewayCallOptions(),
       output: Output.object({ schema: bodyCompParseResultSchema }),
       system: SYSTEM_PROMPT,
       // Bound latency: one extra try at most (the default 2 retries × a slow vision

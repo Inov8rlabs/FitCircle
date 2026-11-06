@@ -42,6 +42,8 @@ import { LIFECYCLE_PROMO_KEY_SET, SUPERSEDED_CARD_TYPES, SUPERSEDED_PROMO_KEYS, 
 import {
   PROMO_CARD_TYPE,
   PROMO_CARD_VERSION,
+  PROMO_EXCLUSIONS,
+  fitzyRecommendationsReadyFrom,
   SYSTEM_PROMOS,
   buildJourneyContext,
   isPromoLive,
@@ -59,6 +61,7 @@ import {
 import { createAdminSupabase } from '@/lib/supabase-admin';
 import { runAfterResponse } from '@/lib/utils/after-response';
 
+import { normalizeTier } from './entitlement-service';
 import { lifecycleConfigCache, lifecycleLive } from './pro-lifecycle-service';
 import { PromoService, defaultPromoLoaders, liveProFeaturesCache, type LifecycleRound, type PromoLoaders } from './promo-service';
 import { promoStylesCache } from './promo-style-store';
@@ -298,15 +301,26 @@ export class HomeFeedService {
     const lifecycleLoader = loaders.proLifecycle;
     // System promo looks: only promo_style@1 clients (zero cost for shipped apps).
     const stylesLoader = supportsPromoStyle(client.features) && promoStylesEnabled() ? loaders.promoStyles : undefined;
-    const [facts, state, liveProFeatures, lifecycle, styles] = await Promise.all([
+    // Trial-first teaser (TRIAL_FIRST_SPEC §3): the plan-preview read only for free users who could
+    // see fitzy_recommendations (onboarding complete + a goal). Zero cost for everyone else.
+    const planLoader = loaders.fitzyPlanReady;
+    const wantPlan = !!planLoader && profileIsFreeForTeaser(profile);
+    const [facts, state, liveProFeatures, lifecycle, styles, fitzyPlanReady] = await Promise.all([
       softly(() => loaders.journeyFacts(profile.id, localDate), PROMO_LOADER_TIMEOUT_MS),
       softly(() => loaders.promoState(profile.id), PROMO_LOADER_TIMEOUT_MS),
       softly(() => loaders.liveProFeatures()),
       // Pro lifecycle prompts (docs/PRO_LIFECYCLE_PROMPTS.md): config (cached) + grants/purchases (+ usage when in a state).
       lifecycleLoader ? softly(() => lifecycleLoader.call(loaders, profile, timezone, now), PROMO_LOADER_TIMEOUT_MS) : Promise.resolve(null),
       stylesLoader ? softly(() => stylesLoader.call(loaders)) : Promise.resolve(null),
+      wantPlan ? softly(() => planLoader.call(loaders, profile.id, localDate), PROMO_LOADER_TIMEOUT_MS) : Promise.resolve(null),
     ]);
-    return { facts, state, liveProFeatures, timezone, localDate, lifecycle, styles };
+    // No real preview yet (e.g. onboarding finished before this shipped): produce one after the
+    // response so the teaser can show next session. Never blocks the feed.
+    if (wantPlan && fitzyPlanReady === false && loaders.warmFitzyPlan) {
+      const warm = loaders.warmFitzyPlan;
+      runAfterResponse(() => warm.call(loaders, profile.id, timezone), 'fitzy plan preview');
+    }
+    return { facts, state, liveProFeatures, timezone, localDate, lifecycle, styles, fitzyPlanReady };
   }
 
   /** Pure-ish: promo candidates + what they replace, for composeFeed. */
@@ -319,7 +333,7 @@ export class HomeFeedService {
     const cfg = promosConfig();
     const promoV1 = client.promoCard;
     if (!cfg.enabled || !client.promoCard || !data) return { compose: { promoV1 }, trace: null };
-    const journey = buildJourneyContext(profile, data.facts, { now: ctx.now, timezone: data.timezone, localDate: data.localDate });
+    const journey = { ...buildJourneyContext(profile, data.facts, { now: ctx.now, timezone: data.timezone, localDate: data.localDate }), fitzyPlanReady: data.fitzyPlanReady ?? null };
     const lc = data.lifecycle ?? null;
     const lifecycleDefs = lc ? lifecyclePromoDefinitions(lc.input, lc.pub.config, { enabled: lifecycleLive(lc.pub), now: ctx.now }) : [];
     // Looks (promo_style@1 clients only — the engine ignores `style` for everyone else). Env kill switch → default look.
@@ -336,6 +350,12 @@ export class HomeFeedService {
     });
     let { candidates } = selected;
     const { trace } = selected;
+    // One paywall card at a time (TRIAL_FIRST_SPEC §3): the personalized Fitzy teaser beats pro_value.
+    for (const { winner, loser } of PROMO_EXCLUSIONS) {
+      if (!candidates.some((c) => c.promoKey === winner)) continue;
+      candidates = candidates.filter((c) => c.promoKey !== loser);
+      for (const t of trace) if (t.key === loser && t.outcome === 'selected') t.outcome = `superseded_by_${winner}`;
+    }
     // pro_value replaces the legacy pro_upsell card for promo@1 clients (while pro_value is live).
     const replacedTypes = new Set<string>(isPromoLive('pro_value', cfg) ? ['pro_upsell'] : []);
     // A Pro lifecycle card is THE paywall card while it shows: the evergreen upsells step aside.
@@ -513,6 +533,14 @@ export interface PromoRoundData {
   lifecycle?: LifecycleRound | null;
   /** System promo looks (promo_style@1 clients only; null = not loaded → default look). */
   styles?: PromoStylesConfig | null;
+  /** A real Fitzy weekly-plan preview exists (null = not read: not a teaser candidate, or failed). */
+  fitzyPlanReady?: boolean | null;
+}
+
+/** Free (known) + onboarding complete + a goal: the only users the fitzy_recommendations teaser can target. */
+export function profileIsFreeForTeaser(profile: FeedProfile): boolean {
+  if (!('subscription_tier' in profile)) return false;
+  return normalizeTier(profile.subscription_tier as string | null) !== 'premium' && fitzyRecommendationsReadyFrom(profile) === true;
 }
 
 /** promo@1 support when the caller didn't parse `actions=` / `promoLayouts=` (e.g. admin preview default). */

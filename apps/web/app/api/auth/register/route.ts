@@ -2,6 +2,7 @@ import { createClient } from '@supabase/supabase-js';
 import { type NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 
+import { isRegionRestricted, regionNotAvailableBody } from '@/lib/geo/region-restriction';
 import { registerRateLimiter, getIdentifier, applyRateLimit } from '@/lib/middleware/rate-limit';
 import { CLEAR_FC_REF_COOKIE, claimWebInvite, resolveWebInvite } from '@/lib/referrals/web-claim';
 import { ensureProfileRow } from '@/lib/services/profile-bootstrap';
@@ -12,6 +13,7 @@ import {
   ensureUniqueUsername,
 } from '@/lib/services/username-service';
 import { triggerWelcomeEmail } from '@/lib/services/welcome-email-service';
+import { ageRequirementBody, isUnderMinimumAgeByYear } from '@/lib/validation/age-requirement';
 import { authEmailSchema } from '@/lib/validation/auth-email';
 
 // Validation schema
@@ -24,9 +26,13 @@ const registerSchema = z.object({
   // Optional invite attribution (docs/REFERRALS_SPEC.md §4 Web). Falls back to the fc_ref cookie.
   ref: z.string().max(32).optional(),
   circle: z.string().max(32).optional(),
+  // 18+ (docs/PRIVACY_COMPLIANCE_SPEC.md §5): optional here; under 18 → 400 AGE_REQUIREMENT.
+  birthYear: z.number().int().min(1900).max(3000).optional(),
 });
 
 export async function POST(request: NextRequest) {
+  // EU/EEA restriction (WEB_EU_SIGNUP_BLOCK, default on; lib/geo/region-restriction.ts).
+  if (isRegionRestricted(request)) return NextResponse.json(regionNotAvailableBody(), { status: 403 });
   try {
     // Apply rate limiting (3 registrations per day per IP) to curb automated
     // account creation / signup abuse.
@@ -37,6 +43,9 @@ export async function POST(request: NextRequest) {
     // Parse and validate request body
     const body = await request.json();
     const validatedData = registerSchema.parse(body);
+    if (validatedData.birthYear !== undefined && isUnderMinimumAgeByYear(validatedData.birthYear)) {
+      return NextResponse.json(ageRequirementBody('birthYear'), { status: 400 });
+    }
 
     // Create Supabase client
     const supabase = createClient(

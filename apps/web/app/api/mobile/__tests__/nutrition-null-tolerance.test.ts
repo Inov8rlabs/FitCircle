@@ -11,6 +11,8 @@ const record = (name: string, args: any[]) => {
   (calls[name] ??= []).push(args);
 };
 
+// AI consent gate: allow-all here; the rule itself is tested in consent-service / ai-consent-routes tests.
+vi.mock('@/lib/services/consent-service', async (orig) => (await import('@/lib/services/__tests__/consent-stub')).allowAllConsentModule(orig));
 vi.mock('@/lib/middleware/mobile-auth', () => ({
   requireMobileAuth: async () => ({ id: 'user-1' }),
 }));
@@ -367,15 +369,15 @@ describe('Fitzy chat', () => {
   it('accepts circleId: null (chat without a circle)', async () => {
     const res = await fitzyChat(req({ messages, circleId: null }));
     expect(res.status).toBe(200);
-    expect(calls.fitzyChat[0]).toEqual(['user-1', messages, undefined, { conversationId: null, timezone: null }]);
+    expect(calls.fitzyChat[0]).toEqual(['user-1', messages, undefined, { conversationId: null, timezone: null, assertAiConsent: expect.any(Function) }]);
     expect((await res.json()).data).toEqual({ answer: 'Hi', disclaimer: 'd' });
   });
 
   it('OLD request shapes are unchanged', async () => {
     await fitzyChat(req({ messages }));
-    expect(calls.fitzyChat[0]).toEqual(['user-1', messages, undefined, { conversationId: null, timezone: null }]);
+    expect(calls.fitzyChat[0]).toEqual(['user-1', messages, undefined, { conversationId: null, timezone: null, assertAiConsent: expect.any(Function) }]);
     await fitzyChat(req({ messages, circleId: CIRCLE }));
-    expect(calls.fitzyChat[1]).toEqual(['user-1', messages, CIRCLE, { conversationId: null, timezone: null }]);
+    expect(calls.fitzyChat[1]).toEqual(['user-1', messages, CIRCLE, { conversationId: null, timezone: null, assertAiConsent: expect.any(Function) }]);
   });
 
   it('still validates: no messages keeps its own message', async () => {
@@ -391,12 +393,12 @@ describe('nutrition coach', () => {
   it('accepts circleId: null', async () => {
     const res = await nutritionCoach(req({ question: 'Is oatmeal good?', circleId: null }));
     expect(res.status).toBe(200);
-    expect(calls.coachAsk[0]).toEqual(['user-1', 'Is oatmeal good?', undefined]);
+    expect(calls.coachAsk[0]).toEqual(['user-1', 'Is oatmeal good?', undefined, { assertAiConsent: expect.any(Function) }]);
   });
 
   it('OLD request shape is unchanged', async () => {
     await nutritionCoach(req({ question: 'Is oatmeal good?', circleId: CIRCLE }));
-    expect(calls.coachAsk[0]).toEqual(['user-1', 'Is oatmeal good?', CIRCLE]);
+    expect(calls.coachAsk[0]).toEqual(['user-1', 'Is oatmeal good?', CIRCLE, { assertAiConsent: expect.any(Function) }]);
   });
 });
 

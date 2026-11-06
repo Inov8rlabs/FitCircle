@@ -37,6 +37,7 @@ import {
   readPendingInviteFromCookieHeader,
   rewardLine,
 } from '@/lib/referrals/web';
+import { AGE_REQUIREMENT_MESSAGE, isUnderMinimumAgeByYear } from '@/lib/validation/age-requirement';
 import { useAuthStore } from '@/stores/auth-store';
 import { useUIStore } from '@/stores/ui-store';
 
@@ -49,7 +50,15 @@ const registerSchema = z.object({
   termsAccepted: z.boolean().refine((val) => val === true, {
     message: 'You must accept the terms and conditions',
   }),
+  // Neutral 18+ gate (docs/PRIVACY_COMPLIANCE_SPEC.md §5): a plain year picker, no hint at the cut-off.
+  birthYear: z
+    .string()
+    .regex(/^\d{4}$/, 'Please select your year of birth')
+    .refine((v) => !isUnderMinimumAgeByYear(Number(v)), { message: AGE_REQUIREMENT_MESSAGE }),
 });
+
+const CURRENT_YEAR = new Date().getFullYear();
+const BIRTH_YEARS = Array.from({ length: 101 }, (_, i) => String(CURRENT_YEAR - i));
 
 type RegisterFormData = z.infer<typeof registerSchema>;
 
@@ -103,6 +112,7 @@ function RegisterForm() {
       email: '',
       password: '',
       termsAccepted: false,
+      birthYear: '',
     },
   });
 
@@ -183,6 +193,7 @@ function RegisterForm() {
         name: data.name,
         username: data.email.split('@')[0],
         invite,
+        birthYear: Number(data.birthYear),
       });
 
       // Accept the invite: referral attribution + joining the circle of a circle
@@ -312,6 +323,27 @@ function RegisterForm() {
                     />
                   </div>
                   {errors.name && <p className="mt-1 text-sm text-red-500">{errors.name.message}</p>}
+                </div>
+
+                <div>
+                  <label htmlFor="birthYear" className="block text-sm font-medium mb-2 text-gray-300">
+                    Year of birth
+                  </label>
+                  <select
+                    {...register('birthYear')}
+                    id="birthYear"
+                    className="block w-full px-3 py-3 border border-slate-700 rounded-lg bg-slate-900/50 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
+                  >
+                    <option value="" disabled>
+                      Select year
+                    </option>
+                    {BIRTH_YEARS.map((y) => (
+                      <option key={y} value={y}>
+                        {y}
+                      </option>
+                    ))}
+                  </select>
+                  {errors.birthYear && <p className="mt-1 text-sm text-red-500">{errors.birthYear.message}</p>}
                 </div>
 
                 <div>

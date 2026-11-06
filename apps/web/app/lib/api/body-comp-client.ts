@@ -58,7 +58,8 @@ export class BodyCompApiError extends Error {
  */
 function authHeaders(): Record<string, string> {
   const token = useAuthStore.getState().token;
-  return token ? { Authorization: `Bearer ${token}` } : {};
+  // consents_v1: the web handles 403 AI_CONSENT_REQUIRED (docs/PRIVACY_COMPLIANCE_SPEC.md §4).
+  return token ? { Authorization: `Bearer ${token}`, 'X-Client-Features': 'consents_v1' } : { 'X-Client-Features': 'consents_v1' };
 }
 
 async function unwrap<T>(res: Response): Promise<T> {

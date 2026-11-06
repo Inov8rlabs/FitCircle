@@ -7,8 +7,12 @@ const state = {
   saveCalls: 0,
   ownsCalls: [] as string[],
   afterCalls: 0,
+  reuse: false,
+  dedupeKeys: [] as string[],
 };
 
+// AI consent gate: allow-all here; the rule itself is tested in consent-service / ai-consent-routes tests.
+vi.mock('@/lib/services/consent-service', async (orig) => (await import('@/lib/services/__tests__/consent-stub')).allowAllConsentModule(orig));
 vi.mock('@sentry/nextjs', () => ({ captureException: vi.fn() }));
 vi.mock('next/server', async (importOriginal) => {
   const original: Record<string, unknown> = await importOriginal();
@@ -28,7 +32,8 @@ vi.mock('@/lib/services/usage-service', () => {
     constructor(
       public readonly feature: string,
       public readonly used: number,
-      public readonly limit: number
+      public readonly limit: number,
+      public readonly trialEligible?: boolean
     ) {
       super('UPGRADE_REQUIRED');
     }
@@ -41,10 +46,12 @@ vi.mock('@/lib/services/nutrition-intelligence-service', () => ({
       if (state.parseError) throw state.parseError;
       return { items: [], totals: {}, overallConfidence: 0.9 };
     },
-    saveUnparsedPhoto: async () => {
+    saveUnparsedPhoto: async (_u: string, _n: string | null, opts: { dedupeKey?: string } = {}) => {
       state.saveCalls += 1;
-      return { entryId: NEW_ENTRY };
+      if (opts.dedupeKey) state.dedupeKeys.push(opts.dedupeKey);
+      return state.reuse ? { entryId: NEW_ENTRY, reused: true } : { entryId: NEW_ENTRY };
     },
+    unparsedPhotoKey: () => 'photo-key',
     attachFallbackImages: async () => undefined,
     ownsFoodLogEntry: async (_userId: string, entryId: string) => {
       state.ownsCalls.push(entryId);
@@ -176,6 +183,8 @@ describe('POST /api/mobile/food/photo-parse — Option-B fallback', () => {
       feature: 'ai_food_parse',
       used: 3,
       limit: 3,
+      // Additive (TRIAL_FIRST_SPEC §5): shipped clients ignore it.
+      paywall: expect.objectContaining({ trigger: 'food_ai', headline: 'Unlock food logging analysis', trialDays: 3, trialEligible: false }),
     });
 
     state.saveCalls = 0;
@@ -191,6 +200,7 @@ describe('POST /api/mobile/food/photo-parse — Option-B fallback', () => {
       feature: 'ai_food_parse',
       used: 3,
       limit: 3,
+      paywall: expect.objectContaining({ trigger: 'food_ai' }),
     });
 
     state.parseError = new Error('RateLimited');
@@ -209,5 +219,44 @@ describe('POST /api/mobile/food/photo-parse — Option-B fallback', () => {
     expect(body.error).toBeNull();
     expect(state.saveCalls).toBe(0);
     expect(state.ownsCalls).toEqual([]);
+  });
+});
+
+describe('trial-first food AI allowance on photo-parse (TRIAL_FIRST_SPEC §5)', () => {
+  beforeEach(() => {
+    state.reuse = false;
+    state.dedupeKeys = [];
+    state.saveCalls = 0;
+    state.afterCalls = 0;
+  });
+
+  it('blocked: same 429 envelope, photo saved un-analyzed, trial copy + paywall', async () => {
+    state.parseError = new UpgradeRequiredError('food_ai_unlimited', 5, 5, true);
+    const res = await post();
+    expect(res.status).toBe(429);
+    const body = await res.json();
+    expect(body.error).toMatchObject({
+      code: 'UPGRADE_REQUIRED',
+      message: "You've used your 5 free AI food analyses. Start your free 3-day trial to keep logging with AI. We saved your photo so you can add the details.",
+      details: {
+        savedEntryId: NEW_ENTRY,
+        imageUrls: [],
+        feature: 'food_ai_unlimited',
+        used: 5,
+        limit: 5,
+        paywall: { trigger: 'food_ai', headline: 'Unlock food logging analysis', cta: 'Start free trial', trialDays: 3, trialEligible: true },
+      },
+    });
+    expect(state.saveCalls).toBe(1);
+    expect(state.dedupeKeys).toEqual(['photo-key']);
+    expect(state.afterCalls).toBe(1); // photos attached after the response
+  });
+
+  it('a retry of the same photo reuses the saved entry and does not re-attach images', async () => {
+    state.parseError = new UpgradeRequiredError('food_ai_unlimited', 5, 5, false);
+    state.reuse = true;
+    const body = await (await post()).json();
+    expect(body.error.details.savedEntryId).toBe(NEW_ENTRY);
+    expect(state.afterCalls).toBe(0);
   });
 });

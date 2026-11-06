@@ -7,6 +7,7 @@ import { toast } from 'sonner';
 
 import { AnalyticsEvents, analytics, toErrorKind, type Plan } from '@/lib/analytics';
 import { rememberCheckout, webProductId } from '@/lib/analytics/checkout';
+import { TIER_LIMITS } from '@/lib/config/tier-limits';
 
 const PRICE_MONTHLY = 9.99;
 const PRICE_ANNUAL = 29.99;
@@ -20,7 +21,11 @@ const PRICE_LIFETIME = 179.99;
 const PROMO_ANNUAL = Number(process.env.NEXT_PUBLIC_LAUNCH_PROMO_ANNUAL ?? '') || null;
 const SHOW_LIFETIME = process.env.NEXT_PUBLIC_LIFETIME_OFFER === 'true';
 
-export function PricingCards({ source = 'pricing_page' }: { source?: string }) {
+/**
+ * `trialDays` > 0 only when a Stripe checkout started now carries the free trial
+ * (GET /api/billing/trial): the CTA becomes "Start free trial" for subscriptions.
+ */
+export function PricingCards({ source = 'pricing_page', trialDays = 0 }: { source?: string; trialDays?: number }) {
   const [selected, setSelected] = useState<Plan>('annual'); // annual pre-selected
   const [busy, setBusy] = useState(false);
 
@@ -166,8 +171,20 @@ export function PricingCards({ source = 'pricing_page' }: { source?: string }) {
         data-testid="checkout-button"
         className="h-14 w-full rounded-xl bg-gradient-brand text-headline text-white shadow-glow transition hover:brightness-110 disabled:opacity-60"
       >
-        {busy ? 'Opening checkout…' : selected === 'lifetime' ? 'Get Pro forever' : 'Continue to checkout'}
+        {busy
+          ? 'Opening checkout…'
+          : selected === 'lifetime'
+            ? 'Get Pro forever'
+            : trialDays > 0
+              ? 'Start free trial'
+              : 'Continue to checkout'}
       </motion.button>
+      {trialDays > 0 && selected !== 'lifetime' && (
+        <p className="text-center text-footnote text-fg-secondary" data-testid="trial-terms">
+          Free for {trialDays} days, then {selected === 'annual' ? `$${PROMO_ANNUAL ?? PRICE_ANNUAL}/yr` : `$${PRICE_MONTHLY}/mo`}. Cancel anytime before
+          the trial ends and you won&apos;t be charged.
+        </p>
+      )}
       <p className="text-center text-caption leading-relaxed text-fg-tertiary">
         Subscriptions renew automatically. Cancel any time in Settings → Billing to stop the next
         renewal; you keep Pro until the end of the period you&apos;ve paid for. No refunds for partial
@@ -180,10 +197,19 @@ export function PricingCards({ source = 'pricing_page' }: { source?: string }) {
 }
 
 /** Free vs Pro comparison rows (MONETIZATION-PLAN gating matrix). */
-export function PlanComparison() {
+/**
+ * Free numbers are remote config: pass the viewer's resolved limits (entitlements) when known;
+ * otherwise the code defaults are shown.
+ */
+export function PlanComparison({
+  foodAiTotal = TIER_LIMITS.free.foodAiAnalysesTotal,
+  fitzyPerDay = TIER_LIMITS.free.fitzyMessagesPerDay,
+}: { foodAiTotal?: number | null; fitzyPerDay?: number | null } = {}) {
+  const food = foodAiTotal ?? TIER_LIMITS.free.foodAiAnalysesTotal;
+  const fitzy = fitzyPerDay ?? TIER_LIMITS.free.fitzyMessagesPerDay;
   const rows: Array<[string, string, string]> = [
-    ['AI food logging', '5 scans/day', 'Fair-use limits'],
-    ['Fitzy AI coach', '5 messages/day', 'Fair-use limits + weekly plan'],
+    ['AI food logging', `${food} AI analyses total, then manual logging`, 'Fair-use limits'],
+    ['Fitzy AI coach', fitzy > 0 ? `${fitzy} messages/day` : 'Daily focus (chat is Pro)', 'Unlimited chat (fair use) + weekly plan'],
     ['Body composition', 'Logging', 'Photo scan, trends, coach'],
     ['History & analytics', 'Last 14 days', 'Full history'],
     ['Circles', 'Join unlimited · create 2', 'Create unlimited'],

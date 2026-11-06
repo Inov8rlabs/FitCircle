@@ -55,7 +55,12 @@ export interface FitzyPaywall {
   trigger: PaywallTrigger;
   headline: string;
   bullets: string[];
-  cta: 'Unlock Fitzy Pro';
+  /** 'Unlock Fitzy Pro' (classic), 'Start free trial' / 'Continue with Pro' (trial-first chat gate). */
+  cta: string;
+  /** Additive (TRIAL_FIRST_SPEC §2): the Pro free-trial length in days (3). Present on the chat gate. */
+  trialDays?: number;
+  /** Additive: server's best guess that the user can still start a free trial (never trialed, no prior store subscription). */
+  trialEligible?: boolean;
 }
 
 export type CommitmentKind = 'move' | 'eat' | 'hydrate' | 'sleep' | 'circle' | 'mind';

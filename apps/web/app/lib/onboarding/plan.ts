@@ -22,6 +22,8 @@
  */
 import { z } from 'zod';
 
+import { AGE_REQUIREMENT_CODE, AGE_REQUIREMENT_MESSAGE, MIN_USER_AGE } from '../validation/age-requirement';
+
 /** Factor when no (or an unknown) activity level is sent: the pre-1.1.0 behaviour. */
 export const PLAN_ACTIVITY_FACTOR = 1.35;
 /** Onboarding v3 activity step ids → standard Mifflin–St Jeor activity multipliers. */
@@ -59,7 +61,17 @@ export const planRequestSchema = z
     weightKg: num(PLAN_WEIGHT_RANGE_KG.min, PLAN_WEIGHT_RANGE_KG.max).nullish(),
     targetWeightKg: num(PLAN_WEIGHT_RANGE_KG.min, PLAN_WEIGHT_RANGE_KG.max).nullish(),
     sex: z.enum(['male', 'female', 'other', 'prefer_not_to_say']).nullish(),
-    age: z.number().int().min(13).max(100).nullish(),
+    // Under 18 → AGE_REQUIREMENT (lib/validation/age-requirement.ts); 18–100 otherwise.
+    age: z
+      .number()
+      .int()
+      .max(100)
+      .nullish()
+      .superRefine((v, ctx) => {
+        if (v != null && v < MIN_USER_AGE) {
+          ctx.addIssue({ code: z.ZodIssueCode.custom, message: AGE_REQUIREMENT_MESSAGE, params: { code: AGE_REQUIREMENT_CODE } });
+        }
+      }),
     unitsSystem: z.enum(['metric', 'imperial']).nullish(),
     // Free string so a future id never fails the request; unknown ids use the default factor.
     activityLevel: z.string().trim().max(40).nullish(),

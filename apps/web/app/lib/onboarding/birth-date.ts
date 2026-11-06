@@ -21,6 +21,7 @@
  */
 import { z } from 'zod';
 
+import { addAgeIssue, isUnderMinimumAge, isUnderMinimumAgeByYear } from '../validation/age-requirement';
 import { isCalendarDate } from '../validation/date-of-birth';
 
 import { ageFrom } from './plan';
@@ -62,17 +63,26 @@ export function parseBirthDate(input: BirthDateInput): ParsedBirthDate | null {
   return null;
 }
 
-/** zod superRefine for any schema that spreads `birthDateFields`. */
+/**
+ * zod superRefine for any schema that spreads `birthDateFields`.
+ * Under 18 → an AGE_REQUIREMENT issue (routes answer 400 AGE_REQUIREMENT; lib/validation/age-requirement.ts),
+ * checked before the plausible-range check so a 12-year-old gets the same neutral answer.
+ */
 export function refineBirthDate(v: BirthDateInput, ctx: z.RefinementCtx, now: Date = new Date()): void {
   if (v.dateOfBirth != null && v.dateOfBirth !== '') {
     if (!isCalendarDate(v.dateOfBirth)) {
       ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['dateOfBirth'], message: 'dateOfBirth must be YYYY-MM-DD' });
+    } else if (isUnderMinimumAge(v.dateOfBirth, now)) {
+      addAgeIssue(ctx, 'dateOfBirth');
     } else if (ageFrom(v.dateOfBirth, now) === null) {
       ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['dateOfBirth'], message: `age must be ${MIN_AGE}-${MAX_AGE}` });
     }
   }
-  if (v.birthYear != null && !yearAgeOk(v.birthYear, now)) {
-    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['birthYear'], message: `age must be ${MIN_AGE}-${MAX_AGE}` });
+  if (v.birthYear != null) {
+    if (isUnderMinimumAgeByYear(v.birthYear, now)) addAgeIssue(ctx, 'birthYear');
+    else if (!yearAgeOk(v.birthYear, now)) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['birthYear'], message: `age must be ${MIN_AGE}-${MAX_AGE}` });
+    }
   }
 }
 

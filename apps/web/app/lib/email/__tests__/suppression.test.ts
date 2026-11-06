@@ -34,6 +34,9 @@ import {
   suppressAddress,
 } from '../suppression';
 
+// Marketing email is only sent with a postal address (lib/email/compliance.ts); these tests cover other behaviour.
+process.env.EMAIL_POSTAL_ADDRESS = process.env.EMAIL_POSTAL_ADDRESS || '123 Test Street, Testville, CA 94000, USA';
+
 let store: MemorySuppressionStore;
 const rendered = { subject: 'S', html: '<p>h</p>', text: 't' };
 
@@ -104,7 +107,16 @@ describe('sendEmail (the central sender)', () => {
   });
 
   it('tags + from name', async () => {
-    await sendEmail({ to: 'a@x.io', ...rendered, fromName: 'Maya', category: 'referral_invite', tags: { 'bad tag!': 'v@1' } });
+    // A marketing stream: compliant body + List-Unsubscribe (lib/email/compliance.ts).
+    await sendEmail({
+      to: 'a@x.io',
+      ...rendered,
+      html: `<p>h</p><p>${process.env.EMAIL_POSTAL_ADDRESS}</p>`,
+      headers: { 'List-Unsubscribe': '<https://fitcircle.ai/u>' },
+      fromName: 'Maya',
+      category: 'referral_invite',
+      tags: { 'bad tag!': 'v@1' },
+    });
     expect(mail.sent[0].from).toBe('Maya via FitCircle <team@fitcircle.ai>');
     expect(mail.sent[0].tags).toEqual([{ name: 'category', value: 'referral_invite' }, { name: 'bad_tag_', value: 'v_1' }]);
   });

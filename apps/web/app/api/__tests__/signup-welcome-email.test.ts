@@ -67,6 +67,9 @@ import { POST as applePOST } from '../mobile/auth/apple/route';
 import { POST as googlePOST } from '../mobile/auth/google/route';
 import { POST as mobileRegisterPOST } from '../mobile/auth/register/route';
 
+// The welcome email is lifecycle mail: sent only with a postal address (lib/email/compliance.ts).
+process.env.EMAIL_POSTAL_ADDRESS = process.env.EMAIL_POSTAL_ADDRESS || '123 Test Street, Testville, CA 94000, USA';
+
 const json = (url: string, body: unknown, headers: Record<string, string> = {}) =>
   new Request(url, { method: 'POST', body: JSON.stringify(body), headers: { 'content-type': 'application/json', ...headers } }) as any;
 

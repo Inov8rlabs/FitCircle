@@ -126,15 +126,16 @@ describe('auth', () => {
 });
 
 describe('promo looks: state + preview', () => {
-  it('no row → no styles; presets, looks, the 4 system promos with their creatives', async () => {
+  it('no row → no styles; presets, looks, the 5 system promos with their creatives', async () => {
     const { body } = await json(await stateGet(req(BASE, tools())));
     const d = body.data;
     expect(d).toMatchObject({ source: 'defaults', version: BASE0, config: DEFAULT_PROMO_STYLES, killSwitch: { stylesEnabled: true, promosEnabled: true }, capability: { feature: 'promo_style@1', firstVersion: '1.1.3' } });
     expect(d.presets.map((p: any) => p.id)).toEqual(['white', 'paywall', 'brand_purple']);
     expect(d.presets[1].style).toEqual(PRESETS.paywall.style);
-    expect(d.promos.map((p: any) => p.key)).toEqual(['first_meal', 'log_meal_now', 'pro_value', 'meet_fitzy']);
+    expect(d.promos.map((p: any) => p.key)).toEqual(['first_meal', 'log_meal_now', 'fitzy_recommendations', 'pro_value', 'meet_fitzy']);
     expect(d.promos[0].creatives).toEqual([expect.objectContaining({ id: 'first_meal_v1', layout: 'hero' })]);
-    expect(d.promos[2].creatives).toHaveLength(3);
+    expect(d.promos[2].creatives).toEqual([expect.objectContaining({ id: 'fitzy_recs_trial', layout: 'banner' })]);
+    expect(d.promos[3].creatives).toHaveLength(3);
   });
 
   it('preview: legacy props carry no style; each variant has 1.1.3 props + issues; changes listed', async () => {

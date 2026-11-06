@@ -21,6 +21,7 @@
 import { generateText, Output } from 'ai';
 import { z } from 'zod';
 
+import { gatewayCallOptions } from '../ai/gateway-options';
 import type { FoodDTO, FoodPortionDTO } from '../types/foods';
 import type { DraftAlternate, NutritionDraftItem, ParsedFoodItem, UnitOption } from '../types/nutrition';
 
@@ -188,6 +189,7 @@ export class NutritionGroundingService {
     }
     const result = await generateText({
       model,
+      ...gatewayCallOptions(),
       output: Output.object({ schema: pickSchema }),
       maxRetries: 0,
       timeout: PICKER_TIMEOUT_MS,

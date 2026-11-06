@@ -137,3 +137,27 @@ describe('findOrCreateSocialUser', () => {
     expect(err.code).toBe('PROFILE_CREATION_FAILED');
   });
 });
+
+describe('findOrCreateSocialUser — EU/EEA restriction (blockNewAccount)', () => {
+  it('a NEW account is refused with REGION_NOT_AVAILABLE and nothing is created', async () => {
+    const { supabase, calls, profiles } = fakeSupabase({});
+    const err = await findOrCreateSocialUser(supabase, { ...input, email: 'new@user.eu', blockNewAccount: true }).catch((e) => e);
+    expect(err).toBeInstanceOf(SocialAuthError);
+    expect(err.code).toBe('REGION_NOT_AVAILABLE');
+    expect(calls).not.toContain('createUser');
+    expect(profiles).toHaveLength(0);
+  });
+
+  it('an existing account (profile email) still signs in', async () => {
+    const { supabase } = fakeSupabase({ profiles: [{ id: 'u1', email: 'me@user.eu' }] });
+    expect(await findOrCreateSocialUser(supabase, { ...input, email: 'me@user.eu', blockNewAccount: true })).toMatchObject({ userId: 'u1', isNewUser: false });
+  });
+
+  it('an existing auth user without a profile email still signs in (collision path)', async () => {
+    const { supabase } = fakeSupabase({
+      authUsers: [{ id: 'legacy', email: 'old@user.eu' }],
+      createUserError: { message: 'already registered', code: 'email_exists' },
+    });
+    expect(await findOrCreateSocialUser(supabase, { ...input, email: 'old@user.eu', blockNewAccount: true })).toMatchObject({ userId: 'legacy', isNewUser: false });
+  });
+});

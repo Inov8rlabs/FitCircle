@@ -22,7 +22,14 @@ const relations = snapshot.relations as Record<string, string[]>;
 const foreignKeys = snapshot.foreign_keys as ForeignKey[];
 
 /** Tables created by migrations not yet applied when the snapshot was taken. */
-const PENDING_RELATIONS: string[] = [];
+const PENDING_RELATIONS: string[] = [
+  // 129_remote_config.sql (TRIAL_FIRST_SPEC §6) — written, not applied yet.
+  'remote_config_defaults',
+  'remote_config_rules',
+  'remote_config_changes',
+  // 130_user_consents.sql (docs/PRIVACY_COMPLIANCE_SPEC.md §2) — written, not applied yet.
+  'user_consents',
+];
 
 const APP_DIR = join(__dirname, '..', '..', 'app');
 

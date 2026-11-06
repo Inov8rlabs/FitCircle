@@ -1,12 +1,14 @@
 import { generateText } from 'ai';
 
+import { logIgnoredQueryError } from '@/lib/api/route-errors';
+
+import { gatewayCallOptions } from '../ai/gateway-options';
 import { createAdminSupabase } from '../supabase-admin';
 import { stripEmoji } from '../text/strip-emoji';
 import type { CoachResponse, INutritionCoachService } from '../types/nutrition-coach';
 
 import { DietaryPreferencesService } from './dietary-preferences-service';
 import { UsageService } from './usage-service';
-import { logIgnoredQueryError } from '@/lib/api/route-errors';
 
 /**
  * NutritionCoachService — the AI Nutrition Coach (PRD v4 §6.9).
@@ -104,10 +106,17 @@ export class NutritionCoachService implements INutritionCoachService {
    * Always returns a guardrail-safe CoachResponse. If the model output fails the output guard,
    * the unsafe answer is dropped and SAFE_FALLBACK is returned instead.
    */
-  static async ask(userId: string, question: string, circleId?: string): Promise<CoachResponse> {
+  static async ask(
+    userId: string,
+    question: string,
+    circleId?: string,
+    opts: { assertAiConsent?: () => Promise<void> } = {}
+  ): Promise<CoachResponse> {
     // 0. Tier-aware daily quota — shares the Fitzy coach budget (fitzy_message_log), since
     // both are Sonnet-backed coach calls. Throws UpgradeRequiredError / RateLimited.
     await UsageService.assertFitzyQuota(userId);
+    // Server-side AI consent (ConsentService), after the paywall and before anything is recorded.
+    if (opts.assertAiConsent) await opts.assertAiConsent();
     await UsageService.recordFitzyMessage(userId);
 
     // 1. Gather light, compact grounding context (aggregates only — never raw food rows).
@@ -118,6 +127,7 @@ export class NutritionCoachService implements INutritionCoachService {
     try {
       const { text } = await generateText({
         model: COACH_MODEL,
+        ...gatewayCallOptions(),
         system: SYSTEM_PROMPT,
         messages: [
           {

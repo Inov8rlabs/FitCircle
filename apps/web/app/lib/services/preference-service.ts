@@ -2,6 +2,7 @@
  * Service for managing user preferences in FitCircle
  */
 
+import { PRIVACY_DEFAULTS } from '@/lib/privacy/defaults';
 import { createAdminSupabase } from '@/lib/supabase-admin';
 import { type UnitSystem } from '@/lib/utils/units';
 
@@ -124,7 +125,7 @@ export class PreferenceService {
         height: 'cm',
       },
       privacy: {
-        profileVisibility: 'public',
+        profileVisibility: PRIVACY_DEFAULTS.profileVisibility,
       },
     };
   }

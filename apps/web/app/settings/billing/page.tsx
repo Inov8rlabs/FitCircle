@@ -119,8 +119,8 @@ export default function BillingSettingsPage() {
             <div className="min-w-0 flex-1">
               <p className="text-headline text-white">Free plan</p>
               <p className="mt-1 text-subhead text-fg-secondary">
-                You&apos;re on the free plan — 5 AI scans and 5 Fitzy messages a day, 14 days of
-                history, and up to 2 circles of your own.
+                You&apos;re on the free plan — 5 free AI food analyses, unlimited manual logging,
+                Fitzy&apos;s daily focus, 14 days of history, and up to 2 circles of your own.
               </p>
             </div>
           </div>

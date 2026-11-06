@@ -3,8 +3,9 @@
 import { Loader2, Mic, Square } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 
+import { useAiConsent } from '@/hooks/useAiConsent';
 import { AnalyticsEvents, analytics, isUpgradeRequired, toErrorKind } from '@/lib/analytics';
-import { nutritionClient, ApiError, type NutritionDraft } from '@/lib/api/nutrition-client';
+import { nutritionClient, ApiError, isAiConsentRequired, type NutritionDraft } from '@/lib/api/nutrition-client';
 
 import { NutritionConfirm } from './NutritionConfirm';
 
@@ -38,6 +39,8 @@ interface VoiceLogProps {
  * renders nothing when the browser has no SpeechRecognition.
  */
 export function VoiceLog({ onLogged, surface = 'food_log' }: VoiceLogProps) {
+  // Server-side AI consent (docs/PRIVACY_COMPLIANCE_SPEC.md §4), asked before the first parse.
+  const aiConsent = useAiConsent();
   const [supported, setSupported] = useState(false);
   const [listening, setListening] = useState(false);
   const [transcript, setTranscript] = useState('');
@@ -55,6 +58,10 @@ export function VoiceLog({ onLogged, surface = 'food_log' }: VoiceLogProps) {
   const parse = async (text: string) => {
     const t = text.trim().slice(0, 1000);
     if (!t) return;
+    if (!(await aiConsent.ensure())) {
+      setError("AI features are off, so we can't estimate this meal. Log it with search or manual entry, or allow AI features to try again.");
+      return;
+    }
     setParsing(true);
     setError(null);
     try {
@@ -63,6 +70,7 @@ export function VoiceLog({ onLogged, surface = 'food_log' }: VoiceLogProps) {
       setDraft(result);
       setShowConfirm(true);
     } catch (err) {
+      if (isAiConsentRequired(err)) aiConsent.invalidate();
       const upgrade = isUpgradeRequired(err);
       analytics.track(
         AnalyticsEvents.mealVoiceParseFailed({ error_kind: toErrorKind(err), upgrade_required: upgrade })
@@ -169,6 +177,7 @@ export function VoiceLog({ onLogged, surface = 'food_log' }: VoiceLogProps) {
         </p>
       )}
       {error && <p className="mt-2 text-sm text-amber-300">{error}</p>}
+      {aiConsent.dialog}
     </div>
   );
 }

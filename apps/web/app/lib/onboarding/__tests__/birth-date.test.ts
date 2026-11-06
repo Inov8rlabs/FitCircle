@@ -1,28 +1,32 @@
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 
+import { isAgeRequirementZodError } from '../../validation/age-requirement';
 import { birthDateFields, birthDateUpdate, ESTIMATE_KEY, parseBirthDate, refineBirthDate } from '../birth-date';
 
 const NOW = new Date('2026-10-28T12:00:00Z');
 const schema = z.object(birthDateFields).superRefine((v, ctx) => refineBirthDate(v, ctx, NOW));
 
 describe('validation', () => {
-  it('birthYear: age 13–100 this year', () => {
+  it('birthYear: age 18–100 this year; under 18 is an AGE_REQUIREMENT issue', () => {
     expect(schema.safeParse({ birthYear: 1990 }).success).toBe(true);
-    expect(schema.safeParse({ birthYear: 2013 }).success).toBe(true); // 13
-    expect(schema.safeParse({ birthYear: 2014 }).success).toBe(false); // 12
+    expect(schema.safeParse({ birthYear: 2008 }).success).toBe(true); // 18 this year
+    const minor = schema.safeParse({ birthYear: 2009 }); // 17
+    expect(minor.success).toBe(false);
+    expect(isAgeRequirementZodError(minor.error)).toBe(true);
+    expect(isAgeRequirementZodError(schema.safeParse({ birthYear: 2014 }).error)).toBe(true); // 12: same neutral answer
     expect(schema.safeParse({ birthYear: 1926 }).success).toBe(true); // 100
     expect(schema.safeParse({ birthYear: 1925 }).success).toBe(false);
     expect(schema.safeParse({ birthYear: 1990.5 }).success).toBe(false);
     expect(schema.safeParse({ birthYear: '1990' }).success).toBe(false);
   });
 
-  it('dateOfBirth: a real YYYY-MM-DD, age 13–100 today', () => {
+  it('dateOfBirth: a real YYYY-MM-DD, age 18–100 today', () => {
     expect(schema.safeParse({ dateOfBirth: '1990-02-28' }).success).toBe(true);
     expect(schema.safeParse({ dateOfBirth: '1990-02-30' }).success).toBe(false);
     expect(schema.safeParse({ dateOfBirth: '1990-02-28T00:00:00Z' }).success).toBe(false);
-    expect(schema.safeParse({ dateOfBirth: '2013-10-29' }).success).toBe(false); // 12 until tomorrow
-    expect(schema.safeParse({ dateOfBirth: '2013-10-28' }).success).toBe(true);
+    expect(isAgeRequirementZodError(schema.safeParse({ dateOfBirth: '2008-10-29' }).error)).toBe(true); // 17 until tomorrow
+    expect(schema.safeParse({ dateOfBirth: '2008-10-28' }).success).toBe(true); // 18 today
   });
 
   it('absent / null is fine', () => {

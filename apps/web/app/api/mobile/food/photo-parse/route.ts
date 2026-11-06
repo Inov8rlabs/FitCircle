@@ -1,7 +1,9 @@
 import * as Sentry from '@sentry/nextjs';
 import { after, type NextRequest, NextResponse } from 'next/server';
 
+import { foodAiUpgradeDetails, foodAiUpgradeMessage } from '@/lib/fitzy/paywall';
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
+import { AI_CONSENT_MESSAGE, AiConsentRequiredError, ConsentService, aiConsentErrorDetails } from '@/lib/services/consent-service';
 import { NutritionIntelligenceService } from '@/lib/services/nutrition-intelligence-service';
 import { NutritionTrainingService } from '@/lib/services/nutrition-training-service';
 import { UpgradeRequiredError } from '@/lib/services/usage-service';
@@ -131,6 +133,9 @@ export async function POST(request: NextRequest) {
     );
 
     try {
+      // Server-side AI consent (docs/PRIVACY_COMPLIANCE_SPEC.md §4). Refused → 403
+      // AI_CONSENT_REQUIRED below, with the same Option-B save so the meal is never lost.
+      await ConsentService.assertUserAi(user.id, request, 'food_photo');
       const draft = await NutritionIntelligenceService.parsePhoto(user.id, images, note, refine ? { refine } : {});
 
       // Production accuracy signal: record the draft AFTER responding so the user never
@@ -159,6 +164,7 @@ export async function POST(request: NextRequest) {
       // user straight into that entry to finish manually.
       const isUpgrade = parseError instanceof UpgradeRequiredError;
       const isRate = parseError?.message === 'RateLimited' || isUpgrade;
+      const isConsent = parseError instanceof AiConsentRequiredError;
 
       // Only a genuine auth failure should escape — that one has to become a 401.
       if (parseError?.message === 'Unauthorized') {
@@ -172,7 +178,7 @@ export async function POST(request: NextRequest) {
       // try/catch — was rethrown into a 500 AND took the user's photo with it,
       // because the fallback save below never ran. Recovery is now the default and
       // the unexpected cases are reported rather than dropped.
-      if (!isRate && parseError?.message !== 'ParseFailed') {
+      if (!isRate && !isConsent && parseError?.message !== 'ParseFailed') {
         Sentry.captureException(parseError, {
           level: 'error',
           tags: { feature: 'nutrition_parse', parse_source: 'photo', parse_error_kind: 'route_unexpected' },
@@ -194,13 +200,18 @@ export async function POST(request: NextRequest) {
         }
       } else {
         try {
-          saved = await NutritionIntelligenceService.saveUnparsedPhoto(user.id, note);
+          // Dedupe: the same photo(s) refused again within 24 h (iOS background retries, or a free
+          // user past the AI allowance re-uploading) reuse the entry already saved — no blank duplicates.
+          const result = await NutritionIntelligenceService.saveUnparsedPhoto(user.id, note, {
+            dedupeKey: NutritionIntelligenceService.unparsedPhotoKey(images, note),
+          });
+          saved = { entryId: result.entryId };
           // Attach the photos AFTER responding: a failed parse has already burned up to
           // ~50s of the 60s budget, and image processing/upload for up to 5 photos would
           // blow past maxDuration mid-loop. The entry (with savedEntryId) is what the
-          // client needs now; the images land moments later.
-          const entryId = saved.entryId;
-          after(() => NutritionIntelligenceService.attachFallbackImages(entryId, user.id, files));
+          // client needs now; the images land moments later. A reused entry already has them.
+          const entryId = result.entryId;
+          if (!result.reused) after(() => NutritionIntelligenceService.attachFallbackImages(entryId, user.id, files));
         } catch (saveError) {
           console.error('[Mobile API] Photo parse fallback save failed:', saveError);
         }
@@ -210,7 +221,7 @@ export async function POST(request: NextRequest) {
       // expected and already gated, so skip those). The service logs WHY the AI
       // parse failed ([nutrition-parse-failure]); this ties that failure to the
       // saved entry the user sees, plus the request's file metadata + latency.
-      if (!isRate) {
+      if (!isRate && !isConsent) {
         console.error(
           '[nutrition-parse-failure:route]',
           JSON.stringify({
@@ -229,15 +240,36 @@ export async function POST(request: NextRequest) {
         );
       }
 
+      if (isConsent) {
+        return NextResponse.json(
+          {
+            success: false,
+            data: null,
+            error: {
+              code: 'AI_CONSENT_REQUIRED',
+              message: saved && !fallback.skipFallbackSave ? `${AI_CONSENT_MESSAGE} We saved your photo so you can add the details.` : AI_CONSENT_MESSAGE,
+              details: {
+                ...aiConsentErrorDetails('food_photo'),
+                ...(saved ? { savedEntryId: saved.entryId, imageUrls: [] } : {}),
+                ...(fallback.skipFallbackSave ? { fallbackSaved: false } : {}),
+              },
+              timestamp: new Date().toISOString(),
+            },
+            meta: { requestTime: Date.now() - startTime },
+          },
+          { status: 403 }
+        );
+      }
+
       // Nothing was saved when the fallback is skipped, so the copy must not claim it was.
       const message = fallback.skipFallbackSave
         ? isUpgrade
-          ? `You've used your ${parseError.limit} free AI scans today — go Pro for unlimited.`
+          ? foodAiUpgradeMessage(parseError.limit, parseError.trialEligible === true)
           : isRate
             ? "You've reached today's photo-estimate limit — you can add the details yourself."
             : "Couldn't auto-detect the food — you can add the details yourself."
         : isUpgrade
-          ? `You've used your ${parseError.limit} free AI scans today — go Pro for unlimited. We saved your photo so you can add the details.`
+          ? foodAiUpgradeMessage(parseError.limit, parseError.trialEligible === true, true)
           : isRate
             ? "You've reached today's photo-estimate limit — we saved your photo so you can add the details."
             : "Couldn't auto-detect the food — we saved your photo so you can add the details.";
@@ -254,13 +286,8 @@ export async function POST(request: NextRequest) {
               // Only present when the client asked for the fallback to be skipped:
               // tells it that `savedEntryId` (if any) is ITS OWN entry, not a new copy.
               ...(fallback.skipFallbackSave ? { fallbackSaved: false } : {}),
-              ...(isUpgrade
-                ? {
-                    feature: (parseError).feature,
-                    used: (parseError).used,
-                    limit: (parseError).limit,
-                  }
-                : {}),
+              // Trial-first (TRIAL_FIRST_SPEC §5): legacy {feature, used, limit} + additive paywall.
+              ...(isUpgrade ? foodAiUpgradeDetails(parseError) : {}),
             },
             timestamp: new Date().toISOString(),
           },

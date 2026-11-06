@@ -1,8 +1,9 @@
 import { type NextRequest, NextResponse } from 'next/server';
 
-import { createServerSupabase } from '@/lib/supabase-server';
+import { isRegionRestricted, regionNotAvailableBody } from '@/lib/geo/region-restriction';
 import { BillingService, type WebPlan } from '@/lib/services/billing-service';
 import { EntitlementService } from '@/lib/services/entitlement-service';
+import { createServerSupabase } from '@/lib/supabase-server';
 
 export const dynamic = 'force-dynamic';
 
@@ -14,6 +15,8 @@ const PLANS: WebPlan[] = ['monthly', 'annual', 'lifetime'];
  * Already-Pro users get 409 (manage instead; cross-platform double-subscription guard).
  */
 export async function POST(request: NextRequest) {
+  // EU/EEA restriction (WEB_EU_SIGNUP_BLOCK, default on; lib/geo/region-restriction.ts).
+  if (isRegionRestricted(request)) return NextResponse.json(regionNotAvailableBody(), { status: 403 });
   try {
     const supabase = await createServerSupabase();
     const {

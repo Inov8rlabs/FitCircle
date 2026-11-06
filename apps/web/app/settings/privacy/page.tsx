@@ -13,6 +13,7 @@ import { useRouter } from 'next/navigation';
 import { useState, useEffect } from 'react';
 import { toast } from 'sonner';
 
+import { ConsentSettings } from '@/components/privacy/ConsentSettings';
 import { MealSharingSettings } from '@/components/profile/meal-sharing-settings';
 import { SettingsScreen, ToggleRow } from '@/components/profile/settings-shell';
 import { Button } from '@/components/ui/button';
@@ -249,6 +250,8 @@ export default function PrivacySettingsPage() {
         </div>
       ) : (
         <>
+          <ConsentSettings />
+
           <MealSharingSettings />
 
           <ListGroup title="Cookie preferences" footer="Control how we use cookies and tracking.">

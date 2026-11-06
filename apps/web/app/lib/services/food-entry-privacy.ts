@@ -1,3 +1,5 @@
+
+import { PRIVACY_DEFAULTS } from '../privacy/defaults';
 // Food entry privacy — the pure rules (docs/FOOD_ENTRY_PRIVACY_SPEC.md).
 //
 // No I/O and no server-only imports: FoodLogService (which uses these) is also
@@ -53,12 +55,18 @@ export function isEntryPrivate(row: { is_private?: boolean | null; visibility?: 
   return row.visibility !== 'circle' && row.visibility !== 'shared';
 }
 
-/** `preferences.privacy.share_meals_with_circles`, default false (fail closed on any odd shape). */
+/**
+ * `preferences.privacy.share_meals_with_circles`; unset → PRIVACY_DEFAULTS.shareMealsWithCircles
+ * (false today, lib/privacy/defaults.ts). Odd shapes fail closed (private).
+ */
 export function shareMealsByDefault(preferences: unknown): boolean {
-  if (!preferences || typeof preferences !== 'object') return false;
+  if (!preferences || typeof preferences !== 'object') return PRIVACY_DEFAULTS.shareMealsWithCircles;
   const privacy = (preferences as Record<string, unknown>).privacy;
-  if (!privacy || typeof privacy !== 'object') return false;
-  return (privacy as Record<string, unknown>).share_meals_with_circles === true;
+  if (privacy == null) return PRIVACY_DEFAULTS.shareMealsWithCircles;
+  if (typeof privacy !== 'object') return false;
+  const v = (privacy as Record<string, unknown>).share_meals_with_circles;
+  if (typeof v === 'boolean') return v;
+  return v == null ? PRIVACY_DEFAULTS.shareMealsWithCircles : false;
 }
 
 function legacyAsksPrivate(req: PrivacyRequestFields): boolean {

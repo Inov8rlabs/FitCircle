@@ -6,6 +6,10 @@
  */
 
 import { EMAIL_FONT, EMAIL_TOKENS, emailButton, emailShell, gmailText, solidBg } from './brand-shell';
+import { emailPostalAddress } from './compliance';
+
+/** Sender identification for plain-text parts (CAN-SPAM / CASL). */
+const textSender = () => ['', 'FitCircle by Inov8r Labs Inc.', ...(emailPostalAddress() ? [emailPostalAddress() as string] : [])].join('\n');
 
 export interface RenderedEmail {
   subject: string;
@@ -94,7 +98,7 @@ ${HOW_IT_WORKS}`;
     "FitCircle: small groups of friends who keep each other on track. Free on iPhone, Android and the web.",
     '',
     `Don't want FitCircle invites? ${i.unsubscribeUrl}`,
-  ].join('\n');
+  ].join('\n') + textSender();
   return { subject, html: shell({ title: subject, preheader: `${who} invited you to FitCircle`, body, footer }), text };
 }
 
@@ -108,7 +112,7 @@ ${initialAvatar(who, i.inviterAvatarUrl)}
 ${i.rewardDays > 0 ? `<p style="margin:14px 0 0 0;font-size:15px;line-height:22px;color:#e8ecf8;">Check in on 3 different days and you both get a free week of Pro.</p>` : ''}
 ${button(i.link, 'Take my seat')}`;
   const footer = `This is the last reminder unless ${esc(who)} sends another. <a href="${esc(i.unsubscribeUrl)}" style="color:#F5F7FF;text-decoration:underline;">Don't send me FitCircle invites</a>.`;
-  const text = `${i.friendName ? `Hey ${i.friendName},` : 'Hey,'} ${who} asked us to give you a gentle nudge.${i.rewardDays > 0 ? ' Check in on 3 different days and you both get a free week of Pro.' : ''}\n\nJoin: ${i.link}\n\nDon't want FitCircle invites? ${i.unsubscribeUrl}`;
+  const text = `${i.friendName ? `Hey ${i.friendName},` : 'Hey,'} ${who} asked us to give you a gentle nudge.${i.rewardDays > 0 ? ' Check in on 3 different days and you both get a free week of Pro.' : ''}\n\nJoin: ${i.link}\n\nDon't want FitCircle invites? ${i.unsubscribeUrl}${textSender()}`;
   return { subject, html: shell({ title: subject, preheader: `${who} is still saving your seat`, body, footer }), text };
 }
 

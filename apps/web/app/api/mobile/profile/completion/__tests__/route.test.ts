@@ -155,7 +155,7 @@ describe('POST /api/mobile/profile/completion — where each answer goes', () =>
   });
 
   it('400 VALIDATION_ERROR with issues for bad input; nothing written', async () => {
-    for (const bad of [{ key: 'height', value: 400 }, { key: 'nope', value: 1 }, { key: 'sex', value: 'x' }, { key: 'birth_year', value: 2020 }, '{not json']) {
+    for (const bad of [{ key: 'height', value: 400 }, { key: 'nope', value: 1 }, { key: 'sex', value: 'x' }, '{not json']) {
       const res = await post(bad);
       expect(res.status).toBe(400);
       const body = await res.json();
@@ -163,6 +163,15 @@ describe('POST /api/mobile/profile/completion — where each answer goes', () =>
       expect(Array.isArray(body.data.issues)).toBe(true);
     }
     expect(profile()).toMatchObject({ height_cm: null, gender: null, date_of_birth: null });
+  });
+
+  it('under 18 → 400 AGE_REQUIREMENT (neutral message); nothing written', async () => {
+    const res = await post({ key: 'birth_year', value: 2020 });
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error.code).toBe('AGE_REQUIREMENT');
+    expect(body.error.message).toMatch(/18 and over/);
+    expect(profile()).toMatchObject({ date_of_birth: null });
   });
 });
 

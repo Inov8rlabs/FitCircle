@@ -2,6 +2,7 @@
  * JourneyContext builder — pure: the profile (already loaded by auth) + the
  * raw rows the promo loaders fetched → the facts the system promos match on.
  */
+import { trialEligibleFromProfile } from '../entitlements/trial-eligibility';
 import { localClock, loggedSlots, mealReminderPrefsFrom, type MealEntryLite } from '../journey/meal-slots';
 
 import type { JourneyContext } from './types';
@@ -17,6 +18,17 @@ export interface JourneyFacts {
 export function fitzyOpenedFrom(profile: Record<string, any>): string | null | undefined {
   if (!('fitzy_opened_at' in profile)) return undefined;
   return typeof profile.fitzy_opened_at === 'string' ? profile.fitzy_opened_at : null;
+}
+
+/**
+ * TRIAL_FIRST_SPEC §3: can Fitzy genuinely produce personalized recommendations? Onboarding is
+ * complete and the user picked at least one goal (profiles.goals, a jsonb array of strings).
+ * Missing columns → null (unknown → the teaser does not match).
+ */
+export function fitzyRecommendationsReadyFrom(profile: Record<string, any>): boolean | null {
+  if (!('onboarding_completed' in profile) || !('goals' in profile)) return null;
+  const goals = Array.isArray(profile.goals) ? profile.goals.filter((g: unknown) => typeof g === 'string' && g.trim().length > 0) : [];
+  return profile.onboarding_completed === true && goals.length > 0;
 }
 
 export function buildJourneyContext(
@@ -38,5 +50,7 @@ export function buildJourneyContext(
     fitzyOpenedAt: fitzyOpenedFrom(profile),
     mealReminderPrefs: mealReminderPrefsFrom(profile.preferences),
     localMinutes,
+    fitzyRecommendationsReady: fitzyRecommendationsReadyFrom(profile),
+    trialEligible: trialEligibleFromProfile(profile),
   };
 }

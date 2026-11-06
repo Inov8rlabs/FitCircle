@@ -3,11 +3,13 @@
 import { Camera, Loader2, Plus, Sparkles, X } from 'lucide-react';
 import { useRef, useState } from 'react';
 
+import { useAiConsent } from '@/hooks/useAiConsent';
 import { AnalyticsEvents, analytics } from '@/lib/analytics';
 import { trackedPhotoParse } from '@/lib/analytics/meal';
 import {
   nutritionClient,
   ApiError,
+  isAiConsentRequired,
   PHOTO_PARSE_MAX_IMAGES,
   PHOTO_PARSE_MAX_NOTE_CHARS,
   type NutritionDraft,
@@ -36,6 +38,8 @@ export function PhotoLog({ onLogged, surface = 'food_log' }: PhotoLogProps) {
   const [pending, setPending] = useState<File[]>([]);
   const [note, setNote] = useState('');
   const [parsing, setParsing] = useState(false);
+  // Server-side AI consent (docs/PRIVACY_COMPLIANCE_SPEC.md §4), asked before the first upload.
+  const aiConsent = useAiConsent();
   const [draft, setDraft] = useState<NutritionDraft | null>(null);
   const [showConfirm, setShowConfirm] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -44,6 +48,10 @@ export function PhotoLog({ onLogged, surface = 'food_log' }: PhotoLogProps) {
 
   const analyze = async (files: File[], hint: string) => {
     if (files.length === 0) return;
+    if (!(await aiConsent.ensure())) {
+      setError("AI features are off, so we can't estimate this meal. Log it with search or manual entry, or allow AI features to try again.");
+      return;
+    }
     setParsing(true);
     // Leave any open confirm card: reanalyze must remount NutritionConfirm with the
     // fresh draft (it seeds state from props on mount) and surface errors out here.
@@ -66,6 +74,7 @@ export function PhotoLog({ onLogged, surface = 'food_log' }: PhotoLogProps) {
       setPending([]);
       setNote('');
     } catch (err) {
+      if (isAiConsentRequired(err)) aiConsent.invalidate();
       // Option B: the parse failed/was rate-limited, but the server saved the photos as a
       // food-log entry so they're not lost. Show the friendly note and refresh so it appears.
       if (err instanceof ApiError && err.details?.savedEntryId) {
@@ -203,6 +212,7 @@ export function PhotoLog({ onLogged, surface = 'food_log' }: PhotoLogProps) {
       )}
 
       {error && <p className="mt-2 text-sm text-amber-300">{error}</p>}
+      {aiConsent.dialog}
     </div>
   );
 }

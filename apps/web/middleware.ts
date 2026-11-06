@@ -1,6 +1,8 @@
 import { createServerClient } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
 
+import { isRegionRestricted, restrictedPagePath } from './app/lib/geo/region-restriction';
+
 // Build the CORS origin allowlist from NEXT_PUBLIC_APP_URL (+ localhost in dev).
 // Replaces the previous wildcard `Access-Control-Allow-Origin: *`, which exposed
 // the Bearer-token API surface to any website.
@@ -41,6 +43,8 @@ export const PUBLIC_ROUTES = [
   '/get', // smart "get the app" link: 307 to the store on phones, QR page on desktop
   '/open', // "open in app" fallback (claimed by the iOS app via AASA); forwards to /get
   '/welcome/app', // post-signup "get the app" handoff; shows no account data
+  '/privacy-choices', // "Your Privacy Choices" / Do Not Sell or Share
+  '/not-available', // EU/EEA sign-up restriction page (WEB_EU_SIGNUP_BLOCK)
 ];
 
 /** Exact match or a "/route/…" sub-path (so '/invite/unsubscribe' never opens '/invite'). */
@@ -49,6 +53,15 @@ export function isPublicPath(pathname: string): boolean {
 }
 
 export async function middleware(request: NextRequest) {
+  // EU/EEA sign-up + checkout restriction (WEB_EU_SIGNUP_BLOCK, default off). Sign-in, export
+  // and deletion stay available; only pages that start a new account or a purchase redirect.
+  const restricted = restrictedPagePath(request.nextUrl.pathname);
+  if (restricted && isRegionRestricted(request)) {
+    const url = new URL('/not-available', request.url);
+    url.searchParams.set('reason', restricted);
+    return NextResponse.redirect(url);
+  }
+
   let response = NextResponse.next({
     request: {
       headers: request.headers,

@@ -61,6 +61,13 @@ export interface EntitlementLimits {
   fitzyMessagesPerDay: number | null;
   maxActiveCreatedCircles: number | null;
   historyDays: number | null;
+  /**
+   * Additive (TRIAL_FIRST_SPEC §5): free users' LIFETIME AI food analyses (5) once
+   * food_ai_unlimited is live; null for Pro / trial and while the gate is dark.
+   */
+  foodAiAnalysesTotal?: number | null;
+  /** Additive: analyses left of foodAiAnalysesTotal (0 → open the paywall instead of uploading); null when not capped. */
+  foodAiAnalysesRemaining?: number | null;
 }
 
 /** Subscription display state (cache of RevenueCat truth on profiles). */

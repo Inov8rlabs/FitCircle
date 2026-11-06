@@ -3,6 +3,11 @@ import { createAdminSupabase } from '../supabase-admin';
 
 import { AppleTokenService } from './apple-token-service';
 import { recalculateLeaderboard } from './leaderboard-service-v2';
+import {
+  type ProcessorDeletionDeps,
+  type ProcessorDeletionSummary,
+  ProcessorDeletionService,
+} from './processor-deletion-service';
 
 // ============================================================================
 // TYPES
@@ -21,6 +26,11 @@ export interface AccountDeletionResult {
     comments: number;
     reactions: number;
   };
+  /**
+   * Outcome per processor (Amplitude, RevenueCat, Stripe, Resend, Sentry):
+   * 'deleted' | 'skipped:<reason>' | 'failed:<reason>'. Additive field.
+   */
+  processors?: ProcessorDeletionSummary;
 }
 
 export interface ChallengeWithMembers {
@@ -223,8 +233,11 @@ export function isUserOwnedStoragePath(bucket: string, path: string, userId: str
  *      A failure here throws; nothing has been deleted.
  *   B. Remove the user's files from storage (logged, never fatal).
  *   C. Delete the user's rows, children first.
- *   D. Revoke the Sign in with Apple token (never fatal), delete the profile,
- *      delete the auth user.
+ *   D. Revoke the Sign in with Apple token (never fatal), scrub identifiers
+ *      from subscription_events.raw (never fatal), delete the profile, delete
+ *      the auth user.
+ *   E. Ask the processors (Amplitude, RevenueCat, Stripe, Resend) to delete the
+ *      user (ProcessorDeletionService; never fatal, never throws).
  *
  * Following FitCircle architecture: ALL business logic in TypeScript services, not stored procedures.
  */
@@ -239,9 +252,11 @@ export class AccountDeletionService {
       confirmEmail?: string;
       userEmail?: string;
       ipAddress?: string;
+      /** Test hook: injected fetch / clients / env for the processor deletions. */
+      processorDeps?: ProcessorDeletionDeps;
     } = {}
   ): Promise<AccountDeletionResult> {
-    const { confirmEmail, userEmail, ipAddress } = options;
+    const { confirmEmail, userEmail, ipAddress, processorDeps } = options;
 
     if (!userId) {
       throw new Error('User id is required');
@@ -276,6 +291,9 @@ export class AccountDeletionService {
     }
 
     const dataSummary = await this.countUserData(db, userId);
+
+    // Identifiers the processors need, captured while the profile still exists.
+    const processorSubject = await this.captureProcessorSubject(db, userId, userEmail);
 
     // ------------------------------------------------------------------------
     // A. Resolve blockers. Nothing of the user's is deleted in this phase.
@@ -337,6 +355,11 @@ export class AccountDeletionService {
     // guardrail stays measurable (ONBOARDING_V2 §6.6). Best-effort.
     await ExperimentService.markUserDeleted(userId);
 
+    // subscription_events outlive the profile (user_id SET NULL) as financial
+    // records; strip the identifiers in the raw webhook payloads while user_id
+    // still finds the rows. Never throws.
+    await ProcessorDeletionService.scrubSubscriptionEvents(userId, processorSubject.email, db);
+
     const { error: profileDeleteError } = await db.from('profiles').delete().eq('id', userId);
     if (profileDeleteError) {
       console.error(
@@ -349,6 +372,9 @@ export class AccountDeletionService {
 
     console.log(`[AccountDeletionService] Account deleted: ${userId}`);
 
+    // E. Processors. Never throws, never undoes the deletion above.
+    const processors = await this.deleteFromProcessors(processorSubject, processorDeps);
+
     return {
       success: true,
       message: 'Your account and all associated data have been permanently deleted.',
@@ -356,7 +382,54 @@ export class AccountDeletionService {
       challenges_transferred: owned.transferred,
       challenges_deleted: circlesDeleted,
       data_summary: dataSummary,
+      processors,
     };
+  }
+
+  // ==========================================================================
+  // PHASE E: PROCESSORS
+  // ==========================================================================
+
+  /** Email and Stripe customer id, read before the rows are deleted. Never throws. */
+  private static async captureProcessorSubject(
+    db: AdminClient,
+    userId: string,
+    userEmail?: string
+  ): Promise<{ userId: string; email: string | null; stripeCustomerId: string | null }> {
+    let email: string | null = userEmail ?? null;
+    let stripeCustomerId: string | null = null;
+    try {
+      const { data } = await db
+        .from('profiles')
+        .select('email, stripe_customer_id')
+        .eq('id', userId)
+        .maybeSingle();
+      email = email ?? (data?.email as string | null | undefined) ?? null;
+      stripeCustomerId = (data?.stripe_customer_id as string | null | undefined) ?? null;
+    } catch (err) {
+      console.warn(
+        '[AccountDeletionService] Could not read processor identifiers:',
+        err instanceof Error ? err.message : 'unknown error'
+      );
+    }
+    return { userId, email, stripeCustomerId };
+  }
+
+  private static async deleteFromProcessors(
+    subject: { userId: string; email: string | null; stripeCustomerId: string | null },
+    deps?: ProcessorDeletionDeps
+  ): Promise<ProcessorDeletionSummary | undefined> {
+    try {
+      const summary = await ProcessorDeletionService.deleteFromProcessors(subject, deps);
+      console.log(`[AccountDeletionService] Processor deletions for ${subject.userId}:`, JSON.stringify(summary));
+      return summary;
+    } catch (err) {
+      console.warn(
+        '[AccountDeletionService] Processor deletions failed:',
+        err instanceof Error ? err.message : 'unknown error'
+      );
+      return undefined;
+    }
   }
 
   // ==========================================================================

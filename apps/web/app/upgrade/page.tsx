@@ -16,6 +16,7 @@ import { ProBadge } from '@/components/billing/ProBadge';
 import { Navbar } from '@/components/layout/navbar';
 import { GlassCard, Screen, ToneDisc, type Tone } from '@/components/ui/ios';
 import { useEntitlements } from '@/hooks/useEntitlements';
+import { useWebTrial } from '@/hooks/useWebTrial';
 import { AnalyticsEvents, analytics } from '@/lib/analytics';
 import { paywallSource, takeCheckout, webProductId } from '@/lib/analytics/checkout';
 import { useTrackOnce } from '@/lib/analytics/react';
@@ -30,6 +31,8 @@ const PRO_FEATURES: Array<{ icon: typeof Sparkles; tone: Tone; title: string; bo
 
 export default function UpgradePage() {
   const { entitlements, isPro, isLoading } = useEntitlements();
+  // Trial-first (TRIAL_FIRST_SPEC §7): the trial headline only when checkout would carry it.
+  const { trialDays } = useWebTrial(!isPro);
   // ?source=<placement> names the entry point (landing, streak_shield, ...).
   // Read from window (not useSearchParams) so the page needs no Suspense boundary.
   const [source, setSource] = useState<string | null>(null);
@@ -92,7 +95,14 @@ export default function UpgradePage() {
           <p className="inline-flex items-center gap-1.5 text-footnote font-bold uppercase tracking-[0.18em] text-brand-orange">
             <Crown className="h-4 w-4" aria-hidden /> FitCircle Pro
           </p>
-          <h1 className="mt-2 text-title1 text-white sm:text-large-title">Unlock FitCircle Pro</h1>
+          <h1 className="mt-2 text-title1 text-white sm:text-large-title" data-testid="paywall-headline">
+            {trialDays > 0 && !isPro ? `Try Pro free for ${trialDays} days` : 'Unlock FitCircle Pro'}
+          </h1>
+          {trialDays > 0 && !isPro && (
+            <p className="mt-1 text-headline text-brand-purple" data-testid="paywall-cancel-anytime">
+              Cancel anytime
+            </p>
+          )}
           <p className="mx-auto mt-2 max-w-md text-subhead text-fg-secondary">
             AI food logging and Fitzy coaching (fair-use limits apply), your full history, and an
             ad-free FitCircle, while your circles stay free for everyone.
@@ -125,12 +135,12 @@ export default function UpgradePage() {
             </p>
           </GlassCard>
         ) : (
-          <PricingCards source={source ?? 'pricing_page'} />
+          <PricingCards source={source ?? 'pricing_page'} trialDays={trialDays} />
         )}
 
         <section>
           <h2 className="mb-2 px-4 text-footnote font-semibold uppercase tracking-wide text-fg-tertiary">Free vs Pro</h2>
-          <PlanComparison />
+          <PlanComparison foodAiTotal={entitlements?.limits?.foodAiAnalysesTotal} fitzyPerDay={entitlements?.limits?.fitzyMessagesPerDay} />
         </section>
       </Screen>
     </div>

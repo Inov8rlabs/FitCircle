@@ -39,6 +39,9 @@ import { CampaignService, featuredCampaign, viewerToday, visibleFor } from '../c
 import { advent, baseRow, freshStart, holdTheLine } from './campaign-fixtures';
 import { ReferralFakeDb, getReferralDb, setReferralDb } from './referral-fake-db';
 
+// Marketing email is only sent with a postal address (lib/email/compliance.ts); these tests cover other behaviour.
+process.env.EMAIL_POSTAL_ADDRESS = process.env.EMAIL_POSTAL_ADDRESS || '123 Test Street, Testville, CA 94000, USA';
+
 const uid = (x: string) => `${x.repeat(8)}-${x.repeat(4)}-4${x.repeat(3)}-8${x.repeat(3)}-${x.repeat(12)}`;
 const [ME, B, D, E, F] = ['a', 'b', 'd', 'e', 'f'].map(uid);
 const CIRCLE = uid('c');

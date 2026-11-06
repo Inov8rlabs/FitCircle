@@ -97,6 +97,8 @@ interface RegisterData {
   password: string;
   name: string;
   username: string;
+  /** Year of birth from the sign-up age gate (18+), kept in auth metadata as the age attestation. */
+  birthYear?: number;
   /**
    * Invite the person signed up through (/join/{circle}?ref=…). Stored in the
    * auth user's metadata so /api/referrals/claim can still seat them in the
@@ -280,6 +282,7 @@ export const useAuthStore = create<AuthState>()(
               data: {
                 name: data.name,
                 username: data.username,
+                ...(data.birthYear ? { birth_year: data.birthYear } : {}),
                 ...(data.invite && (data.invite.circle || data.invite.ref)
                   ? { pending_invite: { circle: data.invite.circle, ref: data.invite.ref } }
                   : {}),

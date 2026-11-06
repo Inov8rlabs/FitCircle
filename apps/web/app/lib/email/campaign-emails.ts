@@ -5,6 +5,7 @@
  * paragraph. Placeholders are rendered by the caller.
  */
 import { EMAIL_FONT, emailShell } from './brand-shell';
+import { emailPostalAddress } from './compliance';
 import { button, esc, type RenderedEmail } from './referral-emails';
 
 export interface CampaignEmailInput {
@@ -52,6 +53,6 @@ ${button(i.ctaUrl, i.ctaLabel)}
     footer: { reason: '', html: footer },
   });
 
-  const text = [i.heading, '', ...paragraphs(i.body).flatMap((p) => [p, '']), `${i.ctaLabel}: ${i.ctaUrl}`, '', `Unsubscribe: ${i.unsubscribeUrl}`].join('\n');
+  const text = [i.heading, '', ...paragraphs(i.body).flatMap((p) => [p, '']), `${i.ctaLabel}: ${i.ctaUrl}`, '', `Unsubscribe: ${i.unsubscribeUrl}`, '', 'FitCircle by Inov8r Labs Inc.', ...(emailPostalAddress() ? [emailPostalAddress() as string] : [])].join('\n');
   return { subject: i.subject, html, text };
 }

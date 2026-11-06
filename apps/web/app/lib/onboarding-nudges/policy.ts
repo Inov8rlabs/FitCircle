@@ -197,6 +197,8 @@ const TRANSIENT_EMAIL_ERRORS = new Set([
   'concurrent_idempotent_requests',
   'network_error',
   'not_configured',
+  // Marketing email without EMAIL_POSTAL_ADDRESS / unsubscribe (lib/email/compliance.ts): retry once configured.
+  'compliance_blocked',
 ]);
 
 export type EmailDisposition = { kind: 'record'; record: Omit<SlotRecord, 'at'> } | { kind: 'release'; reason: string };
