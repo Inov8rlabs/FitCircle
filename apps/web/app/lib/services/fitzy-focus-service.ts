@@ -7,7 +7,11 @@
  * Free gets the full focus, but its CTA is always "Make this my plan" → start_plan (Pro).
  * Every text passes the Fitzy output guard; a failed or unsafe generation falls back to a
  * static focus that is NOT cached (so the next open retries).
+ *  - AI consent (2026-11-06): the focus is fetched by the home card without the user asking
+ *    Fitzy anything, so it is server-initiated AI. Users without server-side evidence of AI
+ *    consent (lib/fitzy/ai-consent.ts) get the static welcome focus, uncached, and NO model call.
  */
+import { hasAiConsentEvidence } from '../fitzy/ai-consent';
 import { isSunday, todayFor } from '../fitzy/dates';
 import { chatModel, deepModel, generateWithFallback, systemMessages, type ModelCall } from '../fitzy/models';
 import { addDays } from '../streaks/streak-calculator';
@@ -124,7 +128,12 @@ export class FitzyFocusService {
 
     let focus: FitzyDailyFocus | null = null;
     let cacheable = true;
-    if (!(await this.hasRecentData(userId, date))) {
+    if (!(await hasAiConsentEvidence(userId))) {
+      // No AI consent on record: honest static intro, not cached (so it turns into a real
+      // focus the day after they allow AI in Fitzy chat). Never a model call.
+      focus = welcomeFocus(date, tier);
+      cacheable = false;
+    } else if (!(await this.hasRecentData(userId, date))) {
       focus = welcomeFocus(date, tier);
     } else {
       const plan = await FitzyPlanService.current(userId, date).catch(() => null);

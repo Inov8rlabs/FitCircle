@@ -145,6 +145,14 @@ describe('POST /api/mobile/fitzy/chat (old route)', () => {
 
 describe('locked Pro surfaces for free users', () => {
   it('plan preview, memory, history and today', async () => {
+    // No AI consent evidence yet: static teaser, uncached, and no model call (server-initiated AI).
+    const noConsent = await (await getPlan(req('/api/mobile/fitzy/plan', { as: FREE }))).json();
+    expect(noConsent.data).toMatchObject({ plan: null, locked: true, preview: { goal: 'Feel good and stay consistent this week', firstCommitment: { title: '3 walks of 15 minutes' }, moreCount: 2 } });
+    expect(ai.calls).toHaveLength(0);
+    expect(getReferralDb().rows('fitzy_plans')).toHaveLength(0);
+
+    // Once they have chatted with Fitzy (consent sheet accepted in the app), the teaser is AI.
+    getReferralDb().rows('fitzy_conversations').push({ id: 'cv-free', user_id: FREE, title: 'hi', created_at: '', updated_at: '', archived_at: null });
     ai.generate.push(JSON.stringify({ goal: 'Move a little every day', commitments: [{ kind: 'move', title: '3 walks', detail: 'Any pace.', count: 3 }, { kind: 'sleep', title: 'Bed by 11, 3 nights', detail: 'Wind down.', count: 3 }, { kind: 'hydrate', title: 'Water with lunch 5 days', detail: 'A glass.', count: 5 }] }));
     const plan = await (await getPlan(req('/api/mobile/fitzy/plan', { as: FREE }))).json();
     expect(plan.data).toMatchObject({ plan: null, locked: true, preview: { goal: 'Move a little every day', firstCommitment: { title: '3 walks' }, moreCount: 2 }, paywall: { trigger: 'weekly_plan', headline: 'Your plan is ready' } });
@@ -157,7 +165,7 @@ describe('locked Pro surfaces for free users', () => {
     expect(proMem.data).toEqual({ items: [], locked: false });
 
     const conv = await (await listConversations(req('/api/mobile/fitzy/conversations', { as: FREE }))).json();
-    expect(conv.data).toMatchObject({ conversations: [], historyLocked: true, paywall: { trigger: 'history' } });
+    expect(conv.data).toMatchObject({ historyLocked: true, paywall: { trigger: 'history' } });
 
     const focus = await (await today(req('/api/mobile/fitzy/today', { as: FREE }))).json();
     expect(focus.data).toMatchObject({ kind: 'welcome', tier: 'free', cta: { label: 'Make this my plan', action: { type: 'start_plan' } } });

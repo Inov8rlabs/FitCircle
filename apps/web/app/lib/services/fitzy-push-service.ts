@@ -12,6 +12,7 @@
  * that they allowed AI data sharing in the app); everyone else gets templates. Lock-screen text
  * never carries weight / calorie / macro / body values (lockScreenSafe).
  */
+import { usersWithAiConsentEvidence } from '../fitzy/ai-consent';
 import { mondayOf } from '../fitzy/dates';
 import { generateWithFallback } from '../fitzy/models';
 import {
@@ -169,7 +170,7 @@ export class FitzyPushService {
     const since14 = new Date(now.getTime() - 14 * 86_400_000).toISOString();
     const sinceDate = addDays(now.toISOString().slice(0, 10), -(ACTIVE_WITHIN_DAYS + 1));
     const since8 = addDays(now.toISOString().slice(0, 10), -9);
-    const [logRows, claims, food, workouts, convs, profileRows] = await Promise.all([
+    const [logRows, claims, food, workouts, aiEligible, profileRows] = await Promise.all([
       chunked(ids, async (part) =>
         ((await supabase.from('notification_log').select('user_id, notification_type, sent_at').in('user_id', part).eq('suppressed', false).gte('sent_at', since14)).data ?? []) as any[]
       ),
@@ -180,7 +181,8 @@ export class FitzyPushService {
       chunked(ids, async (part) =>
         ((await supabase.from('exercise_logs').select('user_id, exercise_date').in('user_id', part).gte('exercise_date', sinceDate).eq('is_deleted', false)).data ?? []) as any[]
       ),
-      chunked(ids, async (part) => ((await supabase.from('fitzy_conversations').select('user_id').in('user_id', part).limit(part.length * 50)).data ?? []) as any[]),
+      // Server-side evidence of AI consent (lib/fitzy/ai-consent.ts): gates every AI push copy.
+      usersWithAiConsentEvidence(ids),
       // fitzy_intro facts (migration 110). Missing column → error → [] → intro never sends (unknown).
       chunked(ids, async (part) => ((await supabase.from('profiles').select('id, created_at, fitzy_opened_at').in('id', part)).data ?? []) as any[]),
     ]);
@@ -194,7 +196,6 @@ export class FitzyPushService {
     const claimsBy = group(claims);
     const foodBy = group(food);
     const workoutsBy = group(workouts);
-    const aiEligible = new Set(convs.map((c) => c.user_id as string));
 
     const started = Date.now();
     const budget = opts.budgetMs ?? 240_000;
@@ -356,7 +357,8 @@ export class FitzyPushService {
         const focus = await withTimeout(FitzyFocusService.get(u.userId, u.tz, x.now), FOCUS_TIMEOUT_MS);
         if (focus.kind === 'recap') kind = 'fitzy_weekly_recap';
         else if (kind === 'fitzy_weekly_recap') kind = 'fitzy_daily_focus';
-        copy = focusPushCopy(focus, FitzyService.guard, 'ai');
+        // FitzyFocusService.get makes no model call without AI consent evidence (welcome focus).
+        copy = focusPushCopy(focus, FitzyService.guard, focus.kind === 'welcome' ? 'template' : 'ai');
       } catch (err: any) {
         console.error('[FitzyPush] focus failed, template:', err?.message ?? err);
         copy = focusPushCopy({ date: today, kind: 'tip', headline: '', body: '', cta: { label: '', action: { type: 'log_workout', label: '' } }, tier }, FitzyService.guard, 'template');

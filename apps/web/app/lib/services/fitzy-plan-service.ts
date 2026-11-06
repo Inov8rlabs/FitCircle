@@ -8,6 +8,7 @@
  */
 import { randomUUID } from 'node:crypto';
 
+import { hasAiConsentEvidence } from '../fitzy/ai-consent';
 import { mondayOf } from '../fitzy/dates';
 import { fitBody } from '../fitzy/text';
 import { chatModel, deepModel, generateWithFallback, systemMessages, type ModelCall } from '../fitzy/models';
@@ -192,6 +193,19 @@ export class FitzyPlanService {
     const cached = await this.row(userId, weekOf);
     if (cached && cached.is_preview && (cached.commitments ?? []).length) return toPreview(rowToPlan(cached));
     if (cached && !cached.is_preview) return toPreview(rowToPlan(cached)); // e.g. lapsed Pro: tease their own plan
+    // AI consent (2026-11-06): GET /fitzy/plan builds this teaser when the Fitzy tab opens, before
+    // the user has sent anything, so it is server-initiated AI. Without server-side evidence of AI
+    // consent: the static default commitments, NOT cached (a real teaser once they allow AI), no model call.
+    if (!(await hasAiConsentEvidence(userId))) {
+      return toPreview({
+        id: '',
+        weekOf,
+        goal: goal?.trim() || DEFAULT_PLAN_GOAL,
+        note: '',
+        commitments: FALLBACK_COMMITMENTS.map((f) => ({ ...f, id: randomUUID(), doneDates: [] })),
+        createdAt: new Date().toISOString(),
+      });
+    }
     let commitments: FitzyCommitment[] = [];
     let planGoal = goal?.trim() || DEFAULT_PLAN_GOAL;
     let model: string | null = null;

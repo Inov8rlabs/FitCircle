@@ -57,6 +57,8 @@ let db: ReferralFakeDb;
 const background: Array<() => Promise<unknown>> = [];
 const meta = (o: unknown) => `\n${META_MARKER}\n${JSON.stringify(o)}`;
 const guard = (t: string) => FitzyService.containsForbiddenContent(t);
+/** Server-side evidence of AI consent: the user has a Fitzy conversation (lib/fitzy/ai-consent.ts). */
+const consent = (userId: string) => db.rows('fitzy_conversations').push({ id: `cv-${userId}`, user_id: userId, title: 'hi', created_at: '', updated_at: '', archived_at: null });
 
 beforeEach(() => {
   db = new ReferralFakeDb();
@@ -364,6 +366,7 @@ describe('daily focus', () => {
     expect(w).toMatchObject({ kind: 'welcome', date: '2026-10-21', cta: { action: { type: 'start_plan' } }, tier: 'free' });
     expect(ai.calls).toHaveLength(0);
 
+    consent(PRO);
     db.rows('food_log_entries').push({ id: 'f1', user_id: PRO, entry_date: '2026-10-20', calories: 400, deleted_at: null });
     ai.generate.set(DEFAULT_CHAT_MODEL, [focusJson]);
     const f = await FitzyFocusService.get(PRO, 'America/Los_Angeles', NOW);
@@ -371,10 +374,12 @@ describe('daily focus', () => {
     const again = await FitzyFocusService.get(PRO, 'America/Los_Angeles', NOW);
     expect(again).toEqual(f);
     expect(ai.calls).toHaveLength(1);
-    expect(db.rows('fitzy_daily')).toHaveLength(2);
+    // The no-consent welcome is not cached (it becomes a real focus once they allow AI).
+    expect(db.rows('fitzy_daily')).toHaveLength(1);
   });
 
   it('free gets the full focus with the start_plan CTA; unsafe output is not cached', async () => {
+    consent(FREE);
     db.rows('food_log_entries').push({ id: 'f2', user_id: FREE, entry_date: '2026-10-20', calories: 300, deleted_at: null });
     ai.generate.set(DEFAULT_CHAT_MODEL, [JSON.stringify({ kind: 'tip', headline: 'Try a calorie deficit', body: 'Eat less today.', cta: { label: 'x', type: 'log_meal' } }), focusJson]);
     const unsafe = await FitzyFocusService.get(FREE, 'UTC', NOW);
@@ -386,6 +391,7 @@ describe('daily focus', () => {
 
   it('Sunday recap for Pro with a plan uses the deep model', async () => {
     const sunday = new Date('2026-10-25T18:00:00Z');
+    consent(PRO);
     db.rows('food_log_entries').push({ id: 'f3', user_id: PRO, entry_date: '2026-10-24', calories: 300, deleted_at: null });
     db.rows('fitzy_plans').push({ id: 'p1', user_id: PRO, week_of: '2026-10-19', goal: 'Move more', note: '', is_preview: false, created_at: '', updated_at: '', commitments: [{ id: 'c1', kind: 'move', title: '3 walks', detail: '', target: { count: 3, per: 'week' }, doneDates: ['2026-10-20', '2026-10-22'] }] });
     ai.generate.set(DEFAULT_DEEP_MODEL, [JSON.stringify({ headline: 'Two walks this week!', body: 'You showed up twice. Carry one walk into Monday.' })]);
@@ -428,6 +434,7 @@ describe('weekly plan', () => {
   });
 
   it('free: Haiku teaser cached for the week (goal + first commitment + N more)', async () => {
+    consent(FREE);
     ai.generate.set(DEFAULT_CHAT_MODEL, [planJson]);
     const preview = await FitzyPlanService.preview(FREE, '2026-10-21', null, 'g', guard);
     expect(ai.calls[0].model).toBe(DEFAULT_CHAT_MODEL);
@@ -569,6 +576,8 @@ describe('model-call contracts', () => {
   const DISABLED = { anthropic: { thinking: { type: 'disabled' } } };
 
   it('structured calls (plan, preview, focus, memory) disable thinking with a real token budget', async () => {
+    consent(FREE);
+    consent(PRO);
     ai.generate.set(DEFAULT_DEEP_MODEL, [planJson]);
     await FitzyPlanService.create(PRO, '2026-10-21', null, 'g', guard);
     ai.generate.set(DEFAULT_CHAT_MODEL, [planJson]);
