@@ -32,9 +32,11 @@ describe('middleware: EU restriction pass-through', () => {
     process.env.WEB_EU_SIGNUP_BLOCK = 'false';
     expect((await middleware(req('/register', 'DE'))).headers.get('location')).toBeNull();
   });
-  it('default (unset = on): UK visitors reach /register; EU visitors can still open /login and the deletion page', async () => {
+  it('default (unset = on): US visitors reach /register; UK/EU visitors are redirected but can still open /login and the deletion page', async () => {
     delete process.env.WEB_EU_SIGNUP_BLOCK;
-    expect((await middleware(req('/register', 'GB'))).headers.get('location')).toBeNull();
+    expect((await middleware(req('/register', 'US'))).headers.get('location')).toBeNull();
+    expect((await middleware(req('/register', 'GB'))).headers.get('location')).toContain('/not-available?reason=signup');
+    expect((await middleware(req('/login', 'GB'))).headers.get('location')).toBeNull();
     expect((await middleware(req('/login', 'DE'))).headers.get('location')).toBeNull();
     expect((await middleware(req('/privacy/delete-account', 'DE'))).headers.get('location')).toBeNull();
     expect((await middleware(req('/register', 'DE'))).headers.get('location')).toContain('/not-available?reason=signup');

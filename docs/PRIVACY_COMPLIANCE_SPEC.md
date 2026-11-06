@@ -255,12 +255,12 @@ The probe also exercised the real Fitzy `generateWithFallback` call builder (thi
     - `POST /api/auth/register`
     - `POST /api/mobile/auth/register`
     - a **first** Google or Apple sign-in via `POST /api/mobile/auth/google|apple`
-  - **Existing accounts still sign in (email and social), export and delete.** The UK is not restricted.
+  - **Existing accounts still sign in (email and social), export and delete.** Since 2026-11-06 the UK (GB + GG/JE/IM) is restricted too: the owner removed the UK from the App Store and Google Play instead of appointing a UK Art. 27 representative (0 UK users at the time).
   - The website has no Google/Apple sign-in; social sign-in exists only in the apps' auth routes.
   - **Residual:** the web form calls Supabase `auth.signUp` from the browser, so a caller using the public anon key directly can skip `/register`.
   - Reopening plan: `docs/EU_COMPLIANCE_PLAN.md`.
 - **Legal pages:** this release ships the CURRENT live Privacy Policy (v1.2) and Terms unchanged, plus `/privacy-choices` and `/not-available`, which contain no placeholders.
-  - Privacy Policy v1.3, the Consumer Health Data Privacy Policy, the French versions and the Terms update (Inov8r Labs Inc., a British Columbia corporation, BC1310005) are held in a separate patch until the owner fills the remaining placeholders: the street address, the UK representative and the named contacts.
+  - Privacy Policy v1.3, the Consumer Health Data Privacy Policy, the French versions and the Terms update (Inov8r Labs Inc., a British Columbia corporation, BC1310005) are held in a separate patch until the owner fills the remaining placeholders: the street address and the named contacts (the UK representative is no longer needed while the UK is not offered).
 
 ## 8. Privacy by default
 

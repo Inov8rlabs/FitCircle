@@ -16,7 +16,7 @@ Status: planning document, 2026-11-06. **Not legal advice.** Every cost and effo
 
 **Still allowed:**
 - Existing accounts sign in (email and social), export their data and delete their account.
-- The UK is not restricted (it is a launch market).
+- The UK is restricted too since 2026-11-06 (removed from both app stores; no UK Art. 27 representative). Reopening the UK needs a UK representative (~£120–£1,200/yr), the UK analytics basis in the policy, and the UK back in store availability.
 - The apps are not distributed in EU App Store or Play territories.
 
 **Known residual exposure:**

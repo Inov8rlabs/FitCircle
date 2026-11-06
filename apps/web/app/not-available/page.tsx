@@ -30,7 +30,7 @@ export default async function NotAvailablePage({ searchParams }: { searchParams:
           {checkout
             ? "FitCircle Pro purchases aren't available in your region yet."
             : "New FitCircle accounts aren't available in your region yet."}{' '}
-          FitCircle is currently offered in the United States, Canada, the United Kingdom, India and Singapore.
+          FitCircle is currently offered in the United States, Canada, India and Singapore.
         </p>
         <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-5 text-slate-300 space-y-3">
           <p className="font-semibold text-white">Already have an account?</p>

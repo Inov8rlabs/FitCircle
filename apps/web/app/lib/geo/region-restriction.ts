@@ -1,13 +1,14 @@
 /**
- * EU/EEA web sign-up + checkout restriction (docs/PRIVACY_COMPLIANCE_SPEC.md §7; audit §7 option A).
+ * EU/EEA + UK sign-up + checkout restriction (docs/PRIVACY_COMPLIANCE_SPEC.md §7; audit §7 option A).
  *
  * WEB_EU_SIGNUP_BLOCK: default ON (owner decision 2026-11-06; set 'false' to reopen). Requests
- * whose Vercel edge country (x-vercel-ip-country) is in the EU, EEA or EFTA cannot open
+ * whose Vercel edge country (x-vercel-ip-country) is in the EU, EEA, EFTA or the UK cannot open
  * /register or /upgrade, create an account (POST /api/auth/register, /api/mobile/auth/register,
  * or a FIRST Google / Apple sign-in via /api/mobile/auth/google|apple), or start a Stripe
- * checkout. Existing accounts still sign in (email and social), export and delete. The UK is
- * NOT restricted (launch market). Unknown country (no header: local dev, non-Vercel) → not
- * restricted. Reopening plan: docs/EU_COMPLIANCE_PLAN.md. Pure, edge-safe.
+ * checkout. Existing accounts still sign in (email and social), export and delete. The UK
+ * (+ Crown Dependencies) was added 2026-11-06 when the owner pulled the UK from both app stores
+ * rather than appoint a UK GDPR Art. 27 representative. Unknown country (no header: local dev,
+ * non-Vercel) → not restricted. Reopening plan: docs/EU_COMPLIANCE_PLAN.md. Pure, edge-safe.
  */
 
 /** EU-27 + EEA (IS, LI, NO) + Switzerland (EFTA). ISO 3166-1 alpha-2. */
@@ -17,6 +18,12 @@ export const EU_EEA_COUNTRIES: ReadonlySet<string> = new Set([
   'IS', 'LI', 'NO',
   'CH',
 ]);
+
+/** UK + Crown Dependencies (Guernsey, Jersey, Isle of Man). Not offered since 2026-11-06 (no UK representative). */
+export const UK_COUNTRIES: ReadonlySet<string> = new Set(['GB', 'GG', 'JE', 'IM']);
+
+/** Every country where new sign-ups and purchases are restricted. */
+export const RESTRICTED_COUNTRIES: ReadonlySet<string> = new Set([...EU_EEA_COUNTRIES, ...UK_COUNTRIES]);
 
 export const REGION_NOT_AVAILABLE_CODE = 'REGION_NOT_AVAILABLE';
 export const REGION_NOT_AVAILABLE_MESSAGE = "FitCircle isn't available in your region yet.";
@@ -34,11 +41,11 @@ export function requestCountry(request: HeaderSource): string | null {
   return /^[A-Z]{2}$/.test(c) ? c : null;
 }
 
-/** True when the flag is on and the request comes from an EU/EEA/EFTA country. Unknown country → not blocked. */
+/** True when the flag is on and the request comes from an EU/EEA/EFTA or UK country. Unknown country → not blocked. */
 export function isRegionRestricted(request: HeaderSource, env: Env = process.env): boolean {
   if (!euSignupBlockEnabled(env)) return false;
   const c = requestCountry(request);
-  return !!c && EU_EEA_COUNTRIES.has(c);
+  return !!c && RESTRICTED_COUNTRIES.has(c);
 }
 
 /** Page paths that start a NEW account or a purchase (gated); everything else stays open. */

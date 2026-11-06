@@ -41,7 +41,9 @@ describe('pure rules', () => {
   it('EU-27 + IS/LI/NO + CH; the launch markets are never restricted', () => {
     expect(EU_EEA_COUNTRIES.size).toBe(31);
     for (const c of ['DE', 'FR', 'BG', 'IE', 'NO', 'CH']) expect(isRegionRestricted(req('/', c), { WEB_EU_SIGNUP_BLOCK: 'true' })).toBe(true);
-    for (const c of ['GB', 'US', 'CA', 'IN', 'SG']) expect(isRegionRestricted(req('/', c), { WEB_EU_SIGNUP_BLOCK: 'true' })).toBe(false);
+    for (const c of ['GB', 'GG', 'JE', 'IM']) expect(isRegionRestricted(req('/', c), { WEB_EU_SIGNUP_BLOCK: 'true' })).toBe(true);
+    for (const c of ['US', 'CA', 'IN', 'SG']) expect(isRegionRestricted(req('/', c), { WEB_EU_SIGNUP_BLOCK: 'true' })).toBe(false);
+    expect(isRegionRestricted(req('/', 'GB'), { WEB_EU_SIGNUP_BLOCK: 'false' })).toBe(false); // same switch reopens the UK
     expect(isRegionRestricted(req('/'), { WEB_EU_SIGNUP_BLOCK: 'true' })).toBe(false); // unknown country
     expect(isRegionRestricted(req('/', 'DE'), {})).toBe(true); // default on
     expect(isRegionRestricted(req('/', 'DE'), { WEB_EU_SIGNUP_BLOCK: 'false' })).toBe(false); // explicitly reopened
