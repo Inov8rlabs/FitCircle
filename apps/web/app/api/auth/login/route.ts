@@ -2,7 +2,8 @@ import { createClient } from '@supabase/supabase-js';
 import { type NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 
-import { authRateLimiter, getIdentifier, applyRateLimit } from '@/lib/middleware/rate-limit';
+import { enforceAbuseLimits } from '@/lib/security/abuse-limits';
+import { recordSecurityEvent } from '@/lib/security/security-events';
 import { authEmailSchema } from '@/lib/validation/auth-email';
 
 // Validation schema
@@ -13,15 +14,13 @@ const loginSchema = z.object({
 
 export async function POST(request: NextRequest) {
   try {
-    // Apply rate limiting (5 attempts per 15 minutes per IP) to slow credential
-    // stuffing / brute-force against the web login endpoint.
-    const identifier = getIdentifier(request);
-    const rateLimitResponse = await applyRateLimit(request, authRateLimiter, identifier);
-    if (rateLimitResponse) return rateLimitResponse;
-
     // Parse and validate request body
     const body = await request.json();
     const validatedData = loginSchema.parse(body);
+
+    // Shared limits against credential stuffing: 10 / 15 min per IP, 5 / 15 min per account.
+    const rateLimitResponse = await enforceAbuseLimits(request, 'login', { email: validatedData.email });
+    if (rateLimitResponse) return rateLimitResponse;
 
     // Create Supabase client
     const supabase = createClient(
@@ -40,6 +39,11 @@ export async function POST(request: NextRequest) {
       email: validatedData.email,
       password: validatedData.password,
     });
+
+    if (error || !data.user || !data.session) {
+      // Credential-stuffing signal: the account is stored hashed only.
+      await recordSecurityEvent(request, { kind: 'login_failure', result: 'rejected', action: 'login', reason: 'invalid_credentials', email: validatedData.email });
+    }
 
     if (error) {
       return NextResponse.json(

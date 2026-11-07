@@ -3,7 +3,9 @@ import { z } from 'zod';
 
 import { parseFitzyContext } from '@/lib/fitzy/context';
 import { describeFitzyError, fitzyFail, readJson } from '@/lib/fitzy/http';
+import { checkIntegrity } from '@/lib/integrity/enforcement';
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
+import { enforceAbuseLimits } from '@/lib/security/abuse-limits';
 import { ConsentService } from '@/lib/services/consent-service';
 import { FitzyService, type FitzyStreamEvent } from '@/lib/services/fitzy-service';
 import { JourneyService } from '@/lib/services/journey-service';
@@ -43,6 +45,11 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     return fitzyFail(error);
   }
+  // Abuse limits (per user + device), then the Android device check (before the body is read).
+  const limited = await enforceAbuseLimits(request, 'fitzy', { userId: user.id });
+  if (limited) return limited;
+  const integrity = await checkIntegrity(request, { action: 'fitzy', userId: user.id });
+  if (!integrity.allowed) return integrity.response!;
   // First Fitzy open → profiles.fitzy_opened_at (ACTIVATION_JOURNEY_SPEC §6). Zero queries once set.
   runAfterResponse(() => JourneyService.markFitzyOpened(user.id, user), 'fitzy opened');
   const parsed = safeParseLenient(bodySchema, await readJson(request));

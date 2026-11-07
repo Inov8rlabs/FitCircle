@@ -31,6 +31,7 @@ const supabaseStub = {
       state.inserted.push(row);
       return { select: () => ({ single: async () => ({ data: { ...row }, error: null }) }) };
     },
+    update: () => ({ eq: async () => ({ error: null }) }),
   }),
   auth: {
     signInWithPassword: async (credentials: { email: string; password: string }) => {
@@ -41,7 +42,10 @@ const supabaseStub = {
       };
     },
     signUp: async ({ email }: { email: string }) => ({ data: { user: { id: 'user-1', email } }, error: null }),
-    admin: { deleteUser: async () => ({}) },
+    admin: {
+      deleteUser: async () => ({}),
+      createUser: async ({ email }: { email: string }) => ({ data: { user: { id: 'user-1', email } }, error: null }),
+    },
     resetPasswordForEmail: async (email: string) => {
       state.emails.push({ kind: 'reset', email });
       return { error: null };

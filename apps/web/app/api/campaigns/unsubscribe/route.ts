@@ -7,7 +7,7 @@ import { CampaignDeliveryService } from '@/lib/services/campaign-delivery-servic
 
 export const dynamic = 'force-dynamic';
 
-const limiter = createRateLimiter({ interval: 60_000, uniqueTokenPerInterval: 5000, maxRequests: 30 });
+const limiter = createRateLimiter({ name: 'campaign-unsubscribe', interval: 60_000, uniqueTokenPerInterval: 5000, maxRequests: 30 });
 
 const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 

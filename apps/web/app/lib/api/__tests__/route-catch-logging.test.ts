@@ -28,6 +28,7 @@ const LOGGING_MAPPERS: Record<string, string> = {
   failFrom: 'app/lib/referrals/http.ts',
   campaignFailFrom: 'app/lib/campaigns/http.ts',
   adsFailFrom: 'app/lib/ads/http.ts',
+  securityFailFrom: 'app/lib/security/http.ts',
   releasesFailFrom: 'app/lib/releases/http.ts',
   experimentsFailFrom: 'app/lib/experiments/http.ts',
   mobileFailFrom: 'app/lib/experiments/http.ts',

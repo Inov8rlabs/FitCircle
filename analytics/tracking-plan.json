@@ -1,7 +1,7 @@
 {
   "$schema": "./tracking-plan.schema.json",
-  "version": 29,
-  "updated": "2026-11-06",
+  "version": 30,
+  "updated": "2026-11-07",
   "conventions": {
     "eventNames": "Title Case, '<Object> <Past-tense verb>' (e.g. 'Meal Logged'). Names are frozen once shipped: rename in the analytics tool, never in code.",
     "propertyNames": "snake_case. Enum values are lowercase snake_case.",
@@ -188,6 +188,28 @@
     "sharing_default_source": [
       "settings",
       "log_screen"
+    ],
+    "security_action": [
+      "register",
+      "login",
+      "google",
+      "refresh",
+      "food_ai",
+      "fitzy",
+      "referral_claim",
+      "entitlement_sync"
+    ],
+    "security_result": [
+      "pass",
+      "block",
+      "fail_open",
+      "log_only",
+      "bypass"
+    ],
+    "security_attack_status": [
+      "normal",
+      "elevated",
+      "under_attack"
     ]
   },
   "globalProperties": [
@@ -1487,7 +1509,7 @@
         "ios",
         "android"
       ],
-      "description": "The app asked the OS for its store rating prompt (iOS RequestReview / Play In-App Review) at a positive moment. From 1.1.2 (build 89+) the server decides who is eligible and which moments are on (GET /api/mobile/rating-prompt, Admin Tools \u2192 Rating prompt); the app also POSTs /api/mobile/rating-prompt/requested. The OS never says whether the prompt was shown or whether the user rated (Apple: max 3 per 365 days; Play: its own quota, nothing for non-Play installs), so this is an upper bound on prompts seen. trigger = the server trigger key: meal_saved, streak_reached, challenge_day_completed. streak_milestone and meal_count are the legacy (iOS 1.1.2 build 88 and earlier) values.",
+      "description": "The app asked the OS for its store rating prompt (iOS RequestReview / Play In-App Review) at a positive moment. From 1.1.2 (build 89+) the server decides who is eligible and which moments are on (GET /api/mobile/rating-prompt, Admin Tools → Rating prompt); the app also POSTs /api/mobile/rating-prompt/requested. The OS never says whether the prompt was shown or whether the user rated (Apple: max 3 per 365 days; Play: its own quota, nothing for non-Play installs), so this is an upper bound on prompts seen. trigger = the server trigger key: meal_saved, streak_reached, challenge_day_completed. streak_milestone and meal_count are the legacy (iOS 1.1.2 build 88 and earlier) values.",
       "properties": [
         {
           "name": "trigger",
@@ -4690,6 +4712,194 @@
           "type": "bool",
           "required": true,
           "description": "An update prompt was accepted for this or an older target before the upgrade."
+        }
+      ]
+    },
+    {
+      "name": "Integrity Checked",
+      "category": "security",
+      "platforms": [
+        "server"
+      ],
+      "description": "Server: an Android integrity_v1 client was checked on a session-issuing call (register, login, google, refresh). Sent server-side.",
+      "properties": [
+        {
+          "name": "action",
+          "type": "enum",
+          "enum": "security_action",
+          "required": true
+        },
+        {
+          "name": "result",
+          "type": "enum",
+          "enum": "security_result",
+          "required": true
+        },
+        {
+          "name": "reason",
+          "type": "string",
+          "required": false,
+          "description": "Failure reason code (e.g. device_integrity, app_not_recognized). Absent on pass."
+        },
+        {
+          "name": "platform",
+          "type": "string",
+          "required": false,
+          "description": "Client platform of the request (ios | android | web), when known."
+        }
+      ]
+    },
+    {
+      "name": "Integrity Blocked",
+      "category": "security",
+      "platforms": [
+        "server"
+      ],
+      "description": "Server: a request was refused with 403 INTEGRITY_FAILED (any protected call). Sent server-side.",
+      "properties": [
+        {
+          "name": "action",
+          "type": "enum",
+          "enum": "security_action",
+          "required": true
+        },
+        {
+          "name": "reason",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "platform",
+          "type": "string",
+          "required": false,
+          "description": "Client platform of the request (ios | android | web), when known."
+        }
+      ]
+    },
+    {
+      "name": "Signup Blocked",
+      "category": "security",
+      "platforms": [
+        "server"
+      ],
+      "description": "Server: a sign-up was refused (disposable email, failed device check). Sent server-side.",
+      "properties": [
+        {
+          "name": "reason",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "platform",
+          "type": "string",
+          "required": false,
+          "description": "Client platform of the request (ios | android | web), when known."
+        }
+      ]
+    },
+    {
+      "name": "Referral Rejected",
+      "category": "security",
+      "platforms": [
+        "server"
+      ],
+      "description": "Server: a referral was refused or rejected for fraud reasons (same mailbox, same device, unattested device). Sent server-side.",
+      "properties": [
+        {
+          "name": "reason",
+          "type": "string",
+          "required": true
+        }
+      ]
+    },
+    {
+      "name": "Free AI Device Limit Hit",
+      "category": "security",
+      "platforms": [
+        "server"
+      ],
+      "description": "Server: a free food-AI analysis was refused because this attested device (or mailbox) already used the lifetime allowance on another account. Sent server-side.",
+      "properties": [
+        {
+          "name": "limit",
+          "type": "int",
+          "required": true
+        },
+        {
+          "name": "used",
+          "type": "int",
+          "required": true
+        }
+      ]
+    },
+    {
+      "name": "Security Summary",
+      "category": "security",
+      "platforms": [
+        "server"
+      ],
+      "description": "Server: hourly counts of security events for trend charts (one event per hour, device fitcircle-server).",
+      "properties": [
+        {
+          "name": "window_minutes",
+          "type": "int",
+          "required": true
+        },
+        {
+          "name": "attack_status",
+          "type": "enum",
+          "enum": "security_attack_status",
+          "required": true
+        },
+        {
+          "name": "integrity_pass",
+          "type": "int",
+          "required": true
+        },
+        {
+          "name": "integrity_block",
+          "type": "int",
+          "required": true
+        },
+        {
+          "name": "integrity_fail_open",
+          "type": "int",
+          "required": true
+        },
+        {
+          "name": "rate_limit_hits",
+          "type": "int",
+          "required": true
+        },
+        {
+          "name": "login_failures",
+          "type": "int",
+          "required": true
+        },
+        {
+          "name": "signups",
+          "type": "int",
+          "required": true
+        },
+        {
+          "name": "signup_blocks",
+          "type": "int",
+          "required": true
+        },
+        {
+          "name": "referral_rejections",
+          "type": "int",
+          "required": true
+        },
+        {
+          "name": "ai_device_limit_hits",
+          "type": "int",
+          "required": true
+        },
+        {
+          "name": "nonce_replays",
+          "type": "int",
+          "required": true
         }
       ]
     }

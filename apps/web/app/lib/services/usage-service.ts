@@ -1,4 +1,9 @@
+import { headers } from 'next/headers';
+
 import { logIgnoredQueryError } from '@/lib/api/route-errors';
+import { isAttestedDevice } from '@/lib/integrity/attestations';
+import { normalizeDeviceId } from '@/lib/integrity/contract';
+import { recordSecurityEvent } from '@/lib/security/security-events';
 
 import { TIER_LIMITS, LEGACY_LIMITS } from '../config/tier-limits';
 import { trialEligibleFromProfile } from '../entitlements/trial-eligibility';
@@ -25,6 +30,12 @@ import { createAdminSupabase } from '../supabase-admin';
  * per CLAUDE.md. Tolerance: two truly concurrent requests can both pass the
  * check at limit-1 — acceptable for a daily product quota.
  */
+
+/** PGRST204 / 42703 naming `column` (a migration not applied yet). */
+function isMissingColumn(error: { code?: string; message?: string } | null, column: string): boolean {
+  if (!error || (error.code !== 'PGRST204' && error.code !== '42703')) return false;
+  return typeof error.message === 'string' && error.message.includes(column);
+}
 
 export class UpgradeRequiredError extends Error {
   constructor(
@@ -64,7 +75,7 @@ export class UsageService {
   static async assertFoodAiQuota(userId: string): Promise<void> {
     const plan = await this.foodAiPlan(userId);
     const used = await this.countFoodAi(userId, plan.scope);
-    if (used >= plan.limit) throw this.foodAiRefusal(plan, used);
+    if (used >= plan.limit) throw await this.foodAiRefusalNoted(plan, used, userId);
   }
 
   /**
@@ -80,11 +91,20 @@ export class UsageService {
   static async reserveFoodAi(userId: string, hash: string): Promise<FoodAiReservation> {
     const plan = await this.foodAiPlan(userId);
     const supabase = createAdminSupabase();
-    const { data: row, error: insertError } = await supabase
+    // Attested device (Android integrity): the credit also counts against the device.
+    const deviceId = plan.scope === 'lifetime' ? await this.attestedRequestDevice(userId) : null;
+    let { data: row, error: insertError } = await supabase
       .from('nutrition_parse_log')
-      .insert({ user_id: userId, image_hash: hash })
+      .insert({ user_id: userId, image_hash: hash, ...(deviceId ? { device_id: deviceId } : {}) })
       .select('id')
       .single();
+    if (insertError && deviceId && isMissingColumn(insertError, 'device_id')) {
+      ({ data: row, error: insertError } = await supabase
+        .from('nutrition_parse_log')
+        .insert({ user_id: userId, image_hash: hash })
+        .select('id')
+        .single());
+    }
     if (insertError || !row?.id) {
       // Couldn't write the reservation: fall back to the plain (non-atomic) check so a logging
       // fault never blocks a paying user, and still refuse a free user who is clearly over.
@@ -101,7 +121,7 @@ export class UsageService {
     const count = await this.countFoodAi(userId, plan.scope);
     if (count > plan.limit) {
       await release();
-      throw this.foodAiRefusal(plan, count - 1);
+      throw await this.foodAiRefusalNoted(plan, count - 1, userId);
     }
     return { id, release };
   }
@@ -120,6 +140,35 @@ export class UsageService {
     if (!gateLive || tier !== 'free') return { total: null, remaining: null };
     const [total, used] = await Promise.all([this.freeFoodAiTotal(userId, signupAt), this.countFoodAi(userId, 'lifetime')]);
     return { total, remaining: Math.max(0, total - used) };
+  }
+
+  /**
+   * X-Device-Id of the current request when that device has passed the Android integrity
+   * check for this user (device_attestations). Unverified ids are ignored: they are
+   * client-controlled. Null outside a request.
+   */
+  private static async attestedRequestDevice(userId: string): Promise<string | null> {
+    let deviceId: string | null = null;
+    try {
+      const h = await headers();
+      deviceId = normalizeDeviceId(h.get('x-device-id'));
+    } catch {
+      return null; // not inside a request (cron, scripts, tests)
+    }
+    if (!deviceId) return null;
+    return (await isAttestedDevice(userId, deviceId)) ? deviceId : null;
+  }
+
+  /** Account ids that share this user's mailbox (profiles.email_canonical), including the user. */
+  private static async mailboxAccountIds(userId: string): Promise<string[]> {
+    const supabase = createAdminSupabase();
+    const { data: me, error } = await supabase.from('profiles').select('email_canonical').eq('id', userId).maybeSingle();
+    const canonical = !error && typeof (me as any)?.email_canonical === 'string' ? ((me as any).email_canonical as string) : null;
+    if (!canonical) return [userId];
+    const { data: rows, error: rowsError } = await supabase.from('profiles').select('id').eq('email_canonical', canonical).limit(50);
+    if (rowsError) return [userId];
+    const ids = new Set<string>([userId, ...((rows ?? []) as Array<{ id: string }>).map((r) => r.id)]);
+    return Array.from(ids);
   }
 
   /**
@@ -145,19 +194,76 @@ export class UsageService {
     return { kind: 'free', scope: 'lifetime', limit: await this.freeFoodAiTotal(userId, profile.signupAt), trialEligible: profile.trialEligible };
   }
 
+  /** The refusal, after recording a shared-device / shared-mailbox limit hit (free plan only). */
+  private static async foodAiRefusalNoted(plan: { kind: 'legacy' | 'free' | 'premium'; limit: number; trialEligible: boolean }, used: number, userId: string): Promise<Error> {
+    if (plan.kind === 'free') await this.noteSharedLimit(userId, plan.limit);
+    return this.foodAiRefusal(plan, used);
+  }
+
   private static foodAiRefusal(plan: { kind: 'legacy' | 'free' | 'premium'; limit: number; trialEligible: boolean }, used: number): Error {
-    if (plan.kind === 'free') return new UpgradeRequiredError('food_ai_unlimited', used, plan.limit, plan.trialEligible);
+    if (plan.kind === 'free') {
+      return new UpgradeRequiredError('food_ai_unlimited', used, plan.limit, plan.trialEligible);
+    }
     return new Error('RateLimited');
   }
 
+  /**
+   * Lifetime count = the larger of: every account on the same mailbox (canonical email),
+   * and the attested device of this request across all accounts. So new accounts on one
+   * phone, or `+tag` / Gmail-dot spellings of one inbox, don't reset the free allowance.
+   */
   private static async countFoodAi(userId: string, scope: 'today' | 'lifetime'): Promise<number> {
     if (scope === 'today') return this.countToday('nutrition_parse_log', userId);
-    const { count, error } = await createAdminSupabase()
-      .from('nutrition_parse_log')
-      .select('*', { count: 'exact', head: true })
-      .eq('user_id', userId);
+    return (await this.lifetimeFoodAiUsage(userId)).used;
+  }
+
+  /** Lifetime usage split: own account, mailbox group, attested device. */
+  private static async lifetimeFoodAiUsage(
+    userId: string
+  ): Promise<{ used: number; ownUsed: number; deviceId: string | null; sharedLimitReason: 'device' | 'mailbox' | null }> {
+    const supabase = createAdminSupabase();
+    const [ids, deviceId] = await Promise.all([this.mailboxAccountIds(userId), this.attestedRequestDevice(userId)]);
+    const accountQuery = supabase.from('nutrition_parse_log').select('*', { count: 'exact', head: true });
+    const { count, error } = await (ids.length === 1 ? accountQuery.eq('user_id', userId) : accountQuery.in('user_id', ids));
     logIgnoredQueryError('UsageService.countFoodAi', error);
-    return count ?? 0;
+    const groupUsed = count ?? 0;
+    let ownUsed = groupUsed;
+    if (ids.length > 1) {
+      const { count: own } = await supabase.from('nutrition_parse_log').select('*', { count: 'exact', head: true }).eq('user_id', userId);
+      ownUsed = own ?? 0;
+    }
+    let deviceUsed = 0;
+    if (deviceId) {
+      const { count: deviceCount, error: deviceError } = await supabase
+        .from('nutrition_parse_log')
+        .select('*', { count: 'exact', head: true })
+        .eq('device_id', deviceId);
+      if (!deviceError) deviceUsed = deviceCount ?? 0;
+    }
+    const used = Math.max(groupUsed, deviceUsed);
+    const sharedLimitReason = deviceUsed > ownUsed && deviceUsed >= groupUsed ? 'device' : groupUsed > ownUsed ? 'mailbox' : null;
+    return { used, ownUsed, deviceId, sharedLimitReason };
+  }
+
+  /**
+   * A free user refused because ANOTHER account on the same device or mailbox used the
+   * allowance: record it (security_events + Amplitude "Free AI Device Limit Hit").
+   */
+  private static async noteSharedLimit(userId: string, limit: number): Promise<void> {
+    try {
+      const usage = await this.lifetimeFoodAiUsage(userId);
+      if (!usage.sharedLimitReason || usage.ownUsed >= limit) return;
+      await recordSecurityEvent(null, {
+        kind: 'free_ai_device_limit',
+        result: 'block',
+        reason: usage.sharedLimitReason,
+        userId,
+        deviceId: usage.deviceId,
+        amplitude: { limit, used: usage.used },
+      });
+    } catch {
+      // telemetry only
+    }
   }
 
   /**

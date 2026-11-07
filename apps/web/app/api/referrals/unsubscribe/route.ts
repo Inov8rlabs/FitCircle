@@ -6,7 +6,7 @@ import { ReferralInviteService, verifyUnsubscribeToken } from '@/lib/services/re
 
 export const dynamic = 'force-dynamic';
 
-const limiter = createRateLimiter({ interval: 60_000, uniqueTokenPerInterval: 5000, maxRequests: 30 });
+const limiter = createRateLimiter({ name: 'referral-unsubscribe', interval: 60_000, uniqueTokenPerInterval: 5000, maxRequests: 30 });
 
 /**
  * GET /api/referrals/unsubscribe?t= — public, side-effect free: only says whether

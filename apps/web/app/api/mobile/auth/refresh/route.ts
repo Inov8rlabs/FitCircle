@@ -1,6 +1,8 @@
 import { type NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 
+import { checkIntegrity, recordSessionAttestation, resolveBypass, userIdFromAccessToken } from '@/lib/integrity/enforcement';
+import { enforceAbuseLimits } from '@/lib/security/abuse-limits';
 import { MobileAPIService } from '@/lib/services/mobile-api-service';
 import { parseLenient, validationMessage } from '@/lib/validation/lenient-parse';
 
@@ -11,12 +13,26 @@ const refreshSchema = z.object({
 
 export async function POST(request: NextRequest) {
   try {
+    const rateLimitResponse = await enforceAbuseLimits(request, 'refresh');
+    if (rateLimitResponse) return rateLimitResponse;
+
     // Parse and validate request body
     const body = await request.json();
     const validatedData = parseLenient(refreshSchema, body);
 
+    // Android integrity_v1 clients re-attest on every refresh (new session id).
+    // A failing device continues only for a user on integrity_bypass_user_ids; the user id
+    // comes from a refresh token that verifies (signature + expiry), never from the client.
+    const integrity = await checkIntegrity(request, { action: 'refresh' });
+    if (!integrity.allowed) {
+      const payload = integrity.bypassEligible ? await MobileAPIService.verifyRefreshToken(validatedData.refresh_token) : null;
+      if (!(await resolveBypass(request, integrity, payload?.userId ?? null, 'refresh'))) return integrity.response!;
+    }
+
     // Refresh the access token
     const tokens = await MobileAPIService.refreshAccessToken(validatedData.refresh_token);
+    const userId = tokens ? userIdFromAccessToken(tokens.access_token) : null;
+    if (tokens && userId) await recordSessionAttestation(request, integrity, { userId, accessToken: tokens.access_token });
 
     if (!tokens) {
       return NextResponse.json(

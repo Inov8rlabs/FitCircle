@@ -6,7 +6,7 @@ import { ReferralService } from '@/lib/services/referral-service';
 
 export const dynamic = 'force-dynamic';
 
-const previewLimiter = createRateLimiter({ interval: 60_000, uniqueTokenPerInterval: 5000, maxRequests: 60 });
+const previewLimiter = createRateLimiter({ name: 'referral-preview', interval: 60_000, uniqueTokenPerInterval: 5000, maxRequests: 60 });
 
 /**
  * GET /api/referrals/preview?code=XXX[&ref=YYY] — public (no auth).

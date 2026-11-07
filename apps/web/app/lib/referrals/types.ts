@@ -111,6 +111,12 @@ export interface ClaimInput {
   ref?: string | null;
   source: AttributionSource;
   deviceId?: string | null;
+  /** Device id proven by the integrity check on this request (Android), else null. */
+  attestedDeviceId?: string | null;
+  /** The claiming request came from an integrity_v1 Android client (it can attest). */
+  integrityClient?: boolean;
+  /** Client platform of the claiming request (X-App-Platform). */
+  platform?: 'ios' | 'android' | 'web' | null;
 }
 
 export interface ClaimResult {

@@ -9,7 +9,7 @@ import { parseLenient } from '@/lib/validation/lenient-parse';
 
 export const dynamic = 'force-dynamic';
 
-const limiter = createRateLimiter({ interval: 60 * 60_000, uniqueTokenPerInterval: 5000, maxRequests: 30 });
+const limiter = createRateLimiter({ name: 'mobile-referral-invites', interval: 60 * 60_000, uniqueTokenPerInterval: 5000, maxRequests: 30 });
 
 /**
  * POST /api/mobile/referrals/invites {contacts[≤10], circleId?} — invite friends.

@@ -1,0 +1,297 @@
+/**
+ * Enforcement matrix (docs/INTEGRITY_CONTRACT.md): legacy vs integrity_v1, kill switch
+ * off / log / block, fail-open (infrastructure) vs fail-closed (client faults and failing
+ * verdicts), the login bypass list, and live session attestations.
+ */
+import jwt from 'jsonwebtoken';
+import { NextRequest } from 'next/server';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+const h = vi.hoisted(() => ({
+  mode: 'block' as string,
+  bypass: [] as string[],
+  live: 'none' as string,
+  consume: 'ok' as string,
+  nonceConfigured: true,
+  decode: { kind: 'decoded', payload: {} } as any,
+  verdictPass: true,
+  verdictReason: 'device_integrity',
+  configured: true,
+  events: [] as any[],
+  attestations: [] as any[],
+  sentry: [] as any[],
+  lastExpectedHash: null as string | null,
+}));
+
+vi.mock('@/lib/remote-config/service', () => ({
+  RemoteConfigService: {
+    enumValue: async () => h.mode,
+    listValue: async () => h.bypass,
+  },
+}));
+vi.mock('../attestations', () => ({
+  findLiveAttestation: async () => h.live,
+  recordAttestation: async (a: any) => void h.attestations.push(a),
+}));
+vi.mock('../nonce', () => ({
+  consumeNonce: async () => h.consume,
+  nonceIssuanceConfigured: () => h.nonceConfigured,
+}));
+vi.mock('@/lib/security/security-events', () => ({ recordSecurityEvent: async (_r: unknown, e: any) => void h.events.push(e) }));
+vi.mock('@sentry/nextjs', () => ({ captureException: (e: Error, ctx: any) => void h.sentry.push({ message: e.message, ...ctx }) }));
+vi.mock('../play-integrity', async (importOriginal) => {
+  const original: any = await importOriginal();
+  return {
+    ...original,
+    evaluateVerdict: (_p: unknown, expected: any) => {
+      h.lastExpectedHash = expected.requestHash;
+      return h.verdictPass
+        ? { pass: true, summary: { appRecognition: 'PLAY_RECOGNIZED', deviceRecognition: ['MEETS_DEVICE_INTEGRITY'], licensing: 'LICENSED', versionCode: '1', tokenAgeMs: 1 } }
+        : { pass: false, reason: h.verdictReason, summary: { appRecognition: 'PLAY_RECOGNIZED', deviceRecognition: [], licensing: 'LICENSED', versionCode: '1', tokenAgeMs: 1 } };
+    },
+    playIntegrityClient: () => ({
+      isConfigured: () => h.configured,
+      config: { packageName: 'com.inov8rlabs.apps.fitcircle', certDigests: ['x'] },
+      decode: async () => h.decode,
+    }),
+  };
+});
+
+import { checkIntegrity, failOpenClass, recordSessionAttestation, resolveBypass, resolveLoginBypass } from '../enforcement';
+
+const DEV = '00000000-0000-4000-8000-000000000001';
+const NONCE = 'a'.repeat(54);
+const USER = '11111111-1111-4111-8111-111111111111';
+
+function req(opts: { android?: boolean; v1?: boolean; token?: boolean; device?: string | null; path?: string; body?: string; auth?: string; error?: string } = {}) {
+  const headers: Record<string, string> = { 'content-type': 'application/json' };
+  if (opts.android !== false) headers['x-app-platform'] = 'android';
+  if (opts.v1 !== false) headers['x-client-features'] = 'icon_keys,integrity_v1';
+  if (opts.token !== false) {
+    headers['x-integrity-token'] = 'tok';
+    headers['x-integrity-nonce'] = NONCE;
+  }
+  if (opts.device !== null) headers['x-device-id'] = opts.device ?? DEV;
+  if (opts.auth) headers.authorization = `Bearer ${opts.auth}`;
+  if (opts.error) headers['x-integrity-error'] = opts.error;
+  return new NextRequest(`http://localhost${opts.path ?? '/api/mobile/auth/login'}`, { method: 'POST', body: opts.body ?? '{"email":"a@b.co","password":"x"}', headers });
+}
+
+beforeEach(() => {
+  Object.assign(h, {
+    mode: 'block',
+    bypass: [],
+    live: 'none',
+    consume: 'ok',
+    nonceConfigured: true,
+    decode: { kind: 'decoded', payload: {} },
+    verdictPass: true,
+    verdictReason: 'device_integrity',
+    configured: true,
+    events: [],
+    attestations: [],
+    sentry: [],
+    lastExpectedHash: null,
+  });
+});
+
+const results = () => h.events.filter((e) => e.kind === 'integrity').map((e) => `${e.result}:${e.reason ?? ''}`);
+
+describe('who is enforced', () => {
+  it('legacy clients (no integrity_v1) are never blocked or verified', async () => {
+    h.verdictPass = false;
+    expect(await checkIntegrity(req({ v1: false, token: false }), { action: 'login' })).toMatchObject({ allowed: true, mode: 'legacy' });
+    expect(h.events).toEqual([]);
+  });
+
+  it('iOS / web declaring integrity_v1 are legacy (Android only for now)', async () => {
+    expect(await checkIntegrity(req({ android: false, token: false }), { action: 'register' })).toMatchObject({ allowed: true, mode: 'legacy' });
+  });
+});
+
+describe('kill switch integrity_enforce_android', () => {
+  it('off: no verification at all', async () => {
+    h.mode = 'off';
+    h.verdictPass = false;
+    expect(await checkIntegrity(req({ token: false }), { action: 'register' })).toMatchObject({ allowed: true, mode: 'off' });
+    expect(h.events).toEqual([]);
+  });
+
+  it('log: a failing verdict is allowed and recorded as log_only', async () => {
+    h.mode = 'log';
+    h.verdictPass = false;
+    expect(await checkIntegrity(req(), { action: 'register' })).toMatchObject({ allowed: true, mode: 'log_only', reason: 'device_integrity' });
+    expect(results()).toEqual(['log_only:device_integrity']);
+  });
+
+  it('block (default): a failing verdict is 403 INTEGRITY_FAILED {reason}', async () => {
+    h.verdictPass = false;
+    h.verdictReason = 'app_not_recognized';
+    const d = await checkIntegrity(req({ path: '/api/mobile/auth/register' }), { action: 'register' });
+    expect(d.allowed).toBe(false);
+    expect(d.response!.status).toBe(403);
+    const body = await d.response!.json();
+    expect(body).toMatchObject({ success: false, code: 'INTEGRITY_FAILED', reason: 'app_not_recognized', error: { code: 'INTEGRITY_FAILED', details: { reason: 'app_not_recognized' } } });
+    expect(results()).toEqual(['block:app_not_recognized']);
+    expect(h.events.map((e) => e.kind)).toContain('signup_block');
+  });
+});
+
+describe('fail closed (client faults)', () => {
+  it.each([
+    ['missing token', { token: false }, 'missing_token'],
+    ['missing device id', { device: null }, 'missing_device_id'],
+  ])('%s → block', async (_n, opts, reason) => {
+    const d = await checkIntegrity(req(opts as any), { action: 'google' });
+    expect(d).toMatchObject({ allowed: false, reason });
+  });
+
+  it.each([
+    ['expired', 'nonce_expired'],
+    ['replayed', 'nonce_replayed'],
+    ['bad_signature', 'nonce_invalid'],
+    ['malformed', 'nonce_invalid'],
+  ])('nonce %s → %s (reason contains "nonce" so the client retries once)', async (consume, reason) => {
+    h.consume = consume;
+    const d = await checkIntegrity(req(), { action: 'refresh' });
+    expect(d).toMatchObject({ allowed: false, reason });
+    expect(reason).toContain('nonce');
+  });
+
+  it('nonce replay is also its own security event', async () => {
+    h.consume = 'replayed';
+    await checkIntegrity(req(), { action: 'google' });
+    expect(h.events.map((e) => e.kind)).toEqual(['integrity', 'nonce_replay']);
+    // Bypass-eligible calls (login / refresh) record it once the bypass is resolved.
+    h.events = [];
+    const d = await checkIntegrity(req(), { action: 'refresh' });
+    expect(h.events).toEqual([]);
+    await resolveBypass(req(), d, null, 'refresh');
+    expect(h.events.map((e) => `${e.kind}:${e.result}`)).toEqual(['integrity:block', 'nonce_replay:block']);
+  });
+
+  it('a token Google rejects (400) blocks; it never earns a fail-open', async () => {
+    h.decode = { kind: 'client', status: 400, message: 'INVALID_ARGUMENT' };
+    expect(await checkIntegrity(req(), { action: 'register' })).toMatchObject({ allowed: false, reason: 'token_invalid' });
+  });
+
+  it('X-Integrity-Error from the device (e.g. no Play services) is still a block', async () => {
+    const d = await checkIntegrity(req({ token: false, error: 'token_-6' }), { action: 'login' });
+    expect(d).toMatchObject({ allowed: false, reason: 'missing_token' });
+  });
+});
+
+describe('fail open (our / Google infrastructure)', () => {
+  it.each([
+    ['decode outage', () => (h.decode = { kind: 'infra', message: 'decode HTTP 503' }), 'decode_http'],
+    ['verifier not configured', () => (h.configured = false), 'verifier_not_configured'],
+    ['nonce store down', () => (h.consume = 'error'), 'nonce_store'],
+  ])('%s → allowed, event + Sentry exception tagged security=fail_open', async (_n, setup, cls) => {
+    setup();
+    const d = await checkIntegrity(req(), { action: 'login' });
+    expect(d).toMatchObject({ allowed: true, mode: 'fail_open' });
+    expect(results()[0]).toMatch(/^fail_open:/);
+    expect(h.sentry[0]).toMatchObject({ tags: { security: 'fail_open', fail_open_reason: cls }, fingerprint: ['security-fail-open', cls] });
+  });
+
+  it('nonce_unavailable fails open only when OUR nonce issuance is broken', async () => {
+    h.nonceConfigured = false;
+    expect(await checkIntegrity(req({ token: false, error: 'nonce_unavailable' }), { action: 'login' })).toMatchObject({ allowed: true, mode: 'fail_open' });
+    h.nonceConfigured = true;
+    expect(await checkIntegrity(req({ token: false, error: 'nonce_unavailable' }), { action: 'login' })).toMatchObject({ allowed: false, reason: 'missing_token' });
+  });
+
+  it('classifies fail-open causes for Sentry grouping', () => {
+    expect(failOpenClass('Google token: invalid_grant')).toBe('token_exchange');
+    expect(failOpenClass('decode timeout')).toBe('decode_timeout');
+    expect(failOpenClass('boom')).toBe('unexpected');
+  });
+});
+
+describe('pass + request binding', () => {
+  it('hashes METHOD, PATH (no query), raw body, nonce and device', async () => {
+    const d = await checkIntegrity(req({ path: '/api/mobile/auth/login?x=1' }), { action: 'login' });
+    expect(d).toMatchObject({ allowed: true, mode: 'verified', attestedDeviceId: DEV });
+    // Golden vector shape: same request with nonce/device of the vector would produce its hash.
+    const { computeRequestHash, sha256Hex } = await import('../contract');
+    expect(h.lastExpectedHash).toBe(computeRequestHash({ method: 'POST', path: '/api/mobile/auth/login', bodySha256: sha256Hex('{"email":"a@b.co","password":"x"}'), nonce: NONCE, deviceId: DEV }));
+  });
+
+  it('the body is still readable by the route after the check', async () => {
+    const r = req();
+    await checkIntegrity(r, { action: 'login' });
+    expect(await r.json()).toEqual({ email: 'a@b.co', password: 'x' });
+  });
+});
+
+describe('session attestations', () => {
+  const token = jwt.sign({ userId: USER, sid: 'sess-1', type: 'access' }, 'k');
+
+  it('a verified session-issuing call binds the device to the new session (24 h)', async () => {
+    const d = await checkIntegrity(req(), { action: 'login' });
+    await recordSessionAttestation(req(), d, { userId: USER, accessToken: token });
+    expect(h.attestations).toEqual([expect.objectContaining({ userId: USER, sessionId: 'sess-1', deviceId: DEV, status: 'verified' })]);
+  });
+
+  it('a fail-open records a short fail_open attestation', async () => {
+    h.decode = { kind: 'infra', message: 'decode timeout' };
+    const d = await checkIntegrity(req(), { action: 'refresh' });
+    await recordSessionAttestation(req(), d, { userId: USER, accessToken: token });
+    expect(h.attestations[0]).toMatchObject({ status: 'fail_open' });
+  });
+
+  it('protected calls accept a live attestation instead of a token', async () => {
+    h.live = 'verified';
+    const d = await checkIntegrity(req({ token: false, auth: token, path: '/api/mobile/fitzy/chat' }), { action: 'fitzy', userId: USER });
+    expect(d).toMatchObject({ allowed: true, mode: 'attested', attestedDeviceId: DEV });
+  });
+
+  it('protected calls with no attestation and no token are blocked', async () => {
+    const d = await checkIntegrity(req({ token: false, auth: token, path: '/api/mobile/food/photo-parse' }), { action: 'food_ai', userId: USER });
+    expect(d).toMatchObject({ allowed: false, reason: 'missing_token' });
+  });
+
+  it('session-issuing calls never accept an attestation (always a fresh token)', async () => {
+    h.live = 'verified';
+    expect(await checkIntegrity(req({ token: false, auth: token }), { action: 'refresh' })).toMatchObject({ allowed: false, reason: 'missing_token' });
+  });
+});
+
+describe('integrity_bypass_user_ids (login + refresh)', () => {
+  it('a blocked login is let through for a listed user, after the password check', async () => {
+    h.verdictPass = false;
+    h.bypass = [USER];
+    const d = await checkIntegrity(req(), { action: 'login' });
+    expect(d).toMatchObject({ allowed: false, bypassEligible: true });
+    expect(await resolveLoginBypass(req(), d, USER)).toBe(true);
+    expect(results()).toEqual(['bypass:device_integrity']);
+  });
+
+  it('anyone else stays blocked (also with a wrong password: userId null)', async () => {
+    h.verdictPass = false;
+    h.bypass = [USER];
+    const d = await checkIntegrity(req(), { action: 'login' });
+    expect(await resolveLoginBypass(req(), d, '22222222-2222-4222-8222-222222222222')).toBe(false);
+    expect(await resolveLoginBypass(req(), d, null)).toBe(false);
+  });
+
+  it('applies to refresh too (user id from the verified refresh token)', async () => {
+    h.verdictPass = false;
+    h.bypass = [USER];
+    const d = await checkIntegrity(req({ path: '/api/mobile/auth/refresh' }), { action: 'refresh' });
+    expect(d).toMatchObject({ allowed: false, bypassEligible: true });
+    expect(await resolveBypass(req(), d, USER, 'refresh')).toBe(true);
+    expect(h.events.at(-1)).toMatchObject({ kind: 'integrity', action: 'refresh', result: 'bypass' });
+    expect(await resolveBypass(req(), d, null, 'refresh')).toBe(false);
+  });
+
+  it('never applies to register, google or protected calls', async () => {
+    h.verdictPass = false;
+    h.bypass = [USER];
+    for (const action of ['register', 'google', 'fitzy', 'food_ai', 'referral_claim', 'entitlement_sync'] as const) {
+      const d = await checkIntegrity(req(), { action, userId: USER });
+      expect(d.bypassEligible).toBe(false);
+      expect(await resolveBypass(req(), d, USER, action)).toBe(false);
+    }
+  });
+});

@@ -12,7 +12,7 @@ export const dynamic = 'force-dynamic';
 /** Only accounts created this recently can ask for their welcome email. */
 const NEW_ACCOUNT_WINDOW_MS = 60 * 60 * 1000;
 
-const limiter = createRateLimiter({ interval: 60 * 60_000, uniqueTokenPerInterval: 5000, maxRequests: 10 });
+const limiter = createRateLimiter({ name: 'auth-welcome', interval: 60 * 60_000, uniqueTokenPerInterval: 5000, maxRequests: 10 });
 const NO_STORE = { 'Cache-Control': 'no-store' };
 
 /**

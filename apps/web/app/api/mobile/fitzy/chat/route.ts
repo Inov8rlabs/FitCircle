@@ -4,7 +4,9 @@ import { z } from 'zod';
 import { aiConsentFail } from '@/lib/consents/http';
 import { parseFitzyContext } from '@/lib/fitzy/context';
 import { fitzyUpgradeMessage, paywallFor } from '@/lib/fitzy/paywall';
+import { checkIntegrity } from '@/lib/integrity/enforcement';
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
+import { enforceAbuseLimits } from '@/lib/security/abuse-limits';
 import { AiConsentRequiredError, ConsentService } from '@/lib/services/consent-service';
 import { FitzyNotFoundError } from '@/lib/services/fitzy-conversation-service';
 import { FitzyService } from '@/lib/services/fitzy-service';
@@ -49,6 +51,12 @@ export async function POST(request: NextRequest) {
     const user = await requireMobileAuth(request);
     // First Fitzy open → profiles.fitzy_opened_at (ACTIVATION_JOURNEY_SPEC §6). Zero queries once set.
     runAfterResponse(() => JourneyService.markFitzyOpened(user.id, user), 'fitzy opened');
+
+    // Abuse limits (per user + device), then the Android device check (before the body is read).
+    const limited = await enforceAbuseLimits(request, 'fitzy', { userId: user.id });
+    if (limited) return limited;
+    const integrity = await checkIntegrity(request, { action: 'fitzy', userId: user.id });
+    if (!integrity.allowed) return integrity.response!;
 
     let body: unknown;
     try {

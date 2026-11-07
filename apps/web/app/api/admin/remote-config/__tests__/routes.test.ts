@@ -88,6 +88,8 @@ describe('GET list', () => {
     expect(body.data.keys).toEqual([
       expect.objectContaining({ key: 'free_food_ai_analyses_total', type: 'int', min: 0, max: 1000, codeDefault: 5, default: null, rules: [], unit: expect.any(String), description: expect.any(String) }),
       expect.objectContaining({ key: 'free_fitzy_messages_per_day', type: 'int', min: 0, max: 200, codeDefault: 0, default: null, rules: [] }),
+      expect.objectContaining({ key: 'integrity_enforce_android', type: 'enum', options: ['block', 'log', 'off'], min: null, max: null, codeDefault: 'block', default: null, rules: [] }),
+      expect.objectContaining({ key: 'integrity_bypass_user_ids', type: 'string_list', maxItems: 200, min: null, max: null, codeDefault: [], default: null, rules: [] }),
     ]);
   });
 });
@@ -187,6 +189,8 @@ describe('preview + estimate', () => {
     expect(body.data.values).toEqual({
       free_food_ai_analyses_total: { value: 9, source: 'rule', ruleId: expect.any(String), ruleName: 'iOS' },
       free_fitzy_messages_per_day: { value: 2, source: 'default' },
+      integrity_enforce_android: { value: 'block', source: 'code' },
+      integrity_bypass_user_ids: { value: [], source: 'code' },
     });
     expect(body.data.context).toMatchObject({ platform: 'ios', country: 'US', channel: 'apple_ads', signupAt: '2026-11-01T00:00:00Z' });
     expect((await PREVIEW(req('/api/admin/remote-config/preview', { method: 'POST', body: { userId: 'x' } }))).status).toBe(400);

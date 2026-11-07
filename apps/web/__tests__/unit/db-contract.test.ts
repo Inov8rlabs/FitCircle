@@ -29,6 +29,11 @@ const PENDING_RELATIONS: string[] = [
   'remote_config_changes',
   // 130_user_consents.sql (docs/PRIVACY_COMPLIANCE_SPEC.md §2) — written, not applied yet.
   'user_consents',
+  // 132_app_integrity.sql (docs/INTEGRITY_CONTRACT.md) — written, not applied yet.
+  'integrity_nonces',
+  'device_attestations',
+  'security_events',
+  'security_alert_state',
 ];
 
 const APP_DIR = join(__dirname, '..', '..', 'app');

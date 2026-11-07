@@ -2,7 +2,9 @@ import { createClient } from '@supabase/supabase-js';
 import { type NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 
-import { authRateLimiter, getIdentifier, applyRateLimit } from '@/lib/middleware/rate-limit';
+import { checkIntegrity, recordSessionAttestation, resolveLoginBypass } from '@/lib/integrity/enforcement';
+import { enforceAbuseLimits, requestDeviceId } from '@/lib/security/abuse-limits';
+import { recordSecurityEvent } from '@/lib/security/security-events';
 import { MobileAPIService } from '@/lib/services/mobile-api-service';
 import { toMobileUser } from '@/lib/services/mobile-profile-response';
 import { authEmailSchema } from '@/lib/validation/auth-email';
@@ -16,13 +18,19 @@ const loginSchema = z.object({
 
 export async function POST(request: NextRequest) {
   try {
-    // Apply rate limiting (5 attempts per 15 minutes per IP)
-    const identifier = getIdentifier(request);
-    const rateLimitResponse = await applyRateLimit(request, authRateLimiter, identifier);
-    if (rateLimitResponse) return rateLimitResponse;
     // Parse and validate request body
     const body = await request.json();
     const validatedData = parseLenient(loginSchema, body);
+
+    // Shared limits: 10 / 15 min per IP, 5 / 15 min per account (canonical email).
+    const rateLimitResponse = await enforceAbuseLimits(request, 'login', { email: validatedData.email });
+    if (rateLimitResponse) return rateLimitResponse;
+
+    // Android integrity_v1 clients must pass the device check. A failing device is
+    // refused whether or not the password is right; only users on
+    // integrity_bypass_user_ids get through (resolved after the password check).
+    const integrity = await checkIntegrity(request, { action: 'login' });
+    if (!integrity.allowed && !integrity.bypassEligible) return integrity.response!;
 
     // Create Supabase client
     const supabase = createClient(
@@ -41,6 +49,24 @@ export async function POST(request: NextRequest) {
       email: validatedData.email,
       password: validatedData.password,
     });
+
+    // Blocked device: only a bypass-listed user with the right password continues.
+    if (!integrity.allowed) {
+      const bypass = await resolveLoginBypass(request, integrity, !error && data.user ? data.user.id : null);
+      if (!bypass) return integrity.response!;
+    }
+
+    if (error || !data.user || !data.session) {
+      // Credential-stuffing signal: the account is stored hashed only.
+      await recordSecurityEvent(request, {
+        kind: 'login_failure',
+        result: 'rejected',
+        action: 'login',
+        reason: error?.message?.toLowerCase().includes('not confirmed') ? 'email_not_confirmed' : 'invalid_credentials',
+        email: validatedData.email,
+        deviceId: requestDeviceId(request),
+      });
+    }
 
     if (error) {
       // Distinguish unconfirmed-email from generic invalid-credentials so clients
@@ -93,6 +119,7 @@ export async function POST(request: NextRequest) {
 
     // Generate JWT tokens for mobile
     const tokens = await MobileAPIService.generateTokens(data.user.id, data.user.email!);
+    await recordSessionAttestation(request, integrity, { userId: data.user.id, accessToken: tokens.access_token });
 
     // Return mobile-friendly response matching iOS APIResponse<AuthResponse> format
     const responsePayload = {

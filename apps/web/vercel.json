@@ -9,6 +9,10 @@
       "schedule": "*/15 * * * *"
     },
     {
+      "path": "/api/cron/security/alerts",
+      "schedule": "*/15 * * * *"
+    },
+    {
       "path": "/api/cron/foods-loader",
       "schedule": "0 4 * * 0"
     },

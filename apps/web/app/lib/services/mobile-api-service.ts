@@ -1,3 +1,5 @@
+import { randomUUID } from 'node:crypto';
+
 import jwt from 'jsonwebtoken';
 
 import { logIgnoredQueryError } from '@/lib/api/route-errors';
@@ -75,6 +77,8 @@ export interface JWTPayload {
   userId: string;
   email: string;
   type: 'access' | 'refresh';
+  /** Access tokens only: session id (one per issued token pair). */
+  sid?: string;
   iat?: number;
   exp?: number;
 }
@@ -120,6 +124,8 @@ export class MobileAPIService {
         userId,
         email,
         type: 'access',
+        // Session id: device attestations are bound to it (lib/integrity/attestations.ts).
+        sid: randomUUID(),
       },
       jwtSecret,
       { expiresIn: accessTokenExpiry } as jwt.SignOptions

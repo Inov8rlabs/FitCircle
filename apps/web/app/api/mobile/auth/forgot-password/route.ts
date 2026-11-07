@@ -2,7 +2,7 @@ import { createClient } from '@supabase/supabase-js';
 import { type NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 
-import { createRateLimiter, getIdentifier, applyRateLimit } from '@/lib/middleware/rate-limit';
+import { enforceAbuseLimits } from '@/lib/security/abuse-limits';
 import { authEmailSchema } from '@/lib/validation/auth-email';
 import { parseLenient } from '@/lib/validation/lenient-parse';
 
@@ -10,19 +10,13 @@ const forgotPasswordSchema = z.object({
   email: authEmailSchema('Invalid email'),
 });
 
-const forgotPasswordRateLimiter = createRateLimiter({
-  interval: 15 * 60 * 1000, // 15 minutes
-  uniqueTokenPerInterval: 500,
-  maxRequests: 3,
-});
-
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const { email } = parseLenient(forgotPasswordSchema, body);
 
-    const identifier = getIdentifier(request);
-    const rateLimitResponse = await applyRateLimit(request, forgotPasswordRateLimiter, `forgot:${identifier}:${email}`);
+    // 3 / hour per mailbox, 10 / hour per IP (lib/security/abuse-limits.ts).
+    const rateLimitResponse = await enforceAbuseLimits(request, 'forgot_password', { email });
     if (rateLimitResponse) return rateLimitResponse;
 
     const supabase = createClient(

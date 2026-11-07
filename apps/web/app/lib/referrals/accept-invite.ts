@@ -40,7 +40,15 @@ export interface AcceptInviteOutcome {
  */
 export async function acceptInvite(
   userId: string,
-  input: { code: string; ref?: string | null; source: AttributionSource; deviceId?: string | null }
+  input: {
+    code: string;
+    ref?: string | null;
+    source: AttributionSource;
+    deviceId?: string | null;
+    attestedDeviceId?: string | null;
+    integrityClient?: boolean;
+    platform?: 'ios' | 'android' | 'web' | null;
+  }
 ): Promise<AcceptInviteOutcome> {
   const code = normalizeCode(input.code);
   const ref = input.ref ? normalizeCode(input.ref) : null;
@@ -55,6 +63,9 @@ export async function acceptInvite(
       ref,
       source: input.source,
       deviceId: input.deviceId ?? null,
+      ...(input.attestedDeviceId ? { attestedDeviceId: input.attestedDeviceId } : {}),
+      ...(input.integrityClient ? { integrityClient: true } : {}),
+      ...(input.platform ? { platform: input.platform } : {}),
     });
     referral = { claimed: true, result };
   } catch (error) {

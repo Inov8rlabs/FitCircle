@@ -1,6 +1,8 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { z } from 'zod';
 
+import { parseClientPlatform } from '@/lib/experiments/request-info';
+import { checkIntegrity, isIntegrityClient } from '@/lib/integrity/enforcement';
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { applyRateLimit, createRateLimiter, getIdentifier } from '@/lib/middleware/rate-limit';
 import { acceptInvite } from '@/lib/referrals/accept-invite';
@@ -10,7 +12,7 @@ import { parseLenient } from '@/lib/validation/lenient-parse';
 
 export const dynamic = 'force-dynamic';
 
-const claimLimiter = createRateLimiter({ interval: 60 * 60_000, uniqueTokenPerInterval: 5000, maxRequests: 20 });
+const claimLimiter = createRateLimiter({ name: 'referral-claim', interval: 60 * 60_000, uniqueTokenPerInterval: 5000, maxRequests: 20 });
 
 const claimSchema = z.object({
   code: z.string().min(1).max(32),
@@ -42,12 +44,17 @@ export async function POST(request: NextRequest) {
     const user = await requireMobileAuth(request);
     const limited = await applyRateLimit(request, claimLimiter, getIdentifier(request, user.id));
     if (limited) return limited;
+    const integrity = await checkIntegrity(request, { action: 'referral_claim', userId: user.id });
+    if (!integrity.allowed) return integrity.response!;
     const body = parseLenient(claimSchema, await request.json());
     const { referral, circleJoin } = await acceptInvite(user.id, {
       code: body.code,
       ref: body.ref ?? null,
       source: body.source,
       deviceId: body.deviceId ?? null,
+      attestedDeviceId: integrity.attestedDeviceId,
+      integrityClient: isIntegrityClient(request),
+      platform: parseClientPlatform(request.headers.get('x-app-platform') ?? request.headers.get('x-platform')),
     });
     if (referral.claimed) return ok({ ...referral.result, circleJoin }, startTime);
 

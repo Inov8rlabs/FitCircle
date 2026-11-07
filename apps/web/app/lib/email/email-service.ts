@@ -11,8 +11,11 @@
  *     webhook can tell the streams apart;
  *   - never throws.
  *
- * Supabase Auth mail (password reset, confirmation) is sent by Supabase via
- * its SMTP settings, not from here (docs/EMAIL_QUALITY.md).
+ * Supabase Auth mail (password reset, resent confirmations) is sent by Supabase via
+ * its SMTP settings (docs/EMAIL_QUALITY.md). The sign-up confirmation for accounts
+ * created by our register routes is sent from here (category `auth`,
+ * lib/services/email-signup-service.ts) because those accounts are created with the
+ * admin API, which sends nothing.
  */
 
 import { Resend } from 'resend';
@@ -115,6 +118,7 @@ export async function sendBatchInvitationEmails(
 
 /** Which stream an email belongs to (Resend tag `category`; docs/EMAIL_QUALITY.md). */
 export type EmailCategory =
+  | 'auth'
   | 'welcome'
   | 'circle_invite'
   | 'referral_invite'
@@ -124,6 +128,7 @@ export type EmailCategory =
   | 'onboarding_nudge'
   | 'notification'
   | 'ads_report'
+  | 'security_alert'
   | 'other';
 
 export interface SendEmailParams {

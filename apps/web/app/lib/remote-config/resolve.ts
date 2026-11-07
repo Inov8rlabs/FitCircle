@@ -12,7 +12,7 @@
 import { z } from 'zod';
 
 import { audienceMismatch, audienceSchema, type AudienceFacts, type RcAudience } from './audience';
-import { keyDef, validValue, type RemoteConfigKey } from './registry';
+import { codeDefault, validValue, type RemoteConfigKey, type RemoteConfigValue } from './registry';
 
 export interface RuleRow {
   id: string;
@@ -50,7 +50,7 @@ export const EMPTY_SNAPSHOT: ConfigSnapshot = { rules: [], defaults: new Map() }
 export type ResolutionSource = 'rule' | 'default' | 'code';
 
 export interface Resolution {
-  value: number;
+  value: RemoteConfigValue;
   source: ResolutionSource;
   ruleId?: string;
   ruleName?: string;
@@ -88,7 +88,7 @@ export function fallbackResolution(snapshot: ConfigSnapshot, key: RemoteConfigKe
   const row = snapshot.defaults.get(key);
   const v = row ? validValue(key, row.value) : null;
   if (v !== null) return { value: v, source: 'default' };
-  return { value: keyDef(key).default, source: 'code' };
+  return { value: codeDefault(key), source: 'code' };
 }
 
 /** Synchronous resolution when every fact a candidate needs is already in `facts`. */

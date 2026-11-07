@@ -14,6 +14,12 @@
  */
 import { createHash } from 'node:crypto';
 
+import { logIgnoredQueryError } from '@/lib/api/route-errors';
+import { attestedDeviceIds } from '@/lib/integrity/attestations';
+import { enforceMode } from '@/lib/integrity/enforcement';
+import { recordSecurityEvent } from '@/lib/security/security-events';
+import { sameMailbox } from '@/lib/validation/email-canonical';
+
 import {
   circleInviteUrl,
   circleShareMessage,
@@ -46,7 +52,6 @@ import { createAdminSupabase } from '../supabase-admin';
 import { FeatureFlagService } from './feature-flag-service';
 import { ReferralInviteService, joinedNudgeState } from './referral-invite-service';
 import { ReferralRewardService } from './referral-reward-service';
-import { logIgnoredQueryError } from '@/lib/api/route-errors';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -61,6 +66,9 @@ interface ReferralRow {
   status_reason: string | null;
   attributed_at: string;
   qualified_at: string | null;
+  /** Migration 132 (absent before it is applied). */
+  invitee_platform?: string | null;
+  invitee_device_attested?: boolean | null;
 }
 
 interface ProfileLite {
@@ -262,6 +270,11 @@ export class ReferralService {
     if (resolved.inviterId === inviteeId) {
       throw new ReferralError('SELF_REFERRAL', "You can't use your own invite");
     }
+    // Same mailbox under another spelling (+tag, Gmail dots) is the same person.
+    if (await this.sameMailboxAccounts(resolved.inviterId, inviteeId)) {
+      await recordSecurityEvent(null, { kind: 'referral_rejection', result: 'rejected', reason: 'same_mailbox', userId: inviteeId, deviceId: input.attestedDeviceId ?? null });
+      throw new ReferralError('SELF_REFERRAL', "You can't use your own invite");
+    }
 
     const existing = await this.referralFor(inviteeId);
     if (existing) {
@@ -304,6 +317,10 @@ export class ReferralService {
       deviceVerdict = await this.deviceVerdict(deviceHash, inviteeId, resolved.inviterId, invitee.created_at);
       await this.recordDeviceHash(deviceHash, inviteeId);
     }
+    // An attested device the inviter has also attested from is the inviter's phone.
+    if (!deviceVerdict && input.attestedDeviceId && (await attestedDeviceIds(resolved.inviterId)).includes(input.attestedDeviceId)) {
+      deviceVerdict = 'device_matches_inviter';
+    }
 
     const { data: inserted, error } = await supabase
       .from('referrals')
@@ -330,11 +347,22 @@ export class ReferralService {
       }
       throw new Error(`referral insert failed: ${error.message}`);
     }
+    // Qualification input (migration 132): separate best-effort write so a missing column
+    // never fails the claim.
+    const integrityFields = {
+      invitee_platform: input.platform ?? null,
+      // null for clients that cannot attest (legacy Android, iOS, web).
+      invitee_device_attested: input.integrityClient ? !!input.attestedDeviceId : null,
+    };
+    const { error: integrityFieldsError } = await supabase.from('referrals').update(integrityFields).eq('id', (inserted as ReferralRow).id);
+    if (integrityFieldsError) console.warn('[ReferralService] integrity fields not stored:', integrityFieldsError.message);
+
     if (deviceVerdict) {
+      await recordSecurityEvent(null, { kind: 'referral_rejection', result: 'rejected', reason: deviceVerdict, userId: inviteeId, deviceId: input.attestedDeviceId ?? null });
       throw new ReferralError('DEVICE_INELIGIBLE', 'This invite can only be used on a new device');
     }
 
-    const referral = inserted as ReferralRow;
+    const referral = { ...(inserted as ReferralRow), ...(integrityFieldsError ? {} : integrityFields) };
     const [inviter, inviteeProfile, { data: contact }] = await Promise.all([
       this.profile(resolved.inviterId),
       this.profile(inviteeId),
@@ -454,7 +482,20 @@ export class ReferralService {
 
     if (isDisposableEmail(invitee.email)) {
       await this.transition(referral.id, 'pending', 'rejected', 'disposable_email');
+      await recordSecurityEvent(null, { kind: 'referral_rejection', result: 'rejected', reason: 'disposable_email', userId: referral.invitee_id });
       return 'rejected';
+    }
+
+    const device = await this.deviceQualification(referral);
+    if (device === 'device_matches_inviter') {
+      await this.transition(referral.id, 'pending', 'rejected', device);
+      await recordSecurityEvent(null, { kind: 'referral_rejection', result: 'rejected', reason: device, userId: referral.invitee_id });
+      return 'rejected';
+    }
+    if (device === 'device_not_attested') {
+      const held = await this.transition(referral.id, 'pending', 'review', device);
+      if (held) await recordSecurityEvent(null, { kind: 'referral_rejection', result: 'log_only', reason: device, userId: referral.invitee_id });
+      return held ? 'review' : referral.status;
     }
 
     let next: ReferralStatus = 'qualified';
@@ -474,6 +515,39 @@ export class ReferralService {
     if (!won) return referral.status; // another worker got here first
     if (next === 'qualified') await this.payOut({ ...referral, status: 'qualified' });
     return next;
+  }
+
+  /**
+   * Device rules for paying a referral (Android app integrity):
+   *  - an invitee who claimed from an integrity_v1 Android client must have claimed from an
+   *    attested device (else held for review), unless integrity enforcement is switched off.
+   *    Legacy clients (invitee_device_attested null) are not held: the mailbox and
+   *    device-id checks at claim time and the rate limits apply to them as to everyone;
+   *  - inviter and invitee never share an attested device id.
+   */
+  static async deviceQualification(referral: ReferralRow): Promise<'ok' | 'device_not_attested' | 'device_matches_inviter'> {
+    if (referral.inviter_id) {
+      const [inviterDevices, inviteeDevices] = await Promise.all([
+        attestedDeviceIds(referral.inviter_id),
+        attestedDeviceIds(referral.invitee_id),
+      ]);
+      if (inviteeDevices.some((d) => inviterDevices.includes(d))) return 'device_matches_inviter';
+    }
+    if (referral.invitee_device_attested === false) {
+      const mode = await enforceMode().catch(() => 'block' as const);
+      if (mode !== 'off') return 'device_not_attested';
+    }
+    return 'ok';
+  }
+
+  /** Inviter and invitee are the same mailbox (canonical email). */
+  private static async sameMailboxAccounts(inviterId: string, inviteeId: string): Promise<boolean> {
+    const { data, error } = await createAdminSupabase().from('profiles').select('id, email').in('id', [inviterId, inviteeId]);
+    if (error) return false;
+    const rows = (data ?? []) as Array<{ id: string; email: string | null }>;
+    const inviter = rows.find((r) => r.id === inviterId)?.email;
+    const invitee = rows.find((r) => r.id === inviteeId)?.email;
+    return sameMailbox(inviter, invitee);
   }
 
   /** Admin: approve a referral held for review. */

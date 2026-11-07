@@ -52,6 +52,7 @@ const SIGN_CHUNK = 100;
 
 /** Per user, per server instance (in-memory): 5 exports an hour. */
 export const dataExportRateLimiter = createRateLimiter({
+  name: 'data-export',
   interval: 60 * 60 * 1000,
   uniqueTokenPerInterval: 5000,
   maxRequests: 5,

@@ -4,8 +4,10 @@ import { z } from 'zod';
 
 import { parseClientPlatform } from '@/lib/experiments/request-info';
 import { isRegionRestricted } from '@/lib/geo/region-restriction';
-import { authRateLimiter, getIdentifier, applyRateLimit } from '@/lib/middleware/rate-limit';
+import { enforceAbuseLimits } from '@/lib/security/abuse-limits';
+import { recordSecurityEvent } from '@/lib/security/security-events';
 import { AppleTokenService } from '@/lib/services/apple-token-service';
+import { setEmailCanonical } from '@/lib/services/email-signup-service';
 import { MobileAPIService } from '@/lib/services/mobile-api-service';
 import { toMobileUser } from '@/lib/services/mobile-profile-response';
 import { SocialAuthError, findOrCreateSocialUser } from '@/lib/services/social-auth-service';
@@ -46,8 +48,7 @@ async function verifyAppleIdentityToken(identityToken: string): Promise<AppleJWT
 
 export async function POST(request: NextRequest) {
   try {
-    const identifier = getIdentifier(request);
-    const rateLimitResponse = await applyRateLimit(request, authRateLimiter, identifier);
+    const rateLimitResponse = await enforceAbuseLimits(request, 'social_login');
     if (rateLimitResponse) return rateLimitResponse;
 
     const body = await request.json();
@@ -111,6 +112,10 @@ export async function POST(request: NextRequest) {
 
     await recordTestDeviceSignal(userId, request.headers); // X-Test-Device: 1 (Test Lab robots)
     const tokens = await MobileAPIService.generateTokens(userId, email);
+    if (isNewUser) {
+      await setEmailCanonical(supabase, userId, email);
+      await recordSecurityEvent(request, { kind: 'signup', result: 'pass', action: 'apple', reason: 'apple', userId });
+    }
 
     // First sign-in created the account: one welcome email after the response.
     // Returning sign-ins (isNewUser false) never get one; the once-only record in

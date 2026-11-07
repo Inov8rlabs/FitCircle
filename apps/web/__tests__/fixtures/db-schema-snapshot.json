@@ -700,6 +700,14 @@
       "columns": [
         "user_id"
       ],
+      "name": "device_attestations_user_id_fkey",
+      "ref": "profiles",
+      "table": "device_attestations"
+    },
+    {
+      "columns": [
+        "user_id"
+      ],
       "name": "dietary_preferences_user_id_fkey",
       "ref": "profiles",
       "table": "dietary_preferences"
@@ -1412,6 +1420,14 @@
       "columns": [
         "user_id"
       ],
+      "name": "security_events_user_id_fkey",
+      "ref": "profiles",
+      "table": "security_events"
+    },
+    {
+      "columns": [
+        "user_id"
+      ],
       "name": "share_cards_user_id_fkey",
       "ref": "profiles",
       "table": "share_cards"
@@ -1511,6 +1527,14 @@
       "name": "user_consent_user_id_fkey",
       "ref": "profiles",
       "table": "user_consent"
+    },
+    {
+      "columns": [
+        "user_id"
+      ],
+      "name": "user_consents_user_id_fkey",
+      "ref": "profiles",
+      "table": "user_consents"
     },
     {
       "columns": [
@@ -2306,6 +2330,18 @@
       "submitted_to_fitcircles",
       "submission_timestamp"
     ],
+    "device_attestations": [
+      "id",
+      "user_id",
+      "session_id",
+      "device_id",
+      "platform",
+      "status",
+      "verdict",
+      "app_version",
+      "created_at",
+      "expires_at"
+    ],
     "dietary_preferences": [
       "user_id",
       "diet",
@@ -2906,6 +2942,14 @@
       "updated_at",
       "updated_by"
     ],
+    "integrity_nonces": [
+      "nonce",
+      "device_id",
+      "request_path",
+      "body_sha256",
+      "created_at",
+      "expires_at"
+    ],
     "leaderboard": [
       "id",
       "challenge_id",
@@ -3018,7 +3062,8 @@
       "id",
       "user_id",
       "image_hash",
-      "created_at"
+      "created_at",
+      "device_id"
     ],
     "nutrition_training_samples": [
       "id",
@@ -3190,7 +3235,8 @@
       "onboarding_flow",
       "onboarding_gate",
       "onboarding_paywall_at",
-      "paywall_last_opened_at"
+      "paywall_last_opened_at",
+      "email_canonical"
     ],
     "progress_entries": [
       "id",
@@ -3331,7 +3377,9 @@
       "last_nudged_at",
       "inviter_notified_at",
       "progress_days",
-      "progress_notified_days"
+      "progress_notified_days",
+      "invitee_platform",
+      "invitee_device_attested"
     ],
     "release_events": [
       "id",
@@ -3388,6 +3436,65 @@
       "notes_updated_at",
       "created_at",
       "updated_at"
+    ],
+    "remote_config_changes": [
+      "id",
+      "config_key",
+      "target",
+      "rule_id",
+      "action",
+      "actor",
+      "before",
+      "after",
+      "at"
+    ],
+    "remote_config_defaults": [
+      "config_key",
+      "value",
+      "updated_by",
+      "updated_at"
+    ],
+    "remote_config_rules": [
+      "id",
+      "config_key",
+      "name",
+      "enabled",
+      "priority",
+      "audience",
+      "value",
+      "created_by",
+      "created_at",
+      "updated_by",
+      "updated_at"
+    ],
+    "security_alert_state": [
+      "signal",
+      "last_sent_at",
+      "last_severity",
+      "last_value",
+      "updated_at"
+    ],
+    "security_events": [
+      "id",
+      "created_at",
+      "kind",
+      "route",
+      "action",
+      "result",
+      "reason",
+      "platform",
+      "app_version",
+      "app_build",
+      "user_id",
+      "device_id",
+      "account_hash",
+      "ip_prefix",
+      "asn",
+      "country",
+      "integrity_error",
+      "verdict",
+      "count",
+      "dedupe_key"
     ],
     "share_cards": [
       "id",
@@ -3532,6 +3639,17 @@
       "withdrawn_at",
       "expires_at",
       "metadata",
+      "created_at"
+    ],
+    "user_consents": [
+      "id",
+      "user_id",
+      "consent_type",
+      "granted",
+      "policy_version",
+      "source",
+      "app_version",
+      "granted_at",
       "created_at"
     ],
     "user_goals": [

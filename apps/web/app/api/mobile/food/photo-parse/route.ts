@@ -2,7 +2,9 @@ import * as Sentry from '@sentry/nextjs';
 import { after, type NextRequest, NextResponse } from 'next/server';
 
 import { foodAiUpgradeDetails, foodAiUpgradeMessage } from '@/lib/fitzy/paywall';
+import { checkIntegrity } from '@/lib/integrity/enforcement';
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
+import { enforceAbuseLimits } from '@/lib/security/abuse-limits';
 import { AI_CONSENT_MESSAGE, AiConsentRequiredError, ConsentService, aiConsentErrorDetails } from '@/lib/services/consent-service';
 import { NutritionIntelligenceService } from '@/lib/services/nutrition-intelligence-service';
 import { NutritionTrainingService } from '@/lib/services/nutrition-training-service';
@@ -44,6 +46,13 @@ export async function POST(request: NextRequest) {
 
   try {
     const user = await requireMobileAuth(request);
+
+    // Abuse limits (per user + device), then the Android device check. The integrity
+    // check hashes the raw multipart bytes, so it runs before formData() reads them.
+    const limited = await enforceAbuseLimits(request, 'food_ai', { userId: user.id });
+    if (limited) return limited;
+    const integrity = await checkIntegrity(request, { action: 'food_ai', userId: user.id });
+    if (!integrity.allowed) return integrity.response!;
 
     const formData = await request.formData();
     const files = formData.getAll('image').filter((f): f is File => typeof f !== 'string');

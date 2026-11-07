@@ -54,22 +54,5 @@ export const REFERRAL_GRANT = {
   lifetime: 'referral-lifetime',
 } as const;
 
-/**
- * Throwaway-inbox domains. Not exhaustive by design — it stops the casual
- * "ten Gmail-less burner accounts" farm; velocity + device checks do the rest.
- */
-export const DISPOSABLE_EMAIL_DOMAINS = new Set([
-  'mailinator.com', 'guerrillamail.com', 'guerrillamail.net', 'sharklasers.com', '10minutemail.com',
-  '10minutemail.net', 'tempmail.com', 'temp-mail.org', 'temp-mail.io', 'throwawaymail.com',
-  'yopmail.com', 'yopmail.net', 'getnada.com', 'nada.email', 'trashmail.com', 'trashmail.de',
-  'dispostable.com', 'maildrop.cc', 'mintemail.com', 'mohmal.com', 'emailondeck.com',
-  'fakeinbox.com', 'tempinbox.com', 'mailnesia.com', 'spamgourmet.com', 'mytemp.email',
-  'tempr.email', 'discard.email', 'burnermail.io', 'inboxkitten.com', 'mail.tm', 'tmpmail.org',
-  'tmail.ws', 'moakt.com', 'emailfake.com', 'tempail.com', 'luxusmail.org', 'mailpoof.com',
-]);
-
-export function isDisposableEmail(email: string | null | undefined): boolean {
-  if (!email) return false;
-  const domain = email.split('@')[1]?.trim().toLowerCase();
-  return !!domain && DISPOSABLE_EMAIL_DOMAINS.has(domain);
-}
+/** Throwaway-inbox domains: one maintained list (lib/validation/disposable-email.ts). */
+export { DISPOSABLE_EMAIL_DOMAINS, isDisposableEmail } from '../validation/disposable-email';

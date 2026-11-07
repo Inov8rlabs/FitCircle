@@ -4,7 +4,15 @@ import { z } from 'zod';
 
 import { parseClientPlatform } from '@/lib/experiments/request-info';
 import { isRegionRestricted, regionNotAvailableBody } from '@/lib/geo/region-restriction';
-import { registerRateLimiter, getIdentifier, applyRateLimit } from '@/lib/middleware/rate-limit';
+import { checkIntegrity, recordSessionAttestation } from '@/lib/integrity/enforcement';
+import { enforceAbuseLimits, requestDeviceId } from '@/lib/security/abuse-limits';
+import { recordSecurityEvent } from '@/lib/security/security-events';
+import {
+  createEmailAccount,
+  sendSignupConfirmation,
+  setEmailCanonical,
+  signupRequiresConfirmation,
+} from '@/lib/services/email-signup-service';
 import { MobileAPIService } from '@/lib/services/mobile-api-service';
 import { toMobileUser } from '@/lib/services/mobile-profile-response';
 import { isTestDeviceRequest, recordTestDeviceSignal } from '@/lib/services/test-device-service';
@@ -17,6 +25,7 @@ import {
 import { triggerWelcomeEmail } from '@/lib/services/welcome-email-service';
 import { authEmailSchema } from '@/lib/validation/auth-email';
 import { coerceDisplayName } from '@/lib/validation/display-name';
+import { DISPOSABLE_EMAIL_MESSAGE, isDisposableEmail } from '@/lib/validation/disposable-email';
 import { parseLenient } from '@/lib/validation/lenient-parse';
 
 // Validation schema
@@ -34,13 +43,24 @@ export async function POST(request: NextRequest) {
   // EU/EEA: no new accounts (WEB_EU_SIGNUP_BLOCK, default on; lib/geo/region-restriction.ts).
   if (isRegionRestricted(request)) return NextResponse.json(regionNotAvailableBody(), { status: 403 });
   try {
-    // Apply rate limiting (3 registrations per day per IP)
-    const identifier = getIdentifier(request);
-    const rateLimitResponse = await applyRateLimit(request, registerRateLimiter, identifier);
+    // Shared limits: 3/h + 10/day per IP, 3/day per device (lib/security/abuse-limits.ts).
+    const rateLimitResponse = await enforceAbuseLimits(request, 'register');
     if (rateLimitResponse) return rateLimitResponse;
     // Parse and validate request body
     const body = await request.json();
     const validatedData = parseLenient(registerSchema, body);
+
+    if (isDisposableEmail(validatedData.email)) {
+      await recordSecurityEvent(request, { kind: 'signup_block', result: 'block', reason: 'disposable_email', action: 'register', deviceId: requestDeviceId(request) });
+      return NextResponse.json(
+        { error: 'Validation error', message: DISPOSABLE_EMAIL_MESSAGE, code: 'VALIDATION_ERROR', details: [{ reason: 'disposable_email' }] },
+        { status: 400 }
+      );
+    }
+
+    // Android integrity_v1 clients must pass the device check (lib/integrity/enforcement.ts).
+    const integrity = await checkIntegrity(request, { action: 'register' });
+    if (!integrity.allowed) return integrity.response!;
 
     // Create Supabase client
     const supabase = createClient(
@@ -83,33 +103,24 @@ export async function POST(request: NextRequest) {
       username = await ensureUniqueUsername(deriveUsernameBase(validatedData.email), usernameTaken);
     }
 
-    // Sign up with Supabase Auth
-    const { data: authData, error: authError } = await supabase.auth.signUp({
+    // Create the account with the Auth admin API (public sign-up can stay off).
+    const requireConfirmation = signupRequiresConfirmation();
+    const created = await createEmailAccount(supabase, {
       email: validatedData.email,
       password: validatedData.password,
+      requireConfirmation,
     });
 
-    if (authError) {
+    if (!created.ok) {
+      const { failure } = created;
       return NextResponse.json(
-        {
-          error: authError.message,
-          message: authError.message || 'Failed to create account',
-          code: 'SIGNUP_FAILED',
-        },
-        { status: 400 }
+        failure.kind === 'error'
+          ? { error: 'Registration failed', message: 'Failed to create user account', code: 'SIGNUP_FAILED' }
+          : { error: failure.message, message: failure.message, code: 'SIGNUP_FAILED' },
+        { status: failure.kind === 'error' ? 500 : 400 }
       );
     }
-
-    if (!authData.user) {
-      return NextResponse.json(
-        {
-          error: 'Registration failed',
-          message: 'Failed to create user account',
-          code: 'SIGNUP_FAILED',
-        },
-        { status: 500 }
-      );
-    }
+    const authData = { user: created.user };
 
     // Create profile
     const { data: profile, error: profileError } = await supabase
@@ -141,8 +152,15 @@ export async function POST(request: NextRequest) {
     // Firebase Test Lab / Play pre-launch robots send X-Test-Device: 1 (excluded from lifecycle nudges).
     await recordTestDeviceSignal(authData.user.id, request.headers);
 
+    await setEmailCanonical(supabase, authData.user.id, validatedData.email);
+    if (requireConfirmation) {
+      await sendSignupConfirmation(supabase, { email: validatedData.email, password: validatedData.password, userId: authData.user.id });
+    }
+
     // Generate JWT tokens for mobile
     const tokens = await MobileAPIService.generateTokens(authData.user.id, authData.user.email!);
+    await recordSessionAttestation(request, integrity, { userId: authData.user.id, accessToken: tokens.access_token });
+    await recordSecurityEvent(request, { kind: 'signup', result: 'pass', action: 'register', reason: 'email', userId: authData.user.id, deviceId: requestDeviceId(request) });
 
     // New account: one welcome email, after the response (never fails registration).
     triggerWelcomeEmail({

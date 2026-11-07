@@ -43,6 +43,8 @@
     "@types/canvas-confetti": "^1.9.0",
     "@types/jsonwebtoken": "^9.0.10",
     "@types/react-window": "^1.8.8",
+    "@upstash/ratelimit": "2.2.0",
+    "@upstash/redis": "1.39.0",
     "@vercel/analytics": "^1.6.1",
     "ai": "^6.0.194",
     "canvas-confetti": "^1.9.3",

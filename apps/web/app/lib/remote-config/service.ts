@@ -24,11 +24,15 @@ import { audienceMismatch, audienceNeeds, audienceSchema, type AudienceFacts, ty
 import {
   REMOTE_CONFIG_KEYS,
   REMOTE_CONFIG_REGISTRY,
+  codeDefault,
   isRemoteConfigKey,
-  keyDef,
   validValue,
   valueError,
+  type EnumConfigKey,
+  type IntConfigKey,
+  type ListConfigKey,
   type RemoteConfigKey,
+  type RemoteConfigValue,
 } from './registry';
 import {
   EMPTY_SNAPSHOT,
@@ -224,7 +228,7 @@ function requireKey(key: string): RemoteConfigKey {
   return key;
 }
 
-function requireValue(key: RemoteConfigKey, value: unknown): number {
+function requireValue(key: RemoteConfigKey, value: unknown): RemoteConfigValue {
   const v = validValue(key, value);
   if (v === null) throw badRequest('value', valueError(key));
   return v;
@@ -260,12 +264,26 @@ export class RemoteConfigService {
       return await resolveIn(snap, key, new FactLoader(ctx));
     } catch (err: any) {
       console.warn(`[remote-config] resolve ${key} failed; code default`, err?.message ?? err);
-      return { value: keyDef(key).default, source: 'code' };
+      return { value: codeDefault(key), source: 'code' };
     }
   }
 
-  static async value(key: RemoteConfigKey, ctx: RemoteConfigContext): Promise<number> {
-    return (await this.resolveConfig(key, ctx)).value;
+  /** An int key's resolved value. */
+  static async value(key: IntConfigKey, ctx: RemoteConfigContext): Promise<number> {
+    const v = (await this.resolveConfig(key, ctx)).value;
+    return typeof v === 'number' ? v : (codeDefault(key) as number);
+  }
+
+  /** An enum key's resolved value (always one of the registry options). */
+  static async enumValue(key: EnumConfigKey, ctx: RemoteConfigContext): Promise<string> {
+    const v = (await this.resolveConfig(key, ctx)).value;
+    return typeof v === 'string' ? v : (codeDefault(key) as string);
+  }
+
+  /** A string-list key's resolved value. */
+  static async listValue(key: ListConfigKey, ctx: RemoteConfigContext): Promise<string[]> {
+    const v = (await this.resolveConfig(key, ctx)).value;
+    return Array.isArray(v) ? v : (codeDefault(key) as string[]);
   }
 
   /** Every registry key for one context (shares the lazy fact reads). */
@@ -277,7 +295,7 @@ export class RemoteConfigService {
       try {
         values[key] = await resolveIn(snap, key, loader);
       } catch {
-        values[key] = { value: keyDef(key).default, source: 'code' };
+        values[key] = { value: codeDefault(key), source: 'code' };
       }
     }
     return { values, facts: await loader.base() };
@@ -306,11 +324,14 @@ export class RemoteConfigService {
         return {
           key,
           type: def.type,
-          min: def.min,
-          max: def.max,
+          // Int keys keep min/max; enum keys list `options`; list keys give `maxItems`.
+          min: def.type === 'int' ? def.min : null,
+          max: def.type === 'int' ? def.max : null,
+          ...(def.type === 'enum' ? { options: [...def.options] } : {}),
+          ...(def.type === 'string_list' ? { maxItems: def.maxItems } : {}),
           unit: def.unit,
           description: def.description,
-          codeDefault: def.default,
+          codeDefault: codeDefault(key),
           default: d ? { value: d.value, updatedBy: d.updated_by, updatedAt: d.updated_at } : null,
           rules: rules
             .filter((r) => r.config_key === key)
@@ -369,7 +390,7 @@ export class RemoteConfigService {
         await this.audit({ config_key: key, target: 'default', action: 'delete', actor: actor.email, before, after: null });
       }
       remoteConfigCache.clear();
-      return { key, default: null, codeDefault: keyDef(key).default };
+      return { key, default: null, codeDefault: codeDefault(key) };
     }
     const value = requireValue(key, raw);
     const row = { config_key: key, value, updated_by: actor.email, updated_at: new Date().toISOString() };
@@ -377,7 +398,7 @@ export class RemoteConfigService {
     if (error) throw new Error(`remote_config_defaults: ${error.message}`);
     await this.audit({ config_key: key, target: 'default', action: before ? 'update' : 'create', actor: actor.email, before: before ?? null, after: row });
     remoteConfigCache.clear();
-    return { key, default: { value, updatedBy: row.updated_by, updatedAt: row.updated_at }, codeDefault: keyDef(key).default };
+    return { key, default: { value, updatedBy: row.updated_by, updatedAt: row.updated_at }, codeDefault: codeDefault(key) };
   }
 
   /** POST /api/admin/remote-config/{key}/rules */

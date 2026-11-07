@@ -4,7 +4,10 @@ import { z } from 'zod';
 
 import { parseClientPlatform } from '@/lib/experiments/request-info';
 import { isRegionRestricted } from '@/lib/geo/region-restriction';
-import { authRateLimiter, getIdentifier, applyRateLimit } from '@/lib/middleware/rate-limit';
+import { checkIntegrity, recordSessionAttestation } from '@/lib/integrity/enforcement';
+import { enforceAbuseLimits, requestDeviceId } from '@/lib/security/abuse-limits';
+import { recordSecurityEvent } from '@/lib/security/security-events';
+import { setEmailCanonical } from '@/lib/services/email-signup-service';
 import { MobileAPIService } from '@/lib/services/mobile-api-service';
 import { toMobileUser } from '@/lib/services/mobile-profile-response';
 import { SocialAuthError, findOrCreateSocialUser } from '@/lib/services/social-auth-service';
@@ -69,13 +72,16 @@ async function verifyGoogleIdToken(idToken: string): Promise<GoogleJWTPayload | 
 
 export async function POST(request: NextRequest) {
   try {
-    const identifier = getIdentifier(request);
-    const rateLimitResponse = await applyRateLimit(request, authRateLimiter, identifier);
+    const rateLimitResponse = await enforceAbuseLimits(request, 'social_login');
     if (rateLimitResponse) return rateLimitResponse;
 
     const body = await request.json();
     const parsed = parseLenient(googleAuthSchema, body);
     const idToken = parsed.googleIdToken || parsed.idToken!;
+
+    // Android integrity_v1 clients must pass the device check (sign-in and first sign-up).
+    const integrity = await checkIntegrity(request, { action: 'google' });
+    if (!integrity.allowed) return integrity.response!;
 
     const googleUser = await verifyGoogleIdToken(idToken);
 
@@ -135,6 +141,11 @@ export async function POST(request: NextRequest) {
 
     await recordTestDeviceSignal(userId, request.headers); // X-Test-Device: 1 (Test Lab robots)
     const tokens = await MobileAPIService.generateTokens(userId, email);
+    await recordSessionAttestation(request, integrity, { userId, accessToken: tokens.access_token });
+    if (isNewUser) {
+      await setEmailCanonical(supabase, userId, email);
+      await recordSecurityEvent(request, { kind: 'signup', result: 'pass', action: 'google', reason: 'google', userId, deviceId: requestDeviceId(request) });
+    }
 
     // First sign-in created the account: one welcome email after the response.
     // Returning sign-ins (isNewUser false) never get one; the once-only record in

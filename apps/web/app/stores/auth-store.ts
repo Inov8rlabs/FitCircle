@@ -271,32 +271,45 @@ export const useAuthStore = create<AuthState>()(
         let accountCreated = false;
         let existingAccount = false;
         try {
-          // Create user with Supabase Auth
-          const baseUrl = process.env.NEXT_PUBLIC_APP_URL ||
-            (typeof window !== 'undefined' ? window.location.origin : '');
-          const { data: authData, error: authError } = await supabase.auth.signUp({
-            email: data.email,
-            password: data.password,
-            options: {
-              emailRedirectTo: `${baseUrl}/onboarding`,
-              data: {
-                name: data.name,
-                username: data.username,
-                ...(data.birthYear ? { birth_year: data.birthYear } : {}),
-                ...(data.invite && (data.invite.circle || data.invite.ref)
-                  ? { pending_invite: { circle: data.invite.circle, ref: data.invite.ref } }
-                  : {}),
-              }
-            }
+          // Create the account on the server (POST /api/auth/register: Auth admin API,
+          // profile row, welcome email, invite claim). Public sign-up is off in Supabase
+          // Auth, so the browser can't call supabase.auth.signUp itself. The username is
+          // derived server-side (the email local part often isn't a valid username).
+          const res = await fetch('/api/auth/register', {
+            method: 'POST',
+            credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              email: data.email,
+              password: data.password,
+              fullName: data.name,
+              ...(data.birthYear ? { birthYear: data.birthYear } : {}),
+              ...(data.invite?.ref ? { ref: data.invite.ref } : {}),
+              ...(data.invite?.circle ? { circle: data.invite.circle } : {}),
+            }),
           });
+          const payload: any = await res.json().catch(() => ({}));
+          if (!res.ok) {
+            const message = typeof payload?.error === 'string' ? payload.error : 'Registration failed';
+            if (res.status === 400 && /already exists/i.test(message)) existingAccount = true;
+            const err: any = new Error(message);
+            err.status = res.status;
+            throw err;
+          }
 
-          if (authError) throw authError;
+          const authData: { user: { id: string } | null; session: any } = {
+            user: payload?.user?.id ? { id: payload.user.id } : null,
+            session: null,
+          };
+          if (payload?.session?.access_token && payload?.session?.refresh_token) {
+            const { data: set } = await supabase.auth.setSession({
+              access_token: payload.session.access_token,
+              refresh_token: payload.session.refresh_token,
+            });
+            authData.session = set.session ?? null;
+          }
 
-          // Supabase returns an obfuscated user with no identities when the email
-          // is already registered (and confirmation is on): not a new account.
-          const alreadyRegistered = authData.user?.identities?.length === 0;
-          if (alreadyRegistered) existingAccount = true;
-          if (authData.user && !alreadyRegistered) {
+          if (authData.user) {
             accountCreated = true;
             analytics.identify(authData.user.id, {
               ...signupUserProperties('email'),

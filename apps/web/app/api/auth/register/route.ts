@@ -3,8 +3,15 @@ import { type NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 
 import { isRegionRestricted, regionNotAvailableBody } from '@/lib/geo/region-restriction';
-import { registerRateLimiter, getIdentifier, applyRateLimit } from '@/lib/middleware/rate-limit';
-import { CLEAR_FC_REF_COOKIE, claimWebInvite, resolveWebInvite } from '@/lib/referrals/web-claim';
+import { CLEAR_FC_REF_COOKIE, PENDING_INVITE_METADATA_KEY, claimWebInvite, resolveWebInvite } from '@/lib/referrals/web-claim';
+import { enforceAbuseLimits } from '@/lib/security/abuse-limits';
+import { recordSecurityEvent } from '@/lib/security/security-events';
+import {
+  createEmailAccount,
+  sendSignupConfirmation,
+  setEmailCanonical,
+  signupRequiresConfirmation,
+} from '@/lib/services/email-signup-service';
 import { ensureProfileRow } from '@/lib/services/profile-bootstrap';
 import {
   USERNAME_PATTERN,
@@ -15,6 +22,26 @@ import {
 import { triggerWelcomeEmail } from '@/lib/services/welcome-email-service';
 import { ageRequirementBody, isUnderMinimumAgeByYear } from '@/lib/validation/age-requirement';
 import { authEmailSchema } from '@/lib/validation/auth-email';
+import { DISPOSABLE_EMAIL_MESSAGE, isDisposableEmail } from '@/lib/validation/disposable-email';
+
+/**
+ * A session for an account we just created (what `signUp` used to return). Uses its own
+ * client so the service-role client above never switches to the user's token. Null on
+ * any failure: the browser signs in itself when no session comes back.
+ */
+async function passwordSession(email: string, password: string) {
+  try {
+    const client = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!, {
+      auth: { autoRefreshToken: false, persistSession: false },
+    });
+    const { data, error } = await client.auth.signInWithPassword({ email, password });
+    if (error) console.warn('[register] post-signup sign-in failed:', error.message);
+    return error ? null : (data?.session ?? null);
+  } catch (err: any) {
+    console.warn('[register] post-signup sign-in threw:', err?.message ?? err);
+    return null;
+  }
+}
 
 // Validation schema
 const registerSchema = z.object({
@@ -34,15 +61,17 @@ export async function POST(request: NextRequest) {
   // EU/EEA restriction (WEB_EU_SIGNUP_BLOCK, default on; lib/geo/region-restriction.ts).
   if (isRegionRestricted(request)) return NextResponse.json(regionNotAvailableBody(), { status: 403 });
   try {
-    // Apply rate limiting (3 registrations per day per IP) to curb automated
-    // account creation / signup abuse.
-    const identifier = getIdentifier(request);
-    const rateLimitResponse = await applyRateLimit(request, registerRateLimiter, identifier);
+    // Shared limits: 3/h + 10/day per IP (lib/security/abuse-limits.ts).
+    const rateLimitResponse = await enforceAbuseLimits(request, 'register');
     if (rateLimitResponse) return rateLimitResponse;
 
     // Parse and validate request body
     const body = await request.json();
     const validatedData = registerSchema.parse(body);
+    if (isDisposableEmail(validatedData.email)) {
+      await recordSecurityEvent(request, { kind: 'signup_block', result: 'block', reason: 'disposable_email', action: 'register' });
+      return NextResponse.json({ error: DISPOSABLE_EMAIL_MESSAGE, code: 'DISPOSABLE_EMAIL' }, { status: 400 });
+    }
     if (validatedData.birthYear !== undefined && isUnderMinimumAgeByYear(validatedData.birthYear)) {
       return NextResponse.json(ageRequirementBody('birthYear'), { status: 400 });
     }
@@ -79,32 +108,33 @@ export async function POST(request: NextRequest) {
       username = await ensureUniqueUsername(deriveUsernameBase(validatedData.email), usernameTaken);
     }
 
-    // Register user with Supabase Auth
-    const { data: authData, error: authError } = await supabase.auth.signUp({
+    // Create the account with the Auth admin API (public sign-up can stay off).
+    const invite = resolveWebInvite(
+      { ref: validatedData.ref, circle: validatedData.circle },
+      request.headers.get('cookie')
+    );
+    const requireConfirmation = signupRequiresConfirmation();
+    const created = await createEmailAccount(supabase, {
       email: validatedData.email,
       password: validatedData.password,
-      options: {
-        data: {
-          display_name: validatedData.fullName,
-          username,
-        }
-      }
+      requireConfirmation,
+      metadata: {
+        display_name: validatedData.fullName,
+        name: validatedData.fullName,
+        username,
+        ...(validatedData.birthYear !== undefined ? { birth_year: validatedData.birthYear } : {}),
+        // Same key the browser sign-up used, so /api/referrals/claim can still settle it later.
+        ...(invite ? { [PENDING_INVITE_METADATA_KEY]: { code: invite.code, ref: invite.ref } } : {}),
+      },
     });
 
-    if (authError) {
+    if (!created.ok) {
       return NextResponse.json(
-        { error: authError.message },
-        { status: 400 }
+        { error: created.failure.kind === 'error' ? 'Failed to create user' : created.failure.message },
+        { status: created.failure.kind === 'error' ? 500 : 400 }
       );
     }
-
-    if (!authData.user) {
-      return NextResponse.json(
-        { error: 'Failed to create user' },
-        { status: 500 }
-      );
-    }
-
+    const authData = { user: created.user };
     // Create user profile in database
     const { error: profileError } = await supabase
       .from('profiles')
@@ -130,6 +160,17 @@ export async function POST(request: NextRequest) {
       if (!ensured) console.error('[register] profile still missing after bootstrap', { userId: authData.user.id });
     }
 
+    await setEmailCanonical(supabase, authData.user.id, validatedData.email);
+    await recordSecurityEvent(request, { kind: 'signup', result: 'pass', action: 'register', reason: 'email', userId: authData.user.id });
+    if (requireConfirmation) {
+      await sendSignupConfirmation(supabase, {
+        email: validatedData.email,
+        password: validatedData.password,
+        userId: authData.user.id,
+        redirectTo: process.env.NEXT_PUBLIC_APP_URL ? `${process.env.NEXT_PUBLIC_APP_URL}/onboarding` : undefined,
+      });
+    }
+
     // New account: one welcome email, after the response (never fails registration;
     // once-only per user across platforms — lib/services/welcome-email-service.ts).
     triggerWelcomeEmail({
@@ -142,11 +183,10 @@ export async function POST(request: NextRequest) {
 
     // Invite: attribution + circle join (runs after the profile exists).
     // Best-effort, never fails registration.
-    const invite = resolveWebInvite(
-      { ref: validatedData.ref, circle: validatedData.circle },
-      request.headers.get('cookie')
-    );
     const referral = invite ? await claimWebInvite(authData.user.id, invite) : null;
+
+    // signUp returned a session when no confirmation was required; keep that contract.
+    const session = requireConfirmation ? null : await passwordSession(validatedData.email, validatedData.password);
 
     // Return success response
     const response = NextResponse.json({
@@ -155,7 +195,7 @@ export async function POST(request: NextRequest) {
         email: authData.user.email,
         fullName: validatedData.fullName,
       },
-      session: authData.session,
+      session,
       circleJoin: referral?.circleJoin ?? null,
       message: 'Registration successful! Check your email for a welcome message.'
     });

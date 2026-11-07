@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from 'next/server';
 
+import { checkIntegrity } from '@/lib/integrity/enforcement';
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { EntitlementService } from '@/lib/services/entitlement-service';
 import { SubscriptionService } from '@/lib/services/subscription-service';
@@ -23,6 +24,10 @@ export async function POST(request: NextRequest) {
   const startTime = Date.now();
   try {
     const user = await requireMobileAuth(request);
+
+    // Android integrity_v1 clients must pass the device check.
+    const integrity = await checkIntegrity(request, { action: 'entitlement_sync', userId: user.id });
+    if (!integrity.allowed) return integrity.response!;
 
     let synced = false;
     if (process.env.REVENUECAT_SECRET_API_KEY) {
