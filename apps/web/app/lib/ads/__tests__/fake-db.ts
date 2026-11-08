@@ -1,7 +1,7 @@
 /**
  * In-memory Supabase stand-in for the ads console tests. Supports the query
  * shapes the ads services use: select / eq / in / gte / lte / lt / not-is-null
- * / order (multi-column) / limit / range / maybeSingle / single / insert(+select) / update / delete /
+ * / is-null / order (multi-column) / limit / range / maybeSingle / single / insert(+select) / update / delete /
  * upsert(onConflict).
  */
 type Row = Record<string, any>;
@@ -108,6 +108,10 @@ class FakeQuery implements PromiseLike<any> {
   }
   lt(col: string, val: any) {
     this.filters.push((r) => r[col] !== null && r[col] !== undefined && r[col] < val);
+    return this;
+  }
+  is(col: string, val: null) {
+    this.filters.push((r) => (val === null ? r[col] === null || r[col] === undefined : r[col] === val));
     return this;
   }
   not(col: string, op: string, val: any) {
