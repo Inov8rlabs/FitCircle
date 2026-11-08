@@ -48,7 +48,9 @@ Android app (release build, analytics consent permitted)
      joins: GA4 user_id = profiles.id, else user_attribution.app_instance_id = user_pseudo_id
      upgrades organic / unknown (or inserts a missing row) → channel google_ads, source google_ads_ga4,
        campaign id (export id, else campaign name → ad_entities), raw = { ga4: evidence, previous: old row }
-     never touches a paid row (apple_ads / meta / google_ads): the update is guarded on channel IN (organic, unknown)
+     never touches apple_ads / meta or a row that already has a campaign; upgrades are guarded on channel IN (organic, unknown)
+     also enriches google_ads rows without a campaign (campaign + ad group), and falls back to the
+       time + geo + device matcher when there is no user_id / app_instance_id (§8)
 
 Google Ads API (hourly ads sync)
   googleAds:search  segments.conversion_action* × metrics.(all_)conversions by campaign/day
@@ -97,7 +99,7 @@ These were checked read-only with the `google-ads-reporting` service-account key
 | `GA4_BIGQUERY_SA_KEY` | Optional. Key JSON (raw or base64) of a separate SA. If unset, the sync uses `GOOGLE_ADS_SA_KEY` (`google-ads-reporting@fitcircle-fitness-app.iam.gserviceaccount.com`). | no |
 | `GA4_BIGQUERY_LOCATION` | Dataset location if not `US` (e.g. `EU`) | no |
 | `GA4_ANDROID_APP_ID` | Defaults to `com.inov8rlabs.apps.fitcircle` (excludes .qa / .dev) | no |
-| `GA4_ATTRIBUTION_LOOKBACK_DAYS` | Defaults to 7 (max 60) | no |
+| `GA4_ATTRIBUTION_LOOKBACK_DAYS` | Daily cron window, defaults to 7 (max 60). Explicit backfills (`start`/`end`) may span up to 400 days and are clamped to the earliest `events_*` table. | no |
 
 If the project, dataset or key is missing or malformed, the cron returns `{ skipped: 'not_configured' }`.
 
@@ -163,3 +165,127 @@ are never exported, so every day of delay is a day of Google-driven installs tha
   off, older app), cannot be matched.
 - The export is daily, so upgrades lag by about 1–2 days.
 - Only Android. iOS Google Ads (none running) would need the iOS app to set the GA4 user id.
+
+## 8. Fallback matcher, enrichment and review (2026-11-08)
+
+Every Android user up to 1.1.2 (and every past user) has no GA4 `user_id` and no `app_instance_id`, so §2's joins
+find nobody. The sync now also:
+
+1. **Matches installs to users by time + geo + device** (`app/lib/ads/ga4/matcher.ts`). For each Android GA4 instance
+   with a first open (`first_open`, else `user_first_touch_timestamp`) in the window, a user is a candidate when
+   - their first-seen time (earliest of `profiles.created_at`, `user_attribution.reported_at`, first push token,
+     first experiment assignment) is **−2 min … +45 min** after the first open;
+   - **country does not conflict**: GA4 `geo.country` (display name → ISO2, `countries.ts`) equals at least one of
+     our signals (attribution country, experiment assignment country, RevenueCat `country_code`, profile country,
+     time zone where it names one country) — or we have none;
+   - **device does not conflict**: GA4 `device.mobile_os_hardware_model` / `mobile_model_name` /
+     `mobile_marketing_name` equals our Android `push_tokens.device_name` (`<manufacturer> <model>`, compared with
+     and without the manufacturer word, alnum-only) — or we have none;
+   - and at least one of country / device positively agrees.
+
+   Only pairs that are **unique in both directions** are accepted. Every compatible pair counts toward ambiguity,
+   including test users and low-confidence pairs, so a second install or a QA account at the same minute blocks the
+   match instead of guessing. Confidence: `high` = device + country within 15 min; `medium` = device only, or
+   device + country after 15 min; `low` = country only (no push token). Exact joins (`user_id`, stored
+   `app_instance_id`) win over the fallback and are `exact`. The evidence (`matched_by:
+   'heuristic_time_geo_device'`, delta, agreement per field, fields used) is stored in `raw.ga4.heuristic`, and the
+   instance id is written to `app_instance_id`.
+2. **Enriches, not just upgrades.** Guards, in order: test / QA / internal / admin-alias / Test Lab users never;
+   `apple_ads` / `meta` never; `google_ads` with a campaign (incl. manual backfills) is done; `google_ads` without
+   one gets campaign + ad group (ad group id resolved by `(campaign, ad_group_name)` in `ad_entities`, since GA4
+   often has only the name); `organic` / `unknown` → `google_ads` / `google_ads_ga4` on a Google Ads signal. The
+   previous row goes to `raw.previous`. Writes are guarded (`channel IN (organic, unknown)`, or `channel =
+   google_ads AND campaign_external_id IS NULL`).
+3. **Referrer campaign id.** 39 of the 67 `google_ads` rows already had `gad_campaignid` in the Play referrer raw.
+   The sync copies it to `campaign_external_id` (`referrer_gad_campaignid`, exact), and
+   `POST /api/mobile/attribution` now does the same at ingest. Rows with only a gclid / gbraid get the only Google
+   Ads campaign live at sign-up as a `low` inference (`sole_google_campaign`), applied only when min confidence is
+   `low`.
+4. **Backfill + review.** Admin Tools → Ads → *GA4 attribution sync*:
+   `GET /api/admin/ads/ga4-attribution?start&end&minConfidence` is a dry run with a per-user preview
+   (current row, proposed row, evidence, status) plus the Google installs that could not be matched and why;
+   `POST` the same body with `userIds` (the reviewed rows) applies. Both run with the daily cron switched off. The
+   range is clamped to the existing `events_*` tables (sandbox expires them after 60 days). The daily cron applies
+   `medium` and up.
+
+### Read-only diagnostic SQL (BigQuery console)
+
+```sql
+-- Read-only diagnostic: GA4 Android instances with a Google Ads signal, one row per install.
+-- Compare first_open_utc / country / model against the Supabase candidate query.
+WITH ev AS (
+  SELECT *
+  FROM `fitcircle-fitness-app.analytics_553928425.events_*`
+  WHERE _TABLE_SUFFIX BETWEEN '20260901' AND FORMAT_DATE('%Y%m%d', CURRENT_DATE())
+    AND platform = 'ANDROID'
+    AND app_info.id = 'com.inov8rlabs.apps.fitcircle'
+),
+inst AS (
+  SELECT
+    user_pseudo_id,
+    ANY_VALUE(user_id) AS user_id,
+    TIMESTAMP_MICROS(MIN(IF(event_name = 'first_open', event_timestamp, NULL))) AS first_open_utc,
+    TIMESTAMP_MICROS(MIN(user_first_touch_timestamp)) AS first_touch_utc,
+    ARRAY_AGG(geo.country IGNORE NULLS ORDER BY event_timestamp LIMIT 1)[SAFE_OFFSET(0)] AS country,
+    ARRAY_AGG(geo.region IGNORE NULLS ORDER BY event_timestamp LIMIT 1)[SAFE_OFFSET(0)] AS region,
+    ARRAY_AGG(device.mobile_os_hardware_model IGNORE NULLS ORDER BY event_timestamp LIMIT 1)[SAFE_OFFSET(0)] AS hardware_model,
+    ARRAY_AGG(device.mobile_model_name IGNORE NULLS ORDER BY event_timestamp LIMIT 1)[SAFE_OFFSET(0)] AS model_name,
+    ARRAY_AGG(app_info.version IGNORE NULLS ORDER BY event_timestamp LIMIT 1)[SAFE_OFFSET(0)] AS app_version,
+    ARRAY_AGG(traffic_source.source IGNORE NULLS ORDER BY event_timestamp LIMIT 1)[SAFE_OFFSET(0)] AS fu_source,
+    ARRAY_AGG(traffic_source.medium IGNORE NULLS ORDER BY event_timestamp LIMIT 1)[SAFE_OFFSET(0)] AS fu_medium,
+    ARRAY_AGG(traffic_source.name IGNORE NULLS ORDER BY event_timestamp LIMIT 1)[SAFE_OFFSET(0)] AS fu_campaign,
+    ARRAY_AGG(session_traffic_source_last_click.google_ads_campaign.campaign_id IGNORE NULLS ORDER BY event_timestamp LIMIT 1)[SAFE_OFFSET(0)] AS gads_campaign_id,
+    ARRAY_AGG(session_traffic_source_last_click.google_ads_campaign.campaign_name IGNORE NULLS ORDER BY event_timestamp LIMIT 1)[SAFE_OFFSET(0)] AS gads_campaign_name,
+    ARRAY_AGG(session_traffic_source_last_click.google_ads_campaign.ad_group_id IGNORE NULLS ORDER BY event_timestamp LIMIT 1)[SAFE_OFFSET(0)] AS gads_ad_group_id,
+    ARRAY_AGG(session_traffic_source_last_click.google_ads_campaign.ad_group_name IGNORE NULLS ORDER BY event_timestamp LIMIT 1)[SAFE_OFFSET(0)] AS gads_ad_group_name,
+    LOGICAL_OR(collected_traffic_source.gclid IS NOT NULL) AS has_gclid,
+    COUNTIF(event_name = 'sign_up') AS sign_ups
+  FROM ev
+  GROUP BY user_pseudo_id
+)
+SELECT *
+FROM inst
+WHERE gads_campaign_id IS NOT NULL
+   OR has_gclid
+   OR (LOWER(fu_source) = 'google' AND LOWER(fu_medium) IN ('cpc', 'ppc', 'paid', 'cpm', 'display', 'video'))
+ORDER BY COALESCE(first_open_utc, first_touch_utc);
+```
+
+The exact matcher input is `ga4AttributionSql()` in `app/lib/ads/ga4/attribution.ts`.
+
+### Read-only candidate signals (Supabase)
+
+```sql
+-- Read-only: Android users' candidate signals for the GA4 fallback matcher.
+-- Window = profiles created between :from and :to (edit the two literals).
+with u as (
+  select p.id, p.email, p.created_at, p.country_code, p.timezone, p.is_admin
+  from profiles p
+  where p.created_at >= timestamptz '2026-11-04 00:00:00+00'
+    and p.created_at <  timestamptz '2026-11-09 00:00:00+00'
+)
+select
+  u.id as user_id,
+  u.created_at,
+  ua.reported_at,
+  least(u.created_at, ua.reported_at,
+        (select min(pt.created_at) from push_tokens pt where pt.user_id = u.id),
+        (select min(ea.assigned_at) from experiment_assignments ea where ea.user_id = u.id)) as first_seen_at,
+  ua.platform, ua.channel, ua.source, ua.campaign_external_id, ua.ad_group_external_id, ua.app_instance_id,
+  ua.raw->>'gad_campaignid' as referrer_gad_campaignid,
+  ua.country as attribution_country,
+  (select string_agg(distinct ea.country, ',') from experiment_assignments ea where ea.user_id = u.id) as experiment_countries,
+  (select string_agg(distinct se.raw->>'country_code', ',') from subscription_events se where se.user_id = u.id) as revenuecat_countries,
+  u.country_code as profile_country,
+  u.timezone,
+  (select string_agg(distinct pt.device_name, ' | ') from push_tokens pt where pt.user_id = u.id and pt.platform = 'android') as android_devices,
+  u.is_admin,
+  coalesce(ua.is_test, false) as attribution_is_test,
+  (u.email ilike '%@cloudtestlabaccounts.com' or u.email ilike '%@fitcircle.ai' or u.email ilike '%@inov8rlabs.com' or u.email ~* '^[a-z]{4,}\.[0-9]{5}@gmail\.com$') as looks_test
+from u
+left join user_attribution ua on ua.user_id = u.id
+where ua.platform = 'android'
+   or exists (select 1 from push_tokens pt where pt.user_id = u.id and pt.platform = 'android')
+   or exists (select 1 from experiment_assignments ea where ea.user_id = u.id and lower(ea.platform) = 'android')
+order by first_seen_at;
+```

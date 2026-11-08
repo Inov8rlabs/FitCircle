@@ -15,7 +15,7 @@ vi.mock('@/lib/supabase-admin', async () => {
 import { GET as cronGET } from '@/api/cron/ads/ga4-attribution/route';
 
 import { parseServiceAccountKey } from '../connectors/google-ads';
-import { evidenceOf, ga4AttributionSql, GA4_SOURCE, googleAdsSignals, type Ga4InstanceRow, planChange } from '../ga4/attribution';
+import { buildCatalog, evidenceOf, ga4AttributionSql, GA4_SOURCE, googleAdsSignals, type Ga4InstanceRow, planChange, planReferrerEnrichment, referrerCampaignId } from '../ga4/attribution';
 import { BigQueryClient, clearBigQueryTokenCache, decodeRows, ga4BigQueryConfigFromEnv, type Ga4BigQueryConfig } from '../ga4/bigquery';
 import { Ga4AttributionService } from '../services/ga4-attribution-service';
 import type { AttributionRow } from '../types';
@@ -75,6 +75,9 @@ function bigQueryFetch(instances = INSTANCES, opts: { pending?: boolean; pages?:
     calls.push({ url, body, method: init.method ?? 'GET' });
     if (url.startsWith('https://oauth2.googleapis.com/token')) return new Response(JSON.stringify({ access_token: 'bq-token', expires_in: 3599 }), { status: 200 });
     const half = Math.ceil(instances.length / 2);
+    if (init.method === 'POST' && body?.query?.includes('INFORMATION_SCHEMA')) {
+      return new Response(JSON.stringify({ jobComplete: true, jobReference: { jobId: 'job_t' }, schema: { fields: [{ name: 'first_table' }, { name: 'last_table' }, { name: 'tables' }] }, rows: [{ f: [{ v: 'events_20260901' }, { v: 'events_20261130' }, { v: '91' }] }] }), { status: 200 });
+    }
     if (init.method === 'POST') {
       if (opts.pending) return new Response(JSON.stringify({ jobComplete: false, jobReference: { jobId: 'job_1', location: 'US' } }), { status: 200 });
       return new Response(JSON.stringify({ jobComplete: true, jobReference: { jobId: 'job_1', location: 'US' }, schema: SCHEMA, rows: (opts.pages ? instances.slice(0, half) : instances).map(bqRow), ...(opts.pages ? { pageToken: 'pg2' } : {}) }), { status: 200 });
@@ -89,7 +92,7 @@ let db: AdsFakeDb;
 function seed() {
   db = new AdsFakeDb();
   setAdsDb(db);
-  for (const id of [U1, U2, U3, U4, U6]) db.rows('profiles').push({ id, created_at: '2026-10-29T10:00:00Z', email: `${id}@example.com` });
+  for (const id of [U1, U2, U3, U4, U6]) db.rows('profiles').push({ id, created_at: '2026-10-29T10:00:00Z', email: `${id.slice(0, 4)}@realmail.net` });
   db.rows('user_attribution').push(
     attr(U1, 'organic', 'google-play'),
     attr(U2, 'unknown', 'something', { app_instance_id: 'p2' }),
@@ -110,7 +113,7 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllEnvs());
 
 describe('GA4 export query', () => {
-  it('daily tables only, Android prod app, first_open / sign_up / identified session_start, parameters for every value', () => {
+  it('daily tables only, Android prod app, first_open / sign_up / session_start, geo + device, parameters for every value', () => {
     const sql = ga4AttributionSql('fitcircle-fitness-app', 'analytics_553928425');
     expect(sql).toContain('FROM `fitcircle-fitness-app.analytics_553928425.events_*`');
     expect(sql).toContain('_TABLE_SUFFIX BETWEEN @start AND @end');
@@ -119,6 +122,9 @@ describe('GA4 export query', () => {
     expect(sql).toContain('traffic_source.source');
     expect(sql).toContain('session_traffic_source_last_click.google_ads_campaign.campaign_id');
     expect(sql).toContain('LOGICAL_OR(collected_traffic_source.gclid IS NOT NULL)');
+    expect(sql).toContain('geo.country');
+    expect(sql).toContain('device.mobile_os_hardware_model');
+    expect(sql).toContain('user_first_touch_timestamp');
     expect(sql).not.toMatch(/SELECT[\s\S]*collected_traffic_source\.gclid,/); // the click id itself is never read out
   });
 
@@ -167,12 +173,52 @@ describe('Google Ads evidence + plan', () => {
 
   it('never downgrades a paid row; resolves campaign id by name when the export has only a name', () => {
     const ev = evidenceOf(INSTANCES[1], 'app_instance_id');
-    const names = new Map([['fitcircle android - us - installs (test)', '24397202136']]);
-    expect(planChange(U3, attr(U3, 'meta', 'meta'), true, ev, names, 'now').outcome).toBe('already_paid');
-    expect(planChange(U3, attr(U3, 'organic', 'x', { is_test: true }), true, ev, names, 'now').outcome).toBe('test');
-    expect(planChange(U5, null, false, ev, names, 'now').outcome).toBe('no_profile');
-    const p = planChange(U2, attr(U2, 'unknown', 'something'), true, ev, names, 'now');
-    expect(p).toMatchObject({ outcome: 'upgrade', row: { channel: 'google_ads', source: GA4_SOURCE, campaign_external_id: '24397202136' } });
+    const catalog = buildCatalog([{ level: 'campaign', external_id: '24397202136', name: 'FitCircle Android - US - Installs (test)' }]);
+    const plan = (userId: string, existing: AttributionRow | null, extra: Partial<Parameters<typeof planChange>[0]> = {}) =>
+      planChange({ userId, existing, profileExists: true, isTest: false, ev, catalog, syncedAt: 'now', ...extra });
+    expect(plan(U3, attr(U3, 'meta', 'meta')).outcome).toBe('already_paid');
+    expect(plan(U3, attr(U3, 'apple_ads', 'apple_search_ads', { campaign_external_id: null })).outcome).toBe('already_paid');
+    expect(plan(U3, attr(U3, 'organic', 'x', { is_test: true })).outcome).toBe('test');
+    expect(plan(U3, attr(U3, 'organic', 'x'), { isTest: true }).outcome).toBe('test');
+    expect(plan(U5, null, { profileExists: false }).outcome).toBe('no_profile');
+    const p = plan(U2, attr(U2, 'unknown', 'something'));
+    expect(p).toMatchObject({ outcome: 'upgrade', write: { kind: 'upgrade', row: { channel: 'google_ads', source: GA4_SOURCE, campaign_external_id: '24397202136', app_instance_id: 'p2' } } });
+    expect((p.write!.row.raw as any).previous).toMatchObject({ channel: 'unknown', source: 'something' });
+  });
+
+  it('enriches google_ads rows without a campaign; rows with a campaign (manual backfill) are done', () => {
+    const catalog = buildCatalog([
+      { level: 'campaign', external_id: '24397202136', name: 'FitCircle Android - US - Installs (test)' },
+      { level: 'ad_group', external_id: '204681147547', parent_external_id: '24397202136', name: 'Friends & circles' },
+    ]);
+    const ev = evidenceOf(inst({ user_pseudo_id: 'px', gads_campaign_id: '24397202136', gads_ad_group_name: 'Friends & circles' }), 'heuristic_time_geo_device', 'high');
+    const gads = attr(U1, 'google_ads', 'google_ads', { raw: { has_gclid: 'true', gad_source: '1' } });
+    const p = planChange({ userId: U1, existing: gads, profileExists: true, isTest: false, ev, catalog, syncedAt: 'now' });
+    expect(p).toMatchObject({ outcome: 'enrich', confidence: 'high', proposed: { channel: 'google_ads', source: 'google_ads', campaign_external_id: '24397202136', ad_group_external_id: '204681147547', app_instance_id: 'px' } });
+    const raw = p.write!.row.raw as any;
+    expect(raw).toMatchObject({ has_gclid: 'true', gad_source: '1', ga4: { matched_by: 'heuristic_time_geo_device', confidence: 'high' }, previous: { channel: 'google_ads', campaign_external_id: null } });
+    expect(p.write!.row).not.toHaveProperty('channel');
+
+    const manual = attr(U1, 'google_ads', 'google_ads', { campaign_external_id: '24397202136', raw: { ga4: { matched_by: 'manual' } } });
+    expect(planChange({ userId: U1, existing: manual, profileExists: true, isTest: false, ev, catalog, syncedAt: 'now' }).outcome).toBe('already_campaign');
+    const noCampaign = evidenceOf(inst({ user_pseudo_id: 'py', has_gclid: 'true' }), 'user_id');
+    expect(planChange({ userId: U1, existing: gads, profileExists: true, isTest: false, ev: noCampaign, catalog, syncedAt: 'now' }).outcome).toBe('no_new_info');
+    const organicGa4 = evidenceOf(INSTANCES[5], 'user_id');
+    expect(planChange({ userId: U1, existing: attr(U1, 'organic', 'google-play'), profileExists: true, isTest: false, ev: organicGa4, catalog, syncedAt: 'now' }).outcome).toBe('not_google');
+  });
+
+  it('referrer gad_campaignid (exact) before the sole-campaign inference (low)', () => {
+    const catalog = buildCatalog([{ level: 'campaign', external_id: '24397202136', name: 'C' }]);
+    expect(referrerCampaignId({ gad_campaignid: '24397202136' })).toBe('24397202136');
+    expect(referrerCampaignId({ referrer: 'utm_source=google&gad_campaignid=24397202136' })).toBe('24397202136');
+    expect(referrerCampaignId({ gad_campaignid: 'x; drop' })).toBeNull();
+    const withRef = attr(U1, 'google_ads', 'google_ads', { raw: { gad_campaignid: '24397202136' } });
+    expect(planReferrerEnrichment(withRef, false, catalog, null, 'now')).toMatchObject({ outcome: 'enrich', method: 'referrer_gad_campaignid', confidence: 'exact' });
+    const bare = attr(U1, 'google_ads', 'google_ads', { raw: { has_gclid: 'true' } });
+    expect(planReferrerEnrichment(bare, false, catalog, '24397202136', 'now')).toMatchObject({ method: 'sole_google_campaign', confidence: 'low' });
+    expect(planReferrerEnrichment(bare, false, catalog, null, 'now')).toBeNull();
+    expect(planReferrerEnrichment(bare, true, catalog, '24397202136', 'now')).toMatchObject({ outcome: 'test', write: null });
+    expect(planReferrerEnrichment(attr(U1, 'organic', 'google-play', { raw: { gad_campaignid: '1234567' } }), false, catalog, null, 'now')).toBeNull();
   });
 });
 
@@ -180,9 +226,10 @@ describe('Ga4AttributionService.run', () => {
   it('upgrades organic/unknown, inserts missing, never touches paid; evidence kept in raw', async () => {
     const { fn, calls } = bigQueryFetch();
     const r = await runWith(fn);
-    expect(r).toMatchObject({ skipped: null, range: { start: '2026-10-24', end: '2026-10-30' }, instances: 7, googleInstances: 6, matched: 5, upgraded: 2, inserted: 1, error: null });
-    expect(r.outcomes).toEqual({ unmatched: 1, already_paid: 1, no_profile: 1, upgrade: 2, insert: 1 });
-    const post = calls.find((c) => c.method === 'POST' && c.url.includes('/queries'))!;
+    expect(r).toMatchObject({ skipped: null, range: { start: '2026-10-24', end: '2026-10-30' }, instances: 7, googleInstances: 6, matched: 6, exactMatched: 6, upgraded: 2, inserted: 1, error: null });
+    expect(r.outcomes).toEqual({ unmatched: 1, not_google: 1, already_paid: 1, no_profile: 1, upgrade: 2, insert: 1 });
+    expect(r.unmatchedGoogle).toEqual([expect.objectContaining({ userPseudoId: 'p7', reason: 'no_candidate' })]);
+    const post = calls.find((c) => c.method === 'POST' && c.url.includes('/queries') && !c.body.query.includes('INFORMATION_SCHEMA'))!;
     expect(post.body.queryParameters.map((p: any) => [p.name, p.parameterValue.value])).toEqual([
       ['start', '20261024'],
       ['end', '20261030'],
@@ -191,10 +238,11 @@ describe('Ga4AttributionService.run', () => {
 
     const row = (id: string) => db.rows('user_attribution').find((a) => a.user_id === id)!;
     expect(row(U1)).toMatchObject({ channel: 'google_ads', source: GA4_SOURCE, campaign_external_id: '24397202136', ad_group_external_id: '190000000001', country: 'US', reported_at: '2026-10-29T10:00:00Z' });
-    expect(row(U1).raw.ga4).toMatchObject({ userPseudoId: 'p1', matchedBy: 'user_id', signals: ['google_ads_campaign', 'first_user_cpc'], signUpAt: '2025-10-29T15:10:00.000Z' });
+    expect(row(U1).raw.ga4).toMatchObject({ userPseudoId: 'p1', matched_by: 'user_id', confidence: 'exact', signals: ['google_ads_campaign', 'first_user_cpc'], signUpAt: '2025-10-29T15:10:00.000Z' });
     expect(row(U1).raw.previous).toMatchObject({ channel: 'organic', source: 'google-play', raw: { utm_medium: 'organic' } });
     expect(row(U2)).toMatchObject({ channel: 'google_ads', source: GA4_SOURCE, campaign_external_id: '24397202136', app_instance_id: 'p2' });
-    expect(row(U2).raw.ga4.matchedBy).toBe('app_instance_id');
+    expect(row(U2).raw.ga4.matched_by).toBe('app_instance_id');
+    expect(row(U1).app_instance_id).toBe('p1');
     expect(row(U3)).toMatchObject({ channel: 'apple_ads', source: 'apple_search_ads' });
     expect(row(U4)).toMatchObject({ channel: 'google_ads', source: GA4_SOURCE, platform: 'android', app_instance_id: 'p4', campaign_external_id: null });
     expect(row(U6)).toMatchObject({ channel: 'organic' });
@@ -205,8 +253,9 @@ describe('Ga4AttributionService.run', () => {
     await runWith(bigQueryFetch().fn);
     const before = JSON.stringify(db.rows('user_attribution'));
     const r = await runWith(bigQueryFetch().fn);
-    expect(r).toMatchObject({ upgraded: 0, inserted: 0 });
-    expect(r.outcomes).toMatchObject({ already_ga4: 3, already_paid: 1 });
+    expect(r).toMatchObject({ upgraded: 0, inserted: 0, enriched: 0 });
+    // U1 / U2 now have a campaign; U4 (gclid only) has none, so only the low sole-campaign inference remains.
+    expect(r.outcomes).toMatchObject({ already_campaign: 2, already_paid: 1, below_confidence: 1 });
     expect(JSON.stringify(db.rows('user_attribution'))).toBe(before);
   });
 
@@ -215,6 +264,9 @@ describe('Ga4AttributionService.run', () => {
     const r = await runWith(bigQueryFetch().fn, { dryRun: true });
     expect(r).toMatchObject({ dryRun: true, upgraded: 2, inserted: 1 });
     expect(JSON.stringify(db.rows('user_attribution'))).toBe(before);
+    const u1 = r.preview.find((p) => p.userId === U1)!;
+    expect(u1).toMatchObject({ outcome: 'upgrade', status: 'would_apply', method: 'user_id', current: { channel: 'organic' }, proposed: { channel: 'google_ads', campaign_external_id: '24397202136', campaignName: 'FitCircle Android - US - Installs (test)' } });
+    expect(u1.evidence).toHaveProperty('ga4');
   });
 
   it('a paid attribution written between plan and write is not replaced (guarded update)', async () => {
@@ -254,6 +306,19 @@ describe('Ga4AttributionService.run', () => {
     expect((await runWith(bigQueryFetch([]).fn)).range).toEqual({ start: '2026-10-28', end: '2026-10-30' });
     vi.stubEnv('GA4_ATTRIBUTION_LOOKBACK_DAYS', '999');
     expect((await runWith(bigQueryFetch([]).fn)).range).toEqual({ start: '2026-09-01', end: '2026-10-30' });
+  });
+
+  it('backfill is clamped to the export tables that exist; a missing table list does not fail the run', async () => {
+    const r = await runWith(bigQueryFetch([]).fn, { start: '2026-07-01', end: '2026-10-30' });
+    expect(r.range).toEqual({ start: '2026-09-01', end: '2026-10-30' });
+    expect(r.exportTables).toEqual({ first: '2026-09-01', last: '2026-11-30', count: 91 });
+    expect(r.warnings.join(' ')).toMatch(/clamped/);
+    const { fn } = bigQueryFetch([]);
+    const denied = async (url: string, init: RequestInit = {}) =>
+      init.body && String(init.body).includes('INFORMATION_SCHEMA') ? new Response(JSON.stringify({ error: { message: 'denied', errors: [{ reason: 'accessDenied' }] } }), { status: 403 }) : fn(url, init);
+    const r2 = await runWith(denied, { start: '2026-10-01', end: '2026-10-07' });
+    expect(r2).toMatchObject({ range: { start: '2026-10-01', end: '2026-10-07' }, exportTables: null, error: null });
+    expect(r2.warnings.join(' ')).toMatch(/table list unavailable/);
   });
 });
 

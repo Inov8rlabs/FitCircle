@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from 'next/server';
 
 import { isYmd } from '@/lib/ads/dates';
+import { parseConfidence } from '@/lib/ads/ga4/matcher';
 import { Ga4AttributionService } from '@/lib/ads/services/ga4-attribution-service';
 import { adminUnauthorized } from '@/lib/referrals/http';
 import { verifyCronSecret } from '@/lib/utils/api-auth';
@@ -15,7 +16,9 @@ export const maxDuration = 300;
  * 200 { skipped: 'disabled' }); BigQuery env unset → { skipped: 'not_configured' }.
  *
  * ?dryRun=1 counts what would change without writing (cron secret is enough).
- * Backfill ?start=YYYY-MM-DD&end=YYYY-MM-DD needs the ADMIN_API_SECRET bearer.
+ * Backfill ?start=YYYY-MM-DD&end=YYYY-MM-DD (and ?minConfidence=low|medium|high)
+ * needs the ADMIN_API_SECRET bearer. The reviewable per-user dry run + apply
+ * for Admin Tools is /api/admin/ads/ga4-attribution.
  */
 export async function GET(request: NextRequest) {
   const params = request.nextUrl.searchParams;
@@ -33,7 +36,8 @@ export async function GET(request: NextRequest) {
   }
   const dry = (params.get('dryRun') ?? '').toLowerCase();
   try {
-    const data = await Ga4AttributionService.run({ start, end, dryRun: dry === '1' || dry === 'true' });
+    const minConfidence = backfill ? parseConfidence(params.get('minConfidence')) : 'medium';
+    const data = await Ga4AttributionService.run({ start, end, minConfidence, dryRun: dry === '1' || dry === 'true' });
     return NextResponse.json({ success: true, data });
   } catch (error: any) {
     console.error('[cron/ads/ga4-attribution] failed:', error?.message);

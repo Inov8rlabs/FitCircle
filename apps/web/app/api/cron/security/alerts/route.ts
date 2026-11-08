@@ -30,9 +30,12 @@ export async function GET(request: NextRequest) {
           maxRuntime: 5,
           timezone: 'Etc/UTC',
         });
+    // Serverless: send the "ok" check-in before the function is frozen, or Sentry sees a timeout.
+    await Sentry.flush(2000);
     return NextResponse.json({ success: true, data: { dryRun, ...result } });
   } catch (error: any) {
     console.error('[cron/security/alerts] failed:', error?.message);
+    await Sentry.flush(2000);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }

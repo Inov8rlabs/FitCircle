@@ -6,6 +6,7 @@
 import { z } from 'zod';
 
 import { APPLE_MOCK_CAMPAIGN_ID } from './config';
+import { referrerCampaignId } from './ga4/attribution';
 import type { AttributionChannel, AttributionRow } from './types';
 
 const id = z
@@ -106,7 +107,8 @@ export function attributionFromBody(userId: string, body: AttributionBody): Attr
     channel,
     platform: body.platform,
     source: body.source.slice(0, 64),
-    campaign_external_id: paid ? (body.campaignId ?? null) : null,
+    // Play referrers of Google App campaign clicks carry gad_campaignid (the clients send no campaignId).
+    campaign_external_id: paid ? (body.campaignId ?? (channel === 'google_ads' ? referrerCampaignId(body.raw ?? null) : null)) : null,
     ad_group_external_id: paid ? (body.adGroupId ?? null) : null,
     keyword_external_id: paid ? (body.keywordId ?? null) : null,
     ad_external_id: paid ? (body.adId ?? null) : null,
