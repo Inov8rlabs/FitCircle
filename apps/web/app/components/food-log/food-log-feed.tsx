@@ -24,7 +24,7 @@ import { useToast } from '@/components/ui/use-toast';
 import { AnalyticsEvents, analytics } from '@/lib/analytics';
 import { canShareEntry, isEntryShared } from '@/lib/food-sharing';
 import { BeverageLogService } from '@/lib/services/beverage-log-service';
-import { FoodLogService } from '@/lib/services/food-log-service';
+import { deleteFoodLogEntry } from '@/lib/food-log/delete-food-log-entry';
 import { supabase } from '@/lib/supabase';
 import { cn } from '@/lib/utils';
 
@@ -74,7 +74,7 @@ export function FoodLogFeed({ entries, userId, summary, nutrition }: FoodLogFeed
       if (isBeverageRow) {
         await BeverageLogService.deleteEntry(id, userId, supabase as any);
       } else {
-        await FoodLogService.deleteEntry(id, userId, supabase as any);
+        await deleteFoodLogEntry(id);
         if (kind === 'food') analytics.track(AnalyticsEvents.mealDeleted());
       }
       setList((prev) => prev.filter((e) => e.id !== id));
