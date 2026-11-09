@@ -28,6 +28,14 @@
       "columns": [
         "user_id"
       ],
+      "name": "app_opens_user_id_fkey",
+      "ref": "profiles",
+      "table": "app_opens"
+    },
+    {
+      "columns": [
+        "user_id"
+      ],
       "name": "apple_auth_tokens_user_id_fkey",
       "ref": "profiles",
       "table": "apple_auth_tokens"
@@ -1744,6 +1752,15 @@
       "rows_entities",
       "rows_metrics",
       "error"
+    ],
+    "app_opens": [
+      "user_id",
+      "local_date",
+      "platform",
+      "first_open_at",
+      "timezone",
+      "app_version",
+      "source"
     ],
     "apple_auth_tokens": [
       "user_id",
