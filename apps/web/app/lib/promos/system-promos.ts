@@ -10,6 +10,7 @@
  */
 import { TIER_LIMITS } from '../config/tier-limits';
 import type { IconKey } from '../design/icons';
+import { PRO_TRIAL_DAYS } from '../entitlements/trial-eligibility';
 import { SLOT_DEFS, slotForMinutes, type MealSlot } from '../journey/meal-slots';
 
 import type { CreativeOption, PromoDefinition, PromoMatchInput } from './engine';
@@ -25,6 +26,7 @@ import type { PromoAction, PromoTheme } from './types';
 export const PROMO_SCORES = {
   first_meal: 985, // directly under the header (position ≤ 2, guardrail-pinned)
   log_meal_now: 965, // just under a campaign card, above hydration
+  fitzy_recommendations: 956, // the personalized paywall card: just above pro_value, which steps aside while it shows
   pro_value: 955, // above referral (paywall reach is an activation goal), where pro_upsell sat otherwise
   meet_fitzy: 905, // just above the Fitzy focus card
 } as const;
@@ -33,6 +35,7 @@ export const PROMO_SCORES = {
 export const PRO_VALUE_MIN_HOURS_SINCE_SIGNUP = 18;
 
 export const PAYWALL_PLACEMENT_FEED = 'feed_pro_value';
+export const PAYWALL_PLACEMENT_FITZY_RECOMMENDATIONS = 'fitzy_recommendations';
 
 const theme = (colors: string[]): PromoTheme => ({ background: { kind: 'gradient', colors }, foreground: 'light' });
 
@@ -148,7 +151,6 @@ const paywallAction: PromoAction = { type: 'paywall', params: { placement: PAYWA
  */
 export function proValueCreatives(live: Set<string> | null): CreativeOption[] {
   const has = (k: string) => live?.has(k) === true;
-  const freeScans = TIER_LIMITS.free.foodAiParsesPerDay;
   const historyBody = has('ads_removed')
     ? 'Pro keeps your full history and trends, and removes ads.'
     : `Pro keeps your full history and trends, not just the last ${TIER_LIMITS.free.historyDays} days.`;
@@ -163,7 +165,9 @@ export function proValueCreatives(live: Set<string> | null): CreativeOption[] {
       emoji: '📸',
       eyebrow: 'FitCircle Pro',
       title: "See exactly what's in every bite",
-      body: `Free includes ${freeScans} AI meal scans a day. Pro makes them unlimited, so every meal counts.`,
+      // No number: the free allowance is lifetime + remote config (TRIAL_FIRST_SPEC §5–§6), so a
+      // static count could be wrong for this viewer.
+      body: 'Pro makes AI meal analysis unlimited, so every photo and description gets its calories and macros.',
       primary: { label: 'See Pro', action: paywallAction },
       dismissible: true,
     },
@@ -246,26 +250,110 @@ export const meetFitzy: PromoDefinition = {
     if (journey.fitzyOpenedAt !== null) return 'fitzy_opened';
     return null;
   },
-  creatives: ({ journey }) => [
+  creatives: ({ ctx, journey }) => {
+    // Pro / trial users can chat: the original card, prompt prefilled from their last meal.
+    if (ctx?.isPro === true) {
+      return [
+        {
+          id: 'meet_fitzy_v1',
+          weight: 100,
+          layout: 'banner',
+          theme: THEMES.fitzy,
+          icon: 'chat',
+          emoji: '💬',
+          title: 'Meet Fitzy, your AI coach',
+          body: 'Ask anything about your meals. Fitzy can tell you what is working and what to try next.',
+          primary: {
+            label: 'Chat with Fitzy',
+            action: { type: 'open_screen', params: { screen: 'fitzy', prompt: fitzyPromptFor(journey.lastMeal) }, fallback: [{ type: 'open_screen', params: { screen: 'fitzy' } }] },
+          },
+          dismissible: true,
+        },
+      ];
+    }
+    // Free users (TRIAL_FIRST_SPEC §3.1): no promise of free chat and no prefilled question that
+    // would end in the paywall. The daily focus is free; chat is Pro (with a trial when eligible).
+    return [
+      {
+        id: journey?.trialEligible === true ? 'meet_fitzy_free_trial' : 'meet_fitzy_free',
+        weight: 100,
+        layout: 'banner',
+        theme: THEMES.fitzy,
+        icon: 'chat',
+        emoji: '💬',
+        title: 'Meet Fitzy, your AI coach',
+        body:
+          journey?.trialEligible === true
+            ? `Get a free daily focus from Fitzy. Chatting with Fitzy is part of Pro, with a free ${PRO_TRIAL_DAYS}-day trial.`
+            : 'Get a free daily focus from Fitzy. Chatting with Fitzy is part of Pro.',
+        primary: { label: 'Meet Fitzy', action: { type: 'open_screen', params: { screen: 'fitzy' } } },
+        dismissible: true,
+      },
+    ];
+  },
+};
+
+// ---------------------------------------------------------------------------- fitzy_recommendations
+
+/**
+ * Trial-first teaser (docs/TRIAL_FIRST_SPEC.md §3). Shows EARLY (session 1, no sign-up delay — most
+ * users are lost on day 0) to free (non-Pro, non-trial) users whose onboarding is complete with at
+ * least one goal AND for whom a REAL free weekly-plan preview exists (generated eagerly at
+ * onboarding completion — plan-warmup.ts), so "Fitzy has recommendations for you" is literally true.
+ * Trial copy only when the user can still start the trial.
+ */
+export function fitzyRecommendationsCreatives(trialEligible: boolean): CreativeOption[] {
+  const action: PromoAction = { type: 'paywall', params: { placement: PAYWALL_PLACEMENT_FITZY_RECOMMENDATIONS } };
+  return [
     {
-      id: 'meet_fitzy_v1',
+      id: trialEligible ? 'fitzy_recs_trial' : 'fitzy_recs_pro',
       weight: 100,
       layout: 'banner',
       theme: THEMES.fitzy,
-      icon: 'chat',
-      emoji: '💬',
-      title: 'Meet Fitzy, your coach',
-      body: 'Ask anything about your meals. Fitzy can tell you what is working and what to try next.',
-      primary: {
-        label: 'Chat with Fitzy',
-        action: { type: 'open_screen', params: { screen: 'fitzy', prompt: fitzyPromptFor(journey.lastMeal) }, fallback: [{ type: 'open_screen', params: { screen: 'fitzy' } }] },
-      },
+      icon: 'sparkles',
+      emoji: '✨',
+      eyebrow: 'Fitzy',
+      title: 'Fitzy has recommendations for you',
+      body: trialEligible
+        ? `Start your free ${PRO_TRIAL_DAYS}-day trial to get your personalized plan.`
+        : 'Go Pro to get your personalized weekly plan from Fitzy.',
+      primary: { label: trialEligible ? 'Start free trial' : 'See Pro', action },
       dismissible: true,
     },
-  ],
+  ];
+}
+
+export const fitzyRecommendations: PromoDefinition = {
+  key: 'fitzy_recommendations',
+  kind: 'promo',
+  score: PROMO_SCORES.fitzy_recommendations,
+  // Early but not spammy: shown on at most 3 distinct days a week (any number of sessions within a
+  // day — the D0 window is the point), gone for 72 h after a dismiss, gone for good after a purchase.
+  caps: { perWeek: 3, cooldownHoursAfterDismiss: 72, hideAfterConversion: true },
+  requiresState: true,
+  audience: ({ ctx, journey }) => {
+    if (ctx.isPro !== false) return ctx.isPro === null ? 'tier_unknown' : 'already_pro';
+    if (ctx.subscriptionsEnabled !== true) return 'subscriptions_off';
+    if (journey.fitzyRecommendationsReady !== true) return journey.fitzyRecommendationsReady == null ? 'goals_unknown' : 'no_goals';
+    if (journey.fitzyPlanReady !== true) return journey.fitzyPlanReady === false ? 'no_plan_yet' : 'plan_unknown';
+    return null;
+  },
+  creatives: ({ journey }) => fitzyRecommendationsCreatives(journey.trialEligible === true),
 };
 
+/**
+ * One paywall card at a time: when fitzy_recommendations is selected, pro_value steps aside
+ * (the personalized card is the stronger, more specific reason to start the trial), and so does
+ * meet_fitzy (one Fitzy card). A Pro lifecycle card still supersedes the paywall cards
+ * (pro-lifecycle SUPERSEDED_PROMO_KEYS).
+ */
+export const PROMO_EXCLUSIONS: ReadonlyArray<{ winner: string; loser: string }> = [
+  { winner: 'fitzy_recommendations', loser: 'pro_value' },
+  // One Fitzy card at a time on day 0: the personalized teaser replaces the generic intro.
+  { winner: 'fitzy_recommendations', loser: 'meet_fitzy' },
+];
+
 /** In evaluation order (ranking is by score, not this order). */
-export const SYSTEM_PROMOS: readonly PromoDefinition[] = [firstMeal, logMealNow, proValue, meetFitzy];
+export const SYSTEM_PROMOS: readonly PromoDefinition[] = [firstMeal, logMealNow, fitzyRecommendations, proValue, meetFitzy];
 
 export const SYSTEM_PROMO_KEYS = SYSTEM_PROMOS.map((p) => p.key);

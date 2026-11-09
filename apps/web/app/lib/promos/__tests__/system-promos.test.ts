@@ -20,6 +20,10 @@ import {
   parsePromoClient,
   proValue,
   proValueCreatives,
+  fitzyRecommendations,
+  fitzyRecommendationsCreatives,
+  fitzyRecommendationsReadyFrom,
+  PROMO_SCORES,
   promosConfig,
   selectPromos,
   type JourneyContext,
@@ -158,8 +162,8 @@ describe('pro_value', () => {
       expect(`${c.title} ${c.body}`).not.toMatch(/\d+\s*(k|,000)|users|people|members love|#1|best/i); // no invented social proof
     }
   });
-  it('quotes the real free scan limit', () => {
-    expect(proValueCreatives(new Set(['food_ai_unlimited']))[0].body).toContain('5 AI meal scans a day');
+  it('no stale free-scan number (the allowance is lifetime + remote config)', () => {
+    expect(proValueCreatives(new Set(['food_ai_unlimited']))[0].body).not.toMatch(/\d/);
   });
   it('dropped entirely for a client without paywall@1', () => {
     const client = parsePromoClient({ cardsSupportPromo: true, actions: 'open_screen@1', promoLayouts: 'banner' });
@@ -175,16 +179,29 @@ describe('meet_fitzy', () => {
     expect(meetFitzy.audience(input({ fitzyOpenedAt: undefined }))).toBe('fitzy_unknown');
     expect(meetFitzy.audience(input({ hasLoggedMeal: false }))).toBe('no_meal_yet');
   });
-  it('opens Fitzy with a prompt seeded from the last meal (sanitised, ≤ 200)', () => {
-    const [c] = meetFitzy.creatives(input());
+  it('Pro: opens Fitzy with a prompt seeded from the last meal (sanitised, ≤ 200)', () => {
+    const [c] = meetFitzy.creatives(input({}, { isPro: true }));
     expect(c.primary.action.params).toEqual({ screen: 'fitzy', prompt: 'What do you think of my lunch: Chicken salad?' });
     expect(fitzyPromptFor({ title: '  <b>Pad\nthai</b> [x](y) ', mealType: 'other' })).toBe('What do you think of my meal: b Pad thai /b x (y)?');
     expect(fitzyPromptFor(null)).toBe('What do you think of my last meal?');
     expect([...fitzyPromptFor({ title: 'z'.repeat(500), mealType: 'dinner' })].length).toBeLessThanOrEqual(200);
   });
-  it('falls back to plain open_screen fitzy if the prompt were invalid', () => {
-    const [c] = meetFitzy.creatives(input());
+  it('Pro: falls back to plain open_screen fitzy if the prompt were invalid', () => {
+    const [c] = meetFitzy.creatives(input({}, { isPro: true }));
     expect(c.primary.action.fallback).toEqual([{ type: 'open_screen', params: { screen: 'fitzy' } }]);
+  });
+
+  it('free (TRIAL_FIRST_SPEC §3.1): no free-chat promise and no prefilled question that would hit the paywall', () => {
+    const [trial] = meetFitzy.creatives(input({ trialEligible: true }));
+    expect(trial).toMatchObject({
+      id: 'meet_fitzy_free_trial',
+      title: 'Meet Fitzy, your AI coach',
+      body: 'Get a free daily focus from Fitzy. Chatting with Fitzy is part of Pro, with a free 3-day trial.',
+      primary: { label: 'Meet Fitzy', action: { type: 'open_screen', params: { screen: 'fitzy' } } },
+    });
+    const [noTrial] = meetFitzy.creatives(input({ trialEligible: false }));
+    expect(noTrial).toMatchObject({ id: 'meet_fitzy_free', body: 'Get a free daily focus from Fitzy. Chatting with Fitzy is part of Pro.' });
+    expect(`${noTrial.title} ${noTrial.body} ${noTrial.primary.label}`).not.toMatch(/chat with fitzy|ask anything/i);
   });
 });
 
@@ -194,5 +211,60 @@ describe('selection across all four for one user', () => {
     const base = { definitions: SYSTEM_PROMOS, ctx: makeCtx({ now: NOW }), state: new Map(), liveProFeatures: new Set(['food_ai_unlimited']), client: CLIENT, config: cfg };
     expect(selectPromos({ ...base, journey: journey({ hasLoggedMeal: false, lastMeal: null }) }).candidates.map((c) => c.promoKey)).toEqual(['first_meal']);
     expect(selectPromos({ ...base, journey: journey() }).candidates.map((c) => c.promoKey)).toEqual(['log_meal_now', 'pro_value', 'meet_fitzy']);
+  });
+});
+
+describe('fitzy_recommendations (TRIAL_FIRST_SPEC §3)', () => {
+  const ready = { fitzyRecommendationsReady: true, trialEligible: true, fitzyPlanReady: true };
+  const at = (hoursAgo: number) => new Date(NOW.getTime() - hoursAgo * 3_600_000).toISOString();
+
+  it('only free, non-trial users with goals set and a REAL plan preview — from session 1 (no sign-up delay)', () => {
+    expect(fitzyRecommendations.audience(input(ready))).toBeNull();
+    expect(fitzyRecommendations.audience(input(ready, { isPro: true }))).toBe('already_pro'); // Pro and trialing are premium
+    expect(fitzyRecommendations.audience(input(ready, { isPro: null }))).toBe('tier_unknown');
+    expect(fitzyRecommendations.audience(input(ready, { subscriptionsEnabled: false }))).toBe('subscriptions_off');
+    expect(fitzyRecommendations.audience(input({ ...ready, fitzyRecommendationsReady: false }))).toBe('no_goals');
+    expect(fitzyRecommendations.audience(input({ ...ready, fitzyRecommendationsReady: null }))).toBe('goals_unknown');
+    expect(fitzyRecommendations.audience(input({ ...ready, signupAt: at(0.1) }))).toBeNull(); // minutes after sign-up
+    expect(fitzyRecommendations.audience(input({ ...ready, hasLoggedMeal: false }))).toBeNull(); // no meal needed
+    expect(fitzyRecommendations.audience(input({ ...ready, fitzyPlanReady: false }))).toBe('no_plan_yet');
+    expect(fitzyRecommendations.audience(input({ ...ready, fitzyPlanReady: null }))).toBe('plan_unknown');
+    expect(fitzyRecommendations.caps).toEqual({ perWeek: 3, cooldownHoursAfterDismiss: 72, hideAfterConversion: true });
+    expect(PROMO_SCORES.fitzy_recommendations).toBeGreaterThan(PROMO_SCORES.pro_value);
+  });
+
+  it('day 0, brand-new free user (no meal yet): first_meal + the teaser; teaser replaces meet_fitzy and pro_value', () => {
+    const cfg = promosConfig({ PROMOS_ENABLED: 'true' });
+    const base = { definitions: SYSTEM_PROMOS, ctx: makeCtx({ now: NOW }), state: new Map(), liveProFeatures: new Set(['food_ai_unlimited']), client: CLIENT, config: cfg };
+    const fresh = journey({ hasLoggedMeal: false, lastMeal: null, signupAt: at(0.5), ...ready });
+    expect(selectPromos({ ...base, journey: fresh }).candidates.map((c) => c.promoKey)).toEqual(['first_meal', 'fitzy_recommendations']);
+  });
+
+  it('readiness = onboarding complete AND at least one goal; missing columns → unknown', () => {
+    expect(fitzyRecommendationsReadyFrom({ onboarding_completed: true, goals: ['weight_loss'] })).toBe(true);
+    expect(fitzyRecommendationsReadyFrom({ onboarding_completed: true, goals: [] })).toBe(false);
+    expect(fitzyRecommendationsReadyFrom({ onboarding_completed: false, goals: ['health'] })).toBe(false);
+    expect(fitzyRecommendationsReadyFrom({ onboarding_completed: true, goals: [' '] })).toBe(false);
+    expect(fitzyRecommendationsReadyFrom({ id: 'x' })).toBeNull();
+    const j = buildJourneyContext({ id: 'u', onboarding_completed: true, goals: ['health'], trial_started_at: null, subscription_platform: null }, null, { now: NOW, timezone: 'UTC', localDate: '2026-10-26' });
+    expect(j).toMatchObject({ fitzyRecommendationsReady: true, trialEligible: true });
+  });
+
+  it('copy: trial-first when eligible, Pro copy otherwise; opens the paywall at placement fitzy_recommendations', () => {
+    const [trial] = fitzyRecommendationsCreatives(true);
+    expect(trial).toMatchObject({
+      title: 'Fitzy has recommendations for you',
+      body: 'Start your free 3-day trial to get your personalized plan.',
+      primary: { label: 'Start free trial', action: { type: 'paywall', params: { placement: 'fitzy_recommendations' } } },
+    });
+    const [pro] = fitzyRecommendationsCreatives(false);
+    expect(pro.primary.label).toBe('See Pro');
+    expect(`${pro.title} ${pro.body}`).not.toMatch(/trial|free/i);
+  });
+
+  it('dropped for a client without paywall@1', () => {
+    const client = parsePromoClient({ cardsSupportPromo: true, actions: 'open_screen@1', promoLayouts: 'banner' });
+    const r = selectPromos({ definitions: [fitzyRecommendations], ctx: makeCtx({ now: NOW }), journey: journey(ready), state: new Map(), liveProFeatures: new Set(), client, config: promosConfig({ PROMOS_ENABLED: 'true' }) });
+    expect(r.candidates).toHaveLength(0);
   });
 });

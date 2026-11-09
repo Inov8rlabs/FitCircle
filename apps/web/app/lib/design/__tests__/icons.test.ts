@@ -13,7 +13,7 @@ import { describe, expect, it } from 'vitest';
 
 import { DOOR_IDEAS, GLYPHS, howItWorksFor } from '@/lib/campaigns/campaign-utils';
 import { CHALLENGE_TEMPLATES } from '@/lib/data/challenge-templates';
-import { firstMeal, LOG_MEAL_COPY, meetFitzy, proValueCreatives } from '@/lib/promos/system-promos';
+import { firstMeal, fitzyRecommendationsCreatives, LOG_MEAL_COPY, meetFitzy, proValueCreatives } from '@/lib/promos/system-promos';
 import { SEASONS } from '@/lib/seasonal/seasons';
 import { MILESTONES } from '@/lib/streaks/streak-config';
 
@@ -84,6 +84,9 @@ describe('every key the API emits is registered', () => {
     const creatives = [
       ...firstMeal.creatives({} as any),
       ...meetFitzy.creatives({ journey: { lastMeal: null } } as any),
+      ...meetFitzy.creatives({ ctx: { isPro: true }, journey: { lastMeal: null } } as any),
+      ...fitzyRecommendationsCreatives(true),
+      ...fitzyRecommendationsCreatives(false),
       ...proValueCreatives(new Set(['food_ai_unlimited', 'history_extended', 'ads_removed'])),
     ];
     expectKeys('promos', [...creatives.map((c) => c.icon), ...Object.values(LOG_MEAL_COPY).map((c) => c.icon)]);

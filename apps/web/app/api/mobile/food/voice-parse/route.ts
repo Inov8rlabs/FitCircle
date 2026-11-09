@@ -1,6 +1,7 @@
 import { after, type NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 
+import { foodAiUpgradeDetails, foodAiUpgradeMessage } from '@/lib/fitzy/paywall';
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { NutritionIntelligenceService } from '@/lib/services/nutrition-intelligence-service';
 import { NutritionTrainingService } from '@/lib/services/nutrition-training-service';
@@ -159,12 +160,12 @@ export async function POST(request: NextRequest) {
       const limitName = parsed.data.source === 'text' ? 'AI-estimate' : 'voice-estimate';
       const message = fallback.skipFallbackSave
         ? isUpgrade
-          ? `You've used your ${parseError.limit} free AI logs today — go Pro for unlimited.`
+          ? foodAiUpgradeMessage(parseError.limit, parseError.trialEligible === true)
           : isRate
             ? `You've reached today's ${limitName} limit — you can add the details yourself.`
             : "Couldn't understand that — you can add the details yourself."
         : isUpgrade
-          ? `You've used your ${parseError.limit} free AI logs today — go Pro for unlimited. We saved your note so you can add the details.`
+          ? `${foodAiUpgradeMessage(parseError.limit, parseError.trialEligible === true)} We saved your note so you can add the details.`
           : isRate
             ? `You've reached today's ${limitName} limit — we saved your note so you can add the details.`
             : "Couldn't understand that — we saved your note so you can add the details.";
@@ -181,13 +182,8 @@ export async function POST(request: NextRequest) {
               // Only present when the client asked for the fallback to be skipped:
               // tells it that `savedEntryId` (if any) is ITS OWN entry, not a new copy.
               ...(fallback.skipFallbackSave ? { fallbackSaved: false } : {}),
-              ...(isUpgrade
-                ? {
-                    feature: (parseError as UpgradeRequiredError).feature,
-                    used: (parseError as UpgradeRequiredError).used,
-                    limit: (parseError as UpgradeRequiredError).limit,
-                  }
-                : {}),
+              // Trial-first (TRIAL_FIRST_SPEC §5): legacy {feature, used, limit} + additive paywall.
+              ...(isUpgrade ? foodAiUpgradeDetails(parseError) : {}),
             },
             timestamp: new Date().toISOString(),
           },

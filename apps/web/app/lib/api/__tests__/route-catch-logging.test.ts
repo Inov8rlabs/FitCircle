@@ -32,6 +32,7 @@ const LOGGING_MAPPERS: Record<string, string> = {
   experimentsFailFrom: 'app/lib/experiments/http.ts',
   mobileFailFrom: 'app/lib/experiments/http.ts',
   feedFailFrom: 'app/lib/home-feed/http.ts',
+  remoteConfigFailFrom: 'app/lib/remote-config/http.ts',
   fitzyFail: 'app/lib/fitzy/http.ts',
   describeFitzyError: 'app/lib/fitzy/http.ts',
   challengeErrorResponse: 'app/lib/http/circle-challenge-errors.ts',

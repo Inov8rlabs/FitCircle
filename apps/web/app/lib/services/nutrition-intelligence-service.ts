@@ -4,6 +4,8 @@ import * as Sentry from '@sentry/nextjs';
 import { generateText, Output } from 'ai';
 
 
+import { logIgnoredQueryError } from '@/lib/api/route-errors';
+
 import { createAdminSupabase } from '../supabase-admin';
 import { stripEmoji, stripEmojiOrNull } from '../text/strip-emoji';
 import type { FoodDTO } from '../types/foods';
@@ -29,7 +31,6 @@ import { FoodsSemanticService, type SemanticCandidate } from './foods-semantic-s
 import { FoodsService } from './foods-service';
 import { NutritionGroundingService, type GroundingMode } from './nutrition-grounding-service';
 import { UsageService } from './usage-service';
-import { logIgnoredQueryError } from '@/lib/api/route-errors';
 
 /**
  * NutritionIntelligenceService — the server-side "brain" for nutrition (PRD §6.1, §7.2.1).
@@ -52,6 +53,8 @@ import { logIgnoredQueryError } from '@/lib/api/route-errors';
 // Both are env-overridable so a bake-off winner can be promoted (or rolled back) without a
 // deploy: NUTRITION_VISION_MODEL / NUTRITION_FALLBACK_MODEL (gateway slugs).
 const VISION_MODEL = process.env.NUTRITION_VISION_MODEL?.trim() || 'anthropic/claude-haiku-4.5';
+/** Fallback-save dedupe window: the same refused photo(s) within this many hours reuse the saved entry. */
+const UNPARSED_DEDUPE_HOURS = 24;
 const FAST_FALLBACK_MODEL = process.env.NUTRITION_FALLBACK_MODEL?.trim() || 'google/gemini-3-flash';
 
 /**
@@ -375,6 +378,10 @@ export class NutritionIntelligenceService {
     }
     const imageHash = hasher.digest('hex');
     const useCache = !opts.bypassCache && !refine;
+    // A free user past the lifetime allowance gets the paywall even for a cached result
+    // (TRIAL_FIRST_SPEC §5: no AI analysis for them past 5, served fresh or from cache).
+    // A cache hit itself never consumes a credit.
+    if (useCache && !opts.bypassQuota) await UsageService.assertFoodAiQuota(userId);
     const cachedResult = useCache ? await this.getCachedResult(imageHash) : null;
     if (cachedResult) {
       const { dbKcalPer100g, ...draft } = await this.toDraft(userId, cachedResult, VISION_MODEL, true, 'photo', 'llm_vision', opts.grounding);
@@ -392,7 +399,10 @@ export class NutritionIntelligenceService {
     //    Caching is checked first so repeat/identical photos don't count against the quota.
     //    A multi-image request is ONE model call and counts as one parse.
     //    Throws UpgradeRequiredError (free limit, paywall trigger) or Error('RateLimited').
-    if (!opts.bypassQuota) await UsageService.assertFoodAiQuota(userId);
+    //    Lifetime allowance for free users (5 total), 100/day ceiling for Pro: the credit is
+    //    RESERVED here (race-safe) and released again if both models fail (success-only counting).
+    //    A "Fix" (refine) is a real analysis and counts too.
+    const reservation = opts.bypassQuota ? null : await UsageService.reserveFoodAi(userId, imageHash);
 
     // 3. Structured vision call via the AI Gateway. generateText + Output.object validates
     //    the result against the Zod schema; explicit failover below handles a failed attempt.
@@ -439,6 +449,7 @@ export class NutritionIntelligenceService {
           primaryModel,
           fallback: 'disabled',
         }, primaryError);
+        await reservation?.release();
         throw new Error('ParseFailed');
       }
       model = fallbackModel;
@@ -461,6 +472,7 @@ export class NutritionIntelligenceService {
           primaryModel,
           primaryError: this.describeParseError(primaryError),
         }, fallbackError);
+        await reservation?.release();
         throw new Error('ParseFailed');
       }
     }
@@ -468,7 +480,8 @@ export class NutritionIntelligenceService {
 
     // 4. Record the call (for the daily cap) and cache the result by image hash. A bake-off
     //    run bypasses the cache entirely so it never seeds production with eval outputs.
-    if (useCache) await this.recordParse(userId, imageHash, result);
+    //    The parse-log row (the credit) was already written by reserveFoodAi.
+    if (useCache) await this.recordParse(userId, imageHash, result, { logged: reservation !== null });
 
     const { dbKcalPer100g, ...draft } = await this.toDraft(userId, result, model, false, 'photo', 'llm_vision', opts.grounding);
     return {
@@ -505,7 +518,9 @@ export class NutritionIntelligenceService {
     const fallbackModel = opts.fallbackModel === undefined ? FAST_FALLBACK_MODEL : opts.fallbackModel;
     // Tier-aware daily quota — COMBINED across all paid parses (photo/voice/item); every
     // recorded parse counts toward the same daily budget. May throw UpgradeRequiredError.
-    if (!opts.bypassQuota) await UsageService.assertFoodAiQuota(userId);
+    // Reserved before the model call (race-safe), released on failure (success-only counting).
+    const transcriptHash = createHash('sha256').update(transcript).digest('hex');
+    const reservation = opts.bypassQuota ? null : await UsageService.reserveFoodAi(userId, transcriptHash);
 
     let result: TextParseResult;
     let model = primaryModel;
@@ -522,6 +537,7 @@ export class NutritionIntelligenceService {
         }, err);
       if (!fallbackModel) {
         failure(primaryModel, primaryError, { fallback: 'disabled' });
+        await reservation?.release();
         throw new Error('ParseFailed');
       }
       model = fallbackModel;
@@ -529,14 +545,13 @@ export class NutritionIntelligenceService {
         result = await this.callVoiceModel(fallbackModel, userId, transcript, TEXT_FALLBACK_TIMEOUT_MS, source);
       } catch (fallbackError) {
         failure(fallbackModel, fallbackError, { primaryError: this.describeParseError(primaryError) });
+        await reservation?.release();
         throw new Error('ParseFailed');
       }
     }
 
-    // Cap accounting (no cache). The hash is over the transcript so the log row matches
-    // the not-null image_hash column convention; it is not used for lookups.
-    const transcriptHash = createHash('sha256').update(transcript).digest('hex');
-    if (!opts.bypassQuota) await this.recordParseLog(userId, transcriptHash);
+    // Cap accounting: the nutrition_parse_log row (hash over the transcript) is the reservation
+    // above, kept because the parse succeeded. No content cache for transcripts.
 
     return {
       ...stripDbDensity(await this.toDraft(userId, result, model, false, 'voice', 'llm_voice')),
@@ -630,6 +645,8 @@ export class NutritionIntelligenceService {
 
     // A successful re-estimate is deterministic for the same food/portion. Check the cache
     // before the daily cap so a user retry is instant and never incurs another model call.
+    // Free users past the lifetime allowance get the paywall even for a cached estimate.
+    await UsageService.assertFoodAiQuota(userId);
     const cached = await this.getCachedResult(itemHash);
     if (cached?.items[0]) {
       return await this.finalizeEstimatedItem(userId, cleanName, resolved, cached.items[0]);
@@ -637,7 +654,8 @@ export class NutritionIntelligenceService {
 
     // Tier-aware daily quota — COMBINED across all paid parses (photo/voice/item); every
     // recorded parse counts toward the same daily budget. May throw UpgradeRequiredError.
-    await UsageService.assertFoodAiQuota(userId);
+    // Reserved before the model call (race-safe), released on failure (success-only counting).
+    const reservation = await UsageService.reserveFoodAi(userId, itemHash);
 
     let llm: ParsedFoodItem;
     const startedAt = Date.now();
@@ -659,15 +677,17 @@ export class NutritionIntelligenceService {
           primaryModel: ITEM_MODEL,
           primaryError: this.describeParseError(primaryError),
         }, fallbackError);
+        await reservation.release();
         throw new Error('ParseFailed');
       }
     }
 
-    await this.recordParse(userId, itemHash, {
-      items: [llm],
-      overallConfidence: llm.confidence,
-      notes: null,
-    });
+    await this.recordParse(
+      userId,
+      itemHash,
+      { items: [llm], overallConfidence: llm.confidence, notes: null },
+      { logged: true },
+    );
     return await this.finalizeEstimatedItem(userId, cleanName, resolved, llm);
   }
 
@@ -683,8 +703,29 @@ export class NutritionIntelligenceService {
   static async saveUnparsedPhoto(
     userId: string,
     note: string | null,
-  ): Promise<{ entryId: string }> {
+    opts: { dedupeKey?: string | null } = {},
+  ): Promise<{ entryId: string; reused?: boolean }> {
     const supabase = createAdminSupabase();
+    const dedupeKey = opts.dedupeKey ?? null;
+    // Same photo(s) refused again within 24 h (a client retry loop, or a re-upload after the
+    // free AI allowance ran out): hand back the entry we already saved instead of piling up
+    // blank duplicates. Best-effort; any error just saves a new entry as before.
+    if (dedupeKey) {
+      try {
+        const since = new Date(Date.now() - UNPARSED_DEDUPE_HOURS * 3_600_000).toISOString();
+        const { data: existing, error: findError } = await supabase
+          .from('food_log_entries')
+          .select('id')
+          .eq('user_id', userId)
+          .is('deleted_at', null)
+          .eq('metadata->>unparsed_photo_key', dedupeKey)
+          .gte('created_at', since)
+          .limit(1);
+        if (!findError && existing?.[0]?.id) return { entryId: existing[0].id as string, reused: true };
+      } catch (err) {
+        console.warn('[NutritionIntelligenceService.saveUnparsedPhoto] dedupe lookup failed:', (err as any)?.message ?? err);
+      }
+    }
     const { data: entry, error } = await FoodLogService.createEntry(
       userId,
       {
@@ -698,7 +739,22 @@ export class NutritionIntelligenceService {
     if (error || !entry) {
       throw new Error(`FallbackSaveFailed: ${error?.message ?? 'no entry returned'}`);
     }
+    if (dedupeKey) {
+      const { error: tagError } = await supabase
+        .from('food_log_entries')
+        .update({ metadata: { ...((entry as any).metadata ?? {}), unparsed_photo_key: dedupeKey } })
+        .eq('id', entry.id);
+      if (tagError) console.warn('[NutritionIntelligenceService.saveUnparsedPhoto] dedupe tag failed:', tagError.message);
+    }
     return { entryId: entry.id };
+  }
+
+  /** Stable key for "these exact photos + note" (fallback-save dedupe). */
+  static unparsedPhotoKey(images: ReadonlyArray<{ bytes: Uint8Array }>, note: string | null): string {
+    const h = createHash('sha256').update(`unparsed:v1:${images.length}:`);
+    for (const img of images) h.update(createHash('sha256').update(img.bytes).digest());
+    if (note?.trim()) h.update(`note:${note.trim()}`);
+    return h.digest('hex');
   }
 
   /**
@@ -1604,27 +1660,22 @@ export class NutritionIntelligenceService {
   }
 
   /** Log the call (cap accounting) + cache the result by image hash. Failure-isolated. */
-  private static async recordParse(userId: string, imageHash: string, result: PhotoParseResult): Promise<void> {
+  private static async recordParse(
+    userId: string,
+    imageHash: string,
+    result: PhotoParseResult,
+    opts: { logged?: boolean } = {},
+  ): Promise<void> {
     const supabase = createAdminSupabase();
     try {
-      await supabase.from('nutrition_parse_log').insert({ user_id: userId, image_hash: imageHash });
+      // `logged`: the credit row was already written by UsageService.reserveFoodAi.
+      if (!opts.logged) await supabase.from('nutrition_parse_log').insert({ user_id: userId, image_hash: imageHash });
       await supabase
         .from('nutrition_parse_cache')
         .upsert({ image_hash: imageHash, result }, { onConflict: 'image_hash' });
     } catch (err) {
       // Non-blocking: a logging/cache failure must not fail the user's parse.
       console.error('[NutritionIntelligenceService.recordParse] non-fatal:', err);
-    }
-  }
-
-  /** Log a parse call (accounting/observability only; no cache write). Failure-isolated. */
-  private static async recordParseLog(userId: string, hash: string): Promise<void> {
-    const supabase = createAdminSupabase();
-    try {
-      await supabase.from('nutrition_parse_log').insert({ user_id: userId, image_hash: hash });
-    } catch (err) {
-      // Non-blocking: a logging failure must not fail the user's parse.
-      console.error('[NutritionIntelligenceService.recordParseLog] non-fatal:', err);
     }
   }
 }

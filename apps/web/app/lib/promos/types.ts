@@ -161,6 +161,15 @@ export interface JourneyContext {
   mealReminderPrefs: MealReminderPrefs;
   /** Local minutes after midnight (slot windows need minutes, not just the hour). */
   localMinutes: number;
+  /**
+   * TRIAL_FIRST_SPEC §3: Fitzy has real input for personalized recommendations
+   * (onboarding complete AND at least one goal). null = unknown (columns absent).
+   */
+  fitzyRecommendationsReady?: boolean | null;
+  /** Server's best guess that the user can still start the free trial (trial-eligibility.ts). */
+  trialEligible?: boolean;
+  /** A REAL free weekly-plan preview exists (plan-warmup.ts). null/undefined = not read → the teaser doesn't match. */
+  fitzyPlanReady?: boolean | null;
 }
 
 /** What the client said it can render and run (`cards=…promo@1`, `actions=`, `promoLayouts=`). */

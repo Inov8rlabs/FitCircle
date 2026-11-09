@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 
+import { fitzyUpgradeMessage, paywallFor } from '@/lib/fitzy/paywall';
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { NutritionCoachService } from '@/lib/services/nutrition-coach-service';
 import { UpgradeRequiredError } from '@/lib/services/usage-service';
@@ -90,8 +91,14 @@ export async function POST(request: NextRequest) {
           data: null,
           error: {
             code: 'UPGRADE_REQUIRED',
-            message: "You've used today's free coach messages — go Pro for unlimited coaching.",
-            details: { feature: error.feature, used: error.used, limit: error.limit },
+            // Shares the Fitzy budget (trial-first: 0/day free). Same envelope; paywall additive.
+            message: error.limit > 0 ? "You've used today's free coach messages — go Pro for unlimited coaching." : fitzyUpgradeMessage(error.limit, error.trialEligible === true),
+            details: {
+              feature: error.feature,
+              used: error.used,
+              limit: error.limit,
+              paywall: paywallFor('fitzy_quota', { trialEligible: error.trialEligible === true }),
+            },
             timestamp: new Date().toISOString(),
           },
           meta: null,

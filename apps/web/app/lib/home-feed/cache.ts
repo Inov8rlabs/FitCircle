@@ -28,7 +28,8 @@ export function swrCache<T>(
   load: () => Promise<T>,
   opts: { ttlMs: number; maxStaleMs: number; label: string; now?: () => number }
 ): SwrCache<T> {
-  const now = opts.now ?? Date.now;
+  // Read Date.now at call time (not captured at module load) so fake timers apply in tests.
+  const now = opts.now ?? (() => Date.now());
   let entry: Entry<T> | null = null;
   let inflight: Promise<T> | null = null;
 

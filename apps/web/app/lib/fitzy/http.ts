@@ -7,7 +7,7 @@ import { FitzyLockedError, FitzyNotFoundError } from '../services/fitzy-conversa
 import { UpgradeRequiredError } from '../services/usage-service';
 import type { FitzyPaywall } from '../types/fitzy';
 
-import { paywallFor } from './paywall';
+import { fitzyUpgradeMessage, paywallFor } from './paywall';
 
 export { ok, fail };
 
@@ -25,8 +25,8 @@ export function describeFitzyError(error: unknown, label = 'fitzy'): FitzyErrorB
     return {
       status: 429,
       code: 'UPGRADE_REQUIRED',
-      message: "You've used today's free Fitzy messages — go Pro for unlimited coaching.",
-      paywall: paywallFor('fitzy_quota'),
+      message: fitzyUpgradeMessage(error.limit, error.trialEligible === true),
+      paywall: paywallFor('fitzy_quota', { trialEligible: error.trialEligible === true }),
       details: { feature: error.feature, used: error.used, limit: error.limit },
     };
   }

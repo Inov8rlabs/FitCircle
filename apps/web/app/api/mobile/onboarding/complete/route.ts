@@ -1,9 +1,11 @@
 import { type NextRequest, NextResponse } from 'next/server';
 
+import { warmFitzyPlanPreview } from '@/lib/fitzy/plan-warmup';
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { AssessmentService } from '@/lib/services/assessment-service';
 import { MobileAPIService } from '@/lib/services/mobile-api-service';
 import { completeBodySchema, OnboardingFlowService } from '@/lib/services/onboarding-flow-service';
+import { runAfterResponse } from '@/lib/utils/after-response';
 import { safeParseLenient } from '@/lib/validation/lenient-parse';
 
 /**
@@ -31,6 +33,9 @@ export async function POST(request: NextRequest) {
     if (birth.success) await OnboardingFlowService.saveBirthDate(user.id, birth.data);
 
     const result = await AssessmentService.completeOnboarding(user.id);
+    // Trial-first (TRIAL_FIRST_SPEC §3): produce the free weekly-plan teaser now, so the
+    // fitzy_recommendations card has real content in session 1. Free users with goals only; never blocks.
+    runAfterResponse(() => warmFitzyPlanPreview(user.id, request.headers.get('x-client-timezone')), 'fitzy plan preview');
     // Onboarding is already complete here; a failed read must not report otherwise.
     const profile = await MobileAPIService.getUserProfileWithStats(user.id).catch((error) => {
       console.error('[Mobile API] Onboarding complete: profile read failed:', error?.message);

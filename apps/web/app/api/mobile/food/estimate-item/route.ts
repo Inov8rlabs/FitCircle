@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 
+import { foodAiUpgradeDetails, foodAiUpgradeMessage } from '@/lib/fitzy/paywall';
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { NutritionIntelligenceService } from '@/lib/services/nutrition-intelligence-service';
 import { UpgradeRequiredError } from '@/lib/services/usage-service';
@@ -93,12 +94,9 @@ export async function POST(request: NextRequest) {
             data: null,
             error: {
               code: 'UPGRADE_REQUIRED',
-              message: `You've used your ${estimateError.limit} free AI estimates today — go Pro for unlimited.`,
-              details: {
-                feature: estimateError.feature,
-                used: estimateError.used,
-                limit: estimateError.limit,
-              },
+              message: foodAiUpgradeMessage(estimateError.limit, estimateError.trialEligible === true),
+              // Trial-first (TRIAL_FIRST_SPEC §5): legacy {feature, used, limit} + additive paywall.
+              details: foodAiUpgradeDetails(estimateError),
               timestamp: new Date().toISOString(),
             },
             meta: { requestTime: Date.now() - startTime },

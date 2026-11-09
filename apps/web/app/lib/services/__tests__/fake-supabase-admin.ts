@@ -18,6 +18,16 @@ export class FakeDb {
   fitcircles: Row[] = [];
   feature_flags: Row[] = [];
   complimentary_grants: Row[] = [];
+  remote_config_rules: Row[] = [];
+  remote_config_defaults: Row[] = [];
+  remote_config_changes: Row[] = [];
+  user_attribution: Row[] = [];
+  experiment_assignments: Row[] = [];
+  private seq = 0;
+  nextId(): string {
+    this.seq += 1;
+    return `00000000-0000-4000-8000-${String(this.seq).padStart(12, '0')}`;
+  }
 
   client() {
     return { from: (table: string) => new FakeQuery(this, table) };
@@ -46,6 +56,16 @@ export class FakeDb {
         return this.feature_flags;
       case 'complimentary_grants':
         return this.complimentary_grants;
+      case 'remote_config_rules':
+        return this.remote_config_rules;
+      case 'remote_config_defaults':
+        return this.remote_config_defaults;
+      case 'remote_config_changes':
+        return this.remote_config_changes;
+      case 'user_attribution':
+        return this.user_attribution;
+      case 'experiment_assignments':
+        return this.experiment_assignments;
       default:
         throw new Error(`FakeDb: unknown table ${table}`);
     }
@@ -155,8 +175,9 @@ class FakeQuery implements PromiseLike<any> {
           return { data: null, error: null };
         }
         if (this.table === 'nutrition_parse_log') {
-          this.db.nutrition_parse_log.push({ created_at: new Date().toISOString(), ...row });
-          return { data: null, error: null };
+          const stored = { id: this.db.nextId(), created_at: new Date().toISOString(), ...row };
+          this.db.nutrition_parse_log.push(stored);
+          return { data: stored, error: null };
         }
         if (this.table === 'complimentary_grants') {
           const stored = { id: `grant_${this.db.complimentary_grants.length + 1}`, created_at: new Date().toISOString(), revoked_at: null, ...row };
@@ -172,6 +193,11 @@ class FakeQuery implements PromiseLike<any> {
       case 'delete': {
         if (this.table === 'subscription_events') {
           for (const row of this.filtered()) this.db.subscription_events.delete(row.id);
+          return { data: null, error: null };
+        }
+        if (this.table === 'nutrition_parse_log') {
+          const doomed = new Set(this.filtered());
+          this.db.nutrition_parse_log = this.db.nutrition_parse_log.filter((r) => !doomed.has(r));
           return { data: null, error: null };
         }
         throw new Error(`FakeDb: delete not supported on ${this.table}`);

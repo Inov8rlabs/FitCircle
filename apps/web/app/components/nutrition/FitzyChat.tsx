@@ -1,10 +1,13 @@
 'use client';
 
-import { Loader2, Send, Sparkles, Trash2 } from 'lucide-react';
+import { Crown, Loader2, Send, Sparkles, Trash2 } from 'lucide-react';
+import Link from 'next/link';
 import { useEffect, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
+import { useEntitlements } from '@/hooks/useEntitlements';
+import { useWebTrial } from '@/hooks/useWebTrial';
 import { AnalyticsEvents, analytics, isUpgradeRequired } from '@/lib/analytics';
 import { nutritionClient, type FitzyMessage } from '@/lib/api/nutrition-client';
 import { useAuthStore } from '@/stores/auth-store';
@@ -19,6 +22,21 @@ interface FitzyChatProps {
 /** Last ~20 turns are sent on each request; we persist a bit more for restore. */
 const MAX_TURNS_SENT = 20;
 const MAX_TURNS_STORED = 50;
+
+/**
+ * Trial-first gate copy (docs/TRIAL_FIRST_SPEC.md §7). Web shows the trial headline only when a
+ * Stripe checkout would really carry the trial (GET /api/billing/trial).
+ */
+export function fitzyGateCopy(trialDays: number): { headline: string; sub: string | null; cta: string } {
+  return trialDays > 0
+    ? { headline: `Try Pro free for ${trialDays} days`, sub: 'Cancel anytime. Start your free trial to chat with Fitzy.', cta: 'Start free trial' }
+    : { headline: 'Unlock Fitzy Pro', sub: 'Upgrade to Pro to chat with Fitzy.', cta: 'Continue with Pro' };
+}
+
+/** Free users can open Fitzy but not send: the gate is live and their daily allowance is 0. */
+export function isFitzyChatLocked(e: { features?: Record<string, { allowed: boolean }>; limits?: { fitzyMessagesPerDay: number | null } } | null): boolean {
+  return !!e && e.features?.fitzy_unlimited?.allowed === false && e.limits?.fitzyMessagesPerDay === 0;
+}
 
 function storageKey(userId: string | undefined): string {
   return `fitzy.history.${userId ?? 'anon'}`;
@@ -56,6 +74,11 @@ export function FitzyChat({ circleId, fill }: FitzyChatProps) {
   const [error, setError] = useState<string | null>(null);
   const [disclaimer, setDisclaimer] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const { entitlements } = useEntitlements();
+  const { trialDays } = useWebTrial(entitlements?.tier !== 'premium');
+  // Pre-send gate: shown instead of sending (or after the server's UPGRADE_REQUIRED).
+  const [gateOpen, setGateOpen] = useState(false);
+  const subscriptionsEnabled = entitlements?.subscriptionsEnabled === true;
 
   // Restore persisted history when the user is known.
   useEffect(() => {
@@ -83,6 +106,12 @@ export function FitzyChat({ circleId, fill }: FitzyChatProps) {
   const send = async () => {
     const text = input.trim();
     if (!text || loading) return;
+    // Trial-first: decide BEFORE sending (no request, no AI spend); the typed text stays in the box.
+    if (isFitzyChatLocked(entitlements)) {
+      analytics.track(AnalyticsEvents.aiLimitReached({ feature: 'fitzy', source: circleId ? 'circle_fitzy' : 'fitzy' }));
+      setGateOpen(true);
+      return;
+    }
 
     const userMessage: FitzyMessage = { role: 'user', content: text };
     const next = [...messages, userMessage];
@@ -99,8 +128,10 @@ export function FitzyChat({ circleId, fill }: FitzyChatProps) {
     } catch (err) {
       if (isUpgradeRequired(err)) {
         analytics.track(AnalyticsEvents.aiLimitReached({ feature: 'fitzy', source: circleId ? 'circle_fitzy' : 'fitzy' }));
+        setGateOpen(true);
+      } else {
+        setError(err instanceof Error ? err.message : 'Fitzy could not respond. Try again.');
       }
-      setError(err instanceof Error ? err.message : 'Fitzy could not respond. Try again.');
       // Roll back the optimistic user turn so the input isn't lost.
       setMessages((prev) => prev.slice(0, -1));
       setInput(text);
@@ -188,6 +219,25 @@ export function FitzyChat({ circleId, fill }: FitzyChatProps) {
         )}
 
         {error && <p className="text-center text-sm text-amber-300">{error}</p>}
+
+        {gateOpen && (() => {
+          const copy = fitzyGateCopy(trialDays);
+          return (
+            <div data-testid="fitzy-paywall" className="rounded-xl border border-fuchsia-500/30 bg-gradient-to-br from-indigo-600/20 to-fuchsia-600/20 p-4 text-center">
+              <Crown className="mx-auto h-6 w-6 text-brand-yellow" aria-hidden />
+              <p className="mt-2 text-sm font-semibold text-white">{copy.headline}</p>
+              {copy.sub && <p className="mt-1 text-xs text-gray-300">{copy.sub}</p>}
+              {subscriptionsEnabled ? (
+                <Link
+                  href="/upgrade?source=fitzy_send"
+                  className="mt-3 inline-flex items-center justify-center rounded-lg bg-gradient-to-r from-indigo-600 to-fuchsia-600 px-4 py-2 text-sm font-semibold text-white hover:from-indigo-700 hover:to-fuchsia-700"
+                >
+                  {copy.cta}
+                </Link>
+              ) : null}
+            </div>
+          );
+        })()}
       </div>
 
       {/* Disclaimer */}

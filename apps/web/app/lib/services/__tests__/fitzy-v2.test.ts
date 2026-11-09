@@ -38,10 +38,11 @@ vi.mock('ai', () => ({
   },
 }));
 
+import { FITZY_UNAVAILABLE, onboardingFallbackAnswer } from '../../fitzy/fallback-answers';
 import { META_MARKER, applyGuardrails, growthNudgeAllowed, parseMeta, splitMeta } from '../../fitzy/meta';
 import { CACHE_EPHEMERAL, DEFAULT_CHAT_MODEL, DEFAULT_DEEP_MODEL, thinkingOptions } from '../../fitzy/models';
-import { FITZY_UNAVAILABLE, onboardingFallbackAnswer } from '../../fitzy/fallback-answers';
 import { StreamGuard } from '../../fitzy/stream-guard';
+import { resetRemoteConfigCache } from '../../remote-config/service';
 import { FitzyConversationService } from '../fitzy-conversation-service';
 import { FitzyFocusService, fitBody } from '../fitzy-focus-service';
 import { FitzyMemoryService, MEMORY_CAP, isExcludedMemory } from '../fitzy-memory-service';
@@ -69,6 +70,10 @@ beforeEach(() => {
   db.addProfile({ id: FREE, display_name: 'Sam Lee', subscription_tier: 'free' });
   db.addProfile({ id: PRO, display_name: 'Ani Rao', subscription_tier: 'premium' });
   db.rows('feature_gates').push({ feature_key: 'fitzy_unlimited', required_tier: 'premium' });
+  // Trial-first ships free = 0/day; these model-path tests run FREE with a 5/day remote-config
+  // default (Admin Tools can still open free chat up). The 0/day gate has its own tests below.
+  db.rows('remote_config_defaults').push({ config_key: 'free_fitzy_messages_per_day', value: 5, updated_by: null, updated_at: '2026-11-01T00:00:00Z' });
+  resetRemoteConfigCache();
   db.rows('engagement_streaks').push({ user_id: PRO, current_streak: 9 });
   delete process.env.FITZY_CHAT_MODEL;
   delete process.env.FITZY_DEEP_MODEL;
@@ -247,6 +252,26 @@ describe('SSE streaming', () => {
     const events: FitzyStreamEvent[] = [];
     await expect(FitzyService.streamChat(FREE, { message: 'hi' }, (e) => events.push(e))).rejects.toBeInstanceOf(UpgradeRequiredError);
     expect(events).toEqual([]);
+  });
+
+  it('trial-first (code default 0/day): a free user is refused BEFORE any model call or write', async () => {
+    db.rows('remote_config_defaults').length = 0;
+    resetRemoteConfigCache();
+    const events: FitzyStreamEvent[] = [];
+    const err = await FitzyService.streamChat(FREE, { message: 'hi' }, (e) => events.push(e)).catch((e) => e);
+    expect(err).toBeInstanceOf(UpgradeRequiredError);
+    expect(err).toMatchObject({ used: 0, limit: 0 });
+    expect(events).toEqual([]);
+    expect(ai.calls).toEqual([]);
+    expect(db.rows('fitzy_messages')).toEqual([]); // the user's message is not persisted as a turn
+    expect(db.rows('fitzy_conversations')).toEqual([]);
+    expect(db.rows('fitzy_message_log')).toEqual([]);
+    await expect(FitzyService.chat(FREE, [{ role: 'user', content: 'hi' }])).rejects.toBeInstanceOf(UpgradeRequiredError);
+    expect(ai.calls).toEqual([]);
+    // Pro (and trialing, which is premium) still chats.
+    ai.stream.set(DEFAULT_CHAT_MODEL, [['Hello there.']]);
+    await collect(PRO, { message: 'hi' });
+    expect(ai.calls).toHaveLength(1);
   });
 
   it('server-held history wins with conversationId; clientMessages seed a new conversation once', async () => {

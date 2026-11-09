@@ -7,9 +7,10 @@ vi.mock('../../supabase-admin', async () => {
   return { createAdminSupabase: () => getDb().client() };
 });
 
-import { UsageService, UpgradeRequiredError } from '../usage-service';
-import { EntitlementService } from '../entitlement-service';
 import { LEGACY_LIMITS, TIER_LIMITS } from '../../config/tier-limits';
+import { resetRemoteConfigCache } from '../../remote-config/service';
+import { EntitlementService } from '../entitlement-service';
+import { UsageService, UpgradeRequiredError } from '../usage-service';
 
 const USER = '11111111-2222-3333-4444-555555555555';
 
@@ -46,6 +47,7 @@ beforeEach(() => {
     db.feature_gates.set(key, 'free');
   }
   setDb(db);
+  resetRemoteConfigCache();
 });
 
 describe('assertFoodAiQuota — gates dark (pre-077 regression guard)', () => {
@@ -62,13 +64,13 @@ describe('assertFoodAiQuota — gates dark (pre-077 regression guard)', () => {
 describe('assertFoodAiQuota — gate live', () => {
   beforeEach(() => setGate('food_ai_unlimited', 'premium'));
 
-  it('free user under the limit passes', async () => {
-    seedParses(TIER_LIMITS.free.foodAiParsesPerDay - 1);
+  it('free user under the lifetime allowance passes', async () => {
+    seedParses(TIER_LIMITS.free.foodAiAnalysesTotal - 1);
     await expect(UsageService.assertFoodAiQuota(USER)).resolves.toBeUndefined();
   });
 
-  it('free user at the limit gets UpgradeRequiredError with {feature, used, limit}', async () => {
-    seedParses(TIER_LIMITS.free.foodAiParsesPerDay);
+  it('free user at the lifetime allowance gets UpgradeRequiredError with {feature, used, limit}', async () => {
+    seedParses(TIER_LIMITS.free.foodAiAnalysesTotal);
     const err = await UsageService.assertFoodAiQuota(USER).catch((e) => e);
     expect(err).toBeInstanceOf(UpgradeRequiredError);
     expect(err.feature).toBe('food_ai_unlimited');
@@ -95,12 +97,12 @@ describe('assertFitzyQuota', () => {
     await expect(UsageService.assertFitzyQuota(USER)).resolves.toBeUndefined();
   });
 
-  it('free user at 5 messages gets UpgradeRequiredError once live', async () => {
+  it('trial-first: a free user is refused on the FIRST message once live (0/day)', async () => {
     setGate('fitzy_unlimited', 'premium');
-    seedFitzy(TIER_LIMITS.free.fitzyMessagesPerDay);
     const err = await UsageService.assertFitzyQuota(USER).catch((e) => e);
     expect(err).toBeInstanceOf(UpgradeRequiredError);
-    expect(err.limit).toBe(5);
+    expect(err.used).toBe(0);
+    expect(err.limit).toBe(0);
   });
 
   it('premium user is capped only by the abuse ceiling', async () => {
@@ -171,6 +173,9 @@ describe('EntitlementService.getEntitlements — payload additivity', () => {
       fitzyMessagesPerDay: null, // legacy: uncapped
       maxActiveCreatedCircles: null,
       historyDays: null,
+      // Additive (TRIAL_FIRST_SPEC §5): not capped while the gate is dark.
+      foodAiAnalysesTotal: null,
+      foodAiAnalysesRemaining: null,
     });
     expect(res.subscription).toMatchObject({ status: null, platform: null, willRenew: false });
   });
@@ -183,9 +188,11 @@ describe('EntitlementService.getEntitlements — payload additivity', () => {
     expect(res.features.food_ai_unlimited).toEqual({ allowed: false, requiredTier: 'premium' });
     expect(res.limits).toEqual({
       foodAiParsesPerDay: 5,
-      fitzyMessagesPerDay: 5,
+      fitzyMessagesPerDay: 0, // trial-first: chat needs Pro or a trial
       maxActiveCreatedCircles: 2,
       historyDays: 14,
+      foodAiAnalysesTotal: 5,
+      foodAiAnalysesRemaining: 5,
     });
   });
 

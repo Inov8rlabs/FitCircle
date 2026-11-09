@@ -1,6 +1,7 @@
 import * as Sentry from '@sentry/nextjs';
 import { after, type NextRequest, NextResponse } from 'next/server';
 
+import { foodAiUpgradeDetails, foodAiUpgradeMessage } from '@/lib/fitzy/paywall';
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { NutritionIntelligenceService } from '@/lib/services/nutrition-intelligence-service';
 import { NutritionTrainingService } from '@/lib/services/nutrition-training-service';
@@ -194,13 +195,18 @@ export async function POST(request: NextRequest) {
         }
       } else {
         try {
-          saved = await NutritionIntelligenceService.saveUnparsedPhoto(user.id, note);
+          // Dedupe: the same photo(s) refused again within 24 h (iOS background retries, or a free
+          // user past the AI allowance re-uploading) reuse the entry already saved — no blank duplicates.
+          const result = await NutritionIntelligenceService.saveUnparsedPhoto(user.id, note, {
+            dedupeKey: NutritionIntelligenceService.unparsedPhotoKey(images, note),
+          });
+          saved = { entryId: result.entryId };
           // Attach the photos AFTER responding: a failed parse has already burned up to
           // ~50s of the 60s budget, and image processing/upload for up to 5 photos would
           // blow past maxDuration mid-loop. The entry (with savedEntryId) is what the
-          // client needs now; the images land moments later.
-          const entryId = saved.entryId;
-          after(() => NutritionIntelligenceService.attachFallbackImages(entryId, user.id, files));
+          // client needs now; the images land moments later. A reused entry already has them.
+          const entryId = result.entryId;
+          if (!result.reused) after(() => NutritionIntelligenceService.attachFallbackImages(entryId, user.id, files));
         } catch (saveError) {
           console.error('[Mobile API] Photo parse fallback save failed:', saveError);
         }
@@ -232,12 +238,12 @@ export async function POST(request: NextRequest) {
       // Nothing was saved when the fallback is skipped, so the copy must not claim it was.
       const message = fallback.skipFallbackSave
         ? isUpgrade
-          ? `You've used your ${parseError.limit} free AI scans today — go Pro for unlimited.`
+          ? foodAiUpgradeMessage(parseError.limit, parseError.trialEligible === true)
           : isRate
             ? "You've reached today's photo-estimate limit — you can add the details yourself."
             : "Couldn't auto-detect the food — you can add the details yourself."
         : isUpgrade
-          ? `You've used your ${parseError.limit} free AI scans today — go Pro for unlimited. We saved your photo so you can add the details.`
+          ? foodAiUpgradeMessage(parseError.limit, parseError.trialEligible === true, true)
           : isRate
             ? "You've reached today's photo-estimate limit — we saved your photo so you can add the details."
             : "Couldn't auto-detect the food — we saved your photo so you can add the details.";
@@ -254,13 +260,8 @@ export async function POST(request: NextRequest) {
               // Only present when the client asked for the fallback to be skipped:
               // tells it that `savedEntryId` (if any) is ITS OWN entry, not a new copy.
               ...(fallback.skipFallbackSave ? { fallbackSaved: false } : {}),
-              ...(isUpgrade
-                ? {
-                    feature: (parseError).feature,
-                    used: (parseError).used,
-                    limit: (parseError).limit,
-                  }
-                : {}),
+              // Trial-first (TRIAL_FIRST_SPEC §5): legacy {feature, used, limit} + additive paywall.
+              ...(isUpgrade ? foodAiUpgradeDetails(parseError) : {}),
             },
             timestamp: new Date().toISOString(),
           },

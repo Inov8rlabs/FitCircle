@@ -1,6 +1,10 @@
-import { createAdminSupabase } from '../supabase-admin';
-import { TIER_LIMITS, LEGACY_LIMITS } from '../config/tier-limits';
 import { logIgnoredQueryError } from '@/lib/api/route-errors';
+
+import { TIER_LIMITS, LEGACY_LIMITS } from '../config/tier-limits';
+import { trialEligibleFromProfile } from '../entitlements/trial-eligibility';
+import { RemoteConfigService } from '../remote-config/service';
+import { createAdminSupabase } from '../supabase-admin';
+
 
 /**
  * UsageService — tier-aware daily quotas for metered AI features.
@@ -26,7 +30,9 @@ export class UpgradeRequiredError extends Error {
   constructor(
     public readonly feature: string,
     public readonly used: number,
-    public readonly limit: number
+    public readonly limit: number,
+    /** Fitzy chat gate only: may the user still start a free trial (paywall copy). Undefined elsewhere. */
+    public readonly trialEligible?: boolean
   ) {
     super('UPGRADE_REQUIRED');
     this.name = 'UpgradeRequiredError';
@@ -35,42 +41,147 @@ export class UpgradeRequiredError extends Error {
 
 type Tier = 'free' | 'premium';
 
+/** Free Fitzy answers per day for the onboarding tour's "Ask Fitzy" step (TRIAL_FIRST_SPEC §1.3). */
+export const ONBOARDING_FREE_FITZY_MESSAGES = 3;
+
+/** A held food AI credit (a nutrition_parse_log row). `release()` gives it back after a failed analysis. */
+export interface FoodAiReservation {
+  /** null when the reservation row could not be written (fail-soft path). */
+  id: string | null;
+  release(): Promise<void>;
+}
+
 export class UsageService {
   /**
-   * Food AI quota (photo + voice + single-item combined). Call where the old
-   * PHOTO_PARSE_DAILY_SOFT_CAP check lived; counting stays on nutrition_parse_log.
+   * Food AI quota check WITHOUT consuming (photo + voice + describe + Fix + estimate-item combined).
+   * Call it before serving a cached analysis so a free user past the lifetime allowance gets the
+   * paywall instead of a free result. Use reserveFoodAi() right before an actual model call.
+   *
+   * Trial-first (TRIAL_FIRST_SPEC §5): once food_ai_unlimited is live, FREE = 5 successful AI
+   * analyses in TOTAL (lifetime, every row in nutrition_parse_log); Pro / trial = the 100/day
+   * abuse ceiling. Gate dark = the legacy 25/day RateLimited cap for everyone.
    */
   static async assertFoodAiQuota(userId: string): Promise<void> {
-    const [gateLive, used] = await Promise.all([
-      this.isGateLive('food_ai_unlimited'),
-      this.countToday('nutrition_parse_log', userId),
-    ]);
-
-    if (!gateLive) {
-      if (used >= LEGACY_LIMITS.foodAiParsesPerDay) throw new Error('RateLimited');
-      return;
-    }
-
-    const tier = await this.getTier(userId);
-    const limit = TIER_LIMITS[tier].foodAiParsesPerDay;
-    if (used >= limit) {
-      if (tier === 'free') throw new UpgradeRequiredError('food_ai_unlimited', used, limit);
-      throw new Error('RateLimited');
-    }
+    const plan = await this.foodAiPlan(userId);
+    const used = await this.countFoodAi(userId, plan.scope);
+    if (used >= plan.limit) throw this.foodAiRefusal(plan, used);
   }
 
-  /** Fitzy / nutrition-coach quota. Historically uncapped, so gate-dark is a no-op. */
-  static async assertFitzyQuota(userId: string): Promise<void> {
+  /**
+   * Reserve ONE food AI analysis before the model call (race-safe insert-then-count).
+   * Inserts the nutrition_parse_log row first, then counts; if the count (including this row)
+   * is over the limit the row is deleted and the call refused. Two parallel requests at 4/5 can
+   * therefore never both pass (worst case both see 6/5 and both are refused — the user retries
+   * and gets the last credit). Only SUCCESSFUL analyses keep their row: callers MUST call
+   * `release()` when the model call fails, so failed/fallback parses never burn a credit.
+   *
+   * @throws UpgradeRequiredError (free, gate live) / Error('RateLimited') (ceilings)
+   */
+  static async reserveFoodAi(userId: string, hash: string): Promise<FoodAiReservation> {
+    const plan = await this.foodAiPlan(userId);
+    const supabase = createAdminSupabase();
+    const { data: row, error: insertError } = await supabase
+      .from('nutrition_parse_log')
+      .insert({ user_id: userId, image_hash: hash })
+      .select('id')
+      .single();
+    if (insertError || !row?.id) {
+      // Couldn't write the reservation: fall back to the plain (non-atomic) check so a logging
+      // fault never blocks a paying user, and still refuse a free user who is clearly over.
+      console.error('[UsageService] nutrition_parse_log reservation failed:', insertError?.message);
+      const used = await this.countFoodAi(userId, plan.scope);
+      if (used >= plan.limit) throw this.foodAiRefusal(plan, used);
+      return { id: null, release: async () => {} };
+    }
+    const id = row.id as string;
+    const release = async () => {
+      const { error } = await createAdminSupabase().from('nutrition_parse_log').delete().eq('id', id);
+      if (error) console.error('[UsageService] nutrition_parse_log release failed:', error.message);
+    };
+    const count = await this.countFoodAi(userId, plan.scope);
+    if (count > plan.limit) {
+      await release();
+      throw this.foodAiRefusal(plan, count - 1);
+    }
+    return { id, release };
+  }
+
+  /**
+   * Free food AI allowance for GET /api/mobile/entitlements (TRIAL_FIRST_SPEC §5):
+   * total = 5 and remaining = 5 − lifetime analyses for free users once the gate is live;
+   * both null for Pro / trial (only the abuse ceiling) and while the gate is dark.
+   */
+  static async foodAiAllowance(
+    userId: string,
+    tier: Tier,
+    gateLive: boolean,
+    signupAt?: string | null
+  ): Promise<{ total: number | null; remaining: number | null }> {
+    if (!gateLive || tier !== 'free') return { total: null, remaining: null };
+    const [total, used] = await Promise.all([this.freeFoodAiTotal(userId, signupAt), this.countFoodAi(userId, 'lifetime')]);
+    return { total, remaining: Math.max(0, total - used) };
+  }
+
+  /**
+   * Free-tier limits come from remote config (Admin Tools, TRIAL_FIRST_SPEC §6): a matching
+   * segment rule, else the admin default, else the code default (5 / 0). Never throws.
+   * Lowering a limit below what a user already used simply means nothing is left.
+   */
+  static freeFoodAiTotal(userId: string, signupAt?: string | null): Promise<number> {
+    return RemoteConfigService.value('free_food_ai_analyses_total', { userId, ...(signupAt !== undefined ? { signupAt } : {}) });
+  }
+
+  static freeFitzyLimit(userId: string, signupAt?: string | null): Promise<number> {
+    return RemoteConfigService.value('free_fitzy_messages_per_day', { userId, ...(signupAt !== undefined ? { signupAt } : {}) });
+  }
+
+  private static async foodAiPlan(
+    userId: string
+  ): Promise<{ kind: 'legacy' | 'free' | 'premium'; scope: 'today' | 'lifetime'; limit: number; trialEligible: boolean }> {
+    const gateLive = await this.isGateLive('food_ai_unlimited');
+    if (!gateLive) return { kind: 'legacy', scope: 'today', limit: LEGACY_LIMITS.foodAiParsesPerDay, trialEligible: false };
+    const profile = await this.getProfileForGate(userId);
+    if (profile.tier === 'premium') return { kind: 'premium', scope: 'today', limit: TIER_LIMITS.premium.foodAiParsesPerDay, trialEligible: false };
+    return { kind: 'free', scope: 'lifetime', limit: await this.freeFoodAiTotal(userId, profile.signupAt), trialEligible: profile.trialEligible };
+  }
+
+  private static foodAiRefusal(plan: { kind: 'legacy' | 'free' | 'premium'; limit: number; trialEligible: boolean }, used: number): Error {
+    if (plan.kind === 'free') return new UpgradeRequiredError('food_ai_unlimited', used, plan.limit, plan.trialEligible);
+    return new Error('RateLimited');
+  }
+
+  private static async countFoodAi(userId: string, scope: 'today' | 'lifetime'): Promise<number> {
+    if (scope === 'today') return this.countToday('nutrition_parse_log', userId);
+    const { count, error } = await createAdminSupabase()
+      .from('nutrition_parse_log')
+      .select('*', { count: 'exact', head: true })
+      .eq('user_id', userId);
+    logIgnoredQueryError('UsageService.countFoodAi', error);
+    return count ?? 0;
+  }
+
+  /**
+   * Fitzy / nutrition-coach quota. Historically uncapped, so gate-dark is a no-op.
+   * Trial-first (TRIAL_FIRST_SPEC §1): free = 0 messages/day once the gate is live, so a
+   * free user's FIRST message throws UpgradeRequiredError here — before any conversation
+   * write, message log or model call. Pro (incl. trialing) keeps the 200/day abuse ceiling.
+   */
+  static async assertFitzyQuota(userId: string, opts: { onboarding?: boolean } = {}): Promise<void> {
     const gateLive = await this.isGateLive('fitzy_unlimited');
     if (!gateLive) return;
 
-    const [tier, used] = await Promise.all([
-      this.getTier(userId),
+    const [profile, used] = await Promise.all([
+      this.getProfileForGate(userId),
       this.countToday('fitzy_message_log', userId),
     ]);
-    const limit = TIER_LIMITS[tier].fitzyMessagesPerDay;
+    const tier = profile.tier;
+    const limit = tier === 'free' ? await this.freeFitzyLimit(userId, profile.signupAt) : TIER_LIMITS.premium.fitzyMessagesPerDay;
+    // The onboarding tour's "Ask Fitzy" step (context 'onboarding') stays answerable for free users
+    // who haven't finished onboarding — shipped apps show a dead-end error there, not the paywall.
+    // Narrow on purpose: unfinished onboarding only, ONBOARDING_FREE_FITZY_MESSAGES per day.
+    if (tier === 'free' && opts.onboarding && profile.onboardingCompleted !== true && used < ONBOARDING_FREE_FITZY_MESSAGES) return;
     if (used >= limit) {
-      if (tier === 'free') throw new UpgradeRequiredError('fitzy_unlimited', used, limit);
+      if (tier === 'free') throw new UpgradeRequiredError('fitzy_unlimited', used, limit, profile.trialEligible);
       throw new Error('RateLimited');
     }
   }
@@ -84,8 +195,7 @@ export class UsageService {
     const [gateLive, tier] = await Promise.all([this.isGateLive('fitzy_unlimited'), this.getTier(userId)]);
     if (tier === 'premium') return { tier: 'pro', remaining: null, limit: null };
     if (!gateLive) return { tier: 'free', remaining: null, limit: null };
-    const used = await this.countToday('fitzy_message_log', userId);
-    const limit = TIER_LIMITS.free.fitzyMessagesPerDay;
+    const [used, limit] = await Promise.all([this.countToday('fitzy_message_log', userId), this.freeFitzyLimit(userId)]);
     return { tier: 'free', remaining: Math.max(0, limit - used), limit };
   }
 
@@ -145,6 +255,26 @@ export class UsageService {
   }
 
   // ---------------------------------------------------------------------------
+
+  /** Tier + trial eligibility from ONE profile read (the Fitzy gate needs both). */
+  private static async getProfileForGate(
+    userId: string
+  ): Promise<{ tier: Tier; trialEligible: boolean; signupAt: string | null; onboardingCompleted: boolean | null }> {
+    const supabase = createAdminSupabase();
+    const { data, error: dataError } = await supabase
+      .from('profiles')
+      .select('subscription_tier, subscription_platform, trial_started_at, created_at, onboarding_completed')
+      .eq('id', userId)
+      .maybeSingle();
+    logIgnoredQueryError('UsageService.getProfileForGate', dataError);
+    const raw = data?.subscription_tier;
+    return {
+      tier: raw === 'premium' || raw === 'enterprise' ? 'premium' : 'free',
+      trialEligible: trialEligibleFromProfile(data ?? null),
+      signupAt: typeof data?.created_at === 'string' ? data.created_at : null,
+      onboardingCompleted: typeof data?.onboarding_completed === 'boolean' ? data.onboarding_completed : null,
+    };
+  }
 
   private static async getTier(userId: string): Promise<Tier> {
     const supabase = createAdminSupabase();

@@ -1,10 +1,10 @@
 import { type NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 
-import { paywallFor } from '@/lib/fitzy/paywall';
+import { parseFitzyContext } from '@/lib/fitzy/context';
+import { fitzyUpgradeMessage, paywallFor } from '@/lib/fitzy/paywall';
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { FitzyNotFoundError } from '@/lib/services/fitzy-conversation-service';
-import { parseFitzyContext } from '@/lib/fitzy/context';
 import { FitzyService } from '@/lib/services/fitzy-service';
 import { JourneyService } from '@/lib/services/journey-service';
 import { UpgradeRequiredError } from '@/lib/services/usage-service';
@@ -108,8 +108,15 @@ export async function POST(request: NextRequest) {
           data: null,
           error: {
             code: 'UPGRADE_REQUIRED',
-            message: "You've used today's free Fitzy messages — go Pro for unlimited coaching.",
-            details: { feature: error.feature, used: error.used, limit: error.limit, paywall: paywallFor('fitzy_quota') },
+            // Trial-first (TRIAL_FIRST_SPEC §1): same 429 envelope + trigger as before so shipped
+            // clients keep opening their paywall; copy + trialDays/trialEligible are additive.
+            message: fitzyUpgradeMessage(error.limit, error.trialEligible === true),
+            details: {
+              feature: error.feature,
+              used: error.used,
+              limit: error.limit,
+              paywall: paywallFor('fitzy_quota', { trialEligible: error.trialEligible === true }),
+            },
             timestamp: new Date().toISOString(),
           },
           meta: null,

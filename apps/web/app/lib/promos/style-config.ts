@@ -38,7 +38,12 @@ export const SYSTEM_PROMO_LABELS: Record<string, { label: string; description: s
   first_meal: { label: 'Snap your first meal', description: 'New members with no meal logged yet (hero, under the header).' },
   log_meal_now: { label: 'Log this meal', description: 'The open meal slot right now, not yet logged today (banner).' },
   pro_value: { label: 'Pro value', description: 'Free members ≥ 18 h after sign-up with a meal logged; 3 copy variants (banner, opens the paywall).' },
-  meet_fitzy: { label: 'Meet Fitzy', description: 'Members who logged a meal but never opened Fitzy (banner).' },
+  meet_fitzy: { label: 'Meet Fitzy', description: 'Members who logged a meal but never opened Fitzy (banner). Free members get no-chat copy (chat is Pro); Pro members get the prefilled chat prompt.' },
+  fitzy_recommendations: {
+    label: 'Fitzy recommendations',
+    description:
+      'Trial-first teaser from session 1: free members with onboarding complete, a goal set and a real Fitzy plan preview (made at onboarding completion). Trial copy when trial-eligible; replaces pro_value and meet_fitzy while it shows (banner, opens the paywall).',
+  },
 };
 
 export const SYSTEM_PROMO_STYLE_KEYS = SYSTEM_PROMOS.map((p) => p.key) as [string, ...string[]];
@@ -64,6 +69,9 @@ export function sampleMatchInput(now: Date = new Date()): PromoMatchInput {
       fitzyOpenedAt: null,
       mealReminderPrefs: { ...DEFAULT_MEAL_REMINDER_PREFS },
       localMinutes: slotForMinutes(localMinutes) ? localMinutes : 12 * 60,
+      fitzyRecommendationsReady: true,
+      trialEligible: true,
+      fitzyPlanReady: true,
     },
     liveProFeatures: new Set(['food_ai_unlimited', 'history_extended', 'ads_removed']),
   };

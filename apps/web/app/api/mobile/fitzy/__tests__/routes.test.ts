@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { resetRemoteConfigCache } from '@/lib/remote-config/service';
 import { ReferralFakeDb, getReferralDb, setReferralDb } from '@/lib/services/__tests__/referral-fake-db';
 
 vi.mock('@/lib/supabase-admin', () => ({ createAdminSupabase: () => getReferralDb().client() }));
@@ -74,6 +75,9 @@ beforeEach(() => {
   db.addProfile({ id: FREE, display_name: 'Sam', subscription_tier: 'free' });
   db.addProfile({ id: PRO, display_name: 'Ani', subscription_tier: 'premium' });
   db.rows('feature_gates').push({ feature_key: 'fitzy_unlimited', required_tier: 'premium' });
+  // Model-path tests run FREE at a 5/day remote-config default; trial-first (0/day) has its own block.
+  db.rows('remote_config_defaults').push({ config_key: 'free_fitzy_messages_per_day', value: 5, updated_by: null, updated_at: '2026-11-01T00:00:00Z' });
+  resetRemoteConfigCache();
 });
 
 describe('POST /api/mobile/fitzy/chat/stream', () => {
@@ -92,18 +96,20 @@ describe('POST /api/mobile/fitzy/chat/stream', () => {
 
   it('quota → single error event with the paywall; bad body → VALIDATION_ERROR; no auth → UNAUTHORIZED', async () => {
     for (let i = 0; i < 5; i++) db.rows('fitzy_message_log').push({ user_id: FREE, created_at: new Date().toISOString() });
-    let { events } = await sse(await streamChat(req('/api/mobile/fitzy/chat/stream', { as: FREE, method: 'POST', body: { message: 'hi' } })));
+    const { events } = await sse(await streamChat(req('/api/mobile/fitzy/chat/stream', { as: FREE, method: 'POST', body: { message: 'hi' } })));
     expect(events).toEqual([
       {
         event: 'error',
         data: {
           code: 'UPGRADE_REQUIRED',
           message: expect.any(String),
-          paywall: { trigger: 'fitzy_quota', headline: 'Keep the momentum going', bullets: expect.arrayContaining([expect.any(String)]), cta: 'Unlock Fitzy Pro' },
+          // Trial-aware (this profile has no trial_started_at column → not eligible → non-trial copy).
+          paywall: { trigger: 'fitzy_quota', headline: 'Unlock Fitzy Pro', bullets: expect.arrayContaining([expect.any(String)]), cta: 'Continue with Pro', trialDays: 3, trialEligible: false },
         },
       },
     ]);
     expect(events[0].data.paywall.bullets).toHaveLength(3);
+    expect(events[0].data.message).toMatch(/used today's free Fitzy messages/); // limit 5 > 0: the old wording
     // Auth + validation fail as plain JSON before the stream opens (clients refresh on HTTP 401).
     let res = await streamChat(req('/api/mobile/fitzy/chat/stream', { as: PRO, method: 'POST', body: { message: '' } }));
     expect(res.status).toBe(400);
@@ -140,6 +146,74 @@ describe('POST /api/mobile/fitzy/chat (old route)', () => {
     expect(res.status).toBe(429);
     const body = await res.json();
     expect(body.error).toMatchObject({ code: 'UPGRADE_REQUIRED', details: { feature: 'fitzy_unlimited', used: 5, limit: 5, paywall: { trigger: 'fitzy_quota' } } });
+  });
+});
+
+describe('trial-first: free chat = 0/day (TRIAL_FIRST_SPEC §1)', () => {
+  beforeEach(() => {
+    db.rows('remote_config_defaults').length = 0; // code default: 0/day
+    resetRemoteConfigCache();
+    db.profile(FREE)!.trial_started_at = null;
+    db.profile(FREE)!.subscription_platform = null;
+  });
+
+  it('stream: first message → single error frame, trial copy, no model call, nothing persisted', async () => {
+    const { events } = await sse(await streamChat(req('/api/mobile/fitzy/chat/stream', { as: FREE, method: 'POST', body: { message: 'hi' } })));
+    expect(events).toEqual([
+      {
+        event: 'error',
+        data: {
+          code: 'UPGRADE_REQUIRED',
+          message: 'Start your free trial to chat with Fitzy.',
+          paywall: {
+            trigger: 'fitzy_quota',
+            headline: 'Try Pro free for 3 days',
+            bullets: ['Unlimited coaching with Fitzy, every day', 'A weekly plan built around your goals', 'Fitzy remembers your routines and preferences', 'Cancel anytime'],
+            cta: 'Start free trial',
+            trialDays: 3,
+            trialEligible: true,
+          },
+        },
+      },
+    ]);
+    expect(ai.calls).toEqual([]);
+    expect(db.rows('fitzy_messages')).toEqual([]);
+    expect(db.rows('fitzy_message_log')).toEqual([]);
+  });
+
+  it('old /chat: same 429 envelope + trigger, used 0 / limit 0, non-trial copy when the trial was used', async () => {
+    db.profile(FREE)!.trial_started_at = '2026-09-01T00:00:00Z';
+    const res = await legacyChat(req('/api/mobile/fitzy/chat', { as: FREE, method: 'POST', body: { messages: [{ role: 'user', content: 'hi' }] } }));
+    expect(res.status).toBe(429);
+    const body = await res.json();
+    expect(body.error).toMatchObject({
+      code: 'UPGRADE_REQUIRED',
+      message: 'Upgrade to Pro to chat with Fitzy.',
+      details: { feature: 'fitzy_unlimited', used: 0, limit: 0, paywall: { trigger: 'fitzy_quota', headline: 'Unlock Fitzy Pro', cta: 'Continue with Pro', trialDays: 3, trialEligible: false } },
+    });
+    expect(ai.calls).toEqual([]);
+  });
+
+  it('Pro (incl. trial) chats normally', async () => {
+    ai.stream.push(['Hello!']);
+    const { events } = await sse(await streamChat(req('/api/mobile/fitzy/chat/stream', { as: PRO, method: 'POST', body: { message: 'hi' } })));
+    expect(events.at(-1)?.event).toBe('done');
+  });
+
+  it("onboarding tour's Ask Fitzy stays answerable before onboarding is complete (3/day), then gates", async () => {
+    db.profile(FREE)!.onboarding_completed = false;
+    for (let i = 0; i < 3; i++) {
+      ai.stream.push(['Greek yogurt.']);
+      const { events } = await sse(await streamChat(req('/api/mobile/fitzy/chat/stream', { as: FREE, method: 'POST', body: { message: 'Breakfast?', context: 'onboarding' } })));
+      expect(events.at(-1)?.event).toBe('done');
+    }
+    const { events } = await sse(await streamChat(req('/api/mobile/fitzy/chat/stream', { as: FREE, method: 'POST', body: { message: 'More?', context: 'onboarding' } })));
+    expect(events[0]).toMatchObject({ event: 'error', data: { code: 'UPGRADE_REQUIRED' } });
+    // Finished onboarding → the context no longer unlocks anything.
+    db.rows('fitzy_message_log').length = 0;
+    db.profile(FREE)!.onboarding_completed = true;
+    const after = await sse(await streamChat(req('/api/mobile/fitzy/chat/stream', { as: FREE, method: 'POST', body: { message: 'Hi', context: 'onboarding' } })));
+    expect(after.events[0]).toMatchObject({ event: 'error', data: { code: 'UPGRADE_REQUIRED' } });
   });
 });
 

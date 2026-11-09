@@ -61,6 +61,24 @@ describe('/upgrade paywall layout', () => {
   beforeEach(() => {
     entitlementsState.entitlements = { subscriptionsEnabled: true };
     entitlementsState.isPro = false;
+    global.fetch = vi.fn().mockResolvedValue({ ok: true, status: 200, json: async () => ({ trialDays: 0, eligible: false }) }) as unknown as typeof fetch;
+  });
+
+  it('trial-first (TRIAL_FIRST_SPEC §7): "Try Pro free for 3 days" + Cancel anytime + Start free trial when checkout would carry the trial', async () => {
+    global.fetch = vi.fn().mockResolvedValue({ ok: true, status: 200, json: async () => ({ trialDays: 3, eligible: true }) }) as unknown as typeof fetch;
+    render(<UpgradePage />);
+    expect(await screen.findByText('Try Pro free for 3 days')).toBeInTheDocument();
+    expect(screen.getByTestId('paywall-cancel-anytime')).toHaveTextContent('Cancel anytime');
+    expect(screen.getByTestId('checkout-button')).toHaveTextContent('Start free trial');
+    expect(screen.getByTestId('trial-terms')).toHaveTextContent('Free for 3 days, then $29.99/yr');
+    expect(global.fetch).toHaveBeenCalledWith('/api/billing/trial', { cache: 'no-store' });
+  });
+
+  it('no trial → classic headline and checkout CTA (never promises a trial checkout will not give)', async () => {
+    render(<UpgradePage />);
+    expect(await screen.findByTestId('paywall-headline')).toHaveTextContent('Unlock FitCircle Pro');
+    expect(screen.queryByTestId('paywall-cancel-anytime')).toBeNull();
+    expect(screen.getByTestId('checkout-button')).toHaveTextContent('Continue to checkout');
   });
 
   it('shows the iOS paywall header, feature list, plans and comparison', async () => {
