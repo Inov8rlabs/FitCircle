@@ -74,7 +74,7 @@ export const REMOTE_CONFIG_REGISTRY = {
     max: 31,
     unit: 'days',
     description:
-      'Length of the FitCircle Pro free trial: the Stripe web checkout trial (platform web) and every server-written trial promise (paywall headlines, food AI / Fitzy upgrade messages, promo cards, Pro lifecycle copy). MUST equal the App Store / Play intro offer for that platform: when the store offers change, change this (a platform rule) at the same moment.',
+      'Length of the FitCircle Pro free trial: the Stripe web checkout trial (platform web) and every server-written trial promise (paywall headlines, food AI / Fitzy upgrade messages, promo cards, Pro lifecycle copy). MUST equal the App Store / Play intro offer for that platform. Change it with Admin Tools → Free trial (trial sync, docs/TRIAL_SYNC.md), which updates both stores first and then this default.',
   },
   integrity_enforce_android: {
     type: 'enum',
