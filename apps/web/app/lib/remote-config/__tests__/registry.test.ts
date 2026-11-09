@@ -19,3 +19,12 @@ describe('integrity_reviewer_emails', () => {
     }
   });
 });
+
+describe('integrity_device_error_fail_open', () => {
+  it('is a true/false switch, default true', () => {
+    expect(codeDefault('integrity_device_error_fail_open')).toBe('true');
+    expect(validValue('integrity_device_error_fail_open', 'false')).toBe('false');
+    expect(validValue('integrity_device_error_fail_open', true)).toBeNull();
+    expect(validValue('integrity_device_error_fail_open', 'off')).toBeNull();
+  });
+});

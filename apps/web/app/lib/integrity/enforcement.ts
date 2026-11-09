@@ -15,14 +15,16 @@
  *   - our / Google infrastructure (verifier not configured, token exchange, quota, 5xx,
  *     timeout, nonce store down) → fail OPEN: allow, log, Sentry (security=fail_open)
  *   - no token because of the PHONE's environment or a transient Play error (the client's
- *     X-Integrity-Error, see classifyClientIntegrityError) → device fail-open: allow and
+ *     X-Integrity-Error, see isDeviceEnvironmentError), while remote config
+ *     `integrity_device_error_fail_open` is true (default) → device fail-open: allow and
  *     record (result fail_open, reason `device_error:<code>`), no Sentry exception; not
  *     counted as an infrastructure fail-open in reports or alerts.
  *
  * Bypass (resolveBypass), only after the identity is VERIFIED by the route:
  *   - integrity_bypass_user_ids: internal test accounts (login, refresh)
  *   - integrity_reviewer_emails: App Store / Play reviewers + pre-launch robots
- *     (login, google, refresh). Platform-agnostic: iOS App Attest will use the same list.
+ *     (exact emails: login, google, refresh; @domain entries: google only).
+ *     Platform-agnostic: iOS App Attest will use the same list.
  *
  * Protected (non-session) calls accept a live device attestation for the session instead
  * of a token. Session-issuing calls (register/login/google/refresh) always need a token
@@ -129,8 +131,11 @@ export async function isBypassUser(userId: string): Promise<boolean> {
   return list.map((s) => s.toLowerCase()).includes(userId.toLowerCase());
 }
 
-/** Exact email or `@domain` entry match (case-insensitive; a domain entry matches that domain only). Pure. */
-export function matchesReviewerList(email: string | null | undefined, list: readonly string[]): boolean {
+/**
+ * Exact email or `@domain` entry match (case-insensitive; a domain entry matches that
+ * domain only, and only when `allowDomains`). Pure.
+ */
+export function matchesReviewerList(email: string | null | undefined, list: readonly string[], opts: { allowDomains?: boolean } = {}): boolean {
   const e = (email ?? '').trim().toLowerCase();
   const at = e.lastIndexOf('@');
   if (at <= 0 || at === e.length - 1) return false;
@@ -138,18 +143,34 @@ export function matchesReviewerList(email: string | null | undefined, list: read
   return list.some((raw) => {
     const entry = raw.trim().toLowerCase();
     if (!entry) return false;
-    return entry.startsWith('@') ? domain === entry : e === entry;
+    if (entry.startsWith('@')) return !!opts.allowDomains && domain === entry;
+    return e === entry;
   });
 }
 
 /**
  * `integrity_reviewer_emails`: App Store / Play reviewers and pre-launch robots. The email
  * must come from a verified identity (password check, Google id token, our refresh token).
+ * `@domain` entries need `allowDomains` (Google sign-in only: there Google proves the
+ * mailbox; a password account's email is not proven while sign-up auto-confirms).
  * Platform-agnostic on purpose: the same list applies to iOS App Attest when it arrives.
  */
-export async function isReviewerEmail(email: string, ctx: { userId?: string | null; platform?: 'ios' | 'android' | 'web' | null } = {}): Promise<boolean> {
+export async function isReviewerEmail(
+  email: string,
+  ctx: { userId?: string | null; platform?: 'ios' | 'android' | 'web' | null; allowDomains?: boolean } = {}
+): Promise<boolean> {
   const list = await RemoteConfigService.listValue('integrity_reviewer_emails', { userId: ctx.userId || PLACEHOLDER_USER, platform: ctx.platform ?? 'android' });
-  return matchesReviewerList(email, list);
+  return matchesReviewerList(email, list, { allowDomains: ctx.allowDomains });
+}
+
+/** Remote config `integrity_device_error_fail_open` (default true; unreadable → true, the code default). */
+export async function deviceErrorFailOpenEnabled(userId?: string | null): Promise<boolean> {
+  try {
+    const v = await RemoteConfigService.enumValue('integrity_device_error_fail_open', { userId: userId || PLACEHOLDER_USER, platform: 'android' });
+    return v !== 'false';
+  } catch {
+    return true;
+  }
 }
 
 const MESSAGE = "This device can't run FitCircle. Install FitCircle from Google Play on a device with Google Play services that isn't rooted.";
@@ -235,7 +256,8 @@ export function clientIntegrityError(request: HeaderSource): string | null {
  *   -17 REQUEST_HASH_TOO_LONG, any other code or string, no header at all.
  *
  * The header is client-controlled: a scripted client can claim a device error. Rate limits
- * still apply, and every such request is recorded (`device_error:<code>`) for review.
+ * still apply, every such request is recorded (`device_error:<code>`) for review, and remote
+ * config `integrity_device_error_fail_open` = false turns this back into a block.
  */
 const DEVICE_ERROR_CODES: ReadonlySet<number> = new Set([-3, -8, -9, -12, -14, -15, -18, -19, -100]);
 const DEVICE_ERROR_STRINGS: ReadonlySet<string> = new Set(['prepare_timeout', 'token_timeout', 'prepare_start', 'interrupted', 'token_provider_invalid']);
@@ -359,7 +381,7 @@ export async function checkIntegrity(request: NextRequest, opts: CheckOptions): 
       // The device could not produce a token. A block, except: a nonce we could not issue
       // (our signing secret is missing) and device-environment errors (see above).
       if (clientError === 'nonce_unavailable' && !nonceIssuanceConfigured()) return await failOpen('nonce issuance not configured');
-      if (clientError && isDeviceEnvironmentError(clientError)) return await deviceFailOpen(clientError);
+      if (clientError && isDeviceEnvironmentError(clientError) && (await deviceErrorFailOpenEnabled(userId))) return await deviceFailOpen(clientError);
       return await fail('missing_token');
     }
     if (!isWellFormedNonce(nonce)) return await fail('nonce_invalid');
@@ -409,8 +431,8 @@ export interface BypassIdentity {
  * Login, google and refresh: once the caller has a VERIFIED identity, a blocked request is
  * allowed for
  *   - a user on `integrity_bypass_user_ids` (login + refresh), event `bypass:<reason>`
- *   - an email on `integrity_reviewer_emails` (login, google, refresh), event
- *     `bypass:reviewer:<reason>`
+ *   - an email on `integrity_reviewer_emails`, event `bypass:reviewer:<reason>`: exact
+ *     entries on login, google, refresh; `@domain` entries on google only
  * Callers must still return the 403 for every other identity, whether or not the
  * credential was right. Accepts a bare user id (older call sites).
  */
@@ -425,7 +447,7 @@ export async function resolveBypass(
   const userId = id.userId ?? null;
   const userBypass = !!userId && USER_BYPASS_ACTIONS.has(action) ? await isBypassUser(userId).catch(() => false) : false;
   const platform = parseClientPlatform(request.headers.get('x-app-platform') ?? request.headers.get('x-platform'));
-  const reviewer = !userBypass && id.email ? await isReviewerEmail(id.email, { userId, platform }).catch(() => false) : false;
+  const reviewer = !userBypass && id.email ? await isReviewerEmail(id.email, { userId, platform, allowDomains: action === 'google' }).catch(() => false) : false;
   const bypass = userBypass || reviewer;
   const reason = reviewer ? `reviewer:${decision.reason ?? 'failed'}` : (decision.reason ?? null);
   await event(request, action, bypass ? 'bypass' : 'block', { reason, userId, deviceId: decision.deviceId, verdict: decision.verdict });

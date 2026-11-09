@@ -9,6 +9,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const h = vi.hoisted(() => ({
   mode: 'block' as string,
+  deviceFailOpen: 'true' as string,
   bypass: [] as string[],
   reviewers: [] as string[],
   listCalls: [] as any[],
@@ -27,7 +28,7 @@ const h = vi.hoisted(() => ({
 
 vi.mock('@/lib/remote-config/service', () => ({
   RemoteConfigService: {
-    enumValue: async () => h.mode,
+    enumValue: async (key: string) => (key === 'integrity_device_error_fail_open' ? h.deviceFailOpen : h.mode),
     listValue: async (key: string, ctx: any) => {
       h.listCalls.push({ key, ctx });
       return key === 'integrity_reviewer_emails' ? h.reviewers : h.bypass;
@@ -93,6 +94,7 @@ function req(opts: { android?: boolean; v1?: boolean; token?: boolean; device?: 
 beforeEach(() => {
   Object.assign(h, {
     mode: 'block',
+    deviceFailOpen: 'true',
     bypass: [],
     reviewers: [],
     listCalls: [],
@@ -381,6 +383,30 @@ describe('device-environment errors fail open (logged, not alerted)', () => {
     expect(results()[0]).not.toMatch(/device_error/);
   });
 
+  it('integrity_device_error_fail_open = false: device errors block again (missing_token)', async () => {
+    h.deviceFailOpen = 'false';
+    for (const code of ['prepare_-14', 'prepare_-9', 'token_timeout']) {
+      expect(await checkIntegrity(req({ token: false, error: code }), { action: 'register' })).toMatchObject({ allowed: false, reason: 'missing_token' });
+    }
+    expect(results()).toEqual(['block:missing_token', 'block:missing_token', 'block:missing_token']);
+    // ...and a login can still be lifted by the reviewer list after the password check.
+    h.reviewers = ['fitcircle.user@gmail.com'];
+    const d = await checkIntegrity(req({ token: false, error: 'prepare_-14' }), { action: 'login' });
+    expect(d).toMatchObject({ allowed: false, bypassEligible: true });
+    expect(await resolveLoginBypass(req(), d, { userId: USER, email: 'fitcircle.user@gmail.com' })).toBe(true);
+  });
+
+  it('integrity_device_error_fail_open unreadable → code default (fail open)', async () => {
+    const { RemoteConfigService } = await import('@/lib/remote-config/service');
+    const real = RemoteConfigService.enumValue;
+    const spy = vi.spyOn(RemoteConfigService, 'enumValue').mockImplementation(async (key: any, ctx: any) => {
+      if (key === 'integrity_device_error_fail_open') throw new Error('db down');
+      return real(key, ctx);
+    });
+    expect(await checkIntegrity(req({ token: false, error: 'prepare_-14' }), { action: 'login' })).toMatchObject({ allowed: true, mode: 'device_error' });
+    spy.mockRestore();
+  });
+
   it('isDeviceEnvironmentError is case-insensitive and rejects junk', () => {
     expect(isDeviceEnvironmentError('PREPARE_-14')).toBe(true);
     expect(isDeviceEnvironmentError(null)).toBe(false);
@@ -392,14 +418,16 @@ describe('device-environment errors fail open (logged, not alerted)', () => {
 describe('integrity_reviewer_emails (verified identities only)', () => {
   const REVIEWERS = ['fitcircle.user@gmail.com', '@cloudtestlabaccounts.com'];
 
-  it('matches exact emails and @domain entries, case-insensitively', () => {
+  it('matches exact emails always and @domain entries only with allowDomains, case-insensitively', () => {
+    const D = { allowDomains: true };
     expect(matchesReviewerList('Fitcircle.User@Gmail.com', REVIEWERS)).toBe(true);
-    expect(matchesReviewerList('robot.123@cloudtestlabaccounts.com', REVIEWERS)).toBe(true);
-    expect(matchesReviewerList('fitcircle.user2@gmail.com', REVIEWERS)).toBe(false);
-    expect(matchesReviewerList('x@evil-cloudtestlabaccounts.com', REVIEWERS)).toBe(false);
-    expect(matchesReviewerList('x@sub.cloudtestlabaccounts.com', REVIEWERS)).toBe(false);
-    expect(matchesReviewerList('cloudtestlabaccounts.com', REVIEWERS)).toBe(false);
-    expect(matchesReviewerList('@cloudtestlabaccounts.com', REVIEWERS)).toBe(false);
+    expect(matchesReviewerList('robot.123@cloudtestlabaccounts.com', REVIEWERS)).toBe(false);
+    expect(matchesReviewerList('robot.123@cloudtestlabaccounts.com', REVIEWERS, D)).toBe(true);
+    expect(matchesReviewerList('fitcircle.user2@gmail.com', REVIEWERS, D)).toBe(false);
+    expect(matchesReviewerList('x@evil-cloudtestlabaccounts.com', REVIEWERS, D)).toBe(false);
+    expect(matchesReviewerList('x@sub.cloudtestlabaccounts.com', REVIEWERS, D)).toBe(false);
+    expect(matchesReviewerList('cloudtestlabaccounts.com', REVIEWERS, D)).toBe(false);
+    expect(matchesReviewerList('@cloudtestlabaccounts.com', REVIEWERS, D)).toBe(false);
     expect(matchesReviewerList(null, REVIEWERS)).toBe(false);
     expect(matchesReviewerList('a@b.co', [])).toBe(false);
   });
@@ -414,11 +442,19 @@ describe('integrity_reviewer_emails (verified identities only)', () => {
     expect(h.events.at(-1)).toMatchObject({ action, result: 'bypass' });
   });
 
-  it('pre-launch robot domain is let through', async () => {
+  it('google: a pre-launch robot domain is let through', async () => {
     h.reviewers = REVIEWERS;
     const d = await checkIntegrity(req({ token: false, error: 'token_-6' }), { action: 'google' });
     expect(await resolveBypass(req(), d, { email: 'abc.12345@cloudtestlabaccounts.com' }, 'google')).toBe(true);
     expect(results()).toEqual(['bypass:reviewer:missing_token']);
+  });
+
+  it.each(['login', 'refresh'] as const)('%s: @domain entries never match (the email is not proven); exact entries do', async (action) => {
+    h.reviewers = REVIEWERS;
+    const d = await checkIntegrity(req({ token: false, error: 'token_-6' }), { action });
+    expect(await resolveBypass(req(), d, { userId: USER, email: 'abc.12345@cloudtestlabaccounts.com' }, action)).toBe(false);
+    expect(await resolveBypass(req(), d, { userId: USER, email: 'fitcircle.user@gmail.com' }, action)).toBe(true);
+    expect(results()).toEqual(['block:missing_token', 'bypass:reviewer:missing_token']);
   });
 
   it('anyone else (or no verified email) stays blocked', async () => {

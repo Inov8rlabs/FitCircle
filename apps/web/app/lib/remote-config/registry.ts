@@ -75,6 +75,14 @@ export const REMOTE_CONFIG_REGISTRY = {
     description:
       'Android app-integrity checks for clients that declare integrity_v1. block = a failing device gets 403 INTEGRITY_FAILED; log = verify and record but allow; off = skip verification.',
   },
+  integrity_device_error_fail_open: {
+    type: 'enum',
+    default: 'true',
+    options: ['true', 'false'],
+    unit: 'boolean',
+    description:
+      'true = an integrity_v1 client with no token because of its phone (outdated Play Store / Play services, Play unreachable, timeouts) is allowed and recorded as device_error:<code>. false = those requests are blocked again (missing_token).',
+  },
   integrity_bypass_user_ids: {
     type: 'string_list',
     default: [],
@@ -90,7 +98,7 @@ export const REMOTE_CONFIG_REGISTRY = {
     itemPattern: EMAIL_OR_DOMAIN_PATTERN,
     unit: 'emails / @domains',
     description:
-      'App Store / Play reviewer and pre-launch robot accounts never blocked by the app-integrity check (exact email, or @domain). Applied only to an identity the server verified: login (after the password check), Google sign-in (verified id token), refresh (verified refresh token). Never on register. Platform-agnostic (Android Play Integrity now, iOS App Attest later).',
+      'App Store / Play reviewer and pre-launch robot accounts never blocked by the app-integrity check. Exact emails apply to login (after the password check), Google sign-in (verified id token) and refresh (verified refresh token); @domain entries apply to Google sign-in only (the only place the mailbox is proven). Never on register. Platform-agnostic (Android Play Integrity now, iOS App Attest later).',
   },
 } as const satisfies Record<string, RemoteConfigKeyDef>;
 
