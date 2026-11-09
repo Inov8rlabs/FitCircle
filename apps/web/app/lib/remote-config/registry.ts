@@ -109,6 +109,31 @@ export const REMOTE_CONFIG_REGISTRY = {
     description:
       'App Store / Play reviewer and pre-launch robot accounts never blocked by the app-integrity check. Exact emails apply to login (after the password check), Google sign-in (verified id token) and refresh (verified refresh token); @domain entries apply to Google sign-in only (the only place the mailbox is proven). Never on register. Platform-agnostic (Android Play Integrity now, iOS App Attest later).',
   },
+  // Retention fixes (2026-11-09). Kill switches: set the default to 'off' in Admin Tools.
+  day1_morning_push: {
+    type: 'enum',
+    default: 'on',
+    options: ['on', 'off'],
+    unit: 'switch',
+    description:
+      'Day-1 morning push: one personalised push the local morning after sign-up (circle / breakfast / start-a-circle), skipped when the user already opened the app that morning. Daily cap, quiet hours and the Journey toggle still apply. off = never sent (a rule can turn it off for one platform or channel).',
+  },
+  day1_morning_push_hour: {
+    type: 'int',
+    default: 8,
+    min: 6,
+    max: 11,
+    unit: 'local hour',
+    description: 'Local hour the Day-1 morning push starts going out (sent from :00 to :59 of this hour, user-local time).',
+  },
+  quiet_hours_deferral: {
+    type: 'enum',
+    default: 'on',
+    options: ['on', 'off'],
+    unit: 'switch',
+    description:
+      'on = setup / meal-reminder / Day-1 pushes that hit quiet hours are held and released at the end of quiet hours (user-local, at most one held push per user per morning, cap re-checked). off = they are dropped as before.',
+  },
 } as const satisfies Record<string, RemoteConfigKeyDef>;
 
 export type RemoteConfigKey = keyof typeof REMOTE_CONFIG_REGISTRY;

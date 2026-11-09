@@ -127,6 +127,10 @@ class FakeQuery {
       this.filters.push(r => (value === null ? readPath(r, column) != null : readPath(r, column) !== value));
     } else if (operator === 'eq') {
       this.filters.push(r => r[column] !== value);
+    } else if (operator === 'in') {
+      // PostgREST list syntax: "(a,b,c)"
+      const values = String(value).replace(/^\(|\)$/g, '').split(',').map(v => v.trim());
+      this.filters.push(r => !values.includes(String(readPath(r, column))));
     } else {
       throw new Error(`FakeSupabase: unsupported not(${operator})`);
     }

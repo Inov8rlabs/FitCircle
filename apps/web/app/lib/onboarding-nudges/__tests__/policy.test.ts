@@ -125,6 +125,27 @@ describe('planNudges — touch 2 (from 24 h)', () => {
   });
 });
 
+describe('quiet-hours hold + the Day-1 morning push (retention fixes 1–2)', () => {
+  it('a held touch-1 push is a done slot (no 15-minute re-tries all night)', () => {
+    const m = nudges({ push_1: { status: 'deferred', at: hoursAgo(1), until: new Date(NOW.getTime() + 8 * 3_600_000).toISOString() } });
+    expect(planNudges(cand({ createdAt: hoursAgo(3), metadata: m }), NOW)).toEqual({ actions: [], wait: 'touch_1_done' });
+  });
+  it('touch 2 waits 12 h after the held push is RELEASED (not after it was held)', () => {
+    const m = nudges({ push_1: { status: 'deferred', at: hoursAgo(20), until: hoursAgo(6) } });
+    expect(planNudges(cand({ createdAt: hoursAgo(25), metadata: m }), NOW)).toEqual({ actions: [], wait: 'touch_2_gap' });
+  });
+  it('no second push once the Day-1 morning push reached them; the email still goes', () => {
+    expect(planNudges(cand({ createdAt: hoursAgo(25), day1PushDelivered: true }), NOW).actions.map((a) => a.slot)).toEqual(['email_2']);
+  });
+  it('orchestrator "deferred" → record status deferred with the release time; no email fallback', () => {
+    expect(pushDisposition({ sent: false, reason: 'deferred', deferUntil: '2026-11-04T12:00:00.000Z' })).toEqual({
+      kind: 'record',
+      record: { status: 'deferred', reason: 'deferred', until: '2026-11-04T12:00:00.000Z' },
+      fallbackToEmail: false,
+    });
+  });
+});
+
 describe('outcomes', () => {
   it('push: sent / duplicate record as sent; final failures record + fall back; temporary holds release', () => {
     expect(pushDisposition({ sent: true })).toEqual({ kind: 'record', record: { status: 'sent' }, fallbackToEmail: false });

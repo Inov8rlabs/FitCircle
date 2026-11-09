@@ -1,8 +1,10 @@
 import { type NextRequest, NextResponse } from 'next/server';
 
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
+import { AppOpenService } from '@/lib/services/app-open-service';
 import { EntitlementService } from '@/lib/services/entitlement-service';
 import { resolveClientTimezone } from '@/lib/streaks/client-timezone';
+import { runAfterResponse } from '@/lib/utils/after-response';
 
 /** Never cacheable: per-user (account-switch cache leak, 2026-09-15). */
 const NO_STORE = { 'Cache-Control': 'no-store' };
@@ -20,6 +22,8 @@ export async function GET(request: NextRequest) {
   try {
     const user = await requireMobileAuth(request);
     const entitlements = await EntitlementService.getEntitlements(user.id, { timezone: resolveClientTimezone(request) });
+    // Both apps fetch this on every foreground: the server-side app-open signal (AppOpenService).
+    runAfterResponse(() => AppOpenService.record(user, request, 'entitlements'), 'app open');
     return NextResponse.json(
       { success: true, data: entitlements, meta: { requestTime: Date.now() - startTime }, error: null },
       { headers: NO_STORE }

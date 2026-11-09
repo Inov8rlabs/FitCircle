@@ -52,6 +52,9 @@ import { createAdminSupabase } from '../supabase-admin';
 
 import { NotificationOrchestrator } from './notification-orchestrator';
 
+/** The Day-1 morning push (Day1MorningPushService): once delivered, touch 2 is email only. */
+const DAY1_PUSH_TYPE = 'day1_morning';
+
 const CANDIDATE_LIMIT = 500;
 const CHUNK = 100;
 
@@ -165,6 +168,7 @@ export class OnboardingNudgeService {
         metadata: row.metadata,
         hasPushToken: devices.length > 0,
         pushDelivered: facts.delivered.get(row.id) ?? new Set(),
+        day1PushDelivered: facts.day1Delivered.has(row.id),
       };
 
       const ineligible = ineligibleReason(candidate, now, maxAgeHours);
@@ -216,14 +220,15 @@ export class OnboardingNudgeService {
     const devices = new Map<string, Array<string | null>>();
     const delivered = new Map<string, Set<1 | 2>>();
     const mockAttribution = new Set<string>();
+    const day1Delivered = new Set<string>();
     for (const part of chunks(ids)) {
       const [tokens, logs, attribution] = await Promise.all([
         supabase.from('push_tokens').select('user_id, device_name').in('user_id', part).eq('is_active', true),
         supabase
           .from('notification_log')
-          .select('user_id, data')
+          .select('user_id, notification_type, data')
           .in('user_id', part)
-          .eq('notification_type', NUDGE_PUSH_TYPE)
+          .in('notification_type', [NUDGE_PUSH_TYPE, DAY1_PUSH_TYPE])
           .eq('suppressed', false),
         supabase.from('user_attribution').select('user_id, is_test').in('user_id', part),
       ]);
@@ -234,7 +239,11 @@ export class OnboardingNudgeService {
         list.push(t.device_name);
         devices.set(t.user_id, list);
       }
-      for (const l of (logs.data ?? []) as Array<{ user_id: string; data: Record<string, any> | null }>) {
+      for (const l of (logs.data ?? []) as Array<{ user_id: string; notification_type?: string; data: Record<string, any> | null }>) {
+        if (l.notification_type === DAY1_PUSH_TYPE) {
+          day1Delivered.add(l.user_id);
+          continue;
+        }
         const touch = Number(l.data?.touch) === 2 ? 2 : 1;
         const set = delivered.get(l.user_id) ?? new Set<1 | 2>();
         set.add(touch);
@@ -245,7 +254,7 @@ export class OnboardingNudgeService {
         if (a.is_test === true) mockAttribution.add(a.user_id);
       }
     }
-    return { devices, delivered, mockAttribution };
+    return { devices, delivered, mockAttribution, day1Delivered };
   }
 
   private static async execute(row: ProfileRow, action: NudgeAction, now: Date, summary: OnboardingNudgeRunSummary): Promise<void> {

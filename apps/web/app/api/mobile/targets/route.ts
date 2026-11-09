@@ -2,8 +2,10 @@ import { type NextRequest } from 'next/server';
 
 import { mobileFailFrom, ok, readJson } from '@/lib/experiments/http';
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
+import { AppOpenService } from '@/lib/services/app-open-service';
 import { UserTargetsService } from '@/lib/services/user-targets-service';
 import { targetsPatchSchema } from '@/lib/targets/user-targets';
+import { runAfterResponse } from '@/lib/utils/after-response';
 import { parseLenient } from '@/lib/validation/lenient-parse';
 
 export const dynamic = 'force-dynamic';
@@ -20,7 +22,10 @@ export async function GET(request: NextRequest) {
   const startTime = Date.now();
   try {
     const user = await requireMobileAuth(request);
-    return ok(await UserTargetsService.get(user.id, user), startTime);
+    const res = ok(await UserTargetsService.get(user.id, user), startTime);
+    // Both apps (1.1.0+) GET this on every foreground: the server-side app-open signal.
+    runAfterResponse(() => AppOpenService.record(user, request, 'targets'), 'app open');
+    return res;
   } catch (error) {
     return mobileFailFrom(error, 'targets GET');
   }

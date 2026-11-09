@@ -2,8 +2,24 @@ import { type NextRequest } from 'next/server';
 
 import { createAdminSupabase } from '@/lib/supabase-admin';
 import { createServerSupabase } from '@/lib/supabase-server';
+import { runAfterResponse } from '@/lib/utils/after-response';
 
+import { AppOpenService } from '../services/app-open-service';
 import { MobileAPIService } from '../services/mobile-api-service';
+
+/**
+ * Retention fix 5: the apps send X-Client-Timezone on every request. A profile
+ * still on the 'UTC' placeholder gets the device zone (after the response,
+ * once per user per instance; never overwrites a real zone).
+ */
+function scheduleTimezoneBackfill(request: NextRequest, user: any): void {
+  try {
+    const tz = AppOpenService.pendingTimezoneBackfill(user, request);
+    if (tz) runAfterResponse(() => AppOpenService.backfillTimezone(user.id, tz), 'timezone backfill');
+  } catch {
+    // never affects auth
+  }
+}
 
 export interface AuthenticatedRequest extends NextRequest {
   user?: any;
@@ -26,6 +42,7 @@ export async function verifyMobileAuth(request: NextRequest): Promise<any | null
       }
       try {
         const user = await MobileAPIService.authenticateWithToken(token);
+        if (user) scheduleTimezoneBackfill(request, user);
         return user;
       } catch (error) {
         console.error('[verifyMobileAuth] Error calling authenticateWithToken:', error);

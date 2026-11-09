@@ -34,6 +34,8 @@ const PENDING_RELATIONS: string[] = [
   'device_attestations',
   'security_events',
   'security_alert_state',
+  // 133_app_opens.sql (retention fix 4: server-side app opens) — written, not applied yet.
+  'app_opens',
 ];
 
 const APP_DIR = join(__dirname, '..', '..', 'app');

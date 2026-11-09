@@ -9,6 +9,7 @@ import {
   DORMANT_IGNORED_REMINDERS,
   decideMealReminder,
   isDormant,
+  isNewUser,
   mealDedupeKey,
   type MealReminderInput,
 } from '../meal-reminders';
@@ -167,5 +168,26 @@ describe('dormant backoff', () => {
     expect(isDormant('2026-10-20T12:00:00Z', 10, now)).toBe(false);
     expect(isDormant(null, 3, now)).toBe(true); // never logged + 3 ignored reminders
     expect(isDormant(null, 2, now)).toBe(false);
+  });
+
+  it('never dormant in the first 72 h after sign-up (retention fix 3), whatever the reminder count', () => {
+    expect(isDormant(null, 9, now, '2026-10-24T13:00:00Z')).toBe(false); // 71 h old
+    expect(isDormant(null, 9, now, '2026-10-23T11:00:00Z')).toBe(true); // 73 h old
+    expect(isNewUser('2026-10-24T13:00:00Z', now)).toBe(true);
+    expect(isNewUser(null, now)).toBe(false);
+  });
+
+  it('decideMealReminder keeps reminding a 2-day-old non-logger (days 1–3)', () => {
+    const base: MealReminderInput = {
+      now: new Date('2026-10-26T16:35:00Z'),
+      timezone: 'America/New_York',
+      prefs: { ...DEFAULT_MEAL_REMINDER_PREFS },
+      entries: [],
+      lastMealAt: null,
+      remindersSinceLastMeal: 4,
+      attemptedKeys: new Set(),
+    };
+    expect(decideMealReminder({ ...base, signupAt: '2026-10-24T20:00:00Z' })).toMatchObject({ send: true, slot: 'lunch' });
+    expect(decideMealReminder({ ...base, signupAt: '2026-10-20T20:00:00Z' })).toMatchObject({ send: false, skip: 'dormant_backoff' });
   });
 });

@@ -7,7 +7,9 @@
  * toggle is off, a reminder for this slot+day was already attempted, the slot
  * is already logged (meal_type OR entry time in the window), or the user is
  * dormant (no meal in 7 days AND ≥ 3 meal reminders since their last meal —
- * resumes on their next log).
+ * resumes on their next log). A user younger than NEW_USER_GRACE_HOURS is never
+ * dormant: a new sign-up who hasn't logged yet is exactly who the reminders are
+ * for (retention fix 3, 2026-11-09 — the backoff used to stop them after ~1 day).
  */
 import type { NotificationType } from '../services/notification-orchestrator';
 
@@ -25,6 +27,8 @@ export const SEND_GRACE_MINUTES = 60;
 /** "Dead user" backoff (§4). */
 export const DORMANT_NO_MEAL_DAYS = 7;
 export const DORMANT_IGNORED_REMINDERS = 3;
+/** Accounts younger than this are never treated as dormant. */
+export const NEW_USER_GRACE_HOURS = 72;
 
 /** `meal:<slot>:<localDate>` — the dedupe key (docs/PUSH_NOTIFICATIONS.md §3). */
 export const mealDedupeKey = (slot: MealSlot, localDate: string) => `meal:${slot}:${localDate}`;
@@ -41,6 +45,8 @@ export interface MealReminderInput {
   lastMealAt: string | null;
   /** Delivered meal reminders since the last meal (or since sign-up if none). */
   remindersSinceLastMeal: number;
+  /** profiles.created_at (ISO); null/absent = unknown (treated as not new). */
+  signupAt?: string | null;
   /** dedupe keys already used (any outcome) in the last ~20 h. */
   attemptedKeys: ReadonlySet<string>;
 }
@@ -55,7 +61,14 @@ export function dueSlotFor(now: Date, timezone: string): { slot: MealSlot | null
   return { slot: dueSlot(clock.minutes, SEND_GRACE_MINUTES), localDate: clock.date };
 }
 
-export function isDormant(lastMealAt: string | null, remindersSinceLastMeal: number, now: Date): boolean {
+/** Account younger than NEW_USER_GRACE_HOURS (never dormant). */
+export function isNewUser(signupAt: string | null | undefined, now: Date): boolean {
+  const t = signupAt ? Date.parse(signupAt) : NaN;
+  return Number.isFinite(t) && now.getTime() - t < NEW_USER_GRACE_HOURS * 3_600_000;
+}
+
+export function isDormant(lastMealAt: string | null, remindersSinceLastMeal: number, now: Date, signupAt?: string | null): boolean {
+  if (isNewUser(signupAt, now)) return false;
   const last = lastMealAt ? Date.parse(lastMealAt) : NaN;
   const recent = !Number.isNaN(last) && now.getTime() - last < DORMANT_NO_MEAL_DAYS * 86_400_000;
   return !recent && remindersSinceLastMeal >= DORMANT_IGNORED_REMINDERS;
@@ -68,6 +81,6 @@ export function decideMealReminder(i: MealReminderInput): MealReminderDecision {
   const dedupeKey = mealDedupeKey(slot, localDate);
   if (i.attemptedKeys.has(dedupeKey)) return { send: false, slot, skip: 'already_sent', localDate };
   if (loggedSlots(i.entries, localDate, i.timezone).has(slot)) return { send: false, slot, skip: 'slot_logged', localDate };
-  if (isDormant(i.lastMealAt, i.remindersSinceLastMeal, i.now)) return { send: false, slot, skip: 'dormant_backoff', localDate };
+  if (isDormant(i.lastMealAt, i.remindersSinceLastMeal, i.now, i.signupAt)) return { send: false, slot, skip: 'dormant_backoff', localDate };
   return { send: true, slot, type: MEAL_REMINDER_TYPE[slot], localDate, dedupeKey };
 }

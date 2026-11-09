@@ -8,6 +8,7 @@ import { SUPPORTED_FEED_SCHEMAS } from '@/lib/home-feed/types';
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { addAutoRefreshHeaders } from '@/lib/middleware/mobile-auto-refresh';
 import { PROMO_CARD_TYPE, PROMO_CARD_VERSION, PROMO_FEATURES_PARAM, parsePromoClient } from '@/lib/promos';
+import { AppOpenService } from '@/lib/services/app-open-service';
 import { HomeFeedService, SLOW_FEED_MS, type FeedTiming } from '@/lib/services/home-feed-service';
 import { ProfileTimezoneService } from '@/lib/services/profile-timezone-service';
 import { runAfterResponse } from '@/lib/utils/after-response';
@@ -70,6 +71,8 @@ export async function GET(request: NextRequest) {
         'profile timezone'
       );
     }
+    // The dashboard is open: an app open (the timezone sync above already covers the zone).
+    runAfterResponse(() => AppOpenService.record(user, request, 'home_feed', { backfillTimezone: false }), 'app open');
     timing.totalMs = Math.round(performance.now() - started);
     // promo@1 props carry `icon` for every client; clients without X-Client-Features: icon_keys also keep `emoji`.
     const response = NextResponse.json(applyIconCompat(feed, requestRendersIconKeys(request)), {

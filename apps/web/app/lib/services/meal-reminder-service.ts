@@ -17,9 +17,11 @@ import {
   MEAL_REMINDER_TYPE,
   decideMealReminder,
   dueSlotFor,
+  isNewUser,
   type MealReminderSkip,
 } from '../journey/meal-reminders';
 import { mealReminderPrefsFrom, type MealEntryLite, type MealSlot } from '../journey/meal-slots';
+import { resolveNotificationTimezone } from '../notifications/user-timezone';
 import { addDays } from '../streaks/streak-calculator';
 import { createAdminSupabase } from '../supabase-admin';
 
@@ -76,8 +78,10 @@ export class MealReminderService {
     summary.candidates = userIds.length;
     if (!userIds.length) return summary;
 
-    // Timezone priority (same as the other reminder crons): notification_preferences →
-    // latest streak claim → profiles.timezone → New York.
+    // Timezone (lib/notifications/user-timezone.ts, the zone quiet hours use too): a
+    // quiet-hours zone the user changed → profiles.timezone (device) → latest streak
+    // claim → the New York default. 'UTC' / the untouched New York preference default
+    // are placeholders, not the user's zone.
     const [prefRows, claimRows, profileRows] = await Promise.all([
       chunked(userIds, async (p) => ((await supabase.from('notification_preferences').select('user_id, quiet_hours_timezone').in('user_id', p)).data ?? []) as any[]),
       chunked(userIds, async (p) =>
@@ -93,7 +97,11 @@ export class MealReminderService {
     // 1. Cheap filter: a slot is due in the user's timezone and their toggle is on.
     const due: Array<{ userId: string; tz: string; slot: MealSlot; localDate: string }> = [];
     for (const userId of userIds) {
-      let tz = prefTz.get(userId) || claimTz.get(userId) || profiles.get(userId)?.timezone || DEFAULT_TZ;
+      let tz = resolveNotificationTimezone({
+        quietHoursTimezone: prefTz.get(userId),
+        profileTimezone: profiles.get(userId)?.timezone,
+        claimTimezone: claimTz.get(userId),
+      });
       let d: ReturnType<typeof dueSlotFor>;
       try {
         d = dueSlotFor(now, tz);
@@ -144,7 +152,8 @@ export class MealReminderService {
         // Dormancy needs history only when there's no meal in the 8-day window (cheap path otherwise).
         let lastMealAt = lastRecent;
         let remindersSinceLastMeal = 0;
-        if (!lastRecent || now.getTime() - Date.parse(lastRecent) >= DORMANT_NO_MEAL_DAYS * 86_400_000) {
+        const signupAt = profiles.get(u.userId)?.created_at ?? null;
+        if (!isNewUser(signupAt, now) && (!lastRecent || now.getTime() - Date.parse(lastRecent) >= DORMANT_NO_MEAL_DAYS * 86_400_000)) {
           ({ lastMealAt, remindersSinceLastMeal } = await this.dormancyFacts(u.userId, profiles.get(u.userId)?.created_at ?? null, now));
         }
         const decision = decideMealReminder({
@@ -154,6 +163,7 @@ export class MealReminderService {
           entries: mine.filter((e) => e.entry_date >= addDays(u.localDate, -1)),
           lastMealAt,
           remindersSinceLastMeal,
+          signupAt,
           attemptedKeys: attemptedBy.get(u.userId) ?? new Set(),
         });
         if (!decision.send) {

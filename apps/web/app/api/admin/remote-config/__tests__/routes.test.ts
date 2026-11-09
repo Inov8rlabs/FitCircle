@@ -100,6 +100,10 @@ describe('GET list', () => {
         default: null,
         rules: [],
       }),
+      // Retention fixes (2026-11-09): kill switches + the Day-1 hour.
+      expect.objectContaining({ key: 'day1_morning_push', type: 'enum', options: ['on', 'off'], codeDefault: 'on', default: null, rules: [] }),
+      expect.objectContaining({ key: 'day1_morning_push_hour', type: 'int', min: 6, max: 11, codeDefault: 8, default: null, rules: [] }),
+      expect.objectContaining({ key: 'quiet_hours_deferral', type: 'enum', options: ['on', 'off'], codeDefault: 'on', default: null, rules: [] }),
     ]);
   });
 });
@@ -204,6 +208,9 @@ describe('preview + estimate', () => {
       integrity_device_error_fail_open: { value: 'true', source: 'code' },
       integrity_bypass_user_ids: { value: [], source: 'code' },
       integrity_reviewer_emails: { value: ['fitcircle.user@gmail.com', '@cloudtestlabaccounts.com'], source: 'code' },
+      day1_morning_push: { value: 'on', source: 'code' },
+      day1_morning_push_hour: { value: 8, source: 'code' },
+      quiet_hours_deferral: { value: 'on', source: 'code' },
     });
     expect(body.data.context).toMatchObject({ platform: 'ios', country: 'US', channel: 'apple_ads', signupAt: '2026-11-01T00:00:00Z' });
     expect((await PREVIEW(req('/api/admin/remote-config/preview', { method: 'POST', body: { userId: 'x' } }))).status).toBe(400);

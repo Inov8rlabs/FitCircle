@@ -8,10 +8,15 @@
  *                       user has an active push token; email instead when they
  *                       have none, or when the push could not be delivered for
  *                       a reason a retry won't fix (no device, push turned off).
- *                       A push held back by quiet hours / the daily cap is
- *                       retried on later runs until touch 2 is due.
+ *                       A push that hits quiet hours is HELD by the
+ *                       orchestrator and released when quiet hours end
+ *                       (slot status 'deferred'; lib/notifications/quiet-hours-deferral.ts);
+ *                       one held back by the daily cap is retried on later
+ *                       runs until touch 2 is due.
  *   touch 2, from 24 h: email + a second push (token permitting), at least
  *                       12 h after a touch-1 send so they never land together.
+ *                       No second push when the Day-1 morning push already
+ *                       reached them (one morning push, not two).
  *   Then nothing: at most 2 pushes and 2 emails per user, ever.
  *
  * Only users created within `maxAgeHours` (default 72) are considered, so old
@@ -37,7 +42,7 @@ export const MAX_MAX_AGE_HOURS = 24 * 14;
 
 export type NudgeSlot = 'push_1' | 'email_1' | 'push_2' | 'email_2';
 export type NudgeChannel = 'push' | 'email';
-export type SlotStatus = 'pending' | 'sent' | 'failed' | 'suppressed' | 'skipped';
+export type SlotStatus = 'pending' | 'sent' | 'failed' | 'suppressed' | 'skipped' | 'deferred';
 
 export interface SlotRecord {
   status: SlotStatus;
@@ -46,6 +51,8 @@ export interface SlotRecord {
   reason?: string;
   /** Resend email id. */
   id?: string;
+  /** status 'deferred': when quiet hours end and the held push is released. */
+  until?: string;
 }
 
 export type NudgeState = Partial<Record<NudgeSlot, SlotRecord>>;
@@ -72,6 +79,8 @@ export interface NudgeCandidate {
   hasPushToken: boolean;
   /** Touches whose push notification_log already shows as delivered. */
   pushDelivered: ReadonlySet<1 | 2>;
+  /** A Day-1 morning push (day1_morning) was delivered: touch 2 is email only. */
+  day1PushDelivered?: boolean;
 }
 
 export function nudgeState(metadata: Record<string, any> | null | undefined): NudgeState {
@@ -106,12 +115,12 @@ export function ineligibleReason(c: NudgeCandidate, now: Date, maxAgeHours: numb
   return null;
 }
 
-/** When a sent record for this touch went out (latest of its push/email), or null. */
+/** When a sent record for this touch went out (latest of its push/email), or null. A held push counts from its release. */
 function sentAt(state: NudgeState, touch: 1 | 2): number | null {
   const times = (['push', 'email'] as const)
     .map((ch) => state[slotOf(ch, touch)])
-    .filter((r): r is SlotRecord => !!r && r.status === 'sent')
-    .map((r) => Date.parse(r.at))
+    .filter((r): r is SlotRecord => !!r && (r.status === 'sent' || r.status === 'deferred'))
+    .map((r) => Date.parse(r.status === 'deferred' && r.until ? r.until : r.at))
     .filter(Number.isFinite);
   return times.length ? Math.max(...times) : null;
 }
@@ -137,7 +146,7 @@ export function planNudges(c: NudgeCandidate, now: Date): NudgePlan {
     const t1 = sentAt(state, 1);
     if (t1 !== null && now.getTime() - t1 < MIN_GAP_BETWEEN_TOUCHES_MS) return { actions: [], wait: 'touch_2_gap' };
     const actions: NudgeAction[] = [];
-    if (c.hasPushToken && !done('push_2')) actions.push({ slot: 'push_2', channel: 'push', touch: 2 });
+    if (c.hasPushToken && !done('push_2') && !c.day1PushDelivered) actions.push({ slot: 'push_2', channel: 'push', touch: 2 });
     if (canEmail && !done('email_2')) actions.push({ slot: 'email_2', channel: 'email', touch: 2 });
     return actions.length ? { actions } : { actions, wait: 'touch_2_done' };
   }
@@ -148,7 +157,7 @@ export function planNudges(c: NudgeCandidate, now: Date): NudgePlan {
       return { actions: [{ slot: 'push_1', channel: 'push', touch: 1, emailFallback: canEmail && !done('email_1') }] };
     }
     const pushFailedForGood = !!push1 && (push1.status === 'failed' || push1.status === 'suppressed' || push1.status === 'skipped');
-    const pushReached = c.pushDelivered.has(1) || push1?.status === 'sent' || push1?.status === 'pending';
+    const pushReached = c.pushDelivered.has(1) || push1?.status === 'sent' || push1?.status === 'pending' || push1?.status === 'deferred';
     if (!pushReached && (!c.hasPushToken || pushFailedForGood) && canEmail && !done('email_1')) {
       return { actions: [{ slot: 'email_1', channel: 'email', touch: 1 }] };
     }
@@ -169,14 +178,26 @@ export type PushDisposition =
   | { kind: 'record'; record: Omit<SlotRecord, 'at'>; fallbackToEmail: boolean }
   | { kind: 'release'; reason: string };
 
+/** The orchestrator's answer to a send. */
+export interface PushSendResult {
+  sent: boolean;
+  reason?: string;
+  /** reason 'deferred': when the held push is released. */
+  deferUntil?: string;
+}
+
 /**
  * Orchestrator result → what to store. Quiet hours, the daily cap, suppression
  * chains and burst control are temporary: release the claim so a later run
  * retries. `duplicate` means this push already went out (dedupe key) → sent.
  */
-export function pushDisposition(res: { sent: boolean; reason?: string }): PushDisposition {
+export function pushDisposition(res: PushSendResult): PushDisposition {
   if (res.sent) return { kind: 'record', record: { status: 'sent' }, fallbackToEmail: false };
   const reason = res.reason ?? 'not_sent';
+  // Held by quiet hours: the release job sends it at the end of quiet hours. Keep the slot.
+  if (reason === 'deferred') {
+    return { kind: 'record', record: { status: 'deferred', reason, ...(res.deferUntil ? { until: res.deferUntil } : {}) }, fallbackToEmail: false };
+  }
   if (reason === 'duplicate') return { kind: 'record', record: { status: 'sent', reason }, fallbackToEmail: false };
   if (FINAL_PUSH_FAILURES.has(reason)) {
     return {

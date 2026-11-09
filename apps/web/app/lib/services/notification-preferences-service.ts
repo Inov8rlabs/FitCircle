@@ -35,6 +35,7 @@ export type NotificationCategory =
 const TYPE_CATEGORY_MAP: Record<string, NotificationCategory> = {
   // Journey (J1-J11)
   day1_nothing_logged: 'journey',
+  day1_morning: 'journey',
   day3_circle_invite: 'journey',
   day14_challenge_nudge: 'journey',
   day30_monthly_recap: 'journey',

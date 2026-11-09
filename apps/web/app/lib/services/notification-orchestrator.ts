@@ -1,5 +1,7 @@
 import { createHash } from 'crypto';
 
+import { DEFERRED_REASON, isDeferrable, planDeferral } from '../notifications/quiet-hours-deferral';
+import { localClockIn, resolveNotificationTimezone } from '../notifications/user-timezone';
 import { createAdminSupabase } from '../supabase-admin';
 import { stripEmoji } from '../text/strip-emoji';
 
@@ -7,6 +9,7 @@ import { ChatInboxService } from './chat-inbox-service';
 import {
   NotificationPreferencesService,
   type NotificationCategory,
+  type NotificationPreferences,
 } from './notification-preferences-service';
 import {
   APNS_PAYLOAD_BUDGET_BYTES,
@@ -120,6 +123,8 @@ export interface NotificationData {
 export type NotificationType =
   // Journey: account age + dormancy ladder
   | 'day1_nothing_logged'
+  // Guaranteed Day-1 morning push (Day1MorningPushService; copy + screen per variant in data)
+  | 'day1_morning'
   | 'day3_circle_invite'
   | 'day14_challenge_nudge'
   | 'day30_monthly_recap'
@@ -223,6 +228,8 @@ export type NotificationScreen =
 export const TYPE_SCREEN_MAP: Record<NotificationType, NotificationScreen> = {
   // Journey
   day1_nothing_logged: 'food_log',
+  // Default; the variant's screen rides data.screen (circles / food_log / circle_detail / dashboard).
+  day1_morning: 'dashboard',
   day3_circle_invite: 'circles',
   day14_challenge_nudge: 'challenges',
   day30_monthly_recap: 'dashboard',
@@ -299,12 +306,25 @@ export const ANDROID_COACH_CHANNEL_ID = 'fitcircle_coach';
 /** Longest tip forwarded to the app in the data payload (never shown on the lock screen). */
 export const FITZY_TIP_DATA_MAX = 400;
 
+/** Types whose screen is chosen per send (data.screen), from this allowlist. */
+const SCREEN_OVERRIDE_TYPES: Partial<Record<NotificationType, ReadonlySet<NotificationScreen>>> = {
+  day1_morning: new Set<NotificationScreen>(['dashboard', 'food_log', 'circles', 'circle_detail', 'challenges']),
+};
+
 export function screenFor(type: NotificationType, data: NotificationData): NotificationScreen {
-  const screen = TYPE_SCREEN_MAP[type] ?? 'dashboard';
+  const allowed = SCREEN_OVERRIDE_TYPES[type];
+  const requested = typeof data.screen === 'string' ? (data.screen as NotificationScreen) : null;
+  const screen = (allowed && requested && allowed.has(requested) ? requested : TYPE_SCREEN_MAP[type]) ?? 'dashboard';
   if ((screen === 'circle_detail' || screen === 'circle_chat') && !data.circleId) {
     return 'circles';
   }
   return screen;
+}
+
+export interface NotificationTiming {
+  prefs: Pick<NotificationPreferences, 'quiet_hours_start' | 'quiet_hours_end' | 'quiet_hours_timezone'> | null;
+  /** IANA zone the user's pushes are timed in. */
+  timezone: string;
 }
 
 interface NotificationLogEntry {
@@ -330,6 +350,12 @@ export const NOTIFICATION_TEMPLATES: Record<
   day1_nothing_logged: () => ({
     title: 'Your streak starts with one log',
     body: 'You joined FitCircle yesterday. Log a meal or a workout today and day 1 is yours.',
+    category: 'journey',
+  }),
+  // Copy is built per user by Day1MorningPushService (lib/journey/day1-morning.ts) from real Day-0 data.
+  day1_morning: (data) => ({
+    title: stripEmoji(String(data.title || 'Good morning')) || 'Good morning',
+    body: stripEmoji(String(data.body || 'Day 2 starts now. One small log keeps it going.')),
     category: 'journey',
   }),
   day3_circle_invite: () => ({
@@ -722,6 +748,8 @@ function otherCirclesSuffix(data: NotificationData): string {
 const SUPPRESSION_CHAINS: Array<{ blocker: NotificationType; blocked: NotificationType; windowMinutes: number }> = [
   // One evening nudge, not two: the dinner reminder already carries the streak.
   { blocker: 'meal_reminder_dinner', blocked: 'momentum_at_risk', windowMinutes: 120 },
+  // One morning push: the Day-1 push already asks for breakfast (or something better).
+  { blocker: 'day1_morning', blocked: 'meal_reminder_breakfast', windowMinutes: 180 },
   // Don't send momentum_at_risk if the user just got a milestone-flavoured nudge.
   { blocker: 'near_milestone', blocked: 'momentum_at_risk', windowMinutes: 120 },
   { blocker: 'milestone_achieved', blocked: 'momentum_at_risk', windowMinutes: 120 },
@@ -988,7 +1016,7 @@ export class NotificationOrchestrator {
     userId: string,
     type: NotificationType,
     data: NotificationData = {}
-  ): Promise<{ sent: boolean; reason?: string }> {
+  ): Promise<{ sent: boolean; reason?: string; deferUntil?: string }> {
     const template = NOTIFICATION_TEMPLATES[type];
     if (!template) {
       console.error(`[NotificationOrchestrator] Unknown notification type: ${type}`);
@@ -1037,18 +1065,29 @@ export class NotificationOrchestrator {
         return { sent: false, reason: 'category_disabled' };
       }
 
+      // The user's local zone for the cap's "today" and quiet hours (lib/notifications/user-timezone.ts).
+      const timing = await this.timingFor(userId);
+
       // 2. Check frequency cap (see CAP_EXEMPT_TYPES / CAP_RESPECTING_EXEMPT_TYPES)
       if (isCapChecked(type)) {
-        const capResult = await this.checkFrequencyCap(userId);
+        const capResult = await this.checkFrequencyCap(userId, timing.timezone);
         if (!capResult.allowed) {
           await this.logNotification(userId, type, content, data, true, 'frequency_cap');
           return { sent: false, reason: 'frequency_cap' };
         }
       }
 
-      // 3. Check quiet hours
-      const quietResult = await this.checkQuietHours(userId);
+      // 3. Check quiet hours. Deferrable nudges are HELD until quiet hours end
+      //    (lib/notifications/quiet-hours-deferral.ts) instead of being dropped.
+      const quietResult = await this.checkQuietHours(userId, timing);
       if (quietResult.inQuietHours) {
+        if (isDeferrable(type) && data.deferredRelease !== true && timing.prefs?.quiet_hours_end) {
+          const plan = planDeferral(type, new Date(now), timing.timezone, timing.prefs.quiet_hours_end);
+          if (plan && (await this.deferralEnabled(userId))) {
+            await this.logNotification(userId, type, content, { ...data, ...plan, timezone: timing.timezone }, true, DEFERRED_REASON);
+            return { sent: false, reason: 'deferred', deferUntil: plan.deferUntil };
+          }
+        }
         await this.logNotification(userId, type, content, data, true, 'quiet_hours');
         return { sent: false, reason: 'quiet_hours' };
       }
@@ -1332,15 +1371,16 @@ export class NotificationOrchestrator {
    * starve every other notification type for the rest of the day).
    */
   static async checkFrequencyCap(
-    userId: string
+    userId: string,
+    timezone?: string
   ): Promise<{ allowed: boolean; count: number }> {
     const supabaseAdmin = createAdminSupabase();
 
     // "Per day" means the user's day, not the server's.
-    const prefs = await NotificationPreferencesService.getPreferences(userId);
+    const tz = timezone ?? (await this.timingFor(userId)).timezone;
     let startOfDay: Date;
     try {
-      startOfDay = startOfLocalDay(prefs.quiet_hours_timezone || 'America/New_York');
+      startOfDay = startOfLocalDay(tz);
     } catch {
       startOfDay = startOfLocalDay('America/New_York');
     }
@@ -1370,24 +1410,53 @@ export class NotificationOrchestrator {
    * Check if it's currently quiet hours for the user.
    */
   static async checkQuietHours(
-    userId: string
+    userId: string,
+    timing?: NotificationTiming
   ): Promise<{ inQuietHours: boolean }> {
-    const prefs = await NotificationPreferencesService.getPreferences(userId);
-
-    if (!prefs.quiet_hours_start || !prefs.quiet_hours_end) {
+    const t = timing ?? (await this.timingFor(userId));
+    const prefs = t.prefs;
+    if (!prefs?.quiet_hours_start || !prefs.quiet_hours_end) {
       return { inQuietHours: false };
     }
-
-    // Get current time in user's timezone
-    const now = new Date();
-    const userTime = new Date(
-      now.toLocaleString('en-US', { timeZone: prefs.quiet_hours_timezone })
-    );
-    const currentMinutes = userTime.getHours() * 60 + userTime.getMinutes();
-
+    // The user's local clock (their real zone, not the New York preference default).
+    const currentMinutes = localClockIn(new Date(), t.timezone).minutes;
     return {
       inQuietHours: isWithinQuietWindow(currentMinutes, prefs.quiet_hours_start, prefs.quiet_hours_end),
     };
+  }
+
+  /**
+   * Preferences + the zone this user's pushes are timed in. The profile's
+   * device zone is read only when the preference zone is still the default.
+   */
+  static async timingFor(userId: string): Promise<NotificationTiming> {
+    const prefs = await NotificationPreferencesService.getPreferences(userId);
+    let profileTimezone: string | null = null;
+    if (!prefs?.quiet_hours_timezone || prefs.quiet_hours_timezone === 'America/New_York') {
+      try {
+        const { data } = await createAdminSupabase().from('profiles').select('timezone').eq('id', userId).maybeSingle();
+        profileTimezone = ((data as { timezone?: string | null } | null)?.timezone ?? null) || null;
+      } catch {
+        profileTimezone = null; // fail soft: the preference zone
+      }
+    }
+    let timezone = resolveNotificationTimezone({ quietHoursTimezone: prefs?.quiet_hours_timezone, profileTimezone });
+    try {
+      new Intl.DateTimeFormat('en-US', { timeZone: timezone });
+    } catch {
+      timezone = 'America/New_York';
+    }
+    return { prefs, timezone };
+  }
+
+  /** Remote config `quiet_hours_deferral` (default on). Fails open to on. */
+  static async deferralEnabled(userId: string): Promise<boolean> {
+    try {
+      const { RemoteConfigService } = await import('../remote-config/service');
+      return (await RemoteConfigService.enumValue('quiet_hours_deferral', { userId })) !== 'off';
+    } catch {
+      return true;
+    }
   }
 
   /**

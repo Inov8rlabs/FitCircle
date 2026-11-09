@@ -106,6 +106,26 @@ describe('MealReminderService.run', () => {
     expect((await MealReminderService.run({ now: NOW })).sent).toBe(1);
   });
 
+  it('a new user (< 72 h) who never logged keeps getting reminders after 3 (no dormant backoff)', async () => {
+    db.rows('food_log_entries').length = 0;
+    db.rows('profiles')[0].created_at = '2026-10-25T02:00:00Z'; // ~38 h old
+    for (const t of ['2026-10-25T12:30:00Z', '2026-10-25T16:30:00Z', '2026-10-25T22:30:00Z', '2026-10-26T12:30:00Z']) {
+      db.rows('notification_log').push({ user_id: NY, notification_type: 'meal_reminder_dinner', data: {}, suppressed: false, sent_at: t });
+    }
+    const r = await MealReminderService.run({ now: NOW });
+    expect(r.sent).toBe(1);
+    expect(r.skipped.dormant_backoff).toBeUndefined();
+  });
+
+  it('times slots in the device zone when the preference zone is the untouched New York default', async () => {
+    // Kolkata user whose notification_preferences still say New York: 16:35Z is 22:05 Kolkata → nothing due.
+    db.rows('notification_preferences').push({ user_id: IN, quiet_hours_timezone: 'America/New_York' });
+    const r = await MealReminderService.run({ now: NOW });
+    expect(send).toHaveBeenCalledTimes(1);
+    expect(send).toHaveBeenCalledWith(NY, 'meal_reminder_lunch', expect.anything());
+    expect(r.due).toBe(1);
+  });
+
   it('kill switch MEAL_REMINDERS_ENABLED=false', async () => {
     process.env.MEAL_REMINDERS_ENABLED = 'false';
     const r = await MealReminderService.run({ now: NOW });
