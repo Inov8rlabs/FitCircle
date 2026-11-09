@@ -510,12 +510,17 @@ async function ensureFixtures(uid, token) {
   fx.calorieChallengeId = cal.id;
 
   // A little history so lists and leaderboards have rows (written once, never touches other users).
-  const { count: trackCount } = await sb.from('daily_tracking').select('id', { count: 'exact', head: true }).eq('user_id', uid);
+  // Re-seed whenever the last 7 days are empty: seeded rows age out of the /tracking/daily window.
+  const { count: trackCount } = await sb
+    .from('daily_tracking')
+    .select('id', { count: 'exact', head: true })
+    .eq('user_id', uid)
+    .gte('tracking_date', addDays(today, -6));
   if (!trackCount) {
     const rows = [1, 2, 3].map((off) => ({
       user_id: uid, tracking_date: addDays(today, -off), steps: 7000 + off * 900, steps_source: 'manual', weight_kg: 75 - off * 0.1, is_public: false,
     }));
-    const { error } = await sb.from('daily_tracking').insert(rows);
+    const { error } = await sb.from('daily_tracking').upsert(rows, { onConflict: 'user_id,tracking_date' });
     if (error) note(`could not seed daily_tracking: ${error.message}`);
     else note('seeded 3 days of daily_tracking for the smoke user');
   }
