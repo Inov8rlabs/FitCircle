@@ -10,6 +10,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const h = vi.hoisted(() => ({
   mode: 'block' as string,
   bypass: [] as string[],
+  reviewers: [] as string[],
+  listCalls: [] as any[],
   live: 'none' as string,
   consume: 'ok' as string,
   nonceConfigured: true,
@@ -26,7 +28,10 @@ const h = vi.hoisted(() => ({
 vi.mock('@/lib/remote-config/service', () => ({
   RemoteConfigService: {
     enumValue: async () => h.mode,
-    listValue: async () => h.bypass,
+    listValue: async (key: string, ctx: any) => {
+      h.listCalls.push({ key, ctx });
+      return key === 'integrity_reviewer_emails' ? h.reviewers : h.bypass;
+    },
   },
 }));
 vi.mock('../attestations', () => ({
@@ -57,7 +62,15 @@ vi.mock('../play-integrity', async (importOriginal) => {
   };
 });
 
-import { checkIntegrity, failOpenClass, recordSessionAttestation, resolveBypass, resolveLoginBypass } from '../enforcement';
+import {
+  checkIntegrity,
+  failOpenClass,
+  isDeviceEnvironmentError,
+  matchesReviewerList,
+  recordSessionAttestation,
+  resolveBypass,
+  resolveLoginBypass,
+} from '../enforcement';
 
 const DEV = '00000000-0000-4000-8000-000000000001';
 const NONCE = 'a'.repeat(54);
@@ -81,6 +94,8 @@ beforeEach(() => {
   Object.assign(h, {
     mode: 'block',
     bypass: [],
+    reviewers: [],
+    listCalls: [],
     live: 'none',
     consume: 'ok',
     nonceConfigured: true,
@@ -160,8 +175,8 @@ describe('fail closed (client faults)', () => {
 
   it('nonce replay is also its own security event', async () => {
     h.consume = 'replayed';
-    await checkIntegrity(req(), { action: 'google' });
-    expect(h.events.map((e) => e.kind)).toEqual(['integrity', 'nonce_replay']);
+    await checkIntegrity(req(), { action: 'register' });
+    expect(h.events.map((e) => e.kind)).toEqual(['integrity', 'signup_block', 'nonce_replay']);
     // Bypass-eligible calls (login / refresh) record it once the bypass is resolved.
     h.events = [];
     const d = await checkIntegrity(req(), { action: 'refresh' });
@@ -175,7 +190,7 @@ describe('fail closed (client faults)', () => {
     expect(await checkIntegrity(req(), { action: 'register' })).toMatchObject({ allowed: false, reason: 'token_invalid' });
   });
 
-  it('X-Integrity-Error from the device (e.g. no Play services) is still a block', async () => {
+  it('X-Integrity-Error that signals no Play / tampering (e.g. no Play services) is still a block', async () => {
     const d = await checkIntegrity(req({ token: false, error: 'token_-6' }), { action: 'login' });
     expect(d).toMatchObject({ allowed: false, reason: 'missing_token' });
   });
@@ -285,13 +300,170 @@ describe('integrity_bypass_user_ids (login + refresh)', () => {
     expect(await resolveBypass(req(), d, null, 'refresh')).toBe(false);
   });
 
-  it('never applies to register, google or protected calls', async () => {
+  it('never applies to register or protected calls', async () => {
     h.verdictPass = false;
     h.bypass = [USER];
-    for (const action of ['register', 'google', 'fitzy', 'food_ai', 'referral_claim', 'entitlement_sync'] as const) {
+    for (const action of ['register', 'fitzy', 'food_ai', 'referral_claim', 'entitlement_sync'] as const) {
       const d = await checkIntegrity(req(), { action, userId: USER });
       expect(d.bypassEligible).toBe(false);
       expect(await resolveBypass(req(), d, USER, action)).toBe(false);
     }
+  });
+
+  it('the user-id list does not apply to google (no user id before the account exists)', async () => {
+    h.verdictPass = false;
+    h.bypass = [USER];
+    const d = await checkIntegrity(req({ path: '/api/mobile/auth/google' }), { action: 'google' });
+    expect(d.bypassEligible).toBe(true);
+    expect(await resolveBypass(req(), d, { userId: USER }, 'google')).toBe(false);
+    expect(results()).toEqual(['block:device_integrity']);
+  });
+});
+
+describe('device-environment errors fail open (logged, not alerted)', () => {
+  it.each([
+    'prepare_-3', 'prepare_-8', 'prepare_-9', 'prepare_-12', 'prepare_-14', 'prepare_-15', 'prepare_-18', 'prepare_-19', 'prepare_-100',
+    'token_-3', 'token_-8', 'token_-9', 'token_-12', 'token_-14', 'token_-15', 'token_-18', 'token_-19', 'token_-100',
+    'prepare_timeout', 'token_timeout', 'prepare_start', 'interrupted', 'token_provider_invalid',
+  ])('%s → allowed, fail_open device_error:<code>, no Sentry', async (code) => {
+    const d = await checkIntegrity(req({ token: false, error: code }), { action: 'login' });
+    expect(d).toMatchObject({ allowed: true, mode: 'device_error', deviceId: DEV, attestedDeviceId: null });
+    expect(results()).toEqual([`fail_open:device_error:${code}`]);
+    expect(h.sentry).toEqual([]);
+  });
+
+  it.each([
+    'prepare_-1', 'prepare_-2', 'prepare_-5', 'prepare_-6', 'prepare_-7', 'prepare_-16', 'prepare_-17',
+    'token_-1', 'token_-2', 'token_-5', 'token_-6', 'token_-7', 'token_-16', 'token_-17',
+    'token_-99', 'disabled', 'nonce_unavailable', 'prepare_-14x', 'foo_-14', 'request_-14',
+  ])('%s → still a block (missing_token)', async (code) => {
+    const d = await checkIntegrity(req({ token: false, error: code }), { action: 'register' });
+    expect(d).toMatchObject({ allowed: false, reason: 'missing_token' });
+    expect(results()).toEqual(['block:missing_token']);
+  });
+
+  it('no token and no error header is still a block', async () => {
+    expect(await checkIntegrity(req({ token: false }), { action: 'register' })).toMatchObject({ allowed: false, reason: 'missing_token' });
+  });
+
+  it('applies to every action (session-issuing and protected) and in log mode', async () => {
+    for (const action of ['register', 'google', 'refresh', 'food_ai', 'fitzy', 'referral_claim', 'entitlement_sync'] as const) {
+      expect(await checkIntegrity(req({ token: false, error: 'prepare_-14' }), { action, userId: USER })).toMatchObject({ allowed: true, mode: 'device_error' });
+    }
+    h.mode = 'log';
+    expect(await checkIntegrity(req({ token: false, error: 'prepare_-9' }), { action: 'login' })).toMatchObject({ allowed: true, mode: 'device_error' });
+    expect(h.sentry).toEqual([]);
+  });
+
+  it('a token that IS sent is verified as usual, whatever the error header says', async () => {
+    h.verdictPass = false;
+    const d = await checkIntegrity(req({ error: 'prepare_-14' }), { action: 'register' });
+    expect(d).toMatchObject({ allowed: false, reason: 'device_integrity' });
+    h.decode = { kind: 'client', status: 400, message: 'INVALID_ARGUMENT' };
+    expect(await checkIntegrity(req({ error: 'prepare_-14' }), { action: 'register' })).toMatchObject({ allowed: false, reason: 'token_invalid' });
+  });
+
+  it('a missing device id is still a block', async () => {
+    expect(await checkIntegrity(req({ token: false, device: null, error: 'prepare_-14' }), { action: 'login' })).toMatchObject({ allowed: false, reason: 'missing_device_id' });
+  });
+
+  it('never writes a session attestation (the next protected call is checked again)', async () => {
+    const token = jwt.sign({ userId: USER, sid: 'sess-1', type: 'access' }, 'k');
+    const d = await checkIntegrity(req({ token: false, error: 'prepare_-14' }), { action: 'login' });
+    await recordSessionAttestation(req(), d, { userId: USER, accessToken: token });
+    expect(h.attestations).toEqual([]);
+  });
+
+  it('infrastructure fail-opens still report to Sentry (security=fail_open)', async () => {
+    h.decode = { kind: 'infra', message: 'decode HTTP 503' };
+    await checkIntegrity(req({ error: 'prepare_-14' }), { action: 'login' });
+    expect(h.sentry).toHaveLength(1);
+    expect(results()[0]).not.toMatch(/device_error/);
+  });
+
+  it('isDeviceEnvironmentError is case-insensitive and rejects junk', () => {
+    expect(isDeviceEnvironmentError('PREPARE_-14')).toBe(true);
+    expect(isDeviceEnvironmentError(null)).toBe(false);
+    expect(isDeviceEnvironmentError('')).toBe(false);
+    expect(isDeviceEnvironmentError('prepare_-140000')).toBe(false);
+  });
+});
+
+describe('integrity_reviewer_emails (verified identities only)', () => {
+  const REVIEWERS = ['fitcircle.user@gmail.com', '@cloudtestlabaccounts.com'];
+
+  it('matches exact emails and @domain entries, case-insensitively', () => {
+    expect(matchesReviewerList('Fitcircle.User@Gmail.com', REVIEWERS)).toBe(true);
+    expect(matchesReviewerList('robot.123@cloudtestlabaccounts.com', REVIEWERS)).toBe(true);
+    expect(matchesReviewerList('fitcircle.user2@gmail.com', REVIEWERS)).toBe(false);
+    expect(matchesReviewerList('x@evil-cloudtestlabaccounts.com', REVIEWERS)).toBe(false);
+    expect(matchesReviewerList('x@sub.cloudtestlabaccounts.com', REVIEWERS)).toBe(false);
+    expect(matchesReviewerList('cloudtestlabaccounts.com', REVIEWERS)).toBe(false);
+    expect(matchesReviewerList('@cloudtestlabaccounts.com', REVIEWERS)).toBe(false);
+    expect(matchesReviewerList(null, REVIEWERS)).toBe(false);
+    expect(matchesReviewerList('a@b.co', [])).toBe(false);
+  });
+
+  it.each(['login', 'google', 'refresh'] as const)('%s: a blocked reviewer is let through, recorded as bypass:reviewer:<reason>', async (action) => {
+    h.verdictPass = false;
+    h.reviewers = REVIEWERS;
+    const d = await checkIntegrity(req(), { action });
+    expect(d).toMatchObject({ allowed: false, bypassEligible: true });
+    expect(await resolveBypass(req(), d, { userId: action === 'google' ? null : USER, email: 'fitcircle.user@gmail.com' }, action)).toBe(true);
+    expect(results()).toEqual(['bypass:reviewer:device_integrity']);
+    expect(h.events.at(-1)).toMatchObject({ action, result: 'bypass' });
+  });
+
+  it('pre-launch robot domain is let through', async () => {
+    h.reviewers = REVIEWERS;
+    const d = await checkIntegrity(req({ token: false, error: 'token_-6' }), { action: 'google' });
+    expect(await resolveBypass(req(), d, { email: 'abc.12345@cloudtestlabaccounts.com' }, 'google')).toBe(true);
+    expect(results()).toEqual(['bypass:reviewer:missing_token']);
+  });
+
+  it('anyone else (or no verified email) stays blocked', async () => {
+    h.verdictPass = false;
+    h.reviewers = REVIEWERS;
+    const d = await checkIntegrity(req(), { action: 'login' });
+    expect(await resolveLoginBypass(req(), d, { userId: USER, email: 'someone@gmail.com' })).toBe(false);
+    expect(await resolveLoginBypass(req(), d, { userId: null, email: null })).toBe(false);
+    expect(await resolveLoginBypass(req(), d, null)).toBe(false);
+    expect(results()).toEqual(['block:device_integrity', 'block:device_integrity', 'block:device_integrity']);
+  });
+
+  it('never applies to register (the body email is an unverified claim) or protected calls', async () => {
+    h.verdictPass = false;
+    h.reviewers = REVIEWERS;
+    for (const action of ['register', 'fitzy', 'food_ai', 'referral_claim', 'entitlement_sync'] as const) {
+      const d = await checkIntegrity(req(), { action, userId: USER });
+      expect(d.bypassEligible).toBe(false);
+      expect(await resolveBypass(req(), d, { userId: USER, email: 'fitcircle.user@gmail.com' }, action)).toBe(false);
+    }
+  });
+
+  it('the user-id list keeps working and is recorded without the reviewer tag', async () => {
+    h.verdictPass = false;
+    h.bypass = [USER];
+    h.reviewers = REVIEWERS;
+    const d = await checkIntegrity(req(), { action: 'login' });
+    expect(await resolveLoginBypass(req(), d, { userId: USER, email: 'fitcircle.user@gmail.com' })).toBe(true);
+    expect(results()).toEqual(['bypass:device_integrity']);
+  });
+
+  it('a remote-config failure fails closed (stays blocked)', async () => {
+    h.verdictPass = false;
+    const { RemoteConfigService } = await import('@/lib/remote-config/service');
+    const spy = vi.spyOn(RemoteConfigService, 'listValue').mockRejectedValue(new Error('db down'));
+    const d = await checkIntegrity(req(), { action: 'login' });
+    expect(await resolveLoginBypass(req(), d, { userId: USER, email: 'fitcircle.user@gmail.com' })).toBe(false);
+    spy.mockRestore();
+  });
+
+  it('reads the list with the request platform (platform-agnostic list)', async () => {
+    h.verdictPass = false;
+    h.reviewers = REVIEWERS;
+    const d = await checkIntegrity(req(), { action: 'login' });
+    await resolveLoginBypass(req(), d, { userId: USER, email: 'fitcircle.user@gmail.com' });
+    expect(h.listCalls.find((c) => c.key === 'integrity_reviewer_emails')?.ctx).toMatchObject({ userId: USER, platform: 'android' });
   });
 });

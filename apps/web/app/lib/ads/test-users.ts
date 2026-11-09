@@ -18,8 +18,10 @@ export type TestUserReason = 'internal' | 'review' | 'test_lab' | 'qa' | 'play_t
 export const TEST_USER_REASONS: TestUserReason[] = ['internal', 'review', 'test_lab', 'qa', 'play_testers', 'mock_attribution'];
 
 const INTERNAL_DOMAINS = ['fitcircle.ai', 'inov8rlabs.com', 'bajirao.me'];
-const REVIEW_EMAILS = ['fitcircle.user@gmail.com'];
-const TEST_LAB_DOMAINS = ['cloudtestlabaccounts.com'];
+/** App Store / Play review demo accounts (also the integrity reviewer allowlist default). */
+export const REVIEW_EMAILS: readonly string[] = ['fitcircle.user@gmail.com'];
+/** Firebase Test Lab / Play pre-launch robot account domains. */
+export const TEST_LAB_DOMAINS: readonly string[] = ['cloudtestlabaccounts.com'];
 const QA_DOMAINS = ['example.com', 'example.org', 'example.net', 'test.com'];
 const PLAY_TESTER_RE = /^[a-z]{4,}\.\d{5}@gmail\.com$/;
 
@@ -40,7 +42,7 @@ function domainOf(email: string): string {
   return email.slice(email.lastIndexOf('@') + 1);
 }
 
-function matchesDomain(domain: string, list: string[]): boolean {
+function matchesDomain(domain: string, list: readonly string[]): boolean {
   return list.some((d) => domain === d || domain.endsWith(`.${d}`));
 }
 

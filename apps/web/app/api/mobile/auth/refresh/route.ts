@@ -21,12 +21,14 @@ export async function POST(request: NextRequest) {
     const validatedData = parseLenient(refreshSchema, body);
 
     // Android integrity_v1 clients re-attest on every refresh (new session id).
-    // A failing device continues only for a user on integrity_bypass_user_ids; the user id
-    // comes from a refresh token that verifies (signature + expiry), never from the client.
+    // A failing device continues only for a user on integrity_bypass_user_ids or an email on
+    // integrity_reviewer_emails; both come from a refresh token that verifies (signature +
+    // expiry; we signed the email in at login / google), never from the client.
     const integrity = await checkIntegrity(request, { action: 'refresh' });
     if (!integrity.allowed) {
       const payload = integrity.bypassEligible ? await MobileAPIService.verifyRefreshToken(validatedData.refresh_token) : null;
-      if (!(await resolveBypass(request, integrity, payload?.userId ?? null, 'refresh'))) return integrity.response!;
+      const identity = { userId: payload?.userId ?? null, email: payload?.email ?? null };
+      if (!(await resolveBypass(request, integrity, identity, 'refresh'))) return integrity.response!;
     }
 
     // Refresh the access token

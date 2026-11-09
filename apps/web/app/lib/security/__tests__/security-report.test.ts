@@ -65,6 +65,17 @@ describe('alert thresholds', () => {
     expect(s).toEqual([expect.objectContaining({ signal: 'fail_open', value: 1, level: 'elevated' })]);
   });
 
+  it('fail-open: device-environment fail-opens (device_error:<code>) never fire the infra signal', () => {
+    const device = many(80, { result: 'fail_open', reason: 'device_error:prepare_-14' });
+    expect(run(device, { quarter: device })).toEqual([]);
+    const s = run([], { quarter: [...device, row({ result: 'fail_open', reason: 'decode HTTP 503' })] });
+    expect(s).toEqual([expect.objectContaining({ signal: 'fail_open', value: 1, level: 'elevated' })]);
+  });
+
+  it('device-environment fail-opens are attempts, not blocks (block rate unaffected)', () => {
+    expect(run([...many(10, {}), ...many(30, { result: 'fail_open', reason: 'device_error:prepare_-9' })])).toEqual([]);
+  });
+
   it('rate-limit hits: > 500/h, counting deduplicated rows by count', () => {
     expect(run([row({ kind: 'rate_limit', result: 'limited', count: 400 }), row({ kind: 'rate_limit', result: 'limited', count: 101 })])[0]).toMatchObject({ signal: 'rate_limit_hits', value: 501 });
     expect(run([row({ kind: 'rate_limit', result: 'limited', count: 1600 })])[0]).toMatchObject({ level: 'under_attack' });
@@ -133,5 +144,18 @@ describe('report aggregation', () => {
     const pts = hourlySeries(rows);
     expect(pts).toHaveLength(1);
     expect(pts[0]).toMatchObject({ hour: '2026-11-07T11:00:00.000Z', counts: { integrity: 2, rate_limit: 7, login_failure: 2, free_ai_device_limit: 1 } });
+  });
+});
+
+describe('fail-open split (infrastructure vs device environment)', () => {
+  it('tiles count them separately; failOpens is infrastructure only', () => {
+    const t = tiles([
+      row({ result: 'fail_open', reason: 'verifier not configured' }),
+      row({ result: 'fail_open', reason: null }),
+      row({ result: 'fail_open', reason: 'device_error:prepare_-14', count: 3 }),
+      row({ result: 'fail_open', reason: 'device_error:token_timeout' }),
+      row({ result: 'pass' }),
+    ]);
+    expect(t).toMatchObject({ failOpens: 2, deviceErrorFailOpens: 4, integrityAttempts: 7, integrityPasses: 1, integrityBlocks: 0 });
   });
 });

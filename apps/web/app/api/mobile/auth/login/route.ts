@@ -28,7 +28,9 @@ export async function POST(request: NextRequest) {
 
     // Android integrity_v1 clients must pass the device check. A failing device is
     // refused whether or not the password is right; only users on
-    // integrity_bypass_user_ids get through (resolved after the password check).
+    // integrity_bypass_user_ids or integrity_reviewer_emails get through (resolved after
+    // the password check, with the account's own email, never the typed one).
+    // A device-environment error (outdated Play Store, ...) is allowed by checkIntegrity.
     const integrity = await checkIntegrity(request, { action: 'login' });
     if (!integrity.allowed && !integrity.bypassEligible) return integrity.response!;
 
@@ -50,9 +52,10 @@ export async function POST(request: NextRequest) {
       password: validatedData.password,
     });
 
-    // Blocked device: only a bypass-listed user with the right password continues.
+    // Blocked device: only a bypass-listed user / reviewer with the right password continues.
     if (!integrity.allowed) {
-      const bypass = await resolveLoginBypass(request, integrity, !error && data.user ? data.user.id : null);
+      const verified = !error && data.user ? data.user : null;
+      const bypass = await resolveLoginBypass(request, integrity, { userId: verified?.id ?? null, email: verified?.email ?? null });
       if (!bypass) return integrity.response!;
     }
 

@@ -10,6 +10,8 @@
  * Premium abuse ceilings are deliberately NOT here (lib/config/tier-limits.ts).
  */
 
+import { REVIEW_EMAILS, TEST_LAB_DOMAINS } from '@/lib/ads/test-users';
+
 export type RemoteConfigType = 'int' | 'enum' | 'string_list';
 
 export type RemoteConfigValue = number | string | string[];
@@ -42,6 +44,9 @@ export interface StringListKeyDef extends KeyDefBase {
 }
 
 export type RemoteConfigKeyDef = IntKeyDef | EnumKeyDef | StringListKeyDef;
+
+/** An exact email, or `@domain` (empty local part) for every address at that domain. */
+const EMAIL_OR_DOMAIN_PATTERN = '^[^\\s@]*@[A-Za-z0-9-]+(\\.[A-Za-z0-9-]+)+$';
 
 const UUID_PATTERN = '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$';
 
@@ -77,6 +82,15 @@ export const REMOTE_CONFIG_REGISTRY = {
     itemPattern: UUID_PATTERN,
     unit: 'user ids',
     description: 'Internal test accounts allowed to sign in and stay signed in (login + refresh only) from builds that fail the Android integrity check.',
+  },
+  integrity_reviewer_emails: {
+    type: 'string_list',
+    default: [...REVIEW_EMAILS, ...TEST_LAB_DOMAINS.map((d) => `@${d}`)],
+    maxItems: 200,
+    itemPattern: EMAIL_OR_DOMAIN_PATTERN,
+    unit: 'emails / @domains',
+    description:
+      'App Store / Play reviewer and pre-launch robot accounts never blocked by the app-integrity check (exact email, or @domain). Applied only to an identity the server verified: login (after the password check), Google sign-in (verified id token), refresh (verified refresh token). Never on register. Platform-agnostic (Android Play Integrity now, iOS App Attest later).',
   },
 } as const satisfies Record<string, RemoteConfigKeyDef>;
 

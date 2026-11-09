@@ -13,7 +13,16 @@
  *   - client faults (no token, bad device id, unknown/used nonce, token Google rejects,
  *     decoded verdict failing any check) → block
  *   - our / Google infrastructure (verifier not configured, token exchange, quota, 5xx,
- *     timeout, nonce store down) → fail OPEN: allow, log, Sentry
+ *     timeout, nonce store down) → fail OPEN: allow, log, Sentry (security=fail_open)
+ *   - no token because of the PHONE's environment or a transient Play error (the client's
+ *     X-Integrity-Error, see classifyClientIntegrityError) → device fail-open: allow and
+ *     record (result fail_open, reason `device_error:<code>`), no Sentry exception; not
+ *     counted as an infrastructure fail-open in reports or alerts.
+ *
+ * Bypass (resolveBypass), only after the identity is VERIFIED by the route:
+ *   - integrity_bypass_user_ids: internal test accounts (login, refresh)
+ *   - integrity_reviewer_emails: App Store / Play reviewers + pre-launch robots
+ *     (login, google, refresh). Platform-agnostic: iOS App Attest will use the same list.
  *
  * Protected (non-session) calls accept a live device attestation for the session instead
  * of a token. Session-issuing calls (register/login/google/refresh) always need a token
@@ -52,8 +61,10 @@ export type IntegrityAction =
 
 /** Calls that issue a session: always need a fresh token. */
 export const SESSION_ACTIONS: ReadonlySet<IntegrityAction> = new Set(['register', 'login', 'google', 'refresh']);
-/** Calls where `integrity_bypass_user_ids` applies. */
-export const BYPASS_ACTIONS: ReadonlySet<IntegrityAction> = new Set(['login', 'refresh']);
+/** Calls whose block may be lifted by resolveBypass (the route verifies the identity first). */
+export const BYPASS_ACTIONS: ReadonlySet<IntegrityAction> = new Set(['login', 'google', 'refresh']);
+/** Calls where `integrity_bypass_user_ids` applies (google has no user id before the account exists). */
+export const USER_BYPASS_ACTIONS: ReadonlySet<IntegrityAction> = new Set(['login', 'refresh']);
 
 export type EnforceMode = 'block' | 'log' | 'off';
 
@@ -75,7 +86,11 @@ export type IntegrityFailReason =
 export interface IntegrityDecision {
   allowed: boolean;
   /** legacy = not an integrity_v1 Android client; off = kill switch. */
-  mode: 'legacy' | 'off' | 'verified' | 'attested' | 'fail_open' | 'log_only' | 'blocked';
+  /**
+   * device_error = no token because of the phone's environment (allowed, recorded, never
+   * attested: every later protected call is checked again).
+   */
+  mode: 'legacy' | 'off' | 'verified' | 'attested' | 'fail_open' | 'device_error' | 'log_only' | 'blocked';
   /** Present when blocked. */
   response?: NextResponse;
   reason?: IntegrityFailReason;
@@ -84,7 +99,7 @@ export interface IntegrityDecision {
   /** Device id proven by this decision (verified token or live verified attestation). */
   attestedDeviceId: string | null;
   verdict?: VerdictSummary;
-  /** Blocked on a login / refresh whose user may be on the bypass list (see resolveBypass). */
+  /** Blocked on a login / google / refresh whose identity may be on a bypass list (see resolveBypass). */
   bypassEligible?: boolean;
 }
 
@@ -112,6 +127,29 @@ export async function enforceMode(userId?: string | null): Promise<EnforceMode> 
 export async function isBypassUser(userId: string): Promise<boolean> {
   const list = await RemoteConfigService.listValue('integrity_bypass_user_ids', { userId, platform: 'android' });
   return list.map((s) => s.toLowerCase()).includes(userId.toLowerCase());
+}
+
+/** Exact email or `@domain` entry match (case-insensitive; a domain entry matches that domain only). Pure. */
+export function matchesReviewerList(email: string | null | undefined, list: readonly string[]): boolean {
+  const e = (email ?? '').trim().toLowerCase();
+  const at = e.lastIndexOf('@');
+  if (at <= 0 || at === e.length - 1) return false;
+  const domain = e.slice(at);
+  return list.some((raw) => {
+    const entry = raw.trim().toLowerCase();
+    if (!entry) return false;
+    return entry.startsWith('@') ? domain === entry : e === entry;
+  });
+}
+
+/**
+ * `integrity_reviewer_emails`: App Store / Play reviewers and pre-launch robots. The email
+ * must come from a verified identity (password check, Google id token, our refresh token).
+ * Platform-agnostic on purpose: the same list applies to iOS App Attest when it arrives.
+ */
+export async function isReviewerEmail(email: string, ctx: { userId?: string | null; platform?: 'ios' | 'android' | 'web' | null } = {}): Promise<boolean> {
+  const list = await RemoteConfigService.listValue('integrity_reviewer_emails', { userId: ctx.userId || PLACEHOLDER_USER, platform: ctx.platform ?? 'android' });
+  return matchesReviewerList(email, list);
 }
 
 const MESSAGE = "This device can't run FitCircle. Install FitCircle from Google Play on a device with Google Play services that isn't rooted.";
@@ -176,6 +214,44 @@ export function clientIntegrityError(request: HeaderSource): string | null {
   return /^[A-Za-z0-9_.:-]+$/.test(v) ? v : null;
 }
 
+/*
+ * X-Integrity-Error classification (Android client: core/integrity/IntegrityManager.kt,
+ * IntegrityInterceptor.kt). Formats: `prepare_<code>` / `token_<code>` (Play
+ * StandardIntegrityErrorCode; non-Play exceptions arrive as -100), `prepare_timeout`,
+ * `token_timeout`, `prepare_start`, `interrupted`, `token_provider_invalid`,
+ * `nonce_unavailable` (handled separately), `disabled` (never sent with integrity_v1).
+ *
+ * DEVICE (fail open, logged): the phone's environment or a transient Play / network error.
+ *   -3 NETWORK_ERROR, -8 TOO_MANY_REQUESTS, -9 CANNOT_BIND_TO_SERVICE,
+ *   -12 GOOGLE_SERVER_UNAVAILABLE, -14 PLAY_STORE_VERSION_OUTDATED,
+ *   -15 PLAY_SERVICES_VERSION_OUTDATED, -18 CLIENT_TRANSIENT_ERROR,
+ *   -19 INTEGRITY_TOKEN_PROVIDER_INVALID (the client already re-prepared once),
+ *   -100 INTERNAL_ERROR, prepare_timeout, token_timeout, prepare_start (SDK threw),
+ *   interrupted, token_provider_invalid
+ * BLOCK (missing_token): no Play / tampering / sideload signals, our own build bugs, and
+ * anything unknown.
+ *   -1 API_NOT_AVAILABLE, -2 PLAY_STORE_NOT_FOUND, -5 APP_NOT_INSTALLED,
+ *   -6 PLAY_SERVICES_NOT_FOUND, -7 APP_UID_MISMATCH, -16 CLOUD_PROJECT_NUMBER_IS_INVALID,
+ *   -17 REQUEST_HASH_TOO_LONG, any other code or string, no header at all.
+ *
+ * The header is client-controlled: a scripted client can claim a device error. Rate limits
+ * still apply, and every such request is recorded (`device_error:<code>`) for review.
+ */
+const DEVICE_ERROR_CODES: ReadonlySet<number> = new Set([-3, -8, -9, -12, -14, -15, -18, -19, -100]);
+const DEVICE_ERROR_STRINGS: ReadonlySet<string> = new Set(['prepare_timeout', 'token_timeout', 'prepare_start', 'interrupted', 'token_provider_invalid']);
+
+/** Reason prefix of a device-environment fail-open (security_events.reason). */
+export const DEVICE_ERROR_REASON_PREFIX = 'device_error:';
+
+/** True when X-Integrity-Error names a device-environment / transient cause (fail open). Pure. */
+export function isDeviceEnvironmentError(clientError: string | null | undefined): boolean {
+  const v = (clientError ?? '').trim().toLowerCase();
+  if (!v) return false;
+  if (DEVICE_ERROR_STRINGS.has(v)) return true;
+  const m = /^(prepare|token)_(-\d{1,4})$/.exec(v);
+  return !!m && DEVICE_ERROR_CODES.has(Number(m[2]));
+}
+
 type IntegrityOutcome = 'pass' | 'block' | 'log_only' | 'fail_open' | 'bypass';
 
 async function event(request: NextRequest, action: IntegrityAction, outcome: IntegrityOutcome, extra: { reason?: string | null; userId?: string | null; deviceId?: string | null; verdict?: VerdictSummary | Record<string, unknown> | null }) {
@@ -185,7 +261,7 @@ async function event(request: NextRequest, action: IntegrityAction, outcome: Int
   if (outcome === 'block' && action === 'register') {
     await recordSecurityEvent(request, { kind: 'signup_block', result: 'block', reason: `integrity_${extra.reason ?? 'failed'}`, ...base });
   }
-  if (extra.reason === 'nonce_replayed') {
+  if (extra.reason === 'nonce_replayed' || extra.reason === 'reviewer:nonce_replayed') {
     await recordSecurityEvent(request, { kind: 'nonce_replay', result: outcome, reason: 'nonce_replayed', ...base });
   }
 }
@@ -253,6 +329,13 @@ export async function checkIntegrity(request: NextRequest, opts: CheckOptions): 
     return { allowed: true, mode: 'fail_open', deviceId, attestedDeviceId: null };
   };
 
+  // The phone could not produce a token for an environmental / transient reason: allow and
+  // record. No Sentry exception (security=fail_open means OUR infrastructure is broken).
+  const deviceFailOpen = async (code: string): Promise<IntegrityDecision> => {
+    await event(request, action, 'fail_open', { reason: `${DEVICE_ERROR_REASON_PREFIX}${code}`, userId, deviceId });
+    return { allowed: true, mode: 'device_error', deviceId, attestedDeviceId: null };
+  };
+
   try {
     if (!deviceId) return await fail('missing_device_id');
 
@@ -273,9 +356,10 @@ export async function checkIntegrity(request: NextRequest, opts: CheckOptions): 
     const nonce = (request.headers.get(INTEGRITY_HEADERS.nonce) ?? '').trim();
     if (!token) {
       if (attestationLookupFailed) return await failOpen('attestation lookup failed');
-      // The device could not produce a token: a device-side failure, so a block. The one
-      // exception is a nonce we could not issue (our signing secret is missing).
+      // The device could not produce a token. A block, except: a nonce we could not issue
+      // (our signing secret is missing) and device-environment errors (see above).
       if (clientError === 'nonce_unavailable' && !nonceIssuanceConfigured()) return await failOpen('nonce issuance not configured');
+      if (clientError && isDeviceEnvironmentError(clientError)) return await deviceFailOpen(clientError);
       return await fail('missing_token');
     }
     if (!isWellFormedNonce(nonce)) return await fail('nonce_invalid');
@@ -314,27 +398,43 @@ export async function checkIntegrity(request: NextRequest, opts: CheckOptions): 
   }
 }
 
+/** A VERIFIED identity (password check, Google id token, our refresh token). */
+export interface BypassIdentity {
+  userId?: string | null;
+  /** Only from a verified source: never a request-body claim (e.g. register). */
+  email?: string | null;
+}
+
 /**
- * Login and refresh only: once the caller has a VERIFIED user id (password check, or a
- * refresh token that verifies), a blocked request from a user on `integrity_bypass_user_ids`
- * is allowed. Callers must still return the 403 for every other user, whether or not the
- * credential was right.
+ * Login, google and refresh: once the caller has a VERIFIED identity, a blocked request is
+ * allowed for
+ *   - a user on `integrity_bypass_user_ids` (login + refresh), event `bypass:<reason>`
+ *   - an email on `integrity_reviewer_emails` (login, google, refresh), event
+ *     `bypass:reviewer:<reason>`
+ * Callers must still return the 403 for every other identity, whether or not the
+ * credential was right. Accepts a bare user id (older call sites).
  */
 export async function resolveBypass(
   request: NextRequest,
   decision: IntegrityDecision,
-  userId: string | null,
+  identity: string | null | BypassIdentity,
   action: IntegrityAction = 'login'
 ): Promise<boolean> {
   if (decision.allowed || !decision.bypassEligible) return decision.allowed;
-  const bypass = userId ? await isBypassUser(userId).catch(() => false) : false;
-  await event(request, action, bypass ? 'bypass' : 'block', { reason: decision.reason ?? null, userId, deviceId: decision.deviceId, verdict: decision.verdict });
+  const id: BypassIdentity = typeof identity === 'string' || identity === null ? { userId: identity } : identity;
+  const userId = id.userId ?? null;
+  const userBypass = !!userId && USER_BYPASS_ACTIONS.has(action) ? await isBypassUser(userId).catch(() => false) : false;
+  const platform = parseClientPlatform(request.headers.get('x-app-platform') ?? request.headers.get('x-platform'));
+  const reviewer = !userBypass && id.email ? await isReviewerEmail(id.email, { userId, platform }).catch(() => false) : false;
+  const bypass = userBypass || reviewer;
+  const reason = reviewer ? `reviewer:${decision.reason ?? 'failed'}` : (decision.reason ?? null);
+  await event(request, action, bypass ? 'bypass' : 'block', { reason, userId, deviceId: decision.deviceId, verdict: decision.verdict });
   return bypass;
 }
 
-/** Login: the user id comes from the password check. */
-export function resolveLoginBypass(request: NextRequest, decision: IntegrityDecision, userId: string | null): Promise<boolean> {
-  return resolveBypass(request, decision, userId, 'login');
+/** Login: the user id (and the account's email) come from the password check. */
+export function resolveLoginBypass(request: NextRequest, decision: IntegrityDecision, identity: string | null | BypassIdentity): Promise<boolean> {
+  return resolveBypass(request, decision, identity, 'login');
 }
 
 /**

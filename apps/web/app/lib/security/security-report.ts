@@ -61,7 +61,10 @@ export interface Tiles {
   integrityPasses: number;
   integrityPassRate: number | null;
   integrityBlocks: number;
+  /** Infrastructure fail-opens only (our verifier / Google / nonce store): the alert signal. */
   failOpens: number;
+  /** Device-environment fail-opens (outdated Play Store, ...): reason `device_error:<code>`; never alerts. */
+  deviceErrorFailOpens: number;
   rateLimitHits: number;
   failedLogins: number;
   signupBlocks: number;
@@ -75,6 +78,13 @@ export interface Tiles {
 /** Integrity attempts = decisions that verified something (cheap attested passes are not logged). */
 const isIntegrityAttempt = (r: EventRow) => r.kind === 'integrity' && ['pass', 'block', 'fail_open', 'log_only', 'bypass'].includes(r.result);
 const isIntegrityBlock = (r: EventRow) => r.kind === 'integrity' && (r.result === 'block' || r.result === 'log_only');
+/** Matches DEVICE_ERROR_REASON_PREFIX in lib/integrity/enforcement.ts. */
+const DEVICE_ERROR_PREFIX = 'device_error:';
+const isDeviceErrorReason = (reason: string | null | undefined) => (reason ?? '').startsWith(DEVICE_ERROR_PREFIX);
+/** A fail-open caused by OUR infrastructure (or Google's verifier), not by the phone. */
+export const isInfraFailOpen = (r: Pick<EventRow, 'kind' | 'result' | 'reason'>) => r.kind === 'integrity' && r.result === 'fail_open' && !isDeviceErrorReason(r.reason);
+/** A fail-open because the phone could not produce a token (client X-Integrity-Error). */
+export const isDeviceErrorFailOpen = (r: Pick<EventRow, 'kind' | 'result' | 'reason'>) => r.kind === 'integrity' && r.result === 'fail_open' && isDeviceErrorReason(r.reason);
 
 export function tiles(rows: EventRow[]): Tiles {
   const attempts = sum(rows, isIntegrityAttempt);
@@ -84,7 +94,8 @@ export function tiles(rows: EventRow[]): Tiles {
     integrityPasses: passes,
     integrityPassRate: attempts > 0 ? passes / attempts : null,
     integrityBlocks: sum(rows, isIntegrityBlock),
-    failOpens: sum(rows, (r) => r.kind === 'integrity' && r.result === 'fail_open'),
+    failOpens: sum(rows, isInfraFailOpen),
+    deviceErrorFailOpens: sum(rows, isDeviceErrorFailOpen),
     rateLimitHits: sum(rows, (r) => r.kind === 'rate_limit'),
     failedLogins: sum(rows, (r) => r.kind === 'login_failure'),
     signupBlocks: sum(rows, (r) => r.kind === 'signup_block'),
@@ -287,7 +298,8 @@ export function evaluateSignals(input: SignalInput): Signal[] {
   out.push(
     worst(
       'fail_open',
-      [{ value: sum(input.quarter, (r) => r.kind === 'integrity' && r.result === 'fail_open'), threshold: THRESHOLDS.fail_open, detail: 'last 15 minutes', attackAt: 50 }],
+      // Infrastructure only: device-environment fail-opens are expected and never alert.
+      [{ value: sum(input.quarter, isInfraFailOpen), threshold: THRESHOLDS.fail_open, detail: 'last 15 minutes', attackAt: 50 }],
       b.fail_open
     )
   );
@@ -312,18 +324,20 @@ export async function loadBaselines(now: Date = new Date()): Promise<Partial<Rec
   const supabase = createAdminSupabase();
   const since = new Date(now.getTime() - 7 * DAY).toISOString();
   const until = new Date(now.getTime() - HOUR).toISOString();
-  const countKind = async (kind: SecurityKind, result?: string) => {
-    let q = supabase.from('security_events').select('count').eq('kind', kind).gte('created_at', since).lt('created_at', until);
+  const countKind = async (kind: SecurityKind, result?: SecurityEventResult, keep?: (r: { kind: SecurityKind; result: SecurityEventResult; reason: string | null }) => boolean) => {
+    let q = supabase.from('security_events').select('count, reason').eq('kind', kind).gte('created_at', since).lt('created_at', until);
     if (result) q = q.eq('result', result);
     const { data, error } = await q.limit(MAX_ROWS);
     if (error) return null;
-    return ((data ?? []) as Array<{ count: number }>).reduce((a, r) => a + (Number(r.count) || 1), 0);
+    return ((data ?? []) as Array<{ count: number; reason: string | null }>)
+      .filter((r) => !keep || keep({ kind, result: result ?? ('' as SecurityEventResult), reason: r.reason ?? null }))
+      .reduce((a, r) => a + (Number(r.count) || 1), 0);
   };
   const [logins, limits, referrals, failOpen] = await Promise.all([
     countKind('login_failure'),
     countKind('rate_limit'),
     countKind('referral_rejection', 'rejected'),
-    countKind('integrity', 'fail_open'),
+    countKind('integrity', 'fail_open', isInfraFailOpen),
   ]);
   const hours = 7 * 24 - 1;
   const out: Partial<Record<SignalId, number>> = {};

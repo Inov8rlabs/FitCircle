@@ -4,7 +4,7 @@ import { z } from 'zod';
 
 import { parseClientPlatform } from '@/lib/experiments/request-info';
 import { isRegionRestricted } from '@/lib/geo/region-restriction';
-import { checkIntegrity, recordSessionAttestation } from '@/lib/integrity/enforcement';
+import { checkIntegrity, recordSessionAttestation, resolveBypass } from '@/lib/integrity/enforcement';
 import { enforceAbuseLimits, requestDeviceId } from '@/lib/security/abuse-limits';
 import { recordSecurityEvent } from '@/lib/security/security-events';
 import { setEmailCanonical } from '@/lib/services/email-signup-service';
@@ -37,6 +37,11 @@ interface GoogleJWTPayload {
   given_name?: string;
   family_name?: string;
   name?: string;
+}
+
+/** Google asserts the mailbox is the account's (boolean, or the string "true" in older tokens). */
+function isGoogleEmailVerified(payload: GoogleJWTPayload): boolean {
+  return payload.email_verified === true || payload.email_verified === 'true';
 }
 
 async function verifyGoogleIdToken(idToken: string): Promise<GoogleJWTPayload | null> {
@@ -80,10 +85,18 @@ export async function POST(request: NextRequest) {
     const idToken = parsed.googleIdToken || parsed.idToken!;
 
     // Android integrity_v1 clients must pass the device check (sign-in and first sign-up).
+    // A failing device is refused whether or not the Google token is valid; only an email
+    // on integrity_reviewer_emails gets through, and only from a token that verifies with
+    // email_verified (resolved before any account is created).
     const integrity = await checkIntegrity(request, { action: 'google' });
-    if (!integrity.allowed) return integrity.response!;
+    if (!integrity.allowed && !integrity.bypassEligible) return integrity.response!;
 
     const googleUser = await verifyGoogleIdToken(idToken);
+
+    if (!integrity.allowed) {
+      const verifiedEmail = googleUser?.sub && isGoogleEmailVerified(googleUser) ? (googleUser.email ?? null) : null;
+      if (!(await resolveBypass(request, integrity, { email: verifiedEmail }, 'google'))) return integrity.response!;
+    }
 
     if (!googleUser || !googleUser.sub) {
       return NextResponse.json(
