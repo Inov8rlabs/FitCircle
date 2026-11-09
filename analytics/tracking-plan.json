@@ -1,7 +1,7 @@
 {
   "$schema": "./tracking-plan.schema.json",
-  "version": 30,
-  "updated": "2026-11-07",
+  "version": 31,
+  "updated": "2026-11-09",
   "conventions": {
     "eventNames": "Title Case, '<Object> <Past-tense verb>' (e.g. 'Meal Logged'). Names are frozen once shipped: rename in the analytics tool, never in code.",
     "propertyNames": "snake_case. Enum values are lowercase snake_case.",
@@ -2229,6 +2229,25 @@
           "type": "string",
           "required": false,
           "description": "Paywall layout from the experiment payload: plans | plan_recap | annual_savings. Absent for non-onboarding paywalls."
+        },
+        {
+          "name": "plan",
+          "type": "enum",
+          "enum": "plan",
+          "required": false,
+          "description": "The plan selected when the event fired: the paywall default (monthly) or the person's own choice. Absent until the plans load."
+        },
+        {
+          "name": "plans_shown",
+          "type": "bool",
+          "required": false,
+          "description": "False when the paywall showed no plans (the offerings load failed or the offering had none). The person sees a retry / sign-in-to-the-store message instead."
+        },
+        {
+          "name": "offerings_error",
+          "type": "string",
+          "required": false,
+          "description": "Why the plans didn't load, snake_case store SDK error code (Android: RevenueCat PurchasesErrorCode, e.g. purchase_not_allowed_error = Play BILLING_UNAVAILABLE); no_plans for an offering without plans. Absent when the plans loaded."
         }
       ]
     },
@@ -2313,6 +2332,13 @@
           "type": "string",
           "required": false,
           "description": "Paywall layout from the experiment payload: plans | plan_recap | annual_savings. Absent for non-onboarding paywalls."
+        },
+        {
+          "name": "plan",
+          "type": "enum",
+          "enum": "plan",
+          "required": false,
+          "description": "The plan selected when the event fired: the paywall default (monthly) or the person's own choice. Absent until the plans load."
         }
       ]
     },
@@ -2657,6 +2683,13 @@
           "type": "string",
           "required": false,
           "description": "Paywall layout from the experiment payload: plans | plan_recap | annual_savings. Absent for non-onboarding paywalls."
+        },
+        {
+          "name": "plan",
+          "type": "enum",
+          "enum": "plan",
+          "required": false,
+          "description": "The plan selected when the event fired: the paywall default (monthly) or the person's own choice. Absent until the plans load."
         }
       ]
     },
