@@ -29,10 +29,6 @@ export default function PrivacyChoicesPage() {
           Back to FitCircle
         </Link>
 
-        <div role="note" className="mb-8 rounded-xl border border-amber-400/50 bg-amber-400/10 p-4 text-amber-100">
-          <p className="font-semibold">Draft — pending legal review</p>
-        </div>
-
         <div className="mb-12">
           <h1 className="text-5xl font-bold text-white mb-4 flex items-center gap-4">
             <SlidersHorizontal className="h-12 w-12 text-purple-400" aria-hidden="true" />
@@ -103,7 +99,10 @@ export default function PrivacyChoicesPage() {
                 Your consent to process health data and your permission for AI features are separate choices. You
                 can review or withdraw them at any time in{' '}
                 <Link href="/settings/privacy" className="text-cyan-400 hover:underline">Settings → Privacy</Link>{' '}
-                on the website, or in Settings in the apps.
+                on the website, or in Settings in the apps. See also our{' '}
+                <Link href="/consumer-health-privacy" className="text-cyan-400 hover:underline">
+                  Consumer Health Data Privacy Policy
+                </Link>.
               </p>
             </section>
 

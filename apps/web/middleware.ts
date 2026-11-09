@@ -43,7 +43,10 @@ export const PUBLIC_ROUTES = [
   '/get', // smart "get the app" link: 307 to the store on phones, QR page on desktop
   '/open', // "open in app" fallback (claimed by the iOS app via AASA); forwards to /get
   '/welcome/app', // post-signup "get the app" handoff; shows no account data
+  '/consumer-health-privacy', // WA MHMDA / NV SB370 policy (linked from the homepage footer)
   '/privacy-choices', // "Your Privacy Choices" / Do Not Sell or Share
+  '/fr/privacy', // Quebec French privacy policy
+  '/fr/terms', // Quebec French terms
   '/not-available', // EU/EEA sign-up restriction page (WEB_EU_SIGNUP_BLOCK)
 ];
 

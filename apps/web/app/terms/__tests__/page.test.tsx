@@ -19,7 +19,7 @@ describe('Terms of Service Page', () => {
 
     it('should display correct effective date', () => {
       render(<TermsPage />);
-      expect(screen.getByText('Effective Date: September 29, 2026')).toBeInTheDocument();
+      expect(screen.getByText('Effective Date: November 6, 2026')).toBeInTheDocument();
     });
 
     it('should have back to home button', () => {
@@ -224,9 +224,9 @@ describe('Terms of Service Page', () => {
       expect(screen.getByText('19. Governing Law and Jurisdiction')).toBeInTheDocument();
     });
 
-    it('should specify Delaware jurisdiction', () => {
+    it('should specify British Columbia governing law', () => {
       render(<TermsPage />);
-      expect(screen.getByText(/governed by and construed in accordance with the laws of the State of Delaware/i)).toBeInTheDocument();
+      expect(screen.getByText(/governed by and construed in accordance with the laws of the Province of\s+British Columbia/i)).toBeInTheDocument();
     });
   });
 
@@ -279,7 +279,7 @@ describe('Terms of Service Page', () => {
   describe('Page Footer', () => {
     it('should display copyright notice', () => {
       render(<TermsPage />);
-      expect(screen.getByText('© 2026 FitCircle. All rights reserved.')).toBeInTheDocument();
+      expect(screen.getByText('© 2026 Inov8r Labs Inc. All rights reserved.')).toBeInTheDocument();
     });
   });
 

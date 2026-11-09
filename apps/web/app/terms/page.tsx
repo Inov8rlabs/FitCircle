@@ -1,7 +1,18 @@
 import { ArrowLeft } from 'lucide-react';
+import { type Metadata } from 'next';
 import Link from 'next/link';
 
 import { Button } from '@/components/ui/button';
+
+export const metadata: Metadata = {
+  title: 'Terms of Service | FitCircle',
+  description: 'FitCircle Terms of Service',
+  alternates: { languages: { 'fr-CA': '/fr/terms' } },
+};
+
+// Update whenever the terms change; never compute at render time.
+const EFFECTIVE_DATE = 'November 6, 2026';
+const TERMS_VERSION = '1.3';
 
 export default function TermsPage() {
   return (
@@ -17,8 +28,12 @@ export default function TermsPage() {
         <h1 className="text-4xl font-bold mb-8">Terms of Service</h1>
 
         <div className="prose prose-neutral dark:prose-invert max-w-none">
-          <p className="text-muted-foreground mb-6">
-            Effective Date: September 29, 2026
+          <p className="text-muted-foreground mb-2">
+            Effective Date: {EFFECTIVE_DATE}
+          </p>
+          <p className="text-muted-foreground mb-6 text-sm">
+            Version {TERMS_VERSION} ·{' '}
+            <Link href="/fr/terms" className="text-primary hover:underline" lang="fr">Version française</Link>
           </p>
 
           <section className="mb-8">
@@ -28,7 +43,11 @@ export default function TermsPage() {
               If you disagree with any part of these terms, you may not access the Service.
             </p>
             <p>
-              These Terms constitute a legally binding agreement between you and FitCircle. By creating an account,
+              These Terms constitute a legally binding agreement between you and Inov8r Labs Inc. (&quot;FitCircle&quot;), a British Columbia corporation
+              (BC Corporation No. BC1310005) with its registered office at{' '}
+              485 - 6400 Roberts Street,
+              Burnaby, British Columbia V5G 4C9, Canada.
+              By creating an account,
               participating in challenges, or using any feature of the Service, you acknowledge that you have read,
               understood, and agree to be bound by these Terms.
             </p>
@@ -57,11 +76,15 @@ export default function TermsPage() {
               You must meet the following requirements to use FitCircle:
             </p>
             <ul className="list-disc pl-6 space-y-2">
-              <li>Be at least 18 years of age</li>
+              <li>Be at least 18 years of age (we check your age when you sign up)</li>
               <li>Have the legal capacity to enter into binding contracts</li>
               <li>Not be prohibited from using the Service under applicable laws</li>
               <li>Reside in a jurisdiction where the Service is available</li>
             </ul>
+            <p className="mt-4">
+              The Service is offered in the United States, Canada, India and Singapore. The
+              website does not accept new sign-ups from the European Union or the European Economic Area.
+            </p>
             <p className="mt-4">
               By using the Service, you represent and warrant that you meet all eligibility requirements.
             </p>
@@ -260,8 +283,9 @@ export default function TermsPage() {
             <h2 className="text-2xl font-semibold mb-4">10. Privacy and Data Protection</h2>
             <p className="mb-4">
               Your use of the Service is governed by our <Link href="/privacy" className="text-primary hover:underline">Privacy Policy</Link>,
-              which explains how we collect, use, and protect your personal information. By using FitCircle, you consent
-              to our data practices as described in the Privacy Policy.
+              which explains how we collect, use, and protect your personal information. Agreeing to these Terms is
+              not consent to process your health data or to use AI features: we ask for those consents separately in
+              the app and on the website, and you can withdraw them at any time in Settings → Privacy.
             </p>
             <p>
               Please note that health and fitness data you share may be visible to other participants in your challenges
@@ -437,8 +461,8 @@ export default function TermsPage() {
               in court, except that you may assert claims in small claims court if they qualify.
             </p>
             <p className="mb-4">
-              The arbitration shall be conducted by the American Arbitration Association (AAA) under its Commercial
-              Arbitration Rules. The arbitrator&apos;s decision will be final and binding.
+              The arbitration shall be conducted by a single arbitrator seated in Vancouver, British Columbia, under
+              the Arbitration Act (British Columbia). The arbitrator&apos;s decision will be final and binding.
             </p>
 
             <h3 className="text-xl font-semibold mb-3 mt-6">18.3 Class Action Waiver</h3>
@@ -446,17 +470,31 @@ export default function TermsPage() {
               YOU AGREE THAT DISPUTES WILL BE RESOLVED ON AN INDIVIDUAL BASIS ONLY. You waive any right to participate
               in a class action lawsuit or class-wide arbitration against FitCircle.
             </p>
+
+            <h3 className="text-xl font-semibold mb-3 mt-6">18.4 Mandatory Consumer Law</h3>
+            <p className="mb-4">
+              Sections 18.2 and 18.3 apply only to the extent permitted by the consumer protection laws that apply
+              to you. If those laws do not allow you to agree to arbitration or to waive class proceedings (for
+              example, consumer protection laws in Quebec, Ontario and other provinces),
+              those sections do not apply to you, and nothing in these Terms limits rights you have under such laws.
+            </p>
+            {/* Counsel review: Quebec CPA s.11.1, Ontario CPA s.7-8 and other provincial consumer law may limit 18.2/18.3 and 19. */}
           </section>
 
           <section className="mb-8">
             <h2 className="text-2xl font-semibold mb-4">19. Governing Law and Jurisdiction</h2>
             <p className="mb-4">
-              These Terms shall be governed by and construed in accordance with the laws of the State of Delaware,
-              United States, without regard to its conflict of law provisions.
+              These Terms shall be governed by and construed in accordance with the laws of the Province of
+              British Columbia and the federal laws of Canada applicable there, without regard to conflict of law
+              provisions.
+            </p>
+            <p className="mb-4">
+              Any legal action or proceeding (excluding arbitration) shall be brought in the courts of British
+              Columbia sitting in Vancouver, and you consent to the jurisdiction of those courts.
             </p>
             <p>
-              Any legal action or proceeding (excluding arbitration) shall be brought exclusively in the federal or
-              state courts located in Delaware, and you consent to personal jurisdiction in those courts.
+              This section does not deprive you of the protection of mandatory laws of the place where you live,
+              or of any right you have under those laws to bring proceedings in your local courts.
             </p>
           </section>
 
@@ -510,7 +548,7 @@ export default function TermsPage() {
 
         <div className="mt-12 pt-8 border-t">
           <p className="text-sm text-muted-foreground text-center">
-            © 2026 FitCircle. All rights reserved.
+            © 2026 Inov8r Labs Inc. All rights reserved.
           </p>
         </div>
       </div>

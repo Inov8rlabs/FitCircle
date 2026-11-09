@@ -662,6 +662,7 @@ export default async function LandingPage({ searchParams }: Props) {
             <ul className="space-y-2 text-subhead text-fg-secondary">
               <li><Link href="/terms" className="hover:text-white">Terms</Link></li>
               <li><Link href="/privacy" className="hover:text-white">Privacy</Link></li>
+              <li><Link href="/consumer-health-privacy" className="hover:text-white">Consumer Health Data Privacy Policy</Link></li>
               <li><Link href="/privacy-choices" className="hover:text-white">Your Privacy Choices</Link></li>
             </ul>
           </nav>

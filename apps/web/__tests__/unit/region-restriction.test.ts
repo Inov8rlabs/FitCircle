@@ -63,8 +63,8 @@ describe('middleware', () => {
     expect(res.headers.get('location')).toBe('https://www.fitcircle.ai/not-available?reason=signup');
     expect((await middleware(req('/upgrade', 'FR'))).headers.get('location')).toContain('reason=checkout');
   });
-  it('the restriction page and the privacy-choices page are public', () => {
-    for (const p of ['/not-available', '/privacy-choices']) expect(isPublicPath(p)).toBe(true);
+  it('the restriction page and the new legal pages are public', () => {
+    for (const p of ['/not-available', '/consumer-health-privacy', '/privacy-choices', '/fr/privacy', '/fr/terms']) expect(isPublicPath(p)).toBe(true);
   });
 });
 
