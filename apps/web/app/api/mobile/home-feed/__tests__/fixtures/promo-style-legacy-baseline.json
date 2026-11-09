@@ -44,7 +44,7 @@
             "label": "Pro ends in"
           },
           "primary": {
-            "label": "Start 3-day free trial",
+            "label": "Start 7-day free trial",
             "action": {
               "type": "paywall",
               "params": {
@@ -160,7 +160,7 @@
             "label": "Pro ends in"
           },
           "primary": {
-            "label": "Start 3-day free trial",
+            "label": "Start 7-day free trial",
             "action": {
               "type": "paywall",
               "params": {
@@ -276,7 +276,7 @@
             "label": "Pro ends in"
           },
           "primary": {
-            "label": "Start 3-day free trial",
+            "label": "Start 7-day free trial",
             "action": {
               "type": "paywall",
               "params": {
@@ -397,7 +397,7 @@
             "label": "Pro ends in"
           },
           "primary": {
-            "label": "Start 3-day free trial",
+            "label": "Start 7-day free trial",
             "action": {
               "type": "paywall",
               "params": {
@@ -514,7 +514,7 @@
           "title": "Your free Pro week ended",
           "body": "With Pro you got 5 meals analyzed by AI. Pick up right where you left off.",
           "primary": {
-            "label": "Get Pro: 3 days free",
+            "label": "Get Pro: 7 days free",
             "action": {
               "type": "paywall",
               "params": {
@@ -631,7 +631,7 @@
           "title": "Your free Pro week ended",
           "body": "With Pro you got 5 meals analyzed by AI. Pick up right where you left off.",
           "primary": {
-            "label": "Get Pro: 3 days free",
+            "label": "Get Pro: 7 days free",
             "action": {
               "type": "paywall",
               "params": {
@@ -748,7 +748,7 @@
           "title": "Your free Pro week ended",
           "body": "With Pro you got 5 meals analyzed by AI. Pick up right where you left off.",
           "primary": {
-            "label": "Get Pro: 3 days free",
+            "label": "Get Pro: 7 days free",
             "action": {
               "type": "paywall",
               "params": {
@@ -870,7 +870,7 @@
           "title": "Your free Pro week ended",
           "body": "With Pro you got 5 meals analyzed by AI. Pick up right where you left off.",
           "primary": {
-            "label": "Get Pro: 3 days free",
+            "label": "Get Pro: 7 days free",
             "action": {
               "type": "paywall",
               "params": {

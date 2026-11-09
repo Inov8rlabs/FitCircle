@@ -9,8 +9,8 @@
  * by tier, FITZY_V2_SPEC).
  */
 import { TIER_LIMITS } from '../config/tier-limits';
+import { DEFAULT_TRIAL_DAYS, trialDayAdjective } from '../config/trial';
 import type { IconKey } from '../design/icons';
-import { PRO_TRIAL_DAYS } from '../entitlements/trial-eligibility';
 import { SLOT_DEFS, slotForMinutes, type MealSlot } from '../journey/meal-slots';
 
 import type { CreativeOption, PromoDefinition, PromoMatchInput } from './engine';
@@ -284,7 +284,7 @@ export const meetFitzy: PromoDefinition = {
         title: 'Meet Fitzy, your AI coach',
         body:
           journey?.trialEligible === true
-            ? `Get a free daily focus from Fitzy. Chatting with Fitzy is part of Pro, with a free ${PRO_TRIAL_DAYS}-day trial.`
+            ? `Get a free daily focus from Fitzy. Chatting with Fitzy is part of Pro, with a free ${trialDayAdjective(journey?.trialDays ?? DEFAULT_TRIAL_DAYS)} trial.`
             : 'Get a free daily focus from Fitzy. Chatting with Fitzy is part of Pro.',
         primary: { label: 'Meet Fitzy', action: { type: 'open_screen', params: { screen: 'fitzy' } } },
         dismissible: true,
@@ -302,7 +302,7 @@ export const meetFitzy: PromoDefinition = {
  * onboarding completion — plan-warmup.ts), so "Fitzy has recommendations for you" is literally true.
  * Trial copy only when the user can still start the trial.
  */
-export function fitzyRecommendationsCreatives(trialEligible: boolean): CreativeOption[] {
+export function fitzyRecommendationsCreatives(trialEligible: boolean, trialDays: number = DEFAULT_TRIAL_DAYS): CreativeOption[] {
   const action: PromoAction = { type: 'paywall', params: { placement: PAYWALL_PLACEMENT_FITZY_RECOMMENDATIONS } };
   return [
     {
@@ -315,7 +315,7 @@ export function fitzyRecommendationsCreatives(trialEligible: boolean): CreativeO
       eyebrow: 'Fitzy',
       title: 'Fitzy has recommendations for you',
       body: trialEligible
-        ? `Start your free ${PRO_TRIAL_DAYS}-day trial to get your personalized plan.`
+        ? `Start your free ${trialDayAdjective(trialDays)} trial to get your personalized plan.`
         : 'Go Pro to get your personalized weekly plan from Fitzy.',
       primary: { label: trialEligible ? 'Start free trial' : 'See Pro', action },
       dismissible: true,
@@ -338,7 +338,7 @@ export const fitzyRecommendations: PromoDefinition = {
     if (journey.fitzyPlanReady !== true) return journey.fitzyPlanReady === false ? 'no_plan_yet' : 'plan_unknown';
     return null;
   },
-  creatives: ({ journey }) => fitzyRecommendationsCreatives(journey.trialEligible === true),
+  creatives: ({ journey }) => fitzyRecommendationsCreatives(journey.trialEligible === true, journey.trialDays),
 };
 
 /**

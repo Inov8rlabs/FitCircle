@@ -2,6 +2,7 @@
  * Copy rendering for the Pro lifecycle card + push: placeholders, relative
  * day phrases in the user's time zone, and the real-usage line. Pure.
  */
+import { DEFAULT_TRIAL_DAYS, normalizeTrialDays } from '../config/trial';
 import { addDays, localDayOf } from '../streaks/streak-calculator';
 
 import { COPY_LIMITS } from './config';
@@ -14,6 +15,7 @@ export const PLACEHOLDERS = [
   { key: 'ends', description: "When Pro ends, in the user's time zone: 'today', 'tomorrow' or 'on Sunday'." },
   { key: 'ended', description: "When Pro ended: 'today', 'yesterday' or 'on Sunday'." },
   { key: 'usage', description: "Real usage while Pro was on, e.g. '5 meals analyzed by AI and 3 chats with Fitzy' (usage body only)." },
+  { key: 'trial_days', description: "Length of the free trial in days, e.g. '7' (remote config trial_days). Use it in trial copy: 'Start {{trial_days}}-day free trial'." },
 ] as const;
 export type PlaceholderKey = (typeof PLACEHOLDERS)[number]['key'];
 
@@ -107,6 +109,8 @@ export interface RenderInput {
   trialAvailable: boolean;
   usage: ProUsage | null;
   firstName: string | null;
+  /** Free-trial length (remote config `trial_days`); undefined → code default. */
+  trialDays?: number;
 }
 
 export function varsFor(input: RenderInput): CopyVars {
@@ -116,6 +120,7 @@ export function varsFor(input: RenderInput): CopyVars {
     ends: endsPhrase(input.endsAt, input.now, input.timezone),
     ended: endedPhrase(input.endsAt, input.now, input.timezone),
     usage: usagePhrase(input.usage),
+    trial_days: String(normalizeTrialDays(input.trialDays ?? DEFAULT_TRIAL_DAYS)),
   };
 }
 

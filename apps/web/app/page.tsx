@@ -51,6 +51,7 @@ import {
   playStoreUrl,
   type GetAppParams,
 } from '@/lib/app-links';
+import { PRO_PRICES_USD } from '@/lib/config/pricing';
 import { cn } from '@/lib/utils';
 
 export const dynamic = 'force-dynamic';
@@ -556,10 +557,10 @@ export default async function LandingPage({ searchParams }: Props) {
                   <h3 className="text-title3 text-white">FitCircle Pro</h3>
                   <p className="mt-1 text-subhead text-fg-secondary">Everything FitCircle has to offer, in one plan.</p>
                   <p className="mt-5 flex items-baseline gap-2">
-                    <span className="text-[40px] font-bold leading-none">$29.99</span>
+                    <span className="text-[40px] font-bold leading-none">${PRO_PRICES_USD.annual}</span>
                     <span className="text-subhead text-fg-secondary">/ year</span>
                   </p>
-                  <p className="mt-1 text-footnote text-fg-secondary">or $9.99 / month</p>
+                  <p className="mt-1 text-footnote text-fg-secondary">or ${PRO_PRICES_USD.monthly} / month</p>
                   <ul className="mt-6 space-y-3 text-callout text-white/90">
                     {PRO_PLAN.map((t) => (
                       <li key={t} className="flex gap-2.5">

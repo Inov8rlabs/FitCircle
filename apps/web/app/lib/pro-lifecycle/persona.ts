@@ -4,6 +4,7 @@
  * profile. The sample usage numbers are ADMIN-PREVIEW ONLY (labelled as
  * sample in the editor) — real users only ever see their own counts.
  */
+import { DEFAULT_TRIAL_DAYS } from '../config/trial';
 import { addDays, localDayOf } from '../streaks/streak-calculator';
 import { localWallTimeToUtc } from '../trials/reminder';
 
@@ -56,7 +57,7 @@ export function personaLifecycle(
       subscription_platform: 'app_store',
       subscription_will_renew: false,
       subscription_expires_at: iso(end),
-      trial_started_at: iso(new Date(end.getTime() - 3 * DAY)),
+      trial_started_at: iso(new Date(end.getTime() - DEFAULT_TRIAL_DAYS * DAY)),
       trial_ends_at: iso(end),
     };
     facts = { profile: { id: 'persona', ...profile }, grants: [], hasPurchased: false, hadTrial: true };

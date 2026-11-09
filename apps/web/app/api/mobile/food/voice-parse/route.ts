@@ -193,12 +193,12 @@ export async function POST(request: NextRequest) {
       const limitName = parsed.data.source === 'text' ? 'AI-estimate' : 'voice-estimate';
       const message = fallback.skipFallbackSave
         ? isUpgrade
-          ? foodAiUpgradeMessage(parseError.limit, parseError.trialEligible === true)
+          ? foodAiUpgradeMessage(parseError.limit, parseError.trialEligible === true, false, parseError.trialDays)
           : isRate
             ? `You've reached today's ${limitName} limit — you can add the details yourself.`
             : "Couldn't understand that — you can add the details yourself."
         : isUpgrade
-          ? `${foodAiUpgradeMessage(parseError.limit, parseError.trialEligible === true)} We saved your note so you can add the details.`
+          ? `${foodAiUpgradeMessage(parseError.limit, parseError.trialEligible === true, false, parseError.trialDays)} We saved your note so you can add the details.`
           : isRate
             ? `You've reached today's ${limitName} limit — we saved your note so you can add the details.`
             : "Couldn't understand that — we saved your note so you can add the details.";

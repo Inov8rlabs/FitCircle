@@ -77,8 +77,9 @@ const stateCopySchema = z
     title: plain(COPY_LIMITS.title + 20), // placeholders expand; the rendered length is checked on render
     body: plain(COPY_LIMITS.body + 20),
     usageBody: plain(COPY_LIMITS.body + 20).refine((s) => s.includes('{{usage}}'), 'must contain {{usage}}'),
-    cta: plain(COPY_LIMITS.label),
-    ctaNoTrial: plain(COPY_LIMITS.label),
+    // {{trial_days}} (14 chars) renders as 1–2 digits; the rendered label is checked on render.
+    cta: plain(COPY_LIMITS.label + 14),
+    ctaNoTrial: plain(COPY_LIMITS.label + 14),
   })
   .strict();
 
@@ -138,7 +139,7 @@ export function lifecycleStyleIssues(config: ProLifecycleConfig): Array<StyleIss
 /**
  * Default copy. Honest: Pro really includes unlimited AI meal scans
  * (food_ai_unlimited), full history (history_extended), no ads (ads_removed)
- * and Fitzy's weekly plan + memory (Pro by tier). The 3-day free trial is
+ * and Fitzy's weekly plan + memory (Pro by tier). The free trial ({{trial_days}} days) is
  * only promised in the CTA / push variant used when the trial is available.
  */
 export const DEFAULT_CONFIG: ProLifecycleConfig = {
@@ -152,7 +153,7 @@ export const DEFAULT_CONFIG: ProLifecycleConfig = {
         title: 'Your {{period}} ends {{ends}}',
         body: 'Keep unlimited AI meal scans, your full history and weekly plans from Fitzy.',
         usageBody: 'So far with Pro: {{usage}}. Keep the momentum going.',
-        cta: 'Start 3-day free trial',
+        cta: 'Start {{trial_days}}-day free trial',
         ctaNoTrial: 'Keep Pro',
       },
       hoursBefore: 48,
@@ -161,7 +162,7 @@ export const DEFAULT_CONFIG: ProLifecycleConfig = {
       push: {
         enabled: true,
         title: 'Your {{period}} ends {{ends}}',
-        body: 'Keep unlimited AI meal scans and weekly plans from Fitzy. Start your 3-day free trial in the app.',
+        body: 'Keep unlimited AI meal scans and weekly plans from Fitzy. Start your {{trial_days}}-day free trial in the app.',
         bodyNoTrial: 'Keep unlimited AI meal scans and weekly plans from Fitzy. Keep Pro from your Home screen.',
       },
     },
@@ -173,7 +174,7 @@ export const DEFAULT_CONFIG: ProLifecycleConfig = {
         title: 'Your {{period}} ended',
         body: 'Get back unlimited AI meal scans, your full history and weekly plans from Fitzy.',
         usageBody: 'With Pro you got {{usage}}. Pick up right where you left off.',
-        cta: 'Get Pro: 3 days free',
+        cta: 'Get Pro: {{trial_days}} days free',
         ctaNoTrial: 'Get Pro back',
       },
       hoursBefore: 48,
@@ -182,7 +183,7 @@ export const DEFAULT_CONFIG: ProLifecycleConfig = {
       push: {
         enabled: true,
         title: 'Your {{period}} ended',
-        body: 'Thanks for trying Pro. Get it back with a 3-day free trial, right from your Home screen.',
+        body: 'Thanks for trying Pro. Get it back with a {{trial_days}}-day free trial, right from your Home screen.',
         bodyNoTrial: 'Thanks for trying Pro. You can get it back anytime from your Home screen.',
       },
     },

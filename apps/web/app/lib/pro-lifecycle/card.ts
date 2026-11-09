@@ -61,7 +61,13 @@ export function localWallTime(at: Date, timezone: string): string {
 const paywall = (state: ProLifecycleState): PromoAction => ({ type: 'paywall', params: { placement: PRO_LIFECYCLE_PAYWALL_SOURCES[state] } });
 
 /** The creative for `state` (or an error), from config + facts. Shared by the feed and the admin preview. */
-export function lifecycleCreative(state: ProLifecycleState, config: ProLifecycleConfig, input: LifecycleFeedInput, now: Date): { creative: CreativeOption; usedUsage: boolean } | { error: string } {
+export function lifecycleCreative(
+  state: ProLifecycleState,
+  config: ProLifecycleConfig,
+  input: LifecycleFeedInput,
+  now: Date,
+  trialDays?: number
+): { creative: CreativeOption; usedUsage: boolean } | { error: string } {
   const sc = config.states[state];
   const r = input.result;
   if (!r.endsAt) return { error: 'no end date' };
@@ -76,6 +82,7 @@ export function lifecycleCreative(state: ProLifecycleState, config: ProLifecycle
     trialAvailable: r.trialAvailable,
     usage: input.usage,
     firstName: input.firstName,
+    trialDays,
   };
   const out = renderCardCopy(sc.copy, render);
   if ('error' in out) return out;
@@ -107,7 +114,7 @@ export function lifecycleCreative(state: ProLifecycleState, config: ProLifecycle
  * other than the definition's → the audience doesn't match (with a reason
  * for the trace). Disabled states and the kill switch are reported too.
  */
-export function lifecyclePromoDefinitions(input: LifecycleFeedInput | null, config: ProLifecycleConfig, opts: { enabled: boolean; now: Date }): PromoDefinition[] {
+export function lifecyclePromoDefinitions(input: LifecycleFeedInput | null, config: ProLifecycleConfig, opts: { enabled: boolean; now: Date; trialDays?: number }): PromoDefinition[] {
   return PRO_LIFECYCLE_STATES.map((state): PromoDefinition => {
     const sc = config.states[state];
     return {
@@ -127,7 +134,7 @@ export function lifecyclePromoDefinitions(input: LifecycleFeedInput | null, conf
       },
       creatives: () => {
         if (!input) return [];
-        const built = lifecycleCreative(state, config, input, opts.now);
+        const built = lifecycleCreative(state, config, input, opts.now, opts.trialDays);
         if ('error' in built) {
           console.warn(`[pro-lifecycle] ${state} card dropped: ${built.error}`);
           return [];

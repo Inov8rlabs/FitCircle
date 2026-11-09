@@ -177,7 +177,7 @@ describe('GET /api/mobile/home-feed — promo@1', () => {
       promoId: 'fitzy_recommendations',
       creativeId: 'fitzy_recs_trial',
       title: 'Fitzy has recommendations for you',
-      body: 'Start your free 3-day trial to get your personalized plan.',
+      body: 'Start your free 7-day trial to get your personalized plan.',
       primary: { label: 'Start free trial', action: { type: 'paywall', params: { placement: 'fitzy_recommendations' } } },
     });
     expect(violations(body.cards.slice(1), { promoV1: true })).toEqual([]);

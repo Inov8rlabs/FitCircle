@@ -103,7 +103,7 @@ export async function POST(request: NextRequest) {
               feature: error.feature,
               used: error.used,
               limit: error.limit,
-              paywall: paywallFor('fitzy_quota', { trialEligible: error.trialEligible === true }),
+              paywall: paywallFor('fitzy_quota', { trialEligible: error.trialEligible === true, trialDays: error.trialDays }),
             },
             timestamp: new Date().toISOString(),
           },

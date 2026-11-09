@@ -1,9 +1,10 @@
 /**
- * "Your trial ends tomorrow" push (docs/ONBOARDING_V2_EXPERIMENT_SPEC.md §3.2,
- * §5.7). Hourly cron: /api/cron/trial-reminders.
+ * "Your trial ends tomorrow / on Friday" push (docs/ONBOARDING_V2_EXPERIMENT_SPEC.md §3.2,
+ * §5.7). Hourly cron: /api/cron/trial-reminders. Any trial length (3-day, 7-day, …): it only
+ * uses trial_ends_at, the store's expiry from the RevenueCat webhook.
  *
  * Candidates: trialing + will_renew + not yet reminded + trial_ends_at within
- * the next 40 h. Timing is pure (lib/trials/reminder.ts): 10:00 local the day
+ * the next 50 h. Timing is pure (lib/trials/reminder.ts): 10:00 local, 24–48 h
  * before the trial ends, or right away when that moment has passed. Quiet
  * hours defer to the next run. The push goes through NotificationOrchestrator
  * as `trial_ending_reminder` — cap-exempt and never blocked by a category
@@ -16,6 +17,7 @@
  *
  * Kill switch: TRIAL_REMINDERS_ENABLED=false (default ON).
  */
+import { endsPhrase } from '../pro-lifecycle/copy';
 import { isValidTimezone } from '../streaks/streak-calculator';
 import { createAdminSupabase } from '../supabase-admin';
 import { decideTrialReminder, REMINDER_LAST_CALL_MS, REMINDER_LOOKAHEAD_MS, type TrialReminderSkip } from '../trials/reminder';
@@ -103,6 +105,8 @@ export class TrialReminderService {
     const res = await NotificationOrchestrator.send(c.id, 'trial_ending_reminder', {
       dedupeKey: trialReminderDedupeKey(c.id, c.trial_ends_at),
       trialEndsAt: c.trial_ends_at,
+      // 'tomorrow' | 'on Friday' in the user's zone, as of the send.
+      endsPhrase: endsPhrase(new Date(c.trial_ends_at), now, tz),
     });
     if (res.sent || FINAL_REASONS.has(res.reason ?? '')) {
       const { error } = await createAdminSupabase()

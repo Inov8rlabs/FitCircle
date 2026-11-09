@@ -5,8 +5,11 @@
  * history). Passing `{ trialEligible }` makes it trial-aware: it adds the additive
  * `trialDays` + `trialEligible` fields and, for the chat gate (fitzy_quota), the
  * trial-first headline + CTA. Shipped clients ignore the extra fields.
+ *
+ * Trial length: the caller passes `trialDays` (remote config `trial_days`, resolved for the
+ * request — UpgradeRequiredError.trialDays); omitted → the code default (lib/config/trial.ts).
  */
-import { PRO_TRIAL_DAYS } from '../entitlements/trial-eligibility';
+import { DEFAULT_TRIAL_DAYS, normalizeTrialDays, trialDayAdjective, tryProFreeHeadline } from '../config/trial';
 import type { FitzyPaywall, PaywallTrigger } from '../types/fitzy';
 
 const HEADLINES: Record<PaywallTrigger, string> = {
@@ -18,9 +21,8 @@ const HEADLINES: Record<PaywallTrigger, string> = {
 
 const BULLETS = ['Unlimited coaching with Fitzy, every day', 'A weekly plan built around your goals', 'Fitzy remembers your routines and preferences'];
 
-/** Trial-first copy (TRIAL_FIRST_SPEC §2). */
+/** Trial-first copy (TRIAL_FIRST_SPEC §2). The headline is tryProFreeHeadline(trialDays). */
 export const TRIAL_COPY = {
-  headline: `Try Pro free for ${PRO_TRIAL_DAYS} days`,
   cta: 'Start free trial',
   cancelAnytime: 'Cancel anytime',
 } as const;
@@ -40,15 +42,16 @@ export const FITZY_CHAT_LOCKED_MESSAGE = {
 /** The pre-trial-first message, still used if the free limit is ever raised above 0 again. */
 export const FITZY_QUOTA_USED_MESSAGE = "You've used today's free Fitzy messages — go Pro for unlimited coaching.";
 
-export function paywallFor(trigger: PaywallTrigger, opts?: { trialEligible: boolean }): FitzyPaywall {
+export function paywallFor(trigger: PaywallTrigger, opts?: { trialEligible: boolean; trialDays?: number }): FitzyPaywall {
   const base: FitzyPaywall = { trigger, headline: HEADLINES[trigger], bullets: [...BULLETS], cta: 'Unlock Fitzy Pro' };
   if (!opts) return base;
   const trial = opts.trialEligible;
-  const withTrial: FitzyPaywall = { ...base, trialDays: PRO_TRIAL_DAYS, trialEligible: trial };
+  const days = normalizeTrialDays(opts.trialDays ?? DEFAULT_TRIAL_DAYS);
+  const withTrial: FitzyPaywall = { ...base, trialDays: days, trialEligible: trial };
   if (trigger !== 'fitzy_quota') return withTrial;
   return {
     ...withTrial,
-    headline: trial ? TRIAL_COPY.headline : NON_TRIAL_COPY.headline,
+    headline: trial ? tryProFreeHeadline(days) : NON_TRIAL_COPY.headline,
     // "Cancel anytime" rides in the bullets so shipped clients that render bullets show it too.
     bullets: trial ? [...BULLETS, TRIAL_COPY.cancelAnytime] : [...BULLETS],
     cta: trial ? TRIAL_COPY.cta : NON_TRIAL_COPY.cta,
@@ -79,36 +82,36 @@ export const FOOD_AI_COPY = {
   bullets: ['AI analysis for every meal photo and description', 'Calories and macros in seconds', 'Fitzy coaching and your weekly plan'],
 } as const;
 
-/** "You've used your 5 free AI food analyses. Start your free 3-day trial to keep logging with AI." */
-export function foodAiBody(limit: number, trialEligible: boolean): string {
+/** "You've used your 5 free AI food analyses. Start your free 7-day trial to keep logging with AI." */
+export function foodAiBody(limit: number, trialEligible: boolean, trialDays: number = DEFAULT_TRIAL_DAYS): string {
   const used = `You've used your ${limit} free AI food analyses.`;
-  return trialEligible ? `${used} Start your free ${PRO_TRIAL_DAYS}-day trial to keep logging with AI.` : `${used} Upgrade to Pro to keep logging with AI.`;
+  return trialEligible ? `${used} Start your free ${trialDayAdjective(trialDays)} trial to keep logging with AI.` : `${used} Upgrade to Pro to keep logging with AI.`;
 }
 
-export function foodAiPaywall(limit: number, trialEligible: boolean): FoodAiPaywall {
+export function foodAiPaywall(limit: number, trialEligible: boolean, trialDays: number = DEFAULT_TRIAL_DAYS): FoodAiPaywall {
   return {
     trigger: 'food_ai',
     headline: FOOD_AI_COPY.headline,
-    body: foodAiBody(limit, trialEligible),
+    body: foodAiBody(limit, trialEligible, trialDays),
     bullets: trialEligible ? [...FOOD_AI_COPY.bullets, TRIAL_COPY.cancelAnytime] : [...FOOD_AI_COPY.bullets],
     cta: trialEligible ? TRIAL_COPY.cta : NON_TRIAL_COPY.cta,
-    trialDays: PRO_TRIAL_DAYS,
+    trialDays: normalizeTrialDays(trialDays),
     trialEligible,
   };
 }
 
 /** The food-route UPGRADE_REQUIRED message. `savedNote`: the photo/entry was kept (Option B). */
-export function foodAiUpgradeMessage(limit: number, trialEligible: boolean, savedNote = false): string {
-  const body = foodAiBody(limit, trialEligible);
+export function foodAiUpgradeMessage(limit: number, trialEligible: boolean, savedNote = false, trialDays: number = DEFAULT_TRIAL_DAYS): string {
+  const body = foodAiBody(limit, trialEligible, trialDays);
   return savedNote ? `${body} We saved your photo so you can add the details.` : body;
 }
 
 /** details for a food UPGRADE_REQUIRED: the legacy {feature, used, limit} plus the additive paywall. */
-export function foodAiUpgradeDetails(err: { feature: string; used: number; limit: number; trialEligible?: boolean }) {
+export function foodAiUpgradeDetails(err: { feature: string; used: number; limit: number; trialEligible?: boolean; trialDays?: number }) {
   return {
     feature: err.feature,
     used: err.used,
     limit: err.limit,
-    paywall: foodAiPaywall(err.limit, err.trialEligible === true),
+    paywall: foodAiPaywall(err.limit, err.trialEligible === true, err.trialDays),
   };
 }

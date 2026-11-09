@@ -3,9 +3,9 @@ import { type NextRequest, NextResponse } from 'next/server';
 import { TrialReminderService } from '@/lib/services/trial-reminder-service';
 
 /**
- * GET /api/cron/trial-reminders — "your trial ends tomorrow" push
+ * GET /api/cron/trial-reminders — "your trial ends tomorrow / on <day>" push
  * (docs/ONBOARDING_V2_EXPERIMENT_SPEC.md §3.2). Hourly; each trial is reminded
- * once at ≈10:00 local the day before it ends (TrialReminderService).
+ * once at ≈10:00 local, 24–48 h before it ends, for any trial length (TrialReminderService).
  * CRON_SECRET-gated, FAIL CLOSED. Kill switch: TRIAL_REMINDERS_ENABLED=false.
  * Ops: ?userId=<uuid> runs the pass for one user only.
  */

@@ -92,7 +92,7 @@ describe('pro_expiring_reminder', () => {
     const due = await run('2026-11-08T16:25:00Z'); // 10:25 CST
     expect(due.sent).toBe(1);
     expect(h.sends[0]).toMatchObject({ userId: ASAEL, type: 'pro_expiring_reminder', data: { title: 'Your free Pro week ends tomorrow', dedupeKey: `pro_expiring_reminder:${ASAEL}:2026-11-09T19:17`, trialAvailable: true } });
-    expect(String(h.sends[0].data.body)).toMatch(/3-day free trial/);
+    expect(String(h.sends[0].data.body)).toMatch(/7-day free trial/);
 
     const again = await run('2026-11-08T17:25:00Z');
     expect(again.planned.find((p) => p.userId === ASAEL)?.outcome).toBe('already_sent');

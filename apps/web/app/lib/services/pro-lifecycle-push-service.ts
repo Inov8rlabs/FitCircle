@@ -38,6 +38,7 @@ import { createAdminSupabase } from '@/lib/supabase-admin';
 import { NotificationOrchestrator, isWithinQuietWindow } from './notification-orchestrator';
 import { NotificationPreferencesService } from './notification-preferences-service';
 import { DEFAULT_TIMEZONE, ProLifecycleService, firstNameOf, lifecycleLive, loadUsage, readPublishedConfig, usageWindow } from './pro-lifecycle-service';
+import { TrialConfig } from './trial-config';
 
 export interface PlannedPush {
   userId: string;
@@ -177,6 +178,9 @@ export class ProLifecyclePushService {
     let usage = null;
     const win = usageWindow(result, now);
     if (win) usage = await loadUsage(userId, win.since, win.until).catch(() => null);
+    // Cron (no request → no platform): the shorter of the iOS / Android trial lengths, so the
+    // push never promises more days than the user's store gives.
+    const trialDays = result.trialAvailable ? await TrialConfig.mobileDays(userId) : undefined;
     const copy = renderPushCopy(sc.push, {
       state,
       now,
@@ -187,6 +191,7 @@ export class ProLifecyclePushService {
       trialAvailable: result.trialAvailable,
       usage,
       firstName: firstNameOf(facts.profile as any),
+      trialDays,
     });
     if ('error' in copy) {
       console.error('[ProLifecyclePush] copy error:', state, copy.error);

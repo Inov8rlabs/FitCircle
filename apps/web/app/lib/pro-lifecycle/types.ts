@@ -43,7 +43,7 @@ export interface StateCopy {
   body: string;
   /** Body when there is: must contain {{usage}}. */
   usageBody: string;
-  /** Primary button when the 3-day free trial is available. */
+  /** Primary button when the free trial is available ({{trial_days}} = its length). */
   cta: string;
   /** Primary button when it isn't (the user already had a trial). */
   ctaNoTrial: string;
@@ -154,7 +154,7 @@ export interface LifecycleResult {
   /** When the Pro time started (grant created_at / trial start), for the usage window. */
   startedAt: string | null;
   source: ProSource | null;
-  /** The 3-day free trial is still available to this user. */
+  /** The free trial is still available to this user. */
   trialAvailable: boolean;
   /** Length of the Pro period in days (ends − started), rounded to 0.1. */
   periodDays: number | null;

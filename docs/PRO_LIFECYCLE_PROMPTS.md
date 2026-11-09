@@ -14,7 +14,7 @@ Server-driven, so shipped iOS / Android **1.1.0+** (they declare `promo@1` + `pa
 
 Excluded: internal / test accounts (`ads/test-users.ts` rules), anyone who paid before (`trial_converted_at` or a real paid `subscription_events` row), live store subscribers, lifetime / "until revoked" grants. Between the expiry and the hourly downgrade the user still has Pro: no prompt.
 
-"Trial available" = no `trial_started_at` and no real TRIAL purchase event: the copy then offers the 3-day free trial; otherwise it says "Get Pro" / "Keep Pro" with no "free".
+"Trial available" = no `trial_started_at` and no real TRIAL purchase event: the copy then offers the free trial (`{{trial_days}}` = remote config `trial_days`); otherwise it says "Get Pro" / "Keep Pro" with no "free".
 
 ## 2. Card (`promo@1`, `lib/pro-lifecycle/card.ts`)
 

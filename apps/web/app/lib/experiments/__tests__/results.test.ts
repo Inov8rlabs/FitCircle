@@ -139,6 +139,23 @@ describe('computeResults', () => {
     expect(metric(r, 'retention_d7').arms.control).toMatchObject({ n: 4, x: 1 });
   });
 
+  it('trial → paid follows the store trial end (3- and 7-day trials): converted within end + 4 days, matured only after it', () => {
+    const now = T0 + 12 * D;
+    const users = [
+      // 7-day trial converting at the end (day 7)
+      user('control', { trialStartedAt: T0, trialEndsAt: T0 + 7 * D, trialConvertedAt: T0 + 7 * D + 3600_000 }),
+      // 7-day trial, billing retry converts on day 10 (end + 3 days)
+      user('control', { trialStartedAt: T0, trialEndsAt: T0 + 7 * D, trialConvertedAt: T0 + 10 * D }),
+      // 7-day trial that has not settled yet (started day 2 → end day 9, settles day 13 > now)
+      user('control', { trialStartedAt: T0 + 2 * D, trialEndsAt: T0 + 9 * D }),
+      // unknown end → start + the default 7 days; cancelled inside the trial
+      user('control', { trialStartedAt: T0, trialEndsAt: null, trialCancelledAt: T0 + 5 * D }),
+    ];
+    const r = computeResults(users, arms, 'control', now, 's');
+    expect(metric(r, 'trial_to_paid').arms.control).toMatchObject({ n: 3, x: 2 });
+    expect(metric(r, 'trial_cancellation').arms.control).toMatchObject({ n: 4, x: 1 }); // every trial has ended by day 12
+  });
+
   it('revenue/user D30 nets refunds and ignores revenue after day 30', () => {
     const users = [
       user('control', { revenue: [{ at: T0 + D, usd: 29.99 }, { at: T0 + 5 * D, usd: -29.99 }] }),

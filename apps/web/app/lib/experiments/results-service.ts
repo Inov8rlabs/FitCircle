@@ -15,7 +15,7 @@ import { isProductionDeployment } from '../analytics/amplitude-server';
 import { createAdminSupabase } from '../supabase-admin';
 
 import { amplitudeReadout } from './analytics';
-import { computeResults, segmentValue, type ResultsBlock, type SegmentDimension, type UserFacts } from './results';
+import { computeResults, segmentValue, trialEndOf, type ResultsBlock, type SegmentDimension, type UserFacts } from './results';
 import { ExperimentService, notFoundExperiment, selectAllPages, type AssignmentRow } from './service';
 
 export const RESULTS_CACHE_TTL_MS = 15 * 60_000;
@@ -145,7 +145,7 @@ export async function loadUserFacts(rows: readonly AssignmentRow[]): Promise<Use
       if (isRefund) {
         if (e.price !== 0) revenue.push({ at: e.at, usd: -Math.abs(e.price) });
         refundAt ??= e.at;
-      } else if (e.type === 'CANCELLATION' && trialStartedAt !== null && trialCancelledAt === null && e.at >= trialStartedAt && e.at <= (trialEndsAt ?? trialStartedAt + 3 * 86_400_000)) {
+      } else if (e.type === 'CANCELLATION' && trialStartedAt !== null && trialCancelledAt === null && e.at >= trialStartedAt && e.at <= trialEndOf({ trialStartedAt, trialEndsAt })) {
         trialCancelledAt = e.at;
       }
     }

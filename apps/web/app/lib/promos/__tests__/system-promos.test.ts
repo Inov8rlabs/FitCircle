@@ -196,7 +196,7 @@ describe('meet_fitzy', () => {
     expect(trial).toMatchObject({
       id: 'meet_fitzy_free_trial',
       title: 'Meet Fitzy, your AI coach',
-      body: 'Get a free daily focus from Fitzy. Chatting with Fitzy is part of Pro, with a free 3-day trial.',
+      body: 'Get a free daily focus from Fitzy. Chatting with Fitzy is part of Pro, with a free 7-day trial.',
       primary: { label: 'Meet Fitzy', action: { type: 'open_screen', params: { screen: 'fitzy' } } },
     });
     const [noTrial] = meetFitzy.creatives(input({ trialEligible: false }));
@@ -254,7 +254,7 @@ describe('fitzy_recommendations (TRIAL_FIRST_SPEC §3)', () => {
     const [trial] = fitzyRecommendationsCreatives(true);
     expect(trial).toMatchObject({
       title: 'Fitzy has recommendations for you',
-      body: 'Start your free 3-day trial to get your personalized plan.',
+      body: 'Start your free 7-day trial to get your personalized plan.',
       primary: { label: 'Start free trial', action: { type: 'paywall', params: { placement: 'fitzy_recommendations' } } },
     });
     const [pro] = fitzyRecommendationsCreatives(false);

@@ -1,10 +1,10 @@
 /**
  * Trial-first monetization (docs/TRIAL_FIRST_SPEC.md) — the server's best guess
- * at whether a user can still start the 3-day Pro free trial.
+ * at whether a user can still start the Pro free trial (length: lib/config/trial.ts).
  *
  * The stores (Apple / Google) make the real decision for their own trials and
  * Stripe checkout re-checks with BillingService.isWebTrialEligible, so this is
- * only used to pick paywall COPY ("Try Pro free for 3 days" vs "Unlock Fitzy Pro").
+ * only used to pick paywall COPY ("Try Pro free for N days" vs "Unlock Fitzy Pro").
  * It must be cheap: it reads only profile columns the caller usually already has.
  *
  * Eligible = never trialed (profiles.trial_started_at null) AND no prior paid
@@ -14,9 +14,6 @@
  * Unknown (columns missing, read failed) → not eligible: never promise a free
  * trial we can't vouch for.
  */
-
-/** Length of the Pro free trial on every store (App Store / Play intro offer, STRIPE_TRIAL_DAYS on web). */
-export const PRO_TRIAL_DAYS = 3;
 
 const STORE_PLATFORMS = new Set(['app_store', 'play_store', 'stripe']);
 

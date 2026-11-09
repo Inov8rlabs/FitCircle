@@ -104,8 +104,8 @@ describe('pricing paywall', () => {
         name: 'Purchase Failed',
         properties: {
           source: 'pricing_page',
-          plan: 'annual',
-          product_id: 'stripe_pro_annual',
+          plan: 'monthly', // monthly is pre-selected
+          product_id: 'stripe_pro_monthly',
           store: 'stripe',
           error_kind: 'server',
         },

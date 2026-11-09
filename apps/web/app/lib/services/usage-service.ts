@@ -10,6 +10,7 @@ import { trialEligibleFromProfile } from '../entitlements/trial-eligibility';
 import { RemoteConfigService } from '../remote-config/service';
 import { createAdminSupabase } from '../supabase-admin';
 
+import { TrialConfig } from './trial-config';
 
 /**
  * UsageService — tier-aware daily quotas for metered AI features.
@@ -43,7 +44,9 @@ export class UpgradeRequiredError extends Error {
     public readonly used: number,
     public readonly limit: number,
     /** Fitzy chat gate only: may the user still start a free trial (paywall copy). Undefined elsewhere. */
-    public readonly trialEligible?: boolean
+    public readonly trialEligible?: boolean,
+    /** Free-trial length for the paywall copy (remote config `trial_days` for this request). */
+    public readonly trialDays?: number
   ) {
     super('UPGRADE_REQUIRED');
     this.name = 'UpgradeRequiredError';
@@ -186,23 +189,24 @@ export class UsageService {
 
   private static async foodAiPlan(
     userId: string
-  ): Promise<{ kind: 'legacy' | 'free' | 'premium'; scope: 'today' | 'lifetime'; limit: number; trialEligible: boolean }> {
+  ): Promise<{ kind: 'legacy' | 'free' | 'premium'; scope: 'today' | 'lifetime'; limit: number; trialEligible: boolean; trialDays?: number }> {
     const gateLive = await this.isGateLive('food_ai_unlimited');
     if (!gateLive) return { kind: 'legacy', scope: 'today', limit: LEGACY_LIMITS.foodAiParsesPerDay, trialEligible: false };
     const profile = await this.getProfileForGate(userId);
     if (profile.tier === 'premium') return { kind: 'premium', scope: 'today', limit: TIER_LIMITS.premium.foodAiParsesPerDay, trialEligible: false };
-    return { kind: 'free', scope: 'lifetime', limit: await this.freeFoodAiTotal(userId, profile.signupAt), trialEligible: profile.trialEligible };
+    const [limit, trialDays] = await Promise.all([this.freeFoodAiTotal(userId, profile.signupAt), TrialConfig.days(userId)]);
+    return { kind: 'free', scope: 'lifetime', limit, trialEligible: profile.trialEligible, trialDays };
   }
 
   /** The refusal, after recording a shared-device / shared-mailbox limit hit (free plan only). */
-  private static async foodAiRefusalNoted(plan: { kind: 'legacy' | 'free' | 'premium'; limit: number; trialEligible: boolean }, used: number, userId: string): Promise<Error> {
+  private static async foodAiRefusalNoted(plan: { kind: 'legacy' | 'free' | 'premium'; limit: number; trialEligible: boolean; trialDays?: number }, used: number, userId: string): Promise<Error> {
     if (plan.kind === 'free') await this.noteSharedLimit(userId, plan.limit);
     return this.foodAiRefusal(plan, used);
   }
 
-  private static foodAiRefusal(plan: { kind: 'legacy' | 'free' | 'premium'; limit: number; trialEligible: boolean }, used: number): Error {
+  private static foodAiRefusal(plan: { kind: 'legacy' | 'free' | 'premium'; limit: number; trialEligible: boolean; trialDays?: number }, used: number): Error {
     if (plan.kind === 'free') {
-      return new UpgradeRequiredError('food_ai_unlimited', used, plan.limit, plan.trialEligible);
+      return new UpgradeRequiredError('food_ai_unlimited', used, plan.limit, plan.trialEligible, plan.trialDays);
     }
     return new Error('RateLimited');
   }
@@ -287,7 +291,7 @@ export class UsageService {
     // Narrow on purpose: unfinished onboarding only, ONBOARDING_FREE_FITZY_MESSAGES per day.
     if (tier === 'free' && opts.onboarding && profile.onboardingCompleted !== true && used < ONBOARDING_FREE_FITZY_MESSAGES) return;
     if (used >= limit) {
-      if (tier === 'free') throw new UpgradeRequiredError('fitzy_unlimited', used, limit, profile.trialEligible);
+      if (tier === 'free') throw new UpgradeRequiredError('fitzy_unlimited', used, limit, profile.trialEligible, await TrialConfig.days(userId));
       throw new Error('RateLimited');
     }
   }

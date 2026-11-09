@@ -224,10 +224,10 @@ describe('promo_style@1 clients (1.1.3+)', () => {
 });
 
 describe('Pro lifecycle defaults unchanged', () => {
-  it('DEFAULT_CONFIG has no style, validates, and keeps its content version (pl1-ee6710073d47a7a6 on main 950b9fe)', () => {
+  it('DEFAULT_CONFIG has no style, validates, and keeps its content version (pl1-562e61950e849e46 since the 7-day trial copy; was pl1-ee6710073d47a7a6 on main 950b9fe)', () => {
     for (const s of Object.values(DEFAULT_CONFIG.states)) expect(s.style).toBeUndefined();
     expect(validateConfig(DEFAULT_CONFIG).issues).toEqual([]);
-    expect(configVersion(true, DEFAULT_CONFIG)).toBe('pl1-ee6710073d47a7a6');
+    expect(configVersion(true, DEFAULT_CONFIG)).toBe('pl1-562e61950e849e46');
   });
 
   it('a stored pre-style config (no style keys) still parses; a blocked look is rejected with its path', () => {

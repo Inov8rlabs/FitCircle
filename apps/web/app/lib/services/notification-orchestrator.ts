@@ -184,7 +184,7 @@ export type NotificationType =
   | 'fitzy_protein_nudge'
   // Day-2 "meet Fitzy" for activated users who never opened Fitzy (ACTIVATION_JOURNEY_SPEC §6)
   | 'fitzy_intro'
-  // Transactional: the free trial renews tomorrow (ONBOARDING_V2_EXPERIMENT_SPEC §3.2; TrialReminderService)
+  // Transactional: the free trial renews in 24–48 h (ONBOARDING_V2_EXPERIMENT_SPEC §3.2; TrialReminderService)
   | 'trial_ending_reminder'
   // "Finish setting up" for sign-ups who left onboarding midway (OnboardingNudgeService; data.touch = 1 | 2)
   | 'onboarding_finish_reminder'
@@ -670,11 +670,16 @@ export const NOTIFICATION_TEMPLATES: Record<
     category: 'coach',
   }),
   // Approved copy (ONBOARDING_V2_EXPERIMENT_SPEC §3.2) — the paywall timeline promises it.
-  trial_ending_reminder: () => ({
-    title: 'Your trial ends tomorrow',
-    body: 'Your FitCircle Pro trial ends tomorrow. Keep it, or cancel anytime in Settings → Subscriptions.',
-    category: 'journey',
-  }),
+  // Sent 24–48 h before the end, so the day is named: 'tomorrow' or 'on Friday' (data.endsPhrase).
+  trial_ending_reminder: (data) => {
+    const raw = typeof data.endsPhrase === 'string' ? data.endsPhrase.trim() : '';
+    const when = /^(today|tomorrow|on [A-Z][a-z]+( \d{1,2})?)$/.test(raw) ? raw : 'tomorrow';
+    return {
+      title: `Your trial ends ${when}`,
+      body: `Your FitCircle Pro trial ends ${when}. Keep it, or cancel anytime in Settings → Subscriptions.`,
+      category: 'journey',
+    };
+  },
   // A nudge (journey toggle, counts toward + respects the daily cap). Touch 2 is ~24 h after sign-up.
   onboarding_finish_reminder: (data) =>
     Number(data.touch) === 2

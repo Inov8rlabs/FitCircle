@@ -25,6 +25,7 @@ import { createAdminSupabase } from '@/lib/supabase-admin';
 
 import { ProLifecycleService, lifecycleConfigCache, lifecycleLive, type PublishedConfig } from './pro-lifecycle-service';
 import { promoStylesCache } from './promo-style-store';
+import { TrialConfig } from './trial-config';
 
 export type ConversionKind = 'meal_logged' | 'subscription_started' | 'fitzy_opened';
 
@@ -160,6 +161,8 @@ export interface PromoLoaders {
   fitzyPlanReady?(userId: string, localDate: string): Promise<boolean>;
   /** Produce the free plan preview after the response when it's missing (best-effort). */
   warmFitzyPlan?(userId: string, timezone: string): Promise<unknown>;
+  /** Free-trial length for trial copy (remote config `trial_days` for this request). */
+  trialDays?(userId: string): Promise<number>;
 }
 
 /** What the promo round learns about the Pro lifecycle prompts. */
@@ -210,6 +213,7 @@ export const defaultPromoLoaders: PromoLoaders = {
   },
   fitzyPlanReady: (userId, localDate) => fitzyPlanPreviewReady(userId, localDate),
   warmFitzyPlan: (userId, timezone) => warmFitzyPlanPreview(userId, timezone),
+  trialDays: (userId) => TrialConfig.days(userId),
 };
 
 export class PromoService {

@@ -4564,7 +4564,7 @@
           "name": "trial_available",
           "type": "bool",
           "required": true,
-          "description": "The copy offered the 3-day free trial."
+          "description": "The copy offered the free trial (length: remote config trial_days)."
         }
       ]
     },

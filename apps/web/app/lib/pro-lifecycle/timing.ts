@@ -1,8 +1,8 @@
 /**
  * Push timing for the Pro lifecycle prompts. Pure.
  *
- *  pro_expiring_reminder  same rule as the store-trial reminder
- *                         (lib/trials/reminder.ts): 10:00 local on the day
+ *  pro_expiring_reminder  the "day before" rule of lib/trials/reminder.ts
+ *                         (DAY_BEFORE_MIN_LEAD_MS): 10:00 local on the day
  *                         before Pro ends (the latest 10:00 at least 14 h
  *                         before the end), or right away when that moment has
  *                         passed and ≥ 1 h of Pro is left. Quiet hours defer
@@ -12,7 +12,7 @@
  *                         after the end (a "your Pro ended" push days later
  *                         reads as spam).
  */
-import { REMINDER_LAST_CALL_MS, reminderSendAt } from '../trials/reminder';
+import { DAY_BEFORE_MIN_LEAD_MS, REMINDER_LAST_CALL_MS, reminderSendAt } from '../trials/reminder';
 
 export const EXPIRING_LOOKAHEAD_MS = 40 * 3_600_000;
 export const EXPIRING_LAST_CALL_MS = REMINDER_LAST_CALL_MS;
@@ -24,7 +24,7 @@ export type PushDecision = { send: true; sendAt: Date } | { send: false; skip: P
 
 /** When the "ends tomorrow" push is due for an end at `endsAt` in `timezone`. */
 export function expiringPushAt(endsAt: Date, timezone: string): Date {
-  return reminderSendAt(endsAt, timezone);
+  return reminderSendAt(endsAt, timezone, DAY_BEFORE_MIN_LEAD_MS);
 }
 
 export function decideExpiringPush(input: { now: Date; endsAt: Date; timezone: string; inQuietHours: boolean }): PushDecision {

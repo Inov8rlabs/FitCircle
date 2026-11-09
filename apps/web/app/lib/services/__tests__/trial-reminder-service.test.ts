@@ -45,10 +45,26 @@ describe('TrialReminderService.run', () => {
     expect(NotificationOrchestrator.send).toHaveBeenCalledWith(U1, 'trial_ending_reminder', {
       dedupeKey: trialReminderDedupeKey(U1, '2026-10-31T18:05:00.000Z'),
       trialEndsAt: '2026-10-31T18:05:00.000Z',
+      endsPhrase: 'tomorrow',
     });
     expect(db.getRows('profiles')[0].trial_reminder_sent_at).toBe(NOW.toISOString());
     // Next hourly run: already reminded → not a candidate.
     expect((await TrialReminderService.run({ now: new Date(NOW.getTime() + 3_600_000) })).candidates).toBe(0);
+  });
+
+  it('a trial ending early in the morning is reminded two local days before (≥ 24 h), naming the day', async () => {
+    db.getRows('profiles')[0].trial_ends_at = '2026-11-01T11:00:00.000Z'; // Sun Nov 1 07:00 local (EST from 02:00)
+    // Sat Oct 31 10:00 local would be 21 h before → too late for a 24 h lead → Fri Oct 30 10:00 (45 h).
+    const s = await TrialReminderService.run({ now: NOW });
+    expect(s).toMatchObject({ candidates: 1, sent: 1 });
+    expect(NotificationOrchestrator.send).toHaveBeenCalledWith(U1, 'trial_ending_reminder', expect.objectContaining({ endsPhrase: 'on Sunday' }));
+  });
+
+  it('a 7-day trial is only a candidate inside the 50 h lookahead (no early reminder)', async () => {
+    db.getRows('profiles')[0].trial_ends_at = '2026-11-05T18:05:00.000Z'; // 7-day trial started Oct 29
+    expect((await TrialReminderService.run({ now: NOW })).candidates).toBe(0);
+    expect((await TrialReminderService.run({ now: new Date('2026-11-04T14:05:00Z') })).skipped).toEqual({ not_yet: 1 }); // 09:05 EST
+    expect((await TrialReminderService.run({ now: new Date('2026-11-04T15:05:00Z') })).sent).toBe(1); // 10:05 EST, 27 h before the end
   });
 
   it('too early → waits (no send, no stamp)', async () => {
@@ -98,6 +114,12 @@ describe('push policy for trial_ending_reminder', () => {
     expect(NOTIFICATION_TEMPLATES.trial_ending_reminder({}).body).toBe(
       'Your FitCircle Pro trial ends tomorrow. Keep it, or cancel anytime in Settings → Subscriptions.'
     );
+    expect(NOTIFICATION_TEMPLATES.trial_ending_reminder({ endsPhrase: 'on Friday' })).toMatchObject({
+      title: 'Your trial ends on Friday',
+      body: 'Your FitCircle Pro trial ends on Friday. Keep it, or cancel anytime in Settings → Subscriptions.',
+    });
+    // Anything unexpected falls back to the approved default.
+    expect(NOTIFICATION_TEMPLATES.trial_ending_reminder({ endsPhrase: 'in <b>2</b> days' }).title).toBe('Your trial ends tomorrow');
   });
 
   it('category toggles never block it; the push master switch does', async () => {

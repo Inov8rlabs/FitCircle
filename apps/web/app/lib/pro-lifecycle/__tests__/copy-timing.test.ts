@@ -65,7 +65,7 @@ const input = (over: Partial<RenderInput> = {}): RenderInput => ({
 describe('card + push copy', () => {
   it('default expiring copy: trial / no trial / usage variants', () => {
     const a = renderCardCopy(DEFAULT_CONFIG.states.pro_expiring.copy, input());
-    expect(a).toEqual({ copy: expect.objectContaining({ title: 'Your free Pro week ends tomorrow', cta: 'Start 3-day free trial', usedUsage: false }) });
+    expect(a).toEqual({ copy: expect.objectContaining({ title: 'Your free Pro week ends tomorrow', cta: 'Start 7-day free trial', usedUsage: false }) });
     const b = renderCardCopy(DEFAULT_CONFIG.states.pro_expiring.copy, input({ trialAvailable: false, usage: { aiMeals: 5, meals: 6, fitzyChats: 0, plans: 0 } }));
     expect(b).toEqual({ copy: expect.objectContaining({ cta: 'Keep Pro', body: 'So far with Pro: 5 meals analyzed by AI. Keep the momentum going.', usedUsage: true }) });
   });
@@ -159,7 +159,7 @@ describe('card props (promo@1 wire)', () => {
       emoji: '⏳',
       title: 'Your free Pro week ends tomorrow',
       countdown: { endsAt: '2026-11-09T13:17:45', label: 'Pro ends in' },
-      primary: { label: 'Start 3-day free trial', action: { type: 'paywall', params: { placement: 'pro_expiring_card' } } },
+      primary: { label: 'Start 7-day free trial', action: { type: 'paywall', params: { placement: 'pro_expiring_card' } } },
       dismissible: true,
     });
     expect(promoPropsSchema.safeParse(props).success).toBe(true);

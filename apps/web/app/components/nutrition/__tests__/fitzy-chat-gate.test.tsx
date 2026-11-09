@@ -42,7 +42,7 @@ beforeEach(() => {
   state.setConsent.mockReset();
   state.aiGranted = true;
   state.entitlements = FREE;
-  state.trialDays = 3;
+  state.trialDays = 7;
   try {
     window.localStorage.removeItem("fitzy.history.u1");
   } catch {
@@ -56,7 +56,7 @@ describe('isFitzyChatLocked / copy', () => {
     expect(isFitzyChatLocked({ ...FREE, limits: { fitzyMessagesPerDay: 3 } })).toBe(false);
     expect(isFitzyChatLocked({ ...FREE, features: { fitzy_unlimited: { allowed: true } } })).toBe(false);
     expect(isFitzyChatLocked(null)).toBe(false);
-    expect(fitzyGateCopy(3)).toEqual({ headline: 'Try Pro free for 3 days', sub: 'Cancel anytime. Start your free trial to chat with Fitzy.', cta: 'Start free trial' });
+    expect(fitzyGateCopy(7)).toEqual({ headline: 'Try Pro free for 7 days', sub: 'Cancel anytime. Start your free trial to chat with Fitzy.', cta: 'Start free trial' });
     expect(fitzyGateCopy(0)).toMatchObject({ headline: 'Unlock Fitzy Pro', cta: 'Continue with Pro' });
   });
 });
@@ -69,7 +69,7 @@ describe('<FitzyChat />', () => {
     await user.click(screen.getByRole('button', { name: 'Send' }));
     expect(state.chat).not.toHaveBeenCalled();
     const card = await screen.findByTestId('fitzy-paywall');
-    expect(card).toHaveTextContent('Try Pro free for 3 days');
+    expect(card).toHaveTextContent('Try Pro free for 7 days');
     expect(screen.getByRole('link', { name: 'Start free trial' })).toHaveAttribute('href', '/upgrade?source=fitzy_send');
     expect(screen.getByPlaceholderText('Message Fitzy…')).toHaveValue('Dinner idea?');
   });

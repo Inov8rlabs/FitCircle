@@ -88,6 +88,7 @@ describe('GET list', () => {
     expect(body.data.keys).toEqual([
       expect.objectContaining({ key: 'free_food_ai_analyses_total', type: 'int', min: 0, max: 1000, codeDefault: 5, default: null, rules: [], unit: expect.any(String), description: expect.any(String) }),
       expect.objectContaining({ key: 'free_fitzy_messages_per_day', type: 'int', min: 0, max: 200, codeDefault: 0, default: null, rules: [] }),
+      expect.objectContaining({ key: 'trial_days', type: 'int', min: 1, max: 31, codeDefault: 7, default: null, rules: [] }),
       expect.objectContaining({ key: 'integrity_enforce_android', type: 'enum', options: ['block', 'log', 'off'], min: null, max: null, codeDefault: 'block', default: null, rules: [] }),
       expect.objectContaining({ key: 'integrity_device_error_fail_open', type: 'enum', options: ['true', 'false'], codeDefault: 'true', default: null, rules: [] }),
       expect.objectContaining({ key: 'integrity_bypass_user_ids', type: 'string_list', maxItems: 200, min: null, max: null, codeDefault: [], default: null, rules: [] }),
@@ -198,6 +199,7 @@ describe('preview + estimate', () => {
     expect(body.data.values).toEqual({
       free_food_ai_analyses_total: { value: 9, source: 'rule', ruleId: expect.any(String), ruleName: 'iOS' },
       free_fitzy_messages_per_day: { value: 2, source: 'default' },
+      trial_days: { value: 7, source: 'code' },
       integrity_enforce_android: { value: 'block', source: 'code' },
       integrity_device_error_fail_open: { value: 'true', source: 'code' },
       integrity_bypass_user_ids: { value: [], source: 'code' },

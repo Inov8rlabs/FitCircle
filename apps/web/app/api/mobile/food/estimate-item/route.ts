@@ -98,7 +98,7 @@ export async function POST(request: NextRequest) {
             data: null,
             error: {
               code: 'UPGRADE_REQUIRED',
-              message: foodAiUpgradeMessage(estimateError.limit, estimateError.trialEligible === true),
+              message: foodAiUpgradeMessage(estimateError.limit, estimateError.trialEligible === true, false, estimateError.trialDays),
               // Trial-first (TRIAL_FIRST_SPEC §5): legacy {feature, used, limit} + additive paywall.
               details: foodAiUpgradeDetails(estimateError),
               timestamp: new Date().toISOString(),

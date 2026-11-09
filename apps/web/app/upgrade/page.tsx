@@ -2,7 +2,7 @@
 
 /**
  * /upgrade — the FitCircle Pro pricing page (web paywall).
- * Annual pre-selected; checkout runs through Stripe (POST /api/billing/checkout);
+ * Monthly pre-selected; checkout runs through Stripe (POST /api/billing/checkout);
  * entitlement lands via RevenueCat → backend webhook → profiles.
  */
 

@@ -5,6 +5,7 @@ import { createAdminSupabase } from '@/lib/supabase-admin';
 
 import { FakeSupabase } from '../../../../__tests__/helpers/fake-supabase';
 import { BillingService, setStripeClientForTest } from '../billing-service';
+import { TrialConfig } from '../trial-config';
 
 vi.mock('@/lib/supabase-admin', () => ({ createAdminSupabase: vi.fn() }));
 
@@ -43,12 +44,21 @@ const trialDaysSent = () => stripe.checkout.sessions.create.mock.calls.at(-1)[0]
 const profile = () => db.getRows('profiles')[0];
 
 describe('web checkout trial eligibility', () => {
-  it('a brand-new customer gets STRIPE_TRIAL_DAYS on monthly and annual; no Stripe history lookup for a fresh customer', async () => {
+  it('a brand-new customer gets the trial (trial_days, default 7) on monthly and annual; no Stripe history lookup for a fresh customer', async () => {
     await checkout('annual');
-    expect(trialDaysSent()).toBe(3);
+    expect(trialDaysSent()).toBe(7);
     expect(stripe.subscriptions.list).not.toHaveBeenCalled();
     await checkout('monthly');
-    expect(trialDaysSent()).toBe(3);
+    expect(trialDaysSent()).toBe(7);
+  });
+
+  it('the length comes from remote config trial_days (platform web), not the STRIPE_TRIAL_DAYS value', async () => {
+    vi.stubEnv('STRIPE_TRIAL_DAYS', '3'); // legacy value: only switches the trial on
+    const spy = vi.spyOn(TrialConfig, 'webDays').mockResolvedValue(10);
+    await checkout('monthly');
+    expect(trialDaysSent()).toBe(10);
+    expect(spy).toHaveBeenCalledWith(USER);
+    spy.mockRestore();
   });
 
   it('lifetime never has a trial', async () => {
@@ -74,7 +84,7 @@ describe('web checkout trial eligibility', () => {
       { id: 's', user_id: USER, type: 'INITIAL_PURCHASE', environment: 'SANDBOX' },
     ]);
     await checkout();
-    expect(trialDaysSent()).toBe(3);
+    expect(trialDaysSent()).toBe(7);
   });
 
   it('no trial when the existing Stripe customer has any past subscription (any status)', async () => {
@@ -88,7 +98,7 @@ describe('web checkout trial eligibility', () => {
   it('an existing customer with no subscriptions is still eligible', async () => {
     profile().stripe_customer_id = 'cus_empty';
     await checkout();
-    expect(trialDaysSent()).toBe(3);
+    expect(trialDaysSent()).toBe(7);
   });
 
   it('fails closed: a Stripe or database error means no trial (checkout still works)', async () => {

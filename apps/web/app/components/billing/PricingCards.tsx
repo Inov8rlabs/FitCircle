@@ -7,11 +7,13 @@ import { toast } from 'sonner';
 
 import { AnalyticsEvents, analytics, toErrorKind, type Plan } from '@/lib/analytics';
 import { rememberCheckout, webProductId } from '@/lib/analytics/checkout';
+import { PRO_PRICES_USD } from '@/lib/config/pricing';
 import { TIER_LIMITS } from '@/lib/config/tier-limits';
+import { trialDayAdjective } from '@/lib/config/trial';
 
-const PRICE_MONTHLY = 9.99;
-const PRICE_ANNUAL = 29.99;
-const PRICE_LIFETIME = 179.99;
+const PRICE_MONTHLY = PRO_PRICES_USD.monthly;
+const PRICE_ANNUAL = PRO_PRICES_USD.annual;
+const PRICE_LIFETIME = PRO_PRICES_USD.lifetime;
 
 /**
  * Launch promo display: set NEXT_PUBLIC_LAUNCH_PROMO_ANNUAL (e.g. "39.99") to
@@ -22,11 +24,21 @@ const PROMO_ANNUAL = Number(process.env.NEXT_PUBLIC_LAUNCH_PROMO_ANNUAL ?? '') |
 const SHOW_LIFETIME = process.env.NEXT_PUBLIC_LIFETIME_OFFER === 'true';
 
 /**
+ * The trial CTA: "Start free trial — $0 today, then $9.99/month after your 7-day trial. Cancel anytime."
+ * The price is what the first charge after the trial will be (the launch promo price for annual, if set).
+ */
+export function trialCtaCopy(plan: 'monthly' | 'annual', trialDays: number): { label: string; detail: string } {
+  const after = plan === 'annual' ? `$${PROMO_ANNUAL ?? PRICE_ANNUAL}/year` : `$${PRICE_MONTHLY}/month`;
+  return { label: 'Start free trial', detail: `$0 today, then ${after} after your ${trialDayAdjective(trialDays)} trial. Cancel anytime.` };
+}
+
+/**
  * `trialDays` > 0 only when a Stripe checkout started now carries the free trial
- * (GET /api/billing/trial): the CTA becomes "Start free trial" for subscriptions.
+ * (GET /api/billing/trial): the CTA becomes the trial CTA (trialCtaCopy) for subscriptions.
+ * Monthly is pre-selected (same default as the iOS / Android paywalls).
  */
 export function PricingCards({ source = 'pricing_page', trialDays = 0 }: { source?: string; trialDays?: number }) {
-  const [selected, setSelected] = useState<Plan>('annual'); // annual pre-selected
+  const [selected, setSelected] = useState<Plan>('monthly'); // monthly pre-selected
   const [busy, setBusy] = useState(false);
 
   const selectPlan = (plan: Plan) => {
@@ -80,6 +92,7 @@ export function PricingCards({ source = 'pricing_page', trialDays = 0 }: { sourc
   };
 
   const annualPerMonth = ((PROMO_ANNUAL ?? PRICE_ANNUAL) / 12).toFixed(2);
+  const trialCta = trialDays > 0 && selected !== 'lifetime' ? trialCtaCopy(selected, trialDays) : null;
 
   const planCard = (
     plan: Plan,
@@ -169,20 +182,26 @@ export function PricingCards({ source = 'pricing_page', trialDays = 0 }: { sourc
         disabled={busy}
         onClick={startCheckout}
         data-testid="checkout-button"
-        className="h-14 w-full rounded-xl bg-gradient-brand text-headline text-white shadow-glow transition hover:brightness-110 disabled:opacity-60"
+        className="min-h-14 w-full rounded-xl bg-gradient-brand px-4 py-2.5 text-headline text-white shadow-glow transition hover:brightness-110 disabled:opacity-60"
       >
-        {busy
-          ? 'Opening checkout…'
-          : selected === 'lifetime'
-            ? 'Get Pro forever'
-            : trialDays > 0
-              ? 'Start free trial'
-              : 'Continue to checkout'}
+        {busy ? (
+          'Opening checkout…'
+        ) : selected === 'lifetime' ? (
+          'Get Pro forever'
+        ) : trialCta ? (
+          <>
+            <span className="block">{trialCta.label} —</span>{' '}
+            <span className="block text-footnote font-medium text-white/90" data-testid="trial-cta-detail">
+              {trialCta.detail}
+            </span>
+          </>
+        ) : (
+          'Continue to checkout'
+        )}
       </motion.button>
-      {trialDays > 0 && selected !== 'lifetime' && (
+      {trialCta && (
         <p className="text-center text-footnote text-fg-secondary" data-testid="trial-terms">
-          Free for {trialDays} days, then {selected === 'annual' ? `$${PROMO_ANNUAL ?? PRICE_ANNUAL}/yr` : `$${PRICE_MONTHLY}/mo`}. Cancel anytime before
-          the trial ends and you won&apos;t be charged.
+          Cancel anytime before the trial ends and you won&apos;t be charged.
         </p>
       )}
       <p className="text-center text-caption leading-relaxed text-fg-tertiary">

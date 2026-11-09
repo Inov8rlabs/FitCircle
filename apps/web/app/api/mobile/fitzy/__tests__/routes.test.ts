@@ -104,7 +104,7 @@ describe('POST /api/mobile/fitzy/chat/stream', () => {
           code: 'UPGRADE_REQUIRED',
           message: expect.any(String),
           // Trial-aware (this profile has no trial_started_at column → not eligible → non-trial copy).
-          paywall: { trigger: 'fitzy_quota', headline: 'Unlock Fitzy Pro', bullets: expect.arrayContaining([expect.any(String)]), cta: 'Continue with Pro', trialDays: 3, trialEligible: false },
+          paywall: { trigger: 'fitzy_quota', headline: 'Unlock Fitzy Pro', bullets: expect.arrayContaining([expect.any(String)]), cta: 'Continue with Pro', trialDays: 7, trialEligible: false },
         },
       },
     ]);
@@ -167,10 +167,10 @@ describe('trial-first: free chat = 0/day (TRIAL_FIRST_SPEC §1)', () => {
           message: 'Start your free trial to chat with Fitzy.',
           paywall: {
             trigger: 'fitzy_quota',
-            headline: 'Try Pro free for 3 days',
+            headline: 'Try Pro free for 7 days',
             bullets: ['Unlimited coaching with Fitzy, every day', 'A weekly plan built around your goals', 'Fitzy remembers your routines and preferences', 'Cancel anytime'],
             cta: 'Start free trial',
-            trialDays: 3,
+            trialDays: 7,
             trialEligible: true,
           },
         },
@@ -189,7 +189,7 @@ describe('trial-first: free chat = 0/day (TRIAL_FIRST_SPEC §1)', () => {
     expect(body.error).toMatchObject({
       code: 'UPGRADE_REQUIRED',
       message: 'Upgrade to Pro to chat with Fitzy.',
-      details: { feature: 'fitzy_unlimited', used: 0, limit: 0, paywall: { trigger: 'fitzy_quota', headline: 'Unlock Fitzy Pro', cta: 'Continue with Pro', trialDays: 3, trialEligible: false } },
+      details: { feature: 'fitzy_unlimited', used: 0, limit: 0, paywall: { trigger: 'fitzy_quota', headline: 'Unlock Fitzy Pro', cta: 'Continue with Pro', trialDays: 7, trialEligible: false } },
     });
     expect(ai.calls).toEqual([]);
   });

@@ -13,7 +13,8 @@ vi.mock('../../supabase-admin', async () => {
 });
 
 import { TIER_LIMITS } from '../../config/tier-limits';
-import { trialEligibleFromProfile, PRO_TRIAL_DAYS } from '../../entitlements/trial-eligibility';
+import { DEFAULT_TRIAL_DAYS } from '../../config/trial';
+import { trialEligibleFromProfile } from '../../entitlements/trial-eligibility';
 import { foodAiPaywall, foodAiUpgradeDetails, foodAiUpgradeMessage, fitzyUpgradeMessage, paywallFor } from '../../fitzy/paywall';
 import { resetRemoteConfigCache } from '../../remote-config/service';
 import { EntitlementService } from '../entitlement-service';
@@ -78,16 +79,16 @@ describe('paywall copy', () => {
   it('fitzy_quota with trial eligibility → trial-first headline/cta + additive fields', () => {
     expect(paywallFor('fitzy_quota', { trialEligible: true })).toEqual({
       trigger: 'fitzy_quota',
-      headline: `Try Pro free for ${PRO_TRIAL_DAYS} days`,
+      headline: 'Try Pro free for 7 days',
       bullets: ['Unlimited coaching with Fitzy, every day', 'A weekly plan built around your goals', 'Fitzy remembers your routines and preferences', 'Cancel anytime'],
       cta: 'Start free trial',
-      trialDays: 3,
+      trialDays: 7,
       trialEligible: true,
     });
   });
 
   it('fitzy_quota without eligibility → non-trial copy', () => {
-    expect(paywallFor('fitzy_quota', { trialEligible: false })).toMatchObject({ headline: 'Unlock Fitzy Pro', cta: 'Continue with Pro', trialDays: 3, trialEligible: false });
+    expect(paywallFor('fitzy_quota', { trialEligible: false })).toMatchObject({ headline: 'Unlock Fitzy Pro', cta: 'Continue with Pro', trialDays: 7, trialEligible: false });
     expect(paywallFor('fitzy_quota', { trialEligible: false }).bullets).not.toContain('Cancel anytime');
   });
 
@@ -110,10 +111,10 @@ describe('paywall copy', () => {
     expect(foodAiPaywall(5, true)).toEqual({
       trigger: 'food_ai',
       headline: 'Unlock food logging analysis',
-      body: "You've used your 5 free AI food analyses. Start your free 3-day trial to keep logging with AI.",
+      body: "You've used your 5 free AI food analyses. Start your free 7-day trial to keep logging with AI.",
       bullets: ['AI analysis for every meal photo and description', 'Calories and macros in seconds', 'Fitzy coaching and your weekly plan', 'Cancel anytime'],
       cta: 'Start free trial',
-      trialDays: 3,
+      trialDays: 7,
       trialEligible: true,
     });
     expect(foodAiPaywall(5, false)).toMatchObject({ body: "You've used your 5 free AI food analyses. Upgrade to Pro to keep logging with AI.", cta: 'Continue with Pro' });
@@ -172,6 +173,44 @@ describe('food AI lifetime allowance (TRIAL_FIRST_SPEC §5)', () => {
   it('lapsed trial: analyses made during the trial count toward the free allowance', async () => {
     seedParses(12, '2026-10-02T10:00:00Z'); // used while trialing
     await expect(UsageService.assertFoodAiQuota(USER)).rejects.toBeInstanceOf(UpgradeRequiredError);
+  });
+});
+
+describe('trial length = remote config trial_days (single source of truth)', () => {
+  it('code default is 7 days', () => {
+    expect(DEFAULT_TRIAL_DAYS).toBe(7);
+    expect(paywallFor('fitzy_quota', { trialEligible: true })).toMatchObject({ headline: 'Try Pro free for 7 days', trialDays: 7 });
+  });
+
+  it('the resolved value rides on UpgradeRequiredError into the Fitzy + food paywall copy', async () => {
+    getDb().remote_config_defaults.push({ config_key: 'trial_days', value: 3, updated_by: null, updated_at: '2026-11-01T00:00:00Z' });
+    const chat = await UsageService.assertFitzyQuota(USER).catch((e) => e);
+    expect(chat).toMatchObject({ trialEligible: true, trialDays: 3 });
+    expect(paywallFor('fitzy_quota', { trialEligible: true, trialDays: chat.trialDays })).toMatchObject({ headline: 'Try Pro free for 3 days', trialDays: 3 });
+
+    seedParses(5, '2026-10-02T10:00:00Z');
+    const food = await UsageService.assertFoodAiQuota(USER).catch((e) => e);
+    expect(food).toMatchObject({ feature: 'food_ai_unlimited', trialDays: 3 });
+    expect(foodAiUpgradeMessage(food.limit, true, false, food.trialDays)).toBe("You've used your 5 free AI food analyses. Start your free 3-day trial to keep logging with AI.");
+    expect(foodAiUpgradeDetails(food).paywall).toMatchObject({ trialDays: 3, body: expect.stringContaining('free 3-day trial') });
+  });
+
+  it('a platform rule (store offer not switched yet) wins for that platform only', async () => {
+    getDb().remote_config_rules.push({
+      id: 'aaaaaaaa-0000-4000-8000-000000000009',
+      config_key: 'trial_days',
+      name: 'iOS offer still 3 days',
+      enabled: true,
+      priority: 10,
+      audience: { platforms: ['ios'] },
+      value: 3,
+      created_at: '2026-11-01T00:00:00Z',
+    });
+    const { TrialConfig } = await import('../trial-config');
+    expect(await TrialConfig.days(USER, { platform: 'ios' })).toBe(3);
+    expect(await TrialConfig.days(USER, { platform: 'android' })).toBe(7);
+    expect(await TrialConfig.webDays(USER)).toBe(7);
+    expect(await TrialConfig.mobileDays(USER)).toBe(3); // cron copy never over-promises
   });
 });
 

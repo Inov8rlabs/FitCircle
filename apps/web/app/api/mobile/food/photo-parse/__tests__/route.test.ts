@@ -184,7 +184,7 @@ describe('POST /api/mobile/food/photo-parse — Option-B fallback', () => {
       used: 3,
       limit: 3,
       // Additive (TRIAL_FIRST_SPEC §5): shipped clients ignore it.
-      paywall: expect.objectContaining({ trigger: 'food_ai', headline: 'Unlock food logging analysis', trialDays: 3, trialEligible: false }),
+      paywall: expect.objectContaining({ trigger: 'food_ai', headline: 'Unlock food logging analysis', trialDays: 7, trialEligible: false }),
     });
 
     state.saveCalls = 0;
@@ -237,14 +237,14 @@ describe('trial-first food AI allowance on photo-parse (TRIAL_FIRST_SPEC §5)', 
     const body = await res.json();
     expect(body.error).toMatchObject({
       code: 'UPGRADE_REQUIRED',
-      message: "You've used your 5 free AI food analyses. Start your free 3-day trial to keep logging with AI. We saved your photo so you can add the details.",
+      message: "You've used your 5 free AI food analyses. Start your free 7-day trial to keep logging with AI. We saved your photo so you can add the details.",
       details: {
         savedEntryId: NEW_ENTRY,
         imageUrls: [],
         feature: 'food_ai_unlimited',
         used: 5,
         limit: 5,
-        paywall: { trigger: 'food_ai', headline: 'Unlock food logging analysis', cta: 'Start free trial', trialDays: 3, trialEligible: true },
+        paywall: { trigger: 'food_ai', headline: 'Unlock food logging analysis', cta: 'Start free trial', trialDays: 7, trialEligible: true },
       },
     });
     expect(state.saveCalls).toBe(1);

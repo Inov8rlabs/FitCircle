@@ -305,7 +305,8 @@ export class HomeFeedService {
     // see fitzy_recommendations (onboarding complete + a goal). Zero cost for everyone else.
     const planLoader = loaders.fitzyPlanReady;
     const wantPlan = !!planLoader && profileIsFreeForTeaser(profile);
-    const [facts, state, liveProFeatures, lifecycle, styles, fitzyPlanReady] = await Promise.all([
+    const trialDaysLoader = loaders.trialDays;
+    const [facts, state, liveProFeatures, lifecycle, styles, fitzyPlanReady, trialDays] = await Promise.all([
       softly(() => loaders.journeyFacts(profile.id, localDate), PROMO_LOADER_TIMEOUT_MS),
       softly(() => loaders.promoState(profile.id), PROMO_LOADER_TIMEOUT_MS),
       softly(() => loaders.liveProFeatures()),
@@ -313,6 +314,8 @@ export class HomeFeedService {
       lifecycleLoader ? softly(() => lifecycleLoader.call(loaders, profile, timezone, now), PROMO_LOADER_TIMEOUT_MS) : Promise.resolve(null),
       stylesLoader ? softly(() => stylesLoader.call(loaders)) : Promise.resolve(null),
       wantPlan ? softly(() => planLoader.call(loaders, profile.id, localDate), PROMO_LOADER_TIMEOUT_MS) : Promise.resolve(null),
+      // Trial length for trial copy (remote config `trial_days`; cached snapshot, no per-user read).
+      trialDaysLoader ? softly(() => trialDaysLoader.call(loaders, profile.id)) : Promise.resolve(null),
     ]);
     // No real preview yet (e.g. onboarding finished before this shipped): produce one after the
     // response so the teaser can show next session. Never blocks the feed.
@@ -320,7 +323,7 @@ export class HomeFeedService {
       const warm = loaders.warmFitzyPlan;
       runAfterResponse(() => warm.call(loaders, profile.id, timezone), 'fitzy plan preview');
     }
-    return { facts, state, liveProFeatures, timezone, localDate, lifecycle, styles, fitzyPlanReady };
+    return { facts, state, liveProFeatures, timezone, localDate, lifecycle, styles, fitzyPlanReady, trialDays };
   }
 
   /** Pure-ish: promo candidates + what they replace, for composeFeed. */
@@ -333,9 +336,14 @@ export class HomeFeedService {
     const cfg = promosConfig();
     const promoV1 = client.promoCard;
     if (!cfg.enabled || !client.promoCard || !data) return { compose: { promoV1 }, trace: null };
-    const journey = { ...buildJourneyContext(profile, data.facts, { now: ctx.now, timezone: data.timezone, localDate: data.localDate }), fitzyPlanReady: data.fitzyPlanReady ?? null };
+    const trialDays = data.trialDays ?? undefined;
+    const journey = {
+      ...buildJourneyContext(profile, data.facts, { now: ctx.now, timezone: data.timezone, localDate: data.localDate }),
+      fitzyPlanReady: data.fitzyPlanReady ?? null,
+      ...(trialDays !== undefined ? { trialDays } : {}),
+    };
     const lc = data.lifecycle ?? null;
-    const lifecycleDefs = lc ? lifecyclePromoDefinitions(lc.input, lc.pub.config, { enabled: lifecycleLive(lc.pub), now: ctx.now }) : [];
+    const lifecycleDefs = lc ? lifecyclePromoDefinitions(lc.input, lc.pub.config, { enabled: lifecycleLive(lc.pub), now: ctx.now, trialDays }) : [];
     // Looks (promo_style@1 clients only — the engine ignores `style` for everyone else). Env kill switch → default look.
     const stylesOn = promoStylesEnabled();
     const definitions = stylesOn ? [...lifecycleDefs, ...withPromoStyles(SYSTEM_PROMOS, data.styles ?? null)] : [...lifecycleDefs, ...SYSTEM_PROMOS].map((d) => ({ ...d, style: null }));
@@ -535,6 +543,8 @@ export interface PromoRoundData {
   styles?: PromoStylesConfig | null;
   /** A real Fitzy weekly-plan preview exists (null = not read: not a teaser candidate, or failed). */
   fitzyPlanReady?: boolean | null;
+  /** Free-trial length (remote config `trial_days`); null = not loaded → code default. */
+  trialDays?: number | null;
 }
 
 /** Free (known) + onboarding complete + a goal: the only users the fitzy_recommendations teaser can target. */

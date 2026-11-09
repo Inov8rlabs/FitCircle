@@ -1,6 +1,9 @@
 import Stripe from 'stripe';
 
+import { webTrialEnabled } from '../config/trial';
 import { createAdminSupabase } from '../supabase-admin';
+
+import { TrialConfig } from './trial-config';
 
 /**
  * BillingService — web (Stripe) purchase plumbing.
@@ -104,10 +107,11 @@ export class BillingService {
   }
 
   /**
-   * Create a Checkout Session for a plan. Annual carries an optional STRIPE_TRIAL_DAYS trial and,
+   * Create a Checkout Session for a plan. Subscriptions carry the free trial (length = remote config
+   * `trial_days` for platform web; on/off = STRIPE_TRIAL_DAYS > 0) for eligible users and, for annual,
    * while STRIPE_COUPON_LAUNCH is set, the launch first-period discount
    * (renewals bill at list price — coupons with duration 'once' only touch the
-   * first invoice). Monthly gets the same optional trial. Launch config: no trial.
+   * first invoice).
    */
   static async createCheckoutSession(params: {
     userId: string;
@@ -116,7 +120,6 @@ export class BillingService {
     origin: string;
   }): Promise<{ url: string }> {
     const { userId, email, plan, origin } = params;
-    const configuredTrialDays = Number(process.env.STRIPE_TRIAL_DAYS ?? 0) || 0;
     const stripe = getStripe();
     const isSubscription = plan !== 'lifetime';
     // The customer id that existed BEFORE this checkout (a fresh one has no history).
@@ -126,8 +129,8 @@ export class BillingService {
       .eq('id', userId)
       .maybeSingle();
     const trialDays =
-      configuredTrialDays > 0 && isSubscription && (await this.isWebTrialEligible(userId, before?.stripe_customer_id ?? null))
-        ? configuredTrialDays
+      webTrialEnabled() && isSubscription && (await this.isWebTrialEligible(userId, before?.stripe_customer_id ?? null))
+        ? await TrialConfig.webDays(userId)
         : 0;
     const customerId = await this.findOrCreateCustomer(userId, email);
 
@@ -142,7 +145,7 @@ export class BillingService {
       ...(isSubscription
         ? {
             subscription_data: {
-              // STRIPE_TRIAL_DAYS (3 from ONBOARDING_V2) — only for users who have
+              // trial_days (remote config, platform web) — only for users who have
               // never trialed or subscribed on any store (isWebTrialEligible).
               ...(trialDays > 0 ? { trial_period_days: trialDays } : {}),
               metadata: { app_user_id: userId, plan },

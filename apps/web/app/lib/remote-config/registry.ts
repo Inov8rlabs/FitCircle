@@ -67,6 +67,15 @@ export const REMOTE_CONFIG_REGISTRY = {
     unit: 'messages/day',
     description: 'Fitzy chat messages per UTC day for non-paying users. 0 = chat requires Pro or a free trial (the first message opens the paywall).',
   },
+  trial_days: {
+    type: 'int',
+    default: 7,
+    min: 1,
+    max: 31,
+    unit: 'days',
+    description:
+      'Length of the FitCircle Pro free trial: the Stripe web checkout trial (platform web) and every server-written trial promise (paywall headlines, food AI / Fitzy upgrade messages, promo cards, Pro lifecycle copy). MUST equal the App Store / Play intro offer for that platform: when the store offers change, change this (a platform rule) at the same moment.',
+  },
   integrity_enforce_android: {
     type: 'enum',
     default: 'block',

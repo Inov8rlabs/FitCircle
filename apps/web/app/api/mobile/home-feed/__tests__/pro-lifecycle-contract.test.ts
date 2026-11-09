@@ -159,7 +159,7 @@ describe('GET /api/mobile/home-feed — Pro lifecycle card', () => {
       title: 'Your free Pro week ends tomorrow',
       body: 'So far with Pro: 5 meals analyzed by AI. Keep the momentum going.',
       countdown: { endsAt: '2026-11-09T13:00:00', label: 'Pro ends in' },
-      primary: { label: 'Start 3-day free trial', action: { type: 'paywall', params: { placement: 'pro_expiring_card' } } },
+      primary: { label: 'Start 7-day free trial', action: { type: 'paywall', params: { placement: 'pro_expiring_card' } } },
     });
     expect(promoPropsSchema.safeParse(card.props).success).toBe(true);
     expect(violations(body.cards.filter((c: any) => c.type !== 'offline_banner'), { promoV1: true })).toEqual([]);
@@ -175,7 +175,7 @@ describe('GET /api/mobile/home-feed — Pro lifecycle card', () => {
     // The campaign card is still there, just lower (G8: one promo in the first 4).
     expect(visible(body).slice(0, 4).filter((id) => /^(promo:|campaign|referral|pro_upsell)/.test(id))).toEqual(['promo:pro_expired']);
     const card = body.cards.find((c: any) => c.id === 'promo:pro_expired');
-    expect(card.props).toMatchObject({ title: 'Your free Pro week ended', icon: 'crown', primary: { label: 'Get Pro: 3 days free', action: { params: { placement: 'pro_expired_card' } } } });
+    expect(card.props).toMatchObject({ title: 'Your free Pro week ended', icon: 'crown', primary: { label: 'Get Pro: 7 days free', action: { params: { placement: 'pro_expired_card' } } } });
     expect(card.props.countdown).toBeUndefined();
     expect(violations(body.cards.filter((c: any) => c.type !== 'offline_banner'), { promoV1: true })).toEqual([]);
   });

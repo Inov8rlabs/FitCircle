@@ -1,11 +1,10 @@
 /**
- * Trial-ends-tomorrow reminder timing (docs/ONBOARDING_V2_EXPERIMENT_SPEC.md
- * §3.2, §5.7). Pure.
+ * Trial-ending reminder timing (docs/ONBOARDING_V2_EXPERIMENT_SPEC.md §3.2, §5.7). Pure.
+ * Works for any trial length: it only looks at trial_ends_at (the store's expiry).
  *
- * Target: 10:00 in the user's timezone on the local day BEFORE the trial ends,
- * so "ends tomorrow" is literally true. Formally, the latest 10:00-local
- * instant that is at least 14 h before trial_ends_at (10:00 + 14 h = midnight,
- * so the trial always ends on the next local day; lead time 14–38 h).
+ * Target: 10:00 in the user's timezone, at least 24 h before trial_ends_at — formally the
+ * latest 10:00-local instant that is ≥ 24 h before the end, so the lead time is 24–48 h
+ * (the trial ends "tomorrow" or "on <weekday>"; the push names the day, endsPhrase).
  *
  *  - before the target                 → wait ('not_yet')
  *  - target passed (late trial start,
@@ -16,10 +15,13 @@
 import { addDays, localDayOf } from '../streaks/streak-calculator';
 
 export const REMINDER_LOCAL_HOUR = 10;
-export const REMINDER_MIN_LEAD_MS = 14 * 3_600_000;
+/** Store-trial reminder: at least 24 h before the end (lead 24–48 h). */
+export const REMINDER_MIN_LEAD_MS = 24 * 3_600_000;
+/** "The day before" rule (10:00 + 14 h = midnight): lead 14–38 h. Used by the Pro lifecycle push. */
+export const DAY_BEFORE_MIN_LEAD_MS = 14 * 3_600_000;
 export const REMINDER_LAST_CALL_MS = 1 * 3_600_000;
-/** How far ahead the cron looks for trials to remind (≥ the 38 h maximum lead). */
-export const REMINDER_LOOKAHEAD_MS = 40 * 3_600_000;
+/** How far ahead the cron looks for trials to remind (≥ the 48 h maximum lead, + DST slack). */
+export const REMINDER_LOOKAHEAD_MS = 50 * 3_600_000;
 
 /** Milliseconds `timezone` is ahead of UTC at `instant` (e.g. −4 h → −14 400 000). */
 export function tzOffsetMs(instant: Date, timezone: string): number {
@@ -48,9 +50,9 @@ export function localWallTimeToUtc(day: string, hour: number, timezone: string):
   return new Date(t);
 }
 
-/** Latest 10:00-local instant at least 14 h before the trial ends. */
-export function reminderSendAt(trialEndsAt: Date, timezone: string): Date {
-  const latest = new Date(trialEndsAt.getTime() - REMINDER_MIN_LEAD_MS);
+/** Latest 10:00-local instant at least `minLeadMs` (default 24 h) before the end. */
+export function reminderSendAt(trialEndsAt: Date, timezone: string, minLeadMs: number = REMINDER_MIN_LEAD_MS): Date {
+  const latest = new Date(trialEndsAt.getTime() - minLeadMs);
   let day = localDayOf(latest, timezone);
   let at = localWallTimeToUtc(day, REMINDER_LOCAL_HOUR, timezone);
   if (at.getTime() > latest.getTime()) {

@@ -31,10 +31,10 @@ describe('PricingCards (restyled iOS plan rows)', () => {
   });
   afterEach(() => vi.restoreAllMocks());
 
-  it('pre-selects annual and keeps the existing prices', () => {
+  it('pre-selects monthly and keeps the existing prices', () => {
     render(<PricingCards source="test" />);
-    expect(screen.getByTestId('plan-annual')).toHaveAttribute('aria-pressed', 'true');
-    expect(screen.getByTestId('plan-monthly')).toHaveAttribute('aria-pressed', 'false');
+    expect(screen.getByTestId('plan-monthly')).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByTestId('plan-annual')).toHaveAttribute('aria-pressed', 'false');
     expect(screen.getByTestId('plan-annual')).toHaveTextContent('$29.99');
     expect(screen.getByTestId('plan-monthly')).toHaveTextContent('$9.99');
   });
@@ -64,14 +64,25 @@ describe('/upgrade paywall layout', () => {
     global.fetch = vi.fn().mockResolvedValue({ ok: true, status: 200, json: async () => ({ trialDays: 0, eligible: false }) }) as unknown as typeof fetch;
   });
 
-  it('trial-first (TRIAL_FIRST_SPEC §7): "Try Pro free for 3 days" + Cancel anytime + Start free trial when checkout would carry the trial', async () => {
-    global.fetch = vi.fn().mockResolvedValue({ ok: true, status: 200, json: async () => ({ trialDays: 3, eligible: true }) }) as unknown as typeof fetch;
+  it('trial-first (TRIAL_FIRST_SPEC §7): "Try Pro free for 7 days" + Cancel anytime + the trial CTA (monthly pre-selected) when checkout would carry the trial', async () => {
+    global.fetch = vi.fn().mockResolvedValue({ ok: true, status: 200, json: async () => ({ trialDays: 7, eligible: true }) }) as unknown as typeof fetch;
+    const user = userEvent.setup();
     render(<UpgradePage />);
-    expect(await screen.findByText('Try Pro free for 3 days')).toBeInTheDocument();
+    expect(await screen.findByText('Try Pro free for 7 days')).toBeInTheDocument();
     expect(screen.getByTestId('paywall-cancel-anytime')).toHaveTextContent('Cancel anytime');
-    expect(screen.getByTestId('checkout-button')).toHaveTextContent('Start free trial');
-    expect(screen.getByTestId('trial-terms')).toHaveTextContent('Free for 3 days, then $29.99/yr');
+    expect(screen.getByTestId('plan-monthly')).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByTestId('checkout-button')).toHaveTextContent('Start free trial — $0 today, then $9.99/month after your 7-day trial. Cancel anytime.');
+    expect(screen.getByTestId('trial-terms')).toHaveTextContent("Cancel anytime before the trial ends and you won't be charged.");
+    await user.click(screen.getByTestId('plan-annual'));
+    expect(screen.getByTestId('checkout-button')).toHaveTextContent('Start free trial — $0 today, then $29.99/year after your 7-day trial. Cancel anytime.');
     expect(global.fetch).toHaveBeenCalledWith('/api/billing/trial', { cache: 'no-store' });
+  });
+
+  it('the trial length in the CTA is whatever the server says (single source of truth)', async () => {
+    global.fetch = vi.fn().mockResolvedValue({ ok: true, status: 200, json: async () => ({ trialDays: 14, eligible: true }) }) as unknown as typeof fetch;
+    render(<UpgradePage />);
+    expect(await screen.findByText('Try Pro free for 14 days')).toBeInTheDocument();
+    expect(screen.getByTestId('checkout-button')).toHaveTextContent('then $9.99/month after your 14-day trial');
   });
 
   it('no trial → classic headline and checkout CTA (never promises a trial checkout will not give)', async () => {

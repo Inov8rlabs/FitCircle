@@ -3,6 +3,8 @@
  * next to each entry so it can be re-checked when the product changes.
  * Plain text only: the same strings feed the page and the FAQPage JSON-LD.
  */
+import { PRO_PRICES_USD } from '@/lib/config/pricing';
+import { DEFAULT_TRIAL_DAYS } from '@/lib/config/trial';
 
 export interface FaqItem {
   q: string;
@@ -22,9 +24,9 @@ export const FAQ_GROUPS: FaqGroup[] = [
     items: [
       {
         // lib/config/tier-limits.ts + remote config defaults (free: 5 AI food analyses total, Fitzy chat Pro-only, 2 created circles, 14-day history);
-        // components/billing/PricingCards.tsx (prices); NEXT_PUBLIC_LIFETIME_OFFER gate (lifetime is launch-window only).
+        // lib/config/pricing.ts (prices); lib/config/trial.ts (trial length); NEXT_PUBLIC_LIFETIME_OFFER gate (lifetime is launch-window only).
         q: 'Is FitCircle free?',
-        a: 'Yes. The app is free on iPhone and Android, and the free plan is free for good. It includes 5 free AI meal analyses, unlimited manual and photo logging, daily streaks, up to 2 circles you create (join as many as you like), circle chat, challenges, and Fitzy’s daily focus. Chatting with Fitzy is part of Pro, which you can try free for 3 days. FitCircle Pro is optional: $9.99 a month or $29.99 a year, and a one-time lifetime option ($179.99) when it’s offered.',
+        a: `Yes. The app is free on iPhone and Android, and the free plan is free for good. It includes 5 free AI meal analyses, unlimited manual and photo logging, daily streaks, up to 2 circles you create (join as many as you like), circle chat, challenges, and Fitzy’s daily focus. Chatting with Fitzy is part of Pro, which you can try free for ${DEFAULT_TRIAL_DAYS} days. FitCircle Pro is optional: $${PRO_PRICES_USD.monthly} a month or $${PRO_PRICES_USD.annual} a year, and a one-time lifetime option ($${PRO_PRICES_USD.lifetime}) when it’s offered.`,
       },
       {
         // Same Supabase account and API across iOS, Android and web.

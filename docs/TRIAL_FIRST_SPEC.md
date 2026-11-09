@@ -14,9 +14,11 @@ Everything below is **additive**. No existing field changes type, no envelope ch
 | Manual, search, barcode and photo-attach logging | Unlimited | Unlimited |
 | Weekly plan, memory, history | Locked, with a teaser preview | Unlocked |
 
-The trial length is `PRO_TRIAL_DAYS = 3` (`lib/entitlements/trial-eligibility.ts`).
+The trial length is remote config key `trial_days` (code default 7, `lib/config/trial.ts`; resolved per request by `TrialConfig`, `lib/services/trial-config.ts`). Every server-written trial promise uses it: paywall `trialDays` / headline, food AI and Fitzy upgrade messages, promo cards, Pro lifecycle copy (`{{trial_days}}`), and the Stripe checkout `trial_period_days` (platform `web`). 2026-11-09: moved from 3 to 7 days.
 
-The stores set the real trial length (App Store and Play intro offers). On the web it is `STRIPE_TRIAL_DAYS`, which prod already sets.
+The stores set the real trial length (App Store and Play intro offers), so `trial_days` for a platform MUST equal that store's offer: when the store offers change, change `trial_days` (a platform rule in Admin Tools) at the same moment. On the web `STRIPE_TRIAL_DAYS > 0` only switches the trial on; its value is no longer the length. A store trial's end is never computed from `trial_days`: it is RevenueCat's `expiration_at_ms` → `profiles.trial_ends_at`.
+
+The examples below were written for the 3-day trial; the live copy says N days.
 
 ## 1. Fitzy chat requires Pro or a trial
 

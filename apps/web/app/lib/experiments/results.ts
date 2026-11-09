@@ -14,6 +14,8 @@
  * bootstrap resamples of the per-user mean. Arms with n = 0 are left out of
  * comparisons (their fields are null).
  */
+import { DEFAULT_TRIAL_DAYS } from '../config/trial';
+
 import { betaDraws, bootstrapMeans, compareDraws, mulberry32, quantileSorted, seedFrom } from './stats';
 
 const H = 3_600_000;
@@ -78,6 +80,11 @@ interface MeanMetricDef {
 
 const within = (t: number | null, from: number, to: number) => t !== null && t >= from && t < to;
 const anyWithin = (ts: readonly number[], from: number, to: number) => ts.some((t) => t >= from && t < to);
+/** Grace after a trial ends for the store's first charge (billing retries, webhook lag). */
+const TRIAL_SETTLE_MS = 4 * D;
+/** The store's trial end; only when unknown, start + the default trial length. Requires trialStartedAt. */
+export const trialEndOf = (u: Pick<UserFacts, 'trialStartedAt' | 'trialEndsAt'>): number => u.trialEndsAt ?? u.trialStartedAt! + DEFAULT_TRIAL_DAYS * D;
+
 /** Mature after `ms` since assignment → evaluate, else null. */
 const matureAfter = (ms: number, f: (u: UserFacts) => boolean) => (u: UserFacts, now: number) => (now >= u.assignedAt + ms ? f(u) : null);
 
@@ -108,14 +115,18 @@ export const RATE_METRICS: readonly RateMetricDef[] = [
   },
   {
     key: 'trial_to_paid',
-    label: 'Trial → paid (7 days after trial start)',
+    label: 'Trial → paid (trial end + 4 days)',
     kind: 'rate',
-    window: 'trial+7d',
+    window: 'trial+4d',
     higherIsBetter: true,
-    // Denominator: users whose trial started (any time after assignment) at least 7 days ago.
+    // Denominator: users whose trial started (any time after assignment) and ended at least 4 days
+    // ago (store billing retries). The end is the store's (trialEndsAt), so 3- and 7-day trials both
+    // work; for a 3-day trial this is the old "7 days after trial start" window.
     evaluate: (u, now) => {
-      if (u.trialStartedAt === null || u.trialStartedAt < u.assignedAt - H || now < u.trialStartedAt + 7 * D) return null;
-      return within(u.trialConvertedAt, u.trialStartedAt, u.trialStartedAt + 7 * D);
+      if (u.trialStartedAt === null || u.trialStartedAt < u.assignedAt - H) return null;
+      const settled = trialEndOf(u) + TRIAL_SETTLE_MS;
+      if (now < settled) return null;
+      return within(u.trialConvertedAt, u.trialStartedAt, settled);
     },
   },
   {
@@ -165,7 +176,7 @@ export const RATE_METRICS: readonly RateMetricDef[] = [
     guardrail: { type: 'absolute', tolerance: 0.03 },
     evaluate: (u, now) => {
       if (u.trialStartedAt === null || u.trialStartedAt < u.assignedAt - H) return null;
-      const end = u.trialEndsAt ?? u.trialStartedAt + 3 * D;
+      const end = trialEndOf(u);
       if (now < end) return null;
       return within(u.trialCancelledAt, u.trialStartedAt, end + 1);
     },

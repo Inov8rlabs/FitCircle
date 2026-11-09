@@ -273,12 +273,12 @@ export async function POST(request: NextRequest) {
       // Nothing was saved when the fallback is skipped, so the copy must not claim it was.
       const message = fallback.skipFallbackSave
         ? isUpgrade
-          ? foodAiUpgradeMessage(parseError.limit, parseError.trialEligible === true)
+          ? foodAiUpgradeMessage(parseError.limit, parseError.trialEligible === true, false, parseError.trialDays)
           : isRate
             ? "You've reached today's photo-estimate limit — you can add the details yourself."
             : "Couldn't auto-detect the food — you can add the details yourself."
         : isUpgrade
-          ? foodAiUpgradeMessage(parseError.limit, parseError.trialEligible === true, true)
+          ? foodAiUpgradeMessage(parseError.limit, parseError.trialEligible === true, true, parseError.trialDays)
           : isRate
             ? "You've reached today's photo-estimate limit — we saved your photo so you can add the details."
             : "Couldn't auto-detect the food — we saved your photo so you can add the details.";

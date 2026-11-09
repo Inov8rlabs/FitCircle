@@ -115,7 +115,7 @@ Then:
 STRIPE_SECRET_KEY / STRIPE_WEBHOOK_SECRET / NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY
 STRIPE_PRICE_PRO_MONTHLY / STRIPE_PRICE_PRO_ANNUAL / STRIPE_PRICE_PRO_LIFETIME
 STRIPE_COUPON_LAUNCH                    (optional, promo window only)
-STRIPE_TRIAL_DAYS                       (optional, free-trial promo only; unset = no trial)
+STRIPE_TRIAL_DAYS                       (on/off: any value > 0 = web free trial on; unset = no trial. Length = remote config trial_days)
 NEXT_PUBLIC_LAUNCH_PROMO_ANNUAL=39.99   (optional, promo display)
 NEXT_PUBLIC_LIFETIME_OFFER=true         (optional, lifetime window)
 REVENUECAT_WEBHOOK_AUTH_TOKEN           (must match RC webhook config header)

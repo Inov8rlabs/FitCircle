@@ -291,7 +291,7 @@ export class SubscriptionService {
 
     switch (event.type) {
       case 'INITIAL_PURCHASE': {
-        // period_type: TRIAL = free trial (3 days, ONBOARDING_V2 §3); INTRO = a
+        // period_type: TRIAL = free trial (length set by the store offer; the end is expiration_at_ms); INTRO = a
         // PAID introductory price (pay-up-front / discounted first period) —
         // recorded at its real price and treated as an active subscription,
         // never as a trial; NORMAL / PROMOTIONAL = full price.

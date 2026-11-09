@@ -42,8 +42,8 @@ describe('POST /api/mobile/food/estimate-item — food AI allowance (TRIAL_FIRST
     const body = await res.json();
     expect(body.error).toMatchObject({
       code: 'UPGRADE_REQUIRED',
-      message: "You've used your 5 free AI food analyses. Start your free 3-day trial to keep logging with AI.",
-      details: { feature: 'food_ai_unlimited', used: 5, limit: 5, paywall: { trigger: 'food_ai', trialDays: 3, trialEligible: true } },
+      message: "You've used your 5 free AI food analyses. Start your free 7-day trial to keep logging with AI.",
+      details: { feature: 'food_ai_unlimited', used: 5, limit: 5, paywall: { trigger: 'food_ai', trialDays: 7, trialEligible: true } },
     });
   });
 

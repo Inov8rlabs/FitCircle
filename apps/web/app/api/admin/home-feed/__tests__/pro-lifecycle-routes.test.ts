@@ -158,7 +158,7 @@ describe('state + preview', () => {
 
   it('preview of an invalid draft reports issues and renders the published side', async () => {
     const bad = structuredClone(DEFAULT_CONFIG) as any;
-    bad.states.pro_expiring.copy.cta = 'A button label that is far too long';
+    bad.states.pro_expiring.copy.cta = 'A button label that is far, far too long to ever fit';
     bad.states.pro_expired.copy.body = 'Hi {{nickname}}';
     const { body } = await json(await previewPost(req(`${BASE}/preview`, tools({ config: bad }))));
     expect(body.data.draft.valid).toBe(false);

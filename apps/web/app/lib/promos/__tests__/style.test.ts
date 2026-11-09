@@ -47,7 +47,7 @@ const props = (over: Partial<PromoProps> = {}): PromoProps => ({
   eyebrow: 'FitCircle Pro',
   title: 'Your free Pro week ends tomorrow',
   body: 'Keep it going.',
-  primary: { label: 'Start 3-day free trial', action: { type: 'paywall', params: { placement: 'pro_expiring_card' } } },
+  primary: { label: 'Start 7-day free trial', action: { type: 'paywall', params: { placement: 'pro_expiring_card' } } },
   dismissible: true,
   ...over,
 });

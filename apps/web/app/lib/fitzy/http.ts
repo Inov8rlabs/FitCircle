@@ -27,7 +27,7 @@ export function describeFitzyError(error: unknown, label = 'fitzy'): FitzyErrorB
       status: 429,
       code: 'UPGRADE_REQUIRED',
       message: fitzyUpgradeMessage(error.limit, error.trialEligible === true),
-      paywall: paywallFor('fitzy_quota', { trialEligible: error.trialEligible === true }),
+      paywall: paywallFor('fitzy_quota', { trialEligible: error.trialEligible === true, trialDays: error.trialDays }),
       details: { feature: error.feature, used: error.used, limit: error.limit },
     };
   }

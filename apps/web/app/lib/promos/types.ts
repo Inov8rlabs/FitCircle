@@ -168,6 +168,8 @@ export interface JourneyContext {
   fitzyRecommendationsReady?: boolean | null;
   /** Server's best guess that the user can still start the free trial (trial-eligibility.ts). */
   trialEligible?: boolean;
+  /** Free-trial length for trial copy (remote config `trial_days` for this request); undefined → code default. */
+  trialDays?: number;
   /** A REAL free weekly-plan preview exists (plan-warmup.ts). null/undefined = not read → the teaser doesn't match. */
   fitzyPlanReady?: boolean | null;
 }
