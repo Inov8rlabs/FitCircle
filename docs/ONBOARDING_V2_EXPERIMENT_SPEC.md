@@ -59,9 +59,9 @@ The v2 tour fixes both. It puts the "aha" (photo → nutrition in seconds) insid
 
 ## 2. Goals, metrics and decision rule
 
-**Primary metric:** **paid conversion per assigned user by day 10 (D10)**.
+**Primary metric:** **paid conversion per assigned user by day 14 (D14)** (was D10 until 2026-11-09, when the trial moved toward 7 days).
 - "Paid conversion" means a trial converted to paid (first `RENEWAL` after a trial), or a direct purchase, within 10 days of assignment.
-- D10 = 3-day trial + store billing retries + reporting lag.
+- D14 = a trial of up to 7 days started in the first days + store billing retries + reporting lag.
 
 **Secondary metrics:**
 - Trial start rate per assigned user, measured at day 1. This is the leading indicator.

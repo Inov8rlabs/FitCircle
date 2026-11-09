@@ -302,7 +302,7 @@ describe('results', () => {
     expect(r.excluded).toEqual({ unexposed: 1, overrides: 1, fallback: 1, winner: 0, layer: 0, layerConflict: 0 });
     expect(r.layer).toBeNull();
     expect(r.population.exposed).toEqual({ control: 10, variantA: 10, variantB: 10 });
-    const paid = r.metrics.find((m: any) => m.key === 'paid_conversion_d10');
+    const paid = r.metrics.find((m: any) => m.key === 'paid_conversion_d14');
     expect(paid.primary).toBe(true);
     expect(paid.arms.variantA).toMatchObject({ n: 10, x: 3 });
     expect(paid.arms.control).toMatchObject({ n: 10, x: 0 });

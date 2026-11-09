@@ -130,14 +130,15 @@ export const RATE_METRICS: readonly RateMetricDef[] = [
     },
   },
   {
-    key: 'paid_conversion_d10',
-    label: 'Paid conversion (D10)',
+    key: 'paid_conversion_d14',
+    label: 'Paid conversion (D14)',
     kind: 'rate',
-    window: 'D10',
+    window: 'D14',
     higherIsBetter: true,
     primary: true,
-    evaluate: matureAfter(10 * D, (u) =>
-      within(u.trialConvertedAt, u.assignedAt - H, u.assignedAt + 10 * D) || within(u.directPurchaseAt, u.assignedAt - H, u.assignedAt + 10 * D)
+    // D14 = up to a 7-day trial started in the first days + store billing retries + reporting lag.
+    evaluate: matureAfter(14 * D, (u) =>
+      within(u.trialConvertedAt, u.assignedAt - H, u.assignedAt + 14 * D) || within(u.directPurchaseAt, u.assignedAt - H, u.assignedAt + 14 * D)
     ),
   },
   {

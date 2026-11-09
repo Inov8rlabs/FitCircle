@@ -108,21 +108,21 @@ describe('computeResults', () => {
     const fresh = NOW - 5 * D;
     const users = [user('control', { assignedAt: fresh }), user('control'), user('variantA', { assignedAt: fresh })];
     const r = computeResults(users, arms, 'control', NOW, 's');
-    expect(metric(r, 'paid_conversion_d10').arms.control.n).toBe(1);
-    expect(metric(r, 'paid_conversion_d10').arms.variantA.n).toBe(0);
+    expect(metric(r, 'paid_conversion_d14').arms.control.n).toBe(1);
+    expect(metric(r, 'paid_conversion_d14').arms.variantA.n).toBe(0);
     expect(metric(r, 'trial_started_d1').arms.control.n).toBe(2);
     // An arm with no mature users has nulls, not a uniform-prior guess.
-    expect(metric(r, 'paid_conversion_d10').arms.variantA).toMatchObject({ value: null, pBest: null, ci90: null });
+    expect(metric(r, 'paid_conversion_d14').arms.variantA).toMatchObject({ value: null, pBest: null, ci90: null });
   });
 
-  it('paid conversion D10 = trial converted or direct purchase within 10 days', () => {
+  it('paid conversion D14 = trial converted or direct purchase within 14 days', () => {
     const users = [
       user('control', { trialStartedAt: T0, trialConvertedAt: T0 + 3 * D }),
       user('control', { directPurchaseAt: T0 + 9 * D }),
-      user('control', { directPurchaseAt: T0 + 11 * D }),
+      user('control', { directPurchaseAt: T0 + 15 * D }),
       user('control'),
     ];
-    expect(metric(computeResults(users, arms, 'control', NOW, 's'), 'paid_conversion_d10').arms.control).toMatchObject({ n: 4, x: 2 });
+    expect(metric(computeResults(users, arms, 'control', NOW, 's'), 'paid_conversion_d14').arms.control).toMatchObject({ n: 4, x: 2 });
   });
 
   it('trial → paid uses trial starters only; trial cancellation and retention windows', () => {
@@ -187,7 +187,7 @@ describe('computeResults', () => {
         'paywall_viewed',
         'trial_started_d1',
         'trial_to_paid',
-        'paid_conversion_d10',
+        'paid_conversion_d14',
         'revenue_per_user_d30',
         'retention_d1',
         'retention_d7',
