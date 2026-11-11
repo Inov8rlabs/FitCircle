@@ -54,3 +54,25 @@ export const VIRALITY_DEFINITIONS: Record<string, string> = {
   blendedCac: 'Spend ÷ (paid-channel users + friends those users brought in, 7-day window). — without spend.',
   circles: 'Circle state in the first 7 days: social, alone in a private circle, only in a public circle, or no circle.',
 };
+
+/**
+ * Keyword funnel tooltips (keywords.definitions). Keys are FunnelMetrics fields.
+ * Full definitions: docs/ADS_METRICS_METHODOLOGY.md §10 — keep the two in sync.
+ */
+export const FUNNEL_DEFINITIONS: Record<string, string> = {
+  spend: 'Network-reported spend for days in the range on this keyword / ad group (Apple: localSpend). The unattributed row is campaign spend not reported on any keyword / ad group (e.g. Search Match), so rows add up to the campaign total.',
+  taps: 'Network-reported taps (Apple) / clicks (Google Ads) for days in the range.',
+  installs: 'Network-reported installs for days in the range (Apple: tap- + view-through, new downloads + redownloads).',
+  signUps: 'Sign-ups (profiles.created_at, report time zone) in the range whose install attribution names this keyword / ad group; test/internal accounts excluded. Same users as the overview.',
+  paywall: 'Of those sign-ups, how many reached the onboarding paywall (profiles.onboarding_paywall_at set). Clients older than the trial-first onboarding do not record it.',
+  trials: 'Sign-ups whose PRODUCTION INITIAL_PURCHASE was a free trial (period_type TRIAL), to date.',
+  payers: 'Sign-ups with ≥ 1 paid PRODUCTION charge (purchase, renewal incl. trial conversion, lifetime) not cancelled out by a refund, to date.',
+  revenue: 'Net revenue to date of those sign-ups: price × (1 − tax − store commission), refunds subtracted.',
+  costPerSignUp: 'Spend ÷ attributed sign-ups. — when there are none.',
+  costPerTrial: 'Spend ÷ attributed trials. — when there are none.',
+  costPerPayer: 'Spend ÷ attributed payers (CAC). — when there are none.',
+  signUpToTrial: 'Trials ÷ sign-ups.',
+  signUpToPaywall: 'Reached paywall ÷ sign-ups.',
+  lowSample: `Fewer than 10 attributed sign-ups: one more trial would swing every ratio, so the row is marked “too few to judge”.`,
+  unattributed: 'Apple: delivery with no keyword (Search Match) plus sign-ups whose attribution has no keyword id (Search Match taps, users who declined ad attribution). Google Ads: sign-ups without an ad group id (GA4-matched users, campaign-only attribution).',
+};

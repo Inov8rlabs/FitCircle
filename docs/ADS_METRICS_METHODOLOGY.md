@@ -280,3 +280,28 @@ expire after 7 days; the sync then fails with `invalid_grant`).
 - **GA4 / BigQuery `ad_impression`** (Firebase logs it with `value` when the AdMob app is linked to Firebase) would need
   no new auth (the `google-ads-reporting` service account already reads the export), but the export only starts on
   2026-11-01, carries no ad requests / match rate, and depends on the AdMob ↔ Firebase app link. A fallback, not the source.
+
+## 10. Keyword funnel (`GET /api/admin/ads/keywords`, admin app → Ads → Keywords)
+
+Per keyword (Apple Ads) or ad group (Apple Ads, Google Ads): spend → taps → installs → sign-ups →
+reached paywall → trials → payers → net revenue, plus cost per sign-up / trial / payer. Built with the
+overview's own slicing (`report.ts buildRows` / `buildTotals` with a channel filter), so every number
+uses §2–§5 unchanged; `lib/ads/keyword-funnel.ts` only adds:
+
+- **Reached paywall** — sign-ups with `profiles.onboarding_paywall_at` set (first onboarding paywall view,
+  any time so far). Clients older than the trial-first onboarding never record it, so it is a lower bound.
+- **Unattributed row** — delivery the network reports on no keyword / ad group (Apple Search Match:
+  campaign spend − keyword spend, clamped at 0) plus the channel's sign-ups whose attribution has no
+  keyword / ad group id (Search Match taps, no-consent installs, Google campaign-only / GA4-matched users).
+  Rows therefore add up to the channel's campaign-level total, which equals the overview by campaign;
+  `reconciliation` checks every field and shows any gap.
+- **Known gap** — Google Ads ad-group rows can't select the app-install column, so ad-group installs are
+  conversions and do not add up to the campaign's app installs (reported with a note, not hidden).
+- **Unknown ids** — attribution ids that match no synced keyword / ad group and have no delivery (e.g.
+  Google install-referrer ad group ids that are not the account's ad groups) stay as `#id` rows with
+  `unknownEntity: true`; their sign-ups cannot be paired with spend.
+- **Too few to judge** — rows with < 10 attributed sign-ups (`lowSample`). Flags: `no_signups` (≥ $1 spend,
+  no attributed sign-up), `no_trials` (sign-ups, no trial). Read a flag together with `lowSample`.
+
+Keyword-level delivery comes from the Apple keyword report (`ad_metrics_daily` level `keyword`, already
+synced); Google Ads attribution carries no keyword, so Google is ad group only.

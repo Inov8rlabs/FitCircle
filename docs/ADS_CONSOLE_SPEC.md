@@ -114,6 +114,7 @@ Targets shown as reference lines (configurable in `ads_settings` later; v1 const
 - `GET /api/admin/ads/changes?limit` → audit log.
 - `POST /api/admin/ads/sync` → trigger a sync now (debounced: no-op if one finished < 2 min ago).
 - `GET /api/admin/ads/virality?start&end&groupBy&includeTest` → `AdsVirality`: invites, friends brought in, K-factor, socially activated and blended CAC of the sign-up cohort, by the overview's breakdowns, plus per-day cohorts with `maturing` flags and `coverage` (what the DB can and cannot see). Read-only. Definitions: ADS_METRICS_METHODOLOGY.md §8.
+- `GET /api/admin/ads/keywords?start&end&channel&level&includeTest` → `AdsKeywordFunnel`: spend → taps → installs → sign-ups → paywall → trials → payers → net revenue per keyword (Apple Ads) or ad group (Apple Ads, Google Ads), with an explicit unattributed row and a `reconciliation` against the channel's campaign totals. `channel` defaults to `apple_ads`; `level` defaults to the channel's first supported level (`keyword` for Apple, `ad_group` for Google; `keyword` on Google → 400). Read-only. Definitions: ADS_METRICS_METHODOLOGY.md §10.
 
 ## 8. Bid and budget control — guardrails
 

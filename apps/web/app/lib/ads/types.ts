@@ -686,3 +686,97 @@ export interface AdsVirality {
   coverage: ViralityCoverage;
   definitions: Record<string, string>;
 }
+
+// ---------------------------------------------------------------------------
+// Keyword funnel (GET /api/admin/ads/keywords, docs/ADS_METRICS_METHODOLOGY.md §10)
+// ---------------------------------------------------------------------------
+
+/** Levels the keyword funnel can be broken down by. */
+export type FunnelLevel = 'keyword' | 'ad_group';
+export const FUNNEL_LEVELS: FunnelLevel[] = ['keyword', 'ad_group'];
+
+/** Spend → money for one keyword / ad group (or the channel total). Ratios are null without a denominator. */
+export interface FunnelMetrics {
+  spend: number;
+  currency: string;
+  mixedCurrency: boolean;
+  impressions: number;
+  taps: number;
+  installs: number;
+  /** Attributed sign-ups (= AdsMetrics.users). */
+  signUps: number;
+  /** Of those, users with profiles.onboarding_paywall_at set. */
+  paywall: number;
+  trials: number;
+  payers: number;
+  /** Net revenue to date (= AdsMetrics.revenueToDate). */
+  revenue: number;
+  cpt: number | null;
+  cpi: number | null;
+  costPerSignUp: number | null;
+  costPerTrial: number | null;
+  costPerPayer: number | null;
+  signUpToPaywall: number | null;
+  signUpToTrial: number | null;
+  roas: number | null;
+  /** Fewer sign-ups than the low-sample threshold: too few to judge. */
+  lowSample: boolean;
+  /**
+   * What stands out: 'no_signups' = spend but no attributed sign-up;
+   * 'no_trials' = sign-ups but no trial; null otherwise. Read with lowSample.
+   */
+  flag: 'no_signups' | 'no_trials' | null;
+}
+
+export interface FunnelRow {
+  key: string;
+  label: string;
+  sublabel: string | null;
+  level: FunnelLevel | null;
+  externalId: string | null;
+  campaignExternalId: string | null;
+  /** Keyword rows: their ad group. */
+  adGroupExternalId: string | null;
+  /** The channel's "(none)" row: delivery and users not tied to one keyword / ad group. */
+  unattributed: boolean;
+  /**
+   * The attribution names an id that is not a synced keyword / ad group and has no
+   * delivery (e.g. Google install-referrer ad group ids that are not the account's
+   * ad groups): sign-ups shown honestly, but there is no spend to pair them with.
+   */
+  unknownEntity: boolean;
+  matchType: string | null;
+  status: string | null;
+  bidAmount: number | null;
+  bidCurrency: string | null;
+  metrics: FunnelMetrics;
+}
+
+export interface FunnelReconciliation {
+  /** Rows summed vs the channel's campaign-level total (same numbers as the overview by campaign). */
+  field: 'spend' | 'taps' | 'installs' | 'signUps' | 'paywall' | 'trials' | 'payers' | 'revenue';
+  rows: number;
+  campaign: number;
+  ok: boolean;
+  /** Why a mismatch is expected (known network limitation), else null. */
+  note: string | null;
+}
+
+export interface AdsKeywordFunnel {
+  range: { start: string; end: string; timeZone: string };
+  channel: AdChannel;
+  level: FunnelLevel;
+  /** Levels this channel can be broken down by (Google Ads: ad group only; no keyword attribution). */
+  levels: FunnelLevel[];
+  rows: FunnelRow[];
+  /** The channel's campaign-level total (= overview by campaign, summed over this channel). */
+  totals: FunnelRow;
+  reconciliation: FunnelReconciliation[];
+  /** Sign-ups on rows whose attribution id matches no synced keyword / ad group (FunnelRow.unknownEntity). */
+  unknownEntitySignUps: number;
+  /** Sign-ups below which a row is "too few to judge". */
+  minSignUps: number;
+  lastSync: ChannelSyncStatus | null;
+  excludedUsers: ExcludedUsers;
+  definitions: Record<string, string>;
+}
