@@ -40,6 +40,8 @@ const PENDING_RELATIONS: string[] = [
   'ai_usage_events',
   'ai_cost_daily',
   'ai_gateway_credits',
+  // 135_ga4_conversion_sends.sql (docs/GA4_SERVER_CONVERSIONS.md) — written, not applied yet.
+  'ga4_conversion_sends',
 ];
 
 const APP_DIR = join(__dirname, '..', '..', 'app');

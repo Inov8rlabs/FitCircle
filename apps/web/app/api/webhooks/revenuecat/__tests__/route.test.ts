@@ -9,6 +9,7 @@ vi.mock('@/lib/supabase-admin', async () => {
 });
 
 import { AdsAttributionService } from '@/lib/ads/services/attribution-service';
+import { Ga4ConversionService } from '@/lib/ads/services/ga4-conversion-service';
 
 import { POST } from '../route';
 
@@ -123,5 +124,30 @@ describe('POST /api/webhooks/revenuecat — processing', () => {
     await POST(makeRequest(rcBody({ id: 'evt_route_noattr' }), SECRET));
     expect(fallback).not.toHaveBeenCalled();
     fallback.mockRestore();
+  });
+
+  it('GA4 server conversion: off by default, never called', async () => {
+    const send = vi.spyOn(Ga4ConversionService, 'sendForEventId');
+    await POST(makeRequest(rcBody({ id: 'evt_route_ga4_off' }), SECRET));
+    await new Promise((r) => setTimeout(r, 0));
+    expect(send).not.toHaveBeenCalled();
+    send.mockRestore();
+  });
+
+  it('GA4 server conversion: when enabled, runs after the response once per first delivery and can never break the webhook', async () => {
+    vi.stubEnv('GA4_SERVER_CONVERSIONS_ENABLED', 'true');
+    vi.stubEnv('GA4_MP_FIREBASE_APP_ID', '1:1:android:abc');
+    vi.stubEnv('GA4_MP_API_SECRET', 'not-a-real-secret');
+    const send = vi.spyOn(Ga4ConversionService, 'sendForEventId').mockRejectedValue(new Error('ga4 down'));
+    const res = await POST(makeRequest(rcBody({ id: 'evt_route_ga4' }), SECRET));
+    expect(res.status).toBe(200);
+    expect((await res.json()).outcome).toBe('applied');
+    const dup = await POST(makeRequest(rcBody({ id: 'evt_route_ga4' }), SECRET));
+    expect((await dup.json()).outcome).toBe('already_processed');
+    await POST(makeRequest(rcBody({ id: 'evt_route_ga4_sbx', environment: 'SANDBOX' }), SECRET));
+    await new Promise((r) => setTimeout(r, 0));
+    expect(send).toHaveBeenCalledTimes(1);
+    expect(send).toHaveBeenCalledWith('evt_route_ga4');
+    send.mockRestore();
   });
 });

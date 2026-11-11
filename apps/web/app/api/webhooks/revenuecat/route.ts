@@ -3,6 +3,7 @@ import { createHash, timingSafeEqual } from 'node:crypto';
 import { type NextRequest, NextResponse } from 'next/server';
 
 import { AdsAttributionService } from '@/lib/ads/services/attribution-service';
+import { Ga4ConversionService } from '@/lib/ads/services/ga4-conversion-service';
 import {
   SubscriptionService,
   type RevenueCatEvent,
@@ -70,6 +71,12 @@ export async function POST(request: NextRequest) {
     if (outcome === 'applied' && event.subscriber_attributes?.$mediaSource) {
       const rcEvent = event;
       runAfterResponse(() => AdsAttributionService.fromRevenueCat(rcEvent), 'ads-attribution-fallback');
+    }
+    // Server-side GA4 conversion (docs/GA4_SERVER_CONVERSIONS.md): first delivery of a
+    // PRODUCTION event only, after the response; off unless configured, never throws.
+    if (outcome !== 'already_processed' && event.environment === 'PRODUCTION' && Ga4ConversionService.enabled()) {
+      const eventId = event.id;
+      runAfterResponse(() => Ga4ConversionService.sendForEventId(eventId), 'ga4-conversion');
     }
     return NextResponse.json({ received: true, outcome });
   } catch (error: any) {
