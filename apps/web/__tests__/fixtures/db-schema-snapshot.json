@@ -986,6 +986,22 @@
     },
     {
       "columns": [
+        "subscription_event_id"
+      ],
+      "name": "ga4_conversion_sends_subscription_event_id_fkey",
+      "ref": "subscription_events",
+      "table": "ga4_conversion_sends"
+    },
+    {
+      "columns": [
+        "user_id"
+      ],
+      "name": "ga4_conversion_sends_user_id_fkey",
+      "ref": "profiles",
+      "table": "ga4_conversion_sends"
+    },
+    {
+      "columns": [
         "daily_goal_id"
       ],
       "name": "goal_completion_history_daily_goal_id_fkey",
@@ -2886,6 +2902,22 @@
       "data_type",
       "category",
       "sodium_per_100g"
+    ],
+    "ga4_conversion_sends": [
+      "subscription_event_id",
+      "user_id",
+      "event_name",
+      "event_at",
+      "status",
+      "skip_reason",
+      "attempts",
+      "value",
+      "currency",
+      "http_status",
+      "error",
+      "created_at",
+      "updated_at",
+      "sent_at"
     ],
     "goal_completion_history": [
       "id",
