@@ -3,6 +3,7 @@ import { after } from 'next/server';
 
 import { logIgnoredQueryError } from '@/lib/api/route-errors';
 
+import { type AiUsageContext } from '../ai/usage';
 import {
   chatMaxOutputTokens,
   chatMaxWords,
@@ -310,6 +311,7 @@ export class FitzyService implements IFitzyService {
         messages: prepared.turns,
         maxOutputTokens: prepared.maxOutputTokens,
         thinking: prepared.thinking,
+        usage: { userId, feature: 'fitzy_chat' },
       });
       raw = res.text;
       model = res.model;
@@ -327,7 +329,7 @@ export class FitzyService implements IFitzyService {
     // Nothing usable from either model: a deterministic answer, never an empty bubble.
     const answer = tripped ? SAFE_FALLBACK : modelAnswer || fallbackAnswerFor(prepared);
     let metaRaw = modelAnswer ? split.metaRaw : null;
-    if (modelAnswer && !tripped && !parseMeta(metaRaw).ok) metaRaw = (await recoverMeta(prepared, modelAnswer)) ?? metaRaw;
+    if (modelAnswer && !tripped && !parseMeta(metaRaw).ok) metaRaw = (await recoverMeta(prepared, modelAnswer, undefined, { userId, feature: 'fitzy_meta_recovery' })) ?? metaRaw;
     const result = await this.finishTurn(prepared, { answer, metaRaw, tripped, model: modelAnswer ? model : null, ...usage });
     return {
       answer: result.answer,
@@ -382,12 +384,15 @@ export class FitzyService implements IFitzyService {
    *  5. A reply (or kept partial) with no parseable META gets one META-only call (recoverMeta).
    */
   static async runModelStream(
-    p: Pick<PreparedTurn, 'system' | 'turns' | 'maxOutputTokens' | 'thinking' | 'context' | 'userMessage'>,
+    p: Pick<PreparedTurn, 'system' | 'turns' | 'maxOutputTokens' | 'thinking' | 'context' | 'userMessage'> & Partial<Pick<PreparedTurn, 'userId'>>,
     send: (events: GuardEvent[]) => void,
     abortSignal?: AbortSignal,
     onAttempt?: (a: StreamAttempt) => void
   ): Promise<StreamTurnOutcome> {
     const maxWords = chatMaxWords(p.context ?? null);
+    // Ledger/gateway attribution; the live eval passes no userId → feature 'eval', system:fitzy-eval.
+    const usageCtx = (feature: 'fitzy_chat' | 'fitzy_meta_recovery'): AiUsageContext =>
+      p.userId ? { userId: p.userId, feature } : { userId: null, feature: 'eval', job: 'fitzy-eval' };
     // Onboarding answers are system UI: emoji-free even if the model adds one (normal chat may use them).
     const fresh = () => new StreamGuard(this.guard, SAFE_FALLBACK, maxWords, p.context === 'onboarding');
     let guard = fresh();
@@ -405,6 +410,7 @@ export class FitzyService implements IFitzyService {
           abortSignal,
           maxOutputTokens: p.maxOutputTokens,
           thinking: p.thinking,
+          usage: usageCtx('fitzy_chat'),
         });
         for await (const chunk of stream.textStream) {
           send(guard.push(chunk));
@@ -438,7 +444,7 @@ export class FitzyService implements IFitzyService {
     // The text is on screen; a missing / broken META block only costs the chips. Ask once for them.
     let metaRecovered = false;
     if (!tripped && !parseMeta(metaRaw).ok) {
-      const recovered = await recoverMeta(p, answer, abortSignal);
+      const recovered = await recoverMeta(p, answer, abortSignal, usageCtx('fitzy_meta_recovery'));
       if (recovered) {
         metaRaw = recovered;
         metaRecovered = true;

@@ -36,6 +36,10 @@ const PENDING_RELATIONS: string[] = [
   'security_alert_state',
   // 133_app_opens.sql (retention fix 4: server-side app opens) — written, not applied yet.
   'app_opens',
+  // 134_ai_costs.sql (FitCircle Finance: AI costs + P&L) — written, not applied yet.
+  'ai_usage_events',
+  'ai_cost_daily',
+  'ai_gateway_credits',
 ];
 
 const APP_DIR = join(__dirname, '..', '..', 'app');

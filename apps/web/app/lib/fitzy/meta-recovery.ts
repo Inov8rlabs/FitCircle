@@ -8,6 +8,8 @@
  */
 import { generateText, type ModelMessage } from 'ai';
 
+import { type AiUsageContext, trackAiCall } from '../ai/usage';
+
 import { META_MARKER, parseMeta, splitMeta } from './meta';
 import { callOptions, chatModel, withDeadline } from './models';
 
@@ -23,7 +25,8 @@ export const META_ONLY_REQUEST = '(app) META line for the reply above, please.';
 export async function recoverMeta(
   p: { system: ModelMessage[]; turns: Array<{ role: 'user' | 'assistant'; content: string }> },
   answer: string,
-  abortSignal?: AbortSignal
+  abortSignal?: AbortSignal,
+  usage?: AiUsageContext
 ): Promise<string | null> {
   const started = Date.now();
   // Two tries inside one META_RECOVERY_MS budget: an unparseable or failed first try gets one more.
@@ -31,15 +34,19 @@ export async function recoverMeta(
     const left = META_RECOVERY_MS - (Date.now() - started);
     if (left < 1_000) break;
     try {
+      const model = chatModel();
       const res = await withDeadline(left, abortSignal, (signal) =>
-        generateText(
-          callOptions(chatModel(), {
-            system: [...p.system, { role: 'system', content: META_RECOVERY_SYSTEM }],
-            messages: [...p.turns, { role: 'assistant', content: answer }, { role: 'user', content: META_ONLY_REQUEST }],
-            maxOutputTokens: 300,
-            thinking: false,
-            abortSignal: signal,
-          }) as Parameters<typeof generateText>[0]
+        trackAiCall(usage, model, () =>
+          generateText(
+            callOptions(model, {
+              system: [...p.system, { role: 'system', content: META_RECOVERY_SYSTEM }],
+              messages: [...p.turns, { role: 'assistant', content: answer }, { role: 'user', content: META_ONLY_REQUEST }],
+              maxOutputTokens: 300,
+              thinking: false,
+              abortSignal: signal,
+              usage,
+            }) as Parameters<typeof generateText>[0]
+          )
         )
       );
       const text = (res.text ?? '').trim();

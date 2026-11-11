@@ -397,7 +397,7 @@ export class FitzyPushService {
     if (!aiEligible) return template;
     try {
       const grounding = await FitzyService.grounding(userId, tier, { timezone: tz });
-      const res = await generateWithFallback({ ...nudgeRequest(grounding, proteinIdeas(prefs.diet, prefs.allergens, 3, seed)), abortSignal: AbortSignal.timeout(AI_TIMEOUT_MS) });
+      const res = await generateWithFallback({ ...nudgeRequest(grounding, proteinIdeas(prefs.diet, prefs.allergens, 3, seed)), abortSignal: AbortSignal.timeout(AI_TIMEOUT_MS), usage: { userId, feature: 'fitzy_push' } });
       return parseNudge(res.text, FitzyService.guard, prefs.allergens) ?? template;
     } catch (err: any) {
       console.error('[FitzyPush] protein nudge generation failed, template:', err?.message ?? err);

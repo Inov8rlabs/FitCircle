@@ -5,6 +5,7 @@
  */
 import { generateText } from 'ai';
 
+import { gatewayCallOptions } from '../../app/lib/ai/gateway-options';
 import { growthNudgeAllowed } from '../../app/lib/fitzy/meta';
 import { SYSTEM_PROMPT } from '../../app/lib/services/fitzy-service';
 
@@ -62,7 +63,7 @@ export async function judgeReply(k: ChatCase, f: Fixtures, r: ChatResult, model 
   for (let attempt = 0; attempt < 3; attempt++) {
     try {
       // Opus 5.5: thinking can't be disabled (adaptive by default) — leave room for it.
-      const res = await generateText({ model, system: RUBRIC, prompt: user, maxOutputTokens: 4000, timeout: 120_000 } as Parameters<typeof generateText>[0]);
+      const res = await generateText({ model, system: RUBRIC, prompt: user, maxOutputTokens: 4000, timeout: 120_000, ...gatewayCallOptions(undefined, { ...process.env, AI_GATEWAY_ZDR: 'false' }, { userId: null, feature: 'eval', job: 'fitzy-eval-judge' }) /* tags only; judge never sent ZDR */ } as Parameters<typeof generateText>[0]);
       cost += telemetry(res.finishReason, res.usage, res.providerMetadata).costUsd ?? 0;
       const s = (res.text ?? '').replace(/```(?:json)?/g, '');
       const g = JSON.parse(s.slice(s.indexOf('{'), s.lastIndexOf('}') + 1));

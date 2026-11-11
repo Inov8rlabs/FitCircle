@@ -52,6 +52,8 @@ export interface CampaignReport {
   status: string;
   live: boolean;
   startDate: string | null;
+  /** Current daily budget from the network (USD), null when unknown. */
+  dailyBudget: number | null;
   windows: Record<WindowKey, DeliveryStats>;
 }
 
@@ -121,6 +123,42 @@ export interface AdsEmailReport {
   consoleUrl: string;
   /** AdMob estimated earnings per window; null when AdMob is not connected and has no rows. */
   adRevenue: AdRevenueEmail | null;
+  /** Subscription + ad revenue against paid spend per window; null when subscription revenue was not loaded. */
+  revenue: Record<WindowKey, RevenueVsSpend> | null;
+  /** Recurring run-rate as of now (lib/finance/recurring.ts, same as the P&L); null when not loaded. */
+  recurring: RecurringEmail | null;
+}
+
+/** Run-rate (not cash): normalized MRR / ARR from active paid subscriptions. */
+export interface RecurringEmail {
+  mrr: { gross: number; net: number };
+  arr: { gross: number; net: number };
+  annualCommitted: { gross: number; net: number };
+  activePaidSubs: { monthly: number; annual_upfront: number; annual_installments: number; other: number; total: number };
+  trialsActive: number;
+}
+
+/** Subscription day totals (USD, report time zone): net = after store commission and tax. */
+export interface SubscriptionDayTotals {
+  net: number;
+  gross: number;
+  charges: number;
+}
+
+export interface RevenueVsSpend {
+  /** What we keep after store commission and tax, refunds subtracted (all real users, not only ad users). */
+  subscriptionNet: number;
+  /** What subscribers paid. */
+  subscriptionGross: number;
+  /** Paid charges (purchases + renewals). */
+  subscriptionCharges: number;
+  /** AdMob estimated earnings; null when AdMob is not connected. */
+  adRevenue: number | null;
+  /** subscriptionNet + adRevenue. */
+  totalNet: number;
+  spend: number;
+  /** totalNet ÷ spend. */
+  returnOnSpend: number | null;
 }
 
 export interface AdRevenueEmail {
@@ -142,6 +180,9 @@ export interface BuildReportInput {
   launchDate: string;
   /** ad_revenue_daily rows launch … today (Pacific days); omit/null when AdMob is not connected. */
   adRevenue?: { rows: AdRevenueRow[]; lastSuccessAt: string | null } | null;
+  /** Subscription revenue per report-time-zone day (PRODUCTION, real users) launch … today; omit when not loaded. */
+  subscriptionByDay?: Map<string, SubscriptionDayTotals> | null;
+  recurring?: RecurringEmail | null;
 }
 
 export const STALE_SYNC_MS = 3 * 3600_000;
@@ -257,6 +298,7 @@ export function buildAdsEmailReport(input: BuildReportInput): AdsEmailReport {
       status: entity ? [entity.status, entity.serving_status].filter(Boolean).join(' / ') || 'unknown' : 'not in entities',
       live: entity ? isLive(entity, now) : false,
       startDate: entity?.start_at ? ymdInTz(entity.start_at, timeZone) : null,
+      dailyBudget: entity && entity.daily_budget !== null && entity.daily_budget !== '' && Number.isFinite(Number(entity.daily_budget)) ? Number(entity.daily_budget) : null,
       windows: { today: statsFor(byKey.today), yesterday: statsFor(byKey.yesterday), launch: statsFor(byKey.launch) },
     };
   });
@@ -306,7 +348,36 @@ export function buildAdsEmailReport(input: BuildReportInput): AdsEmailReport {
           lastSuccessAt: input.adRevenue.lastSuccessAt,
         }
       : null,
+    revenue: null,
+    recurring: input.recurring ?? null,
   };
+  if (input.subscriptionByDay) {
+    const subs = input.subscriptionByDay;
+    const revenueFor = (key: WindowKey): RevenueVsSpend => {
+      const w = byKey[key];
+      let net = 0;
+      let gross = 0;
+      let charges = 0;
+      for (const [day, v] of subs) {
+        if (!inWindow(day, w)) continue;
+        net += v.net;
+        gross += v.gross;
+        charges += v.charges;
+      }
+      const ad = report.adRevenue ? report.adRevenue.windows[key].earnings : null;
+      const totalNet = round2(net + (ad ?? 0));
+      return {
+        subscriptionNet: round2(net),
+        subscriptionGross: round2(gross),
+        subscriptionCharges: charges,
+        adRevenue: ad,
+        totalNet,
+        spend: totals[key].spend,
+        returnOnSpend: ratio(totalNet, totals[key].spend),
+      };
+    };
+    report.revenue = { today: revenueFor('today'), yesterday: revenueFor('yesterday'), launch: revenueFor('launch') };
+  }
   report.alerts = buildAlerts(report, input.entities, now);
   return report;
 }
@@ -359,6 +430,8 @@ export function buildAlerts(report: Pick<AdsEmailReport, 'campaigns' | 'sync' | 
 // Rendering
 // ---------------------------------------------------------------------------
 
+const round2 = (n: number) => Math.round(n * 100) / 100;
+
 export const money = (n: number | null) => (n === null ? '—' : `$${n.toFixed(2)}`);
 export const pct = (n: number | null) => (n === null ? '—' : `${(n * 100).toFixed(1)}%`);
 const int = (n: number) => n.toLocaleString('en-US');
@@ -385,7 +458,8 @@ export function renderSubject(r: AdsEmailReport): string {
   const h = headline(r);
   const t = r.totals[h.key];
   const alerts = r.alerts.length ? ` [${r.alerts.length} alert${r.alerts.length === 1 ? '' : 's'}]` : '';
-  return `FitCircle ads — ${r.dayLabel} ${r.slot}: ${money(t.spend)} spend, ${int(t.installs)} install${t.installs === 1 ? '' : 's'} ${h.word}${alerts}`;
+  const rev = r.revenue ? `, ${money(r.revenue[h.key].totalNet)} revenue` : '';
+  return `FitCircle ads — ${r.dayLabel} ${r.slot}: ${money(t.spend)} spend, ${int(t.installs)} install${t.installs === 1 ? '' : 's'}${rev} ${h.word}${alerts}`;
 }
 
 const DELIVERY_ROWS: Array<[string, (s: DeliveryStats) => string]> = [
@@ -409,6 +483,34 @@ const FUNNEL_ROWS: Array<[string, (f: FunnelStats) => string]> = [
   ['Test/internal sign-ups excluded', (f) => int(f.excludedTest)],
 ];
 
+const REVENUE_ROWS: Array<[string, (v: RevenueVsSpend) => string]> = [
+  ['Subscriptions — net (we keep)', (v) => money(v.subscriptionNet)],
+  ['Subscriptions — gross (paid)', (v) => `${money(v.subscriptionGross)} (${int(v.subscriptionCharges)} charge${v.subscriptionCharges === 1 ? '' : 's'})`],
+  ['Ads — AdMob (est.)', (v) => money4(v.adRevenue)],
+  ['Total revenue (net)', (v) => money4(v.totalNet)],
+  ['Paid ad spend', (v) => money(v.spend)],
+  ['Revenue ÷ spend', (v) => (v.returnOnSpend === null ? '—' : `${v.returnOnSpend < 0.1 ? v.returnOnSpend.toFixed(4) : v.returnOnSpend.toFixed(2)}×`)],
+];
+
+export function recurringLine(r: RecurringEmail): string {
+  const s = r.activePaidSubs;
+  const plans = [s.monthly ? `${s.monthly} monthly` : '', s.annual_upfront ? `${s.annual_upfront} annual (upfront)` : '', s.annual_installments ? `${s.annual_installments} annual (paid monthly)` : '', s.other ? `${s.other} other` : '']
+    .filter(Boolean)
+    .join(', ');
+  return [
+    `MRR ${money(r.mrr.gross)} gross / ${money(r.mrr.net)} net`,
+    `ARR ${money(r.arr.gross)} / ${money(r.arr.net)}`,
+    `annual committed ${money(r.annualCommitted.gross)} / ${money(r.annualCommitted.net)}`,
+    `${int(s.total)} active paid sub${s.total === 1 ? '' : 's'}${plans ? ` (${plans})` : ''}`,
+    `${int(r.trialsActive)} active trial${r.trialsActive === 1 ? '' : 's'}`,
+  ].join(' · ');
+}
+
+const RECURRING_NOTE = 'Run-rate, not cash: MRR = monthly price, annual ÷ 12 (also when paid monthly); ARR = MRR × 12; annual committed = contracted annual value even when paid monthly. Lifetime purchases and trials excluded.';
+
+const REVENUE_NOTE =
+  'Subscriptions: RevenueCat production events (App Store, Google Play, web), real users from every source — not only ad users; net is after store commission and tax, refunds subtracted. Spend: all connected ad networks.';
+
 const AD_REVENUE_ROWS: Array<[string, (m: AdRevenueMetrics) => string]> = [
   ['Estimated earnings', (m) => money4(m.earnings)],
   ['Impressions', (m) => int(m.impressions)],
@@ -424,7 +526,7 @@ const money4 = (n: number | null) => (n === null ? '—' : Math.abs(n) < 1 && n 
 const AD_REVENUE_NOTE = 'AdMob estimated earnings (not final until AdMob closes the month); AdMob days are Pacific time.';
 
 export const DATA_NOTES = [
-  'Ad delivery: ad network reports (Apple Ads API) synced hourly into the Ads Console; networks restate the last few days, so today and yesterday can still move.',
+  'Ad delivery: ad network reports (Apple Ads and Google Ads APIs) synced hourly into the Ads Console; networks restate the last few days, so today and yesterday can still move.',
   'Funnel: FitCircle database. Sign-ups = new profiles in the window (report time zone), all sources (paid + organic), excluding internal, App Review, Firebase Test Lab, Play pre-launch and Apple mock-attribution accounts. Onboarded / first meal / trial / paid are what those sign-ups have done as of now.',
   'Platform = the platform the user reported attribution from, else their first push token, else their first home-feed request; "unknown" = none yet.',
   '"Attributed to a paid ad" counts user_attribution rows, which only app 1.0.9+ reports — it undercounts. For iOS paid attribution today, Amplitude (user property asa_campaign_id) is the reference; it is not queried here.',
@@ -444,6 +546,8 @@ function textTable<T>(rows: Array<[string, (v: T) => string]>, cols: Array<{ hea
   return [head, ...body].map((l) => l.trimEnd()).join('\n');
 }
 
+const budgetLabel = (c: CampaignReport) => (c.dailyBudget === null ? '' : `, budget ${money(c.dailyBudget)}/day`);
+
 const windowCols = <T>(r: AdsEmailReport, pick: (k: WindowKey) => T) => r.windows.map((w) => ({ head: w.key === 'launch' ? `Since ${w.start}` : w.label, value: pick(w.key) }));
 
 export function renderText(r: AdsEmailReport): string {
@@ -456,11 +560,21 @@ export function renderText(r: AdsEmailReport): string {
     for (const a of r.alerts) out.push(`  ! ${a.message}`);
     out.push('');
   }
-  out.push('TOTAL — all connected paid channels');
+  if (r.revenue) {
+    out.push('REVENUE vs SPEND');
+    out.push(textTable(REVENUE_ROWS, windowCols(r, (k) => r.revenue![k])));
+    out.push(`  ${REVENUE_NOTE}`);
+    if (r.recurring) {
+      out.push(`  Run-rate now: ${recurringLine(r.recurring)}`);
+      out.push(`  ${RECURRING_NOTE}`);
+    }
+    out.push('');
+  }
+  out.push('SPEND — all connected paid channels');
   out.push(textTable(DELIVERY_ROWS, windowCols(r, (k) => r.totals[k])));
   out.push('');
   for (const c of r.campaigns) {
-    out.push(`${CHANNEL_LABEL[c.channel]} (${PLATFORM_LABEL[c.platform] ?? c.platform}) — ${c.name} [${c.externalId}] — ${c.live ? 'live' : 'not live'} (${c.status})${c.startDate ? `, started ${c.startDate}` : ''}`);
+    out.push(`${CHANNEL_LABEL[c.channel]} (${PLATFORM_LABEL[c.platform] ?? c.platform}) — ${c.name} [${c.externalId}] — ${c.live ? 'live' : 'not live'} (${c.status})${budgetLabel(c)}${c.startDate ? `, started ${c.startDate}` : ''}`);
     out.push(textTable(DELIVERY_ROWS, windowCols(r, (k) => c.windows[k])));
     out.push('');
   }
@@ -513,13 +627,22 @@ export function renderHtml(r: AdsEmailReport): string {
         .join('')}</ul></div>`
     );
   }
-  parts.push(h2('Total — all connected paid channels', 'Source: ad network reports (Ads Console sync)'));
+  if (r.revenue) {
+    parts.push(h2('Revenue vs spend', REVENUE_NOTE));
+    parts.push(htmlTable(REVENUE_ROWS, windowCols(r, (k) => r.revenue![k])));
+    if (r.recurring) {
+      parts.push(
+        `<div style="font-size:13px;color:#111827;margin:-8px 0 4px"><span style="font-weight:600">Run-rate now:</span> ${esc(recurringLine(r.recurring))}</div><div style="font-size:12px;color:#6b7280;margin:0 0 18px">${esc(RECURRING_NOTE)}</div>`
+      );
+    }
+  }
+  parts.push(h2('Spend — all connected paid channels', 'Source: ad network reports (Ads Console sync)'));
   parts.push(htmlTable(DELIVERY_ROWS, windowCols(r, (k) => r.totals[k])));
   for (const c of r.campaigns) {
     parts.push(
       h2(
         `${CHANNEL_LABEL[c.channel]} (${PLATFORM_LABEL[c.platform] ?? c.platform}) — ${c.name}`,
-        `Campaign ${c.externalId} · ${c.live ? 'live' : 'not live'} (${c.status})${c.startDate ? ` · started ${c.startDate}` : ''}`
+        `Campaign ${c.externalId} · ${c.live ? 'live' : 'not live'} (${c.status})${c.dailyBudget === null ? '' : ` · budget ${money(c.dailyBudget)}/day`}${c.startDate ? ` · started ${c.startDate}` : ''}`
       )
     );
     parts.push(htmlTable(DELIVERY_ROWS, windowCols(r, (k) => c.windows[k])));

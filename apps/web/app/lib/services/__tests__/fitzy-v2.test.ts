@@ -200,7 +200,7 @@ describe('SSE streaming', () => {
     recover.fn.mockResolvedValueOnce('{"suggestions":["Lunch ideas?"],"actions":[]}');
     ai.stream.set(DEFAULT_CHAT_MODEL, [['Oats with berries are a great start.']]);
     const events = await collect(FREE, { message: 'Breakfast idea?' });
-    expect(recover.fn).toHaveBeenCalledWith(expect.objectContaining({ system: expect.any(Array) }), 'Oats with berries are a great start.', undefined);
+    expect(recover.fn).toHaveBeenCalledWith(expect.objectContaining({ system: expect.any(Array) }), 'Oats with berries are a great start.', undefined, { userId: FREE, feature: 'fitzy_meta_recovery' });
     expect((events.at(-1)!.data as any).suggestions).toEqual(['Lunch ideas?']);
   });
 
@@ -602,6 +602,8 @@ describe('model-call contracts', () => {
   const DISABLED = { anthropic: { thinking: { type: 'disabled' } }, gateway: { zeroDataRetention: true } };
 
   it('structured calls (plan, preview, focus, memory) disable thinking with a real token budget', async () => {
+    // Gateway reporting tags are opt-in (billed per write); this test checks attribution when on.
+    process.env.AI_GATEWAY_REPORTING_TAGS = 'on';
     consent(FREE);
     consent(PRO);
     ai.generate.set(DEFAULT_DEEP_MODEL, [planJson]);
@@ -617,10 +619,21 @@ describe('model-call contracts', () => {
     expect(ai.calls).toHaveLength(4);
     for (const c of ai.calls) {
       expect(c.fn).toBe('generate');
-      expect(c.opts.providerOptions).toEqual(DISABLED);
+      // Plus gateway attribution (lib/ai/usage.ts): user + app / env / feature tags.
+      const { user, tags, ...gw } = c.opts.providerOptions.gateway;
+      expect({ ...c.opts.providerOptions, gateway: gw }).toEqual(DISABLED);
+      expect([PRO, FREE]).toContain(user);
+      expect(tags).toEqual(expect.arrayContaining(['app:fitcircle', expect.stringMatching(/^env:/), expect.stringMatching(/^feature:fitzy_/)]));
       expect(c.opts.maxOutputTokens).toBeGreaterThanOrEqual(200);
     }
+    expect(ai.calls.map((c) => c.opts.providerOptions.gateway.tags.find((t: string) => t.startsWith('feature:')))).toEqual([
+      'feature:fitzy_plan',
+      'feature:fitzy_plan_preview',
+      'feature:fitzy_daily_focus',
+      'feature:fitzy_memory',
+    ]);
     expect(ai.calls[0].opts.maxOutputTokens).toBeGreaterThanOrEqual(900); // full weekly plan
+    delete process.env.AI_GATEWAY_REPORTING_TAGS;
   });
 
   it('chat (stream and non-stream) keeps the model default (no thinking override)', async () => {

@@ -134,7 +134,7 @@ export class NutritionEvalRunner {
     if (predNames.length === 0 || truthNames.length === 0) return undefined;
     try {
       const norm = (s: string) => s.toLowerCase().replace(/\s+/g, ' ').trim();
-      const vectors = await embedTexts([...predNames, ...truthNames].map(norm));
+      const vectors = await embedTexts([...predNames, ...truthNames].map(norm), { userId: null, feature: 'eval', job: 'nutrition-eval' });
       const cos = (a: number[], b: number[]) => {
         let dot = 0;
         let na = 0;

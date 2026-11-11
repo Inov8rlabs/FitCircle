@@ -293,3 +293,64 @@ describe('ad revenue (AdMob) section', () => {
     expect(renderText(r)).toContain('AdMob ad revenue: not connected');
   });
 });
+
+describe('revenue vs spend section', () => {
+  const adRow = (date: string, earnings: number) => ({
+    source: 'admob', date, app_id: 'a', app_name: 'FitCircle', platform: 'android' as const, ad_unit_id: 'u', ad_unit_name: 'Home', format: 'NATIVE', country: 'US', currency: 'USD',
+    estimated_earnings: earnings, ad_requests: 10, matched_requests: 8, impressions: 4, clicks: 1,
+  });
+  const subs = new Map([
+    ['2026-10-27', { net: 6.99, gross: 9.99, charges: 1 }],
+    ['2026-10-25', { net: 20.99, gross: 29.99, charges: 1 }],
+    // Before launch: never counted.
+    ['2026-10-20', { net: 100, gross: 140, charges: 1 }],
+  ]);
+
+  it('adds subscription (net and gross) and ad revenue per window against spend', () => {
+    const r = buildAdsEmailReport(input({ now: PM, subscriptionByDay: subs, adRevenue: { rows: [adRow('2026-10-27', 0.25)], lastSuccessAt: null } }));
+    expect(r.revenue!.today).toMatchObject({ subscriptionNet: 6.99, subscriptionGross: 9.99, subscriptionCharges: 1, adRevenue: 0.25, totalNet: 7.24, spend: 18.58 });
+    expect(r.revenue!.today.returnOnSpend).toBeCloseTo(7.24 / 18.58, 6);
+    expect(r.revenue!.yesterday).toMatchObject({ subscriptionNet: 0, totalNet: 0, spend: 65.75 });
+    expect(r.revenue!.launch).toMatchObject({ subscriptionNet: 27.98, subscriptionGross: 39.98, subscriptionCharges: 2, totalNet: 28.23 });
+    const text = renderText(r);
+    expect(text).toContain('REVENUE vs SPEND');
+    expect(text).toContain('Subscriptions — net (we keep)');
+    expect(text).toContain('$9.99 (1 charge)');
+    expect(renderHtml(r)).toContain('Revenue vs spend');
+    expect(renderSubject(r)).toContain('$7.24 revenue today');
+  });
+
+  it('ad revenue is — (not $0) when AdMob is not connected; no section when subscriptions were not loaded', () => {
+    const r = buildAdsEmailReport(input({ now: PM, subscriptionByDay: subs }));
+    expect(r.revenue!.today.adRevenue).toBeNull();
+    expect(r.revenue!.today.totalNet).toBe(6.99);
+    const none = buildAdsEmailReport(input({ now: PM }));
+    expect(none.revenue).toBeNull();
+    expect(renderText(none)).not.toContain('REVENUE vs SPEND');
+    expect(renderSubject(none)).not.toContain('revenue');
+  });
+
+  it('shows each campaign’s current daily budget so spend can be read against it', () => {
+    const r = buildAdsEmailReport(input({ now: PM, entities: [campaign({ daily_budget: '75.00' as unknown as number })] }));
+    expect(r.campaigns[0].dailyBudget).toBe(75);
+    expect(renderText(r)).toContain('budget $75.00/day');
+    expect(renderHtml(r)).toContain('budget $75.00/day');
+  });
+});
+
+describe('recurring run-rate line', () => {
+  it('labels MRR / ARR / annual committed as run-rate, not cash', () => {
+    const recurring = {
+      mrr: { gross: 9.99, net: 6.99 },
+      arr: { gross: 119.88, net: 83.88 },
+      annualCommitted: { gross: 0, net: 0 },
+      activePaidSubs: { monthly: 1, annual_upfront: 0, annual_installments: 0, other: 0, total: 1 },
+      trialsActive: 2,
+    };
+    const r = buildAdsEmailReport(input({ now: PM, subscriptionByDay: new Map(), recurring }));
+    const text = renderText(r);
+    expect(text).toContain('Run-rate now: MRR $9.99 gross / $6.99 net · ARR $119.88 / $83.88 · annual committed $0.00 / $0.00 · 1 active paid sub (1 monthly) · 2 active trials');
+    expect(text).toContain('Run-rate, not cash');
+    expect(renderHtml(r)).toContain('Run-rate now:');
+  });
+});

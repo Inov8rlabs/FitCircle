@@ -21,7 +21,8 @@
 import { generateText, Output } from 'ai';
 import { z } from 'zod';
 
-import { gatewayCallOptions } from '../ai/gateway-options';
+import { aiCallOptions } from '../ai/gateway-options';
+import { trackAiCall } from '../ai/usage';
 import type { FoodDTO, FoodPortionDTO } from '../types/foods';
 import type { DraftAlternate, NutritionDraftItem, ParsedFoodItem, UnitOption } from '../types/nutrition';
 
@@ -111,7 +112,7 @@ export class NutritionGroundingService {
     let picks: Array<number | null>;
     try {
       stats.pickerUsed = true;
-      picks = await (opts.pick ?? ((i, c) => this.pickWithModel(i, c, opts.pickerModel ?? process.env.NUTRITION_GROUNDING_PICKER_MODEL ?? DEFAULT_PICKER_MODEL)))(items, candidates);
+      picks = await (opts.pick ?? ((i, c) => this.pickWithModel(i, c, opts.pickerModel ?? process.env.NUTRITION_GROUNDING_PICKER_MODEL ?? DEFAULT_PICKER_MODEL, userId)))(items, candidates);
     } catch (err) {
       stats.pickerFailed = true;
       console.warn('[nutrition-grounding] picker failed, using lexical fallback:', (err as Error)?.message);
@@ -177,7 +178,7 @@ export class NutritionGroundingService {
 
   // MARK: - picking
 
-  private static async pickWithModel(items: ParsedFoodItem[], candidates: FoodDTO[][], model: string): Promise<Array<number | null>> {
+  private static async pickWithModel(items: ParsedFoodItem[], candidates: FoodDTO[][], model: string, userId: string | null = null): Promise<Array<number | null>> {
     const withCandidates = items.map((it, i) => ({ it, i, c: candidates[i] })).filter((x) => x.c.length > 0);
     if (withCandidates.length === 0) return items.map(() => null);
     const d = (f: FoodDTO) => `${Math.round(f.per100g.calories ?? 0)} kcal, P${r1(f.per100g.proteinG)} C${r1(f.per100g.carbsG)} F${r1(f.per100g.fatG)} per 100 g`;
@@ -187,9 +188,10 @@ export class NutritionGroundingService {
       lines.push(`ITEM ${i}: "${it.name}"${it.dbName ? ` (generic: ${it.dbName})` : ''} — ${it.quantity} ${it.servingUnit}, ${Math.round(it.grams)} g, model's own density ${own}`);
       c.forEach((f, j) => lines.push(`  [${j}] ${f.name}${f.category ? ` (${f.category})` : ''}${f.isCustom ? ' (user\'s own food)' : ''} — ${d(f)}`));
     }
-    const result = await generateText({
+    const usage = { userId, feature: 'food_grounding' as const };
+    const result = await trackAiCall(usage, model, () => generateText({
       model,
-      ...gatewayCallOptions(),
+      ...aiCallOptions(usage),
       output: Output.object({ schema: pickSchema }),
       maxRetries: 0,
       timeout: PICKER_TIMEOUT_MS,
@@ -207,7 +209,7 @@ export class NutritionGroundingService {
         'Pick the fat variant that matches how the item was cooked; for steamed/boiled/plain items never pick an oil/butter row.',
       ].join(' '),
       prompt: lines.join('\n'),
-    });
+    }));
     const picks: Array<number | null> = items.map(() => null);
     const parsed = result.output;
     for (const p of parsed.picks) {

@@ -80,6 +80,10 @@ export interface BlendedReturn {
   adRevenue: number | null;
   /** Net subscription revenue from events in the range, all real users (cash basis). */
   subscriptionRevenue: number;
+  /** What subscribers paid (before store commission and tax), refunds subtracted. */
+  subscriptionGross: number;
+  /** Paid subscription charges (purchases and renewals) in the range. */
+  subscriptionCharges: number;
   totalRevenue: number;
   /** totalRevenue ÷ spend (subscriptions only while AdMob is not connected). */
   roas: number | null;
@@ -127,6 +131,8 @@ export const REVENUE_DEFINITIONS: Record<string, string> = {
   adRevenue: 'ESTIMATE. AdMob does not report revenue per user: each day’s platform ARPDAU is credited to every user active that day, then summed over the channel’s cohort (sign-up → today).',
   roas: '(Subscription revenue + estimated ad revenue) ÷ spend, cohort basis.',
   roasSubscriptions: 'Subscription revenue ÷ spend (the console’s ROAS to date).',
+  totalRevenueRange: 'Net subscription revenue + AdMob estimated earnings booked on days in the range, all real users (paid and organic).',
+  subscriptionRevenueRange: 'Subscription revenue booked on days in the range from RevenueCat production events (App Store, Google Play, web), all real users. Net is after store commission and tax with refunds subtracted; gross is what customers paid.',
   blendedRoas: 'Cash basis, all users: (AdMob earnings + net subscription revenue booked on days in the range) ÷ paid spend on days in the range.',
 };
 
@@ -145,6 +151,14 @@ const normPlatform = (v: unknown): UserDay['platform'] => {
   if (s.includes('android')) return 'android';
   return 'unknown';
 };
+
+/** One day of subscription revenue (USD). */
+export interface SubscriptionDay {
+  net: number;
+  gross: number;
+  /** Paid charges (purchases and renewals), refunds not counted. */
+  charges: number;
+}
 
 export class AdRevenueReportService {
   static async loadRevenue(start: string, end: string): Promise<AdRevenueRow[]> {
@@ -209,6 +223,15 @@ export class AdRevenueReportService {
 
   /** Net subscription revenue per report-time-zone day from PRODUCTION events in [start, end], real users only. */
   static async subscriptionByDay(start: string, end: string, timeZone: string, includeTest = false): Promise<Map<string, number>> {
+    const both = await this.subscriptionRevenueByDay(start, end, timeZone, includeTest);
+    return new Map([...both].map(([day, v]) => [day, v.net]));
+  }
+
+  /**
+   * Subscription revenue per report-time-zone day from PRODUCTION events in [start, end], real users only:
+   * net = after store commission and tax (what we keep), gross = what customers paid. Refunds subtract from both.
+   */
+  static async subscriptionRevenueByDay(start: string, end: string, timeZone: string, includeTest = false): Promise<Map<string, SubscriptionDay>> {
     const from = new Date(Date.parse(`${start}T00:00:00Z`) - 14 * 3600_000).toISOString();
     const to = new Date(Date.parse(`${addDays(end, 1)}T00:00:00Z`) + 14 * 3600_000).toISOString();
     const events = await selectAll<RevenueEvent>(() =>
@@ -221,14 +244,16 @@ export class AdRevenueReportService {
         .order('id', { ascending: true })
     );
     const verdicts = includeTest ? null : await AdsReportService.classifyUsers(events.map((e) => e.user_id).filter((v): v is string => !!v));
-    const out = new Map<string, number>();
+    const out = new Map<string, SubscriptionDay>();
     for (const e of dedupeEvents(events).events) {
       if (verdicts && e.user_id && verdicts.get(e.user_id)?.testReason) continue;
       const c = classifyEvent(e);
       if (!c.net || !e.event_timestamp) continue;
       const day = ymdInTz(e.event_timestamp, timeZone);
       if (day < start || day > end) continue;
-      out.set(day, round2((out.get(day) ?? 0) + c.net));
+      const gross = c.kind === 'refund' ? -c.grossUsd : c.grossUsd;
+      const prev = out.get(day) ?? { net: 0, gross: 0, charges: 0 };
+      out.set(day, { net: round2(prev.net + c.net), gross: round2(prev.gross + gross), charges: prev.charges + (c.kind === 'charge' ? 1 : 0) });
     }
     return out;
   }
@@ -239,7 +264,7 @@ export class AdRevenueReportService {
     // covers the same "to date" window as subscription revenue to date.
     const windowEnd = todayPt > range.end ? todayPt : range.end;
 
-    const [revenueAll, userDaysAll, status, metricRows, entities, cohortResult, conversionRows, subsByDay] = await Promise.all([
+    const [revenueAll, userDaysAll, status, metricRows, entities, cohortResult, conversionRows, subsDetail] = await Promise.all([
       this.loadRevenue(range.start, windowEnd),
       this.loadUserDays(range.start, windowEnd, { includeTest: range.includeTest }),
       AdRevenueSyncService.status(),
@@ -247,8 +272,9 @@ export class AdRevenueReportService {
       AdsReportService.loadEntities(),
       AdsReportService.reportCohort(range),
       AdsReportService.loadConversions(range.start, range.end),
-      this.subscriptionByDay(range.start, range.end, range.timeZone, range.includeTest),
+      this.subscriptionRevenueByDay(range.start, range.end, range.timeZone, range.includeTest),
     ]);
+    const subsByDay = new Map([...subsDetail].map(([day, v]) => [day, v.net]));
 
     const byPlatformFilter = <T extends { platform: string }>(rows: T[]) => (platform ? rows.filter((r) => r.platform === platform) : rows);
     const revenueWindow = byPlatformFilter(revenueAll);
@@ -330,11 +356,15 @@ export class AdRevenueReportService {
 
     const spendRange = round2([...spendByDay.values()].reduce((s, v) => s + v, 0));
     const subsRange = round2([...subsByDay.values()].reduce((s, v) => s + v, 0));
+    const subsGrossRange = round2([...subsDetail.values()].reduce((s, v) => s + v.gross, 0));
+    const subsCharges = [...subsDetail.values()].reduce((s, v) => s + v.charges, 0);
     const adRange = round2(sumRevenue(inRange(revenueAll)).earnings);
     const blended: BlendedReturn = {
       spend: spendRange,
       adRevenue: adConnected ? adRange : null,
       subscriptionRevenue: subsRange,
+      subscriptionGross: subsGrossRange,
+      subscriptionCharges: subsCharges,
       totalRevenue: round2(adRange + subsRange),
       roas: ratio(adRange + subsRange, spendRange),
     };

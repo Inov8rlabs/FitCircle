@@ -21,6 +21,10 @@
       "schedule": "30 4 * * 0"
     },
     {
+      "path": "/api/cron/ai-costs/sync",
+      "schedule": "15 9 * * *"
+    },
+    {
       "path": "/api/cron/streaks/daily-check",
       "schedule": "0 0 * * *"
     },

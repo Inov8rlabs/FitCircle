@@ -45,7 +45,7 @@ async function call(req: ModelCall & { primary: string }) {
   let text = '';
   let error: unknown = null;
   try {
-    text = (await generateWithFallback({ ...req, onAttempt: (a) => attempts.push(a) })).text;
+    text = (await generateWithFallback({ ...req, usage: { userId: null, feature: 'eval', job: 'fitzy-eval' }, onAttempt: (a) => attempts.push(a) })).text;
   } catch (err) {
     error = err;
   }

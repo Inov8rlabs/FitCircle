@@ -31,7 +31,7 @@ export class FoodsEmbeddingService {
 
       // Embed "name brand" (brand is secondary signal, matching the FTS weighting).
       const texts = rows.map((r) => (r.brand ? `${r.name} ${r.brand}` : String(r.name)));
-      const vectors = await embedTexts(texts);
+      const vectors = await embedTexts(texts, { userId: null, feature: 'food_embedding_index', job: 'embed-foods' });
 
       for (let i = 0; i < rows.length; i++) {
         await client.query(`update public.foods set name_embedding = $1::vector where id = $2`, [

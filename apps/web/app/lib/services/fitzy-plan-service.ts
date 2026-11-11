@@ -170,7 +170,7 @@ export class FitzyPlanService {
     let note = DEFAULT_PLAN_NOTE;
     let model: string | null = null;
     try {
-      const res = await generateWithFallback(planRequest('plan', weekOf, goal, grounding));
+      const res = await generateWithFallback({ ...planRequest('plan', weekOf, goal, grounding), usage: { userId, feature: 'fitzy_plan' } });
       model = res.model;
       ({ commitments, goal: planGoal, note } = parsePlanDraft(res.text, guard, goal));
     } catch (err) {
@@ -210,7 +210,7 @@ export class FitzyPlanService {
     let planGoal = goal?.trim() || DEFAULT_PLAN_GOAL;
     let model: string | null = null;
     try {
-      const res = await generateWithFallback(planRequest('preview', weekOf, goal, grounding));
+      const res = await generateWithFallback({ ...planRequest('preview', weekOf, goal, grounding), usage: { userId, feature: 'fitzy_plan_preview' } });
       model = res.model;
       ({ commitments, goal: planGoal } = parsePlanDraft(res.text, guard, goal));
     } catch (err) {

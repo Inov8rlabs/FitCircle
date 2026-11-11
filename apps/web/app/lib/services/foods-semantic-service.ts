@@ -38,7 +38,7 @@ export class FoodsSemanticService {
 
     let vectors: number[][];
     try {
-      vectors = await embedTexts(names);
+      vectors = await embedTexts(names, { userId, feature: 'food_embedding' });
     } catch (err) {
       console.error('[FoodsSemanticService] embedding failed → lexical fallback:', err);
       return null;

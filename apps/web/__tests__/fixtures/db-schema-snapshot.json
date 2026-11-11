@@ -1753,6 +1753,42 @@
       "rows_metrics",
       "error"
     ],
+    "ai_cost_daily": [
+      "day",
+      "dimension",
+      "key",
+      "total_cost",
+      "market_cost",
+      "input_tokens",
+      "output_tokens",
+      "cached_input_tokens",
+      "reasoning_tokens",
+      "request_count",
+      "synced_at"
+    ],
+    "ai_gateway_credits": [
+      "captured_at",
+      "balance",
+      "total_used"
+    ],
+    "ai_usage_events": [
+      "id",
+      "created_at",
+      "user_id",
+      "feature",
+      "model",
+      "provider",
+      "environment",
+      "input_tokens",
+      "output_tokens",
+      "cached_input_tokens",
+      "reasoning_tokens",
+      "cost_usd",
+      "market_cost_usd",
+      "generation_id",
+      "ok",
+      "duration_ms"
+    ],
     "app_opens": [
       "user_id",
       "local_date",

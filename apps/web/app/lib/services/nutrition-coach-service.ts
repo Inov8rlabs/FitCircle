@@ -2,7 +2,8 @@ import { generateText } from 'ai';
 
 import { logIgnoredQueryError } from '@/lib/api/route-errors';
 
-import { gatewayCallOptions } from '../ai/gateway-options';
+import { aiCallOptions } from '../ai/gateway-options';
+import { trackAiCall } from '../ai/usage';
 import { createAdminSupabase } from '../supabase-admin';
 import { stripEmoji } from '../text/strip-emoji';
 import type { CoachResponse, INutritionCoachService } from '../types/nutrition-coach';
@@ -125,9 +126,10 @@ export class NutritionCoachService implements INutritionCoachService {
     // 2. Single text generation through the AI Gateway with the strict guardrail system prompt.
     let answer: string;
     try {
-      const { text } = await generateText({
+      const usage = { userId, feature: 'nutrition_coach' as const };
+      const { text } = await trackAiCall(usage, COACH_MODEL, () => generateText({
         model: COACH_MODEL,
-        ...gatewayCallOptions(),
+        ...aiCallOptions(usage),
         system: SYSTEM_PROMPT,
         messages: [
           {
@@ -142,7 +144,7 @@ export class NutritionCoachService implements INutritionCoachService {
             ],
           },
         ],
-      });
+      }));
       answer = stripEmoji((text ?? '').trim());
     } catch (err) {
       console.error('[NutritionCoachService.ask] generation failed:', err);

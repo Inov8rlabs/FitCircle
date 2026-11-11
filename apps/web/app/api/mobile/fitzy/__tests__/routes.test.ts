@@ -246,6 +246,9 @@ describe('locked Pro surfaces for free users', () => {
   });
 });
 
+/** Gateway reporting tags are off by default (billed per write; lib/ai/usage.ts) — the ledger attributes the call. */
+const ATTRIBUTION = {};
+
 describe('context: "onboarding" (ONBOARDING_V2 §5.3 step 6)', () => {
   const systemText = (call: any) => call.messages.filter((m: any) => m.role === 'system').map((m: any) => m.content).join('\n');
 
@@ -257,7 +260,7 @@ describe('context: "onboarding" (ONBOARDING_V2 §5.3 step 6)', () => {
     expect(ai.calls).toHaveLength(1);
     expect(ai.calls[0].maxOutputTokens).toBe(500);
     // Thinking off: in the live eval adaptive thinking ate the whole 450-token cap.
-    expect(ai.calls[0].providerOptions).toEqual({ anthropic: { thinking: { type: 'disabled' } }, gateway: { zeroDataRetention: true } });
+    expect(ai.calls[0].providerOptions).toEqual({ anthropic: { thinking: { type: 'disabled' } }, gateway: { zeroDataRetention: true, ...ATTRIBUTION } });
     expect(systemText(ai.calls[0])).toContain('ONBOARDING MODE');
     // The cached base prompt stays the first system message (prompt caching unchanged).
     expect(ai.calls[0].messages[0].content).toMatch(/^You are Fitzy/);
@@ -270,7 +273,7 @@ describe('context: "onboarding" (ONBOARDING_V2 §5.3 step 6)', () => {
       expect(res.status).toBe(200);
       await sse(res);
       expect(ai.calls[0].maxOutputTokens).toBeUndefined();
-      expect(ai.calls[0].providerOptions).toEqual({ gateway: { zeroDataRetention: true } }); // ZDR only, thinking left on
+      expect(ai.calls[0].providerOptions).toEqual({ gateway: { zeroDataRetention: true, ...ATTRIBUTION } }); // ZDR only, thinking left on
       expect(systemText(ai.calls[0])).not.toContain('ONBOARDING MODE');
     }
   });
@@ -280,7 +283,7 @@ describe('context: "onboarding" (ONBOARDING_V2 §5.3 step 6)', () => {
     const res = await legacyChat(req('/api/mobile/fitzy/chat', { as: FREE, method: 'POST', body: { messages: [{ role: 'user', content: 'Breakfast?' }], context: 'onboarding' } }));
     expect(res.status).toBe(200);
     expect(ai.calls[0].maxOutputTokens).toBe(500);
-    expect(ai.calls[0].providerOptions).toEqual({ anthropic: { thinking: { type: 'disabled' } }, gateway: { zeroDataRetention: true } });
+    expect(ai.calls[0].providerOptions).toEqual({ anthropic: { thinking: { type: 'disabled' } }, gateway: { zeroDataRetention: true, ...ATTRIBUTION } });
     expect(systemText(ai.calls[0])).toContain('ONBOARDING MODE');
   });
 });

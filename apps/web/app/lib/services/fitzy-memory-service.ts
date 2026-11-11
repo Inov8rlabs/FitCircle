@@ -133,7 +133,7 @@ export class FitzyMemoryService {
     try {
       const existing = await this.row(userId);
       const items = existing?.items ?? [];
-      const res = await generateWithFallback(extractRequest(items, userMessage, answer));
+      const res = await generateWithFallback({ ...extractRequest(items, userMessage, answer), usage: { userId, feature: 'fitzy_memory' } });
       const parsed = parseExtraction(res.text);
       const fresh = this.sanitize(parsed, items, guard);
       if (!fresh.length) return items;

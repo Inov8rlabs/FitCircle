@@ -13,11 +13,13 @@ import {
   buildAdsEmailReport,
   type FunnelUser,
   launchDateFrom,
+  type RecurringEmail,
   renderHtml,
   renderSubject,
   renderText,
   type SyncState,
 } from '../email-report';
+import { recurringAsOf } from '../../finance/recurring';
 import { dedupeEvents, type RevenueEvent, userOutcome } from '../metrics';
 import { AdRevenueReportService } from './ad-revenue-report-service';
 import { AdRevenueSyncService } from './ad-revenue-sync-service';
@@ -186,11 +188,41 @@ export class AdsEmailReportService {
       lastError: s.error,
     }));
 
-    const [revenueStatus, revenueRows] = await Promise.all([AdRevenueSyncService.status().catch(() => null), AdRevenueReportService.loadRevenue(launch, today)]);
+    const [revenueStatus, revenueRows, subscriptionByDay] = await Promise.all([
+      AdRevenueSyncService.status().catch(() => null),
+      AdRevenueReportService.loadRevenue(launch, today),
+      AdRevenueReportService.subscriptionRevenueByDay(launch, today, timeZone).catch((e) => {
+        console.warn('[ads/email] subscription revenue unavailable:', e?.message ?? e);
+        return null;
+      }),
+    ]);
     const adRevenue = revenueStatus?.configured || revenueRows.length ? { rows: revenueRows, lastSuccessAt: revenueStatus?.lastSuccessAt ?? null } : null;
 
-    const report = buildAdsEmailReport({ now, timeZone, consoleUrl: consoleUrl(), entities: campaigns, metricRows, sync, users, launchDate: launch, adRevenue });
+    const recurring = await this.loadRecurring(now).catch((e) => {
+      console.warn('[ads/email] recurring run-rate unavailable:', e?.message ?? e);
+      return null;
+    });
+
+    const report = buildAdsEmailReport({ now, timeZone, consoleUrl: consoleUrl(), entities: campaigns, metricRows, sync, users, launchDate: launch, adRevenue, subscriptionByDay, recurring });
     return { report, subject: renderSubject(report), text: renderText(report), html: renderHtml(report) };
+  }
+
+  /** MRR / ARR run-rate as of now from every PRODUCTION subscription event (same rules as the P&L). */
+  static async loadRecurring(now: Date): Promise<RecurringEmail> {
+    const events = await selectAll<RevenueEvent>(() =>
+      db().from('subscription_events').select('id, user_id, type, store, environment, event_timestamp, raw').eq('environment', 'PRODUCTION').order('id', { ascending: true })
+    );
+    const deduped = dedupeEvents(events).events;
+    const verdicts = await AdsReportService.classifyUsers(deduped.map((e) => e.user_id).filter((v): v is string => !!v));
+    const byUser = new Map<string, RevenueEvent[]>();
+    for (const e of deduped) {
+      if (!e.user_id) continue;
+      const list = byUser.get(e.user_id) ?? [];
+      list.push(e);
+      byUser.set(e.user_id, list);
+    }
+    const snap = recurringAsOf(byUser, now.getTime(), (id) => !verdicts.get(id)?.testReason);
+    return { mrr: snap.mrr, arr: snap.arr, annualCommitted: snap.annualCommittedContractValue, activePaidSubs: snap.activePaidSubs, trialsActive: snap.trialsActive };
   }
 
   static async send(rendered: RenderedAdsReport, recipients = reportRecipients()): Promise<{ success: boolean; id?: string; error?: string }> {

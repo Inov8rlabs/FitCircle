@@ -140,10 +140,10 @@ export class FitzyFocusService {
       const grounding = await FitzyService.grounding(userId, tier, { timezone });
       try {
         if (tier === 'pro' && plan && isSunday(date)) {
-          const res = await generateWithFallback(recapRequest(plan, grounding));
+          const res = await generateWithFallback({ ...recapRequest(plan, grounding), usage: { userId, feature: 'fitzy_weekly_recap' } });
           focus = this.recapFromText(res.text, date, tier);
         } else {
-          const res = await generateWithFallback(focusRequest(date, !!plan, grounding));
+          const res = await generateWithFallback({ ...focusRequest(date, !!plan, grounding), usage: { userId, feature: 'fitzy_daily_focus' } });
           focus = this.focusFromText(res.text, date, tier);
         }
       } catch (err) {

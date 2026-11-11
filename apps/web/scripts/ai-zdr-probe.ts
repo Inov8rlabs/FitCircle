@@ -37,12 +37,15 @@ const routedTo = (meta: any): string | null => {
   return g?.routing?.finalProvider ?? g?.routing?.resolvedProvider ?? null;
 };
 
+/** Tagged as eval spend (gateway user system:zdr-probe, feature:eval, env:development). */
+const PROBE_USAGE = { userId: null, feature: 'eval', job: 'zdr-probe' } as const;
+
 async function text(model: string, zdr: boolean) {
   const res = await generateText({
     model,
     prompt: 'Reply with exactly the word OK.',
     maxOutputTokens: 200,
-    providerOptions: zdr ? withGatewayOptions({}, { AI_GATEWAY_ZDR: 'true' }) : {},
+    providerOptions: withGatewayOptions({}, { AI_GATEWAY_ZDR: zdr ? 'true' : 'false' }, PROBE_USAGE) ?? {},
     abortSignal: AbortSignal.timeout(60_000),
   });
   return { ok: /ok/i.test(res.text ?? ''), provider: routedTo(res.providerMetadata), text: (res.text ?? '').slice(0, 20) };
@@ -53,7 +56,7 @@ async function vision(model: string, png: Buffer) {
     model,
     messages: [{ role: 'user', content: [{ type: 'text', text: 'What single colour fills this image? One word.' }, { type: 'image', image: png, mediaType: 'image/png' }] }],
     maxOutputTokens: 200,
-    providerOptions: withGatewayOptions({}, { AI_GATEWAY_ZDR: 'true' }),
+    providerOptions: withGatewayOptions({}, { AI_GATEWAY_ZDR: 'true' }, PROBE_USAGE),
     abortSignal: AbortSignal.timeout(60_000),
   });
   return { ok: (res.text ?? '').trim().length > 0, provider: routedTo(res.providerMetadata), text: (res.text ?? '').trim().slice(0, 20) };
@@ -87,7 +90,7 @@ async function main() {
   // Real production call builders: Fitzy (thinking off + gateway ZDR merged) and a structured
   // output call shaped like the food path (gateway sort/user/tags + ZDR).
   try {
-    const r = await generateWithFallback({ primary: 'anthropic/claude-haiku-5.5', system: systemMessages('Reply with only JSON {"ok":true}.'), messages: [{ role: 'user', content: 'go' }], maxOutputTokens: 100, thinking: false });
+    const r = await generateWithFallback({ primary: 'anthropic/claude-haiku-5.5', system: systemMessages('Reply with only JSON {"ok":true}.'), messages: [{ role: 'user', content: 'go' }], maxOutputTokens: 100, thinking: false, usage: PROBE_USAGE });
     rows.push(`PASS  fitzy generateWithFallback (thinking off + ZDR) → ${r.model}: ${r.text.slice(0, 20)}`);
   } catch (err: any) {
     rows.push(`FAIL  fitzy generateWithFallback: ${String(err?.message ?? err).slice(0, 160)}`);
@@ -99,7 +102,7 @@ async function main() {
         output: Output.object({ schema: z.object({ food: z.string(), calories: z.number() }) }),
         prompt: 'A medium banana. Return its name and approximate calories.',
         maxOutputTokens: 2000,
-        providerOptions: withGatewayOptions({ gateway: { sort: 'ttft', user: 'zdr-probe', tags: ['probe'] } }, { AI_GATEWAY_ZDR: 'true' }),
+        providerOptions: withGatewayOptions({ gateway: { sort: 'ttft', tags: ['probe'] } }, { AI_GATEWAY_ZDR: 'true' }, PROBE_USAGE),
       });
       rows.push(`PASS  ${model} [structured, gateway opts + ZDR] → ${JSON.stringify(output)}`);
     } catch (err: any) {
@@ -107,7 +110,7 @@ async function main() {
     }
   }
   try {
-    const { embedding } = await embed({ model: EMBEDDING, value: 'banana', providerOptions: withGatewayOptions({}, { AI_GATEWAY_ZDR: 'true' }) });
+    const { embedding } = await embed({ model: EMBEDDING, value: 'banana', providerOptions: withGatewayOptions({}, { AI_GATEWAY_ZDR: 'true' }, PROBE_USAGE) });
     rows.push(`PASS  ${EMBEDDING} [embed, ZDR] → ${embedding.length} dims  (food semantic match; off in prod)`);
   } catch (err: any) {
     rows.push(`FAIL  ${EMBEDDING} [embed, ZDR]: ${String(err?.message ?? err).slice(0, 160)}  (food semantic match; off in prod)`);

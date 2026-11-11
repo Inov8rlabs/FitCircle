@@ -7,6 +7,7 @@ import { generateText, Output } from 'ai';
 import { logIgnoredQueryError } from '@/lib/api/route-errors';
 
 import { gatewayZdrEnabled } from '../ai/gateway-options';
+import { type AiFeature, type AiUsageContext, trackAiCall, usageGatewayFields } from '../ai/usage';
 import { createAdminSupabase } from '../supabase-admin';
 import { stripEmoji, stripEmojiOrNull } from '../text/strip-emoji';
 import type { FoodDTO } from '../types/foods';
@@ -838,14 +839,20 @@ export class NutritionIntelligenceService {
     return 'snack';
   }
 
+  /** Ledger / gateway attribution for a parse (lib/ai/usage.ts): food_photo | food_voice | food_text | food_item. */
+  static usageContext(userId: string, source: 'photo' | 'voice' | 'text' | 'item'): AiUsageContext {
+    return { userId, feature: `food_${source}` as AiFeature };
+  }
+
   private static gatewayOptions(
     userId: string,
     source: 'photo' | 'voice' | 'text' | 'item',
-  ): { sort: 'ttft'; user: string; tags: string[]; zeroDataRetention?: boolean } {
+  ): { sort: 'ttft'; user?: string; tags?: string[]; zeroDataRetention?: boolean } {
     return {
       sort: 'ttft',
-      user: userId,
-      tags: ['nutrition', `source:${source}`],
+      // Gateway user + tags only when AI_GATEWAY_REPORTING_TAGS=on (tag writes are billed); the
+      // ai_usage_events ledger carries user / feature / cost per call (lib/ai/usage.ts).
+      ...usageGatewayFields(this.usageContext(userId, source), ['nutrition', `source:${source}`]),
       // Zero data retention at the AI providers (AI_GATEWAY_ZDR, default on; lib/ai/gateway-options.ts).
       ...(gatewayZdrEnabled() ? { zeroDataRetention: true } : {}),
     };
@@ -1069,7 +1076,7 @@ export class NutritionIntelligenceService {
     });
     let result;
     try {
-      result = await generateText({
+      result = await trackAiCall(this.usageContext(userId, 'photo'), model, () => generateText({
         model,
         output: limits.nativeSchema ? PHOTO_OUTPUT : PHOTO_OUTPUT_JSON_MODE,
         system: limits.nativeSchema ? system : `${system} ${RESPONSE_SHAPE_PROMPT}`,
@@ -1093,7 +1100,7 @@ export class NutritionIntelligenceService {
             ],
           },
         ],
-      });
+      }));
     } catch (err) {
       // generateText itself throws NoObjectGeneratedError when the completed reply fails the
       // schema; it carries the raw text, so a near-miss shape gets one repair attempt here.
@@ -1157,7 +1164,7 @@ export class NutritionIntelligenceService {
     const system = textSystemPrompt(source);
     let result;
     try {
-      result = await generateText({
+      result = await trackAiCall(this.usageContext(userId, source === 'text' ? 'text' : 'voice'), model, () => generateText({
         model,
         output: limits.nativeSchema ? TEXT_OUTPUT : TEXT_OUTPUT_JSON_MODE,
         system: shapeInPrompt ? `${system} ${TEXT_RESPONSE_SHAPE_PROMPT}` : system,
@@ -1182,7 +1189,7 @@ export class NutritionIntelligenceService {
             ],
           },
         ],
-      });
+      }));
     } catch (err) {
       const e = err as { text?: string; finishReason?: string };
       if (e?.text && (e.finishReason == null || e.finishReason === 'stop')) {
@@ -1210,7 +1217,7 @@ export class NutritionIntelligenceService {
     timeoutMs: number,
   ): Promise<ParsedFoodItem> {
     const limits = this.modelCallOptions(model, 800);
-    const result = await generateText({
+    const result = await trackAiCall(this.usageContext(userId, 'item'), model, () => generateText({
       model,
       output: Output.object({ schema: parsedFoodItemSchema }),
       system: ITEM_SYSTEM_PROMPT,
@@ -1232,7 +1239,7 @@ export class NutritionIntelligenceService {
           ],
         },
       ],
-    });
+    }));
     return this.outputOrThrow(result, model);
   }
 

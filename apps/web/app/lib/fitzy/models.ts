@@ -10,6 +10,7 @@
 import { generateText, streamText, type ModelMessage } from 'ai';
 
 import { gatewayCallOptions } from '../ai/gateway-options';
+import { type AiUsageContext, recordAiUsage, trackAiCall, usageFromError } from '../ai/usage';
 
 export const DEFAULT_CHAT_MODEL = 'anthropic/claude-haiku-5.5';
 export const DEFAULT_DEEP_MODEL = 'anthropic/claude-sonnet-5.5';
@@ -143,6 +144,8 @@ export interface ModelCall {
   /** false for structured JSON tasks (see thinkingOptions). Default true. */
   thinking?: boolean;
   abortSignal?: AbortSignal;
+  /** Who/what the call serves: gateway user + tags and the ai_usage_events ledger (lib/ai/usage.ts). */
+  usage?: AiUsageContext;
 }
 
 /**
@@ -158,7 +161,7 @@ export function callOptions(model: string, call: ModelCall) {
     ...(call.abortSignal ? { abortSignal: call.abortSignal } : {}),
     ...(call.maxOutputTokens ? { maxOutputTokens: call.maxOutputTokens } : {}),
     // Thinking switch + gateway zero data retention (lib/ai/gateway-options.ts).
-    ...gatewayCallOptions(thinkingOptions(model, call.thinking ?? true).providerOptions),
+    ...gatewayCallOptions(thinkingOptions(model, call.thinking ?? true).providerOptions, process.env, call.usage),
   };
 }
 
@@ -209,7 +212,7 @@ export async function generateWithFallback(opts: ModelCall & { primary: string; 
     let reported = false;
     try {
       const res = await withDeadline(MODEL_TIMEOUT_MS + 2_000, opts.abortSignal, (signal) =>
-        generateText(callOptions(model, { ...opts, abortSignal: signal }) as Parameters<typeof generateText>[0])
+        trackAiCall(opts.usage, model, () => generateText(callOptions(model, { ...opts, abortSignal: signal }) as Parameters<typeof generateText>[0]))
       );
       const text = (res.text ?? '').trim();
       reported = true;
@@ -245,8 +248,17 @@ export function streamFrom(opts: {
   maxOutputTokens?: number;
   /** false disables model thinking (see thinkingOptions). Default true. */
   thinking?: boolean;
+  usage?: AiUsageContext;
 }) {
   const stallCtl = new AbortController();
+  // Exactly one ledger row per stream: finished, errored or aborted (stall / client gone).
+  const t0 = Date.now();
+  let recorded = false;
+  const record = (ok: boolean, usage?: unknown, providerMetadata?: unknown) => {
+    if (recorded) return;
+    recorded = true;
+    recordAiUsage(opts.usage, { model: opts.model, usage, providerMetadata, ok, durationMs: Date.now() - t0 });
+  };
   const signal = opts.abortSignal ? anySignal(stallCtl.signal, opts.abortSignal) : stallCtl.signal;
   const result = streamText({
     ...callOptions(opts.model, {
@@ -255,10 +267,14 @@ export function streamFrom(opts: {
       abortSignal: signal,
       maxOutputTokens: opts.maxOutputTokens,
       thinking: opts.thinking,
+      usage: opts.usage,
     }),
-    onError: () => {
+    onFinish: (e: any) => record(true, e?.totalUsage ?? e?.usage, e?.providerMetadata),
+    onError: (e: any) => {
       /* surfaced through textStream */
+      record(false, usageFromError(e?.error).usage, usageFromError(e?.error).providerMetadata);
     },
+    onAbort: () => record(false),
   } as Parameters<typeof streamText>[0]);
   return {
     /** Model text, guarded by the stall watchdog (a stall aborts the request and throws ModelStallError). */

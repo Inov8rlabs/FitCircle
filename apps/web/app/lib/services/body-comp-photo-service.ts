@@ -6,7 +6,8 @@ import { z } from 'zod';
 
 import { logIgnoredQueryError } from '@/lib/api/route-errors';
 
-import { gatewayCallOptions } from '../ai/gateway-options';
+import { aiCallOptions } from '../ai/gateway-options';
+import { trackAiCall } from '../ai/usage';
 import { createAdminSupabase } from '../supabase-admin';
 import {
   type BodyCompDraft,
@@ -169,7 +170,7 @@ export class BodyCompPhotoService {
     let parse: BodyCompParseResult;
     let model = PRIMARY_MODEL;
     try {
-      parse = await this.callModel(PRIMARY_MODEL, images, PARSE_TIMEOUT_MS);
+      parse = await this.callModel(PRIMARY_MODEL, images, PARSE_TIMEOUT_MS, userId);
     } catch (err) {
       this.logParseFailure(userId, PRIMARY_MODEL, Date.now() - startedAt, meta, err);
       throw new Error('ParseFailed');
@@ -188,7 +189,8 @@ export class BodyCompPhotoService {
           const retryParse = await this.callModel(
             ESCALATION_MODEL,
             images,
-            Math.min(PARSE_TIMEOUT_MS, remainingMs)
+            Math.min(PARSE_TIMEOUT_MS, remainingMs),
+            userId
           );
           const retryDraft = this.buildDraft(retryParse, ESCALATION_MODEL, false);
           if (retryDraft.overallConfidence > draft.overallConfidence) {
@@ -362,11 +364,13 @@ export class BodyCompPhotoService {
   private static async callModel(
     model: string,
     images: ParseScanImage[],
-    timeoutMs: number
+    timeoutMs: number,
+    userId: string | null = null
   ): Promise<BodyCompParseResult> {
-    const { output } = await generateText({
+    const usage = { userId, feature: 'body_comp' as const };
+    const { output } = await trackAiCall(usage, model, () => generateText({
       model,
-      ...gatewayCallOptions(),
+      ...aiCallOptions(usage),
       output: Output.object({ schema: bodyCompParseResultSchema }),
       system: SYSTEM_PROMPT,
       // Bound latency: one extra try at most (the default 2 retries × a slow vision
@@ -388,7 +392,7 @@ export class BodyCompPhotoService {
           ],
         },
       ],
-    });
+    }));
     return output;
   }
 
