@@ -133,3 +133,88 @@ FCM's `collapse_key` is not used, because FCM keeps only 4 distinct collapse key
 - The planner, and daily-summary bundling
 - `dedupeKey` (in-process and `notification_log`), the identical-content guard, concurrent sends, and retry after no delivery
 - Burst control, the payload's `thread-id` / `apns-collapse-id` / `tag`, and the posts that have dedicated pushes
+
+## 7. Delivery analytics and open tracking
+
+Added 2026-11-12 (branch `feat/checkout-exit-analytics`, tracking plan v33). Before this, `notification_log.opened_at` was never set (clients reported opens only to Amplitude, without an id to join on), so the open rate could not be measured per push.
+
+### 7.1 `notification_id` in every payload
+
+`NotificationOrchestrator.send()` generates the `notification_log` row id (`crypto.randomUUID()`) before anything else. Every `send()` writes exactly one row with that id, whatever the outcome. The row is still inserted **after** the FCM call, so the duplicate guard (§3), which counts delivered rows, is unchanged. Every delivered payload carries it:
+
+| Key | Value |
+|---|---|
+| `data.notification_id` | the `notification_log.id` (lowercase UUID string) |
+
+It is additive. Android's `ALLOWED_DATA_KEYS` drops it until a build adds it; iOS ignores unknown keys. Pushes sent outside the orchestrator (`CampaignDeliveryService`) have no `notification_log` row and no `notification_id`.
+
+### 7.2 `Push Sent` (server, Amplitude)
+
+There is one `Push Sent` event per `notification_log` row the orchestrator writes (`lib/notifications/push-sent-events.ts`). `user_id` is the profile id, and `platform` is `server`.
+
+| Property | Value |
+|---|---|
+| `notification_type` | `notification_log.notification_type` |
+| `notification_category` | `notification_log.notification_category` |
+| `outcome` | `sent`: delivered to at least 1 device. `no_token`: the user has no active push token. `failed`: tokens exist, but FCM accepted none. `suppressed`: any guard stopped it before sending (including a quiet-hours deferral, and a burst follow-up that no device takes). |
+| `suppression_reason` | `notification_log.suppression_reason` for every non-`sent` outcome (`duplicate`, `category_disabled`, `frequency_cap`, `quiet_hours`, `deferred_quiet_hours`, `burst`, `suppressed_by_<type>`, `no_delivery`) |
+| `push_platform` | `ios`, `android` or `both`: the platforms of the active tokens targeted. Absent when the send stopped before the token read. |
+| `notification_id` | the row id |
+
+Delivery:
+
+- Events are queued in-process. One flush is scheduled after the response (`runAfterResponse` → Next `after()`, which also works in cron route handlers), so one cron tick becomes one HTTP V2 request, or one per 500 events.
+- `insert_id = push-sent:<notification_log id>` makes retries idempotent.
+- A 2.5 s timeout applies, and nothing ever throws.
+- It is a no-op when `AMPLITUDE_SERVER_API_KEY` is unset or `off`, using the same key resolution as the server Identify (`lib/analytics/amplitude-server.ts`).
+
+The push and the log row never depend on Amplitude.
+
+### 7.3 `POST /api/mobile/notifications/opened`
+
+The app calls this when the user taps a push that has `data.notification_id`. It uses mobile auth (Bearer).
+
+Request body:
+
+```json
+{ "notification_id": "<uuid from data.notification_id>", "action": "default" }
+```
+
+- `notification_id` is required and must be a UUID. Upper case is accepted, which covers iOS `uuidString`.
+- `action` is optional. It must match `^[A-Za-z0-9_.-]{1,64}$`: `default` for a body tap, or the action button id such as `log_meal` or `snooze`. `null` is treated as absent.
+
+| Status | When |
+|---|---|
+| `204` (no body) | Recorded. The first open sets `notification_log.opened_at = now()`, and the action is stored in `data.openedAction`. A repeat (retry, second tap) is also `204` and changes nothing. |
+| `400 VALIDATION_ERROR` | `notification_id` is missing or not a UUID, the action is malformed, or the body is not JSON. |
+| `401 UNAUTHORIZED` | Missing or invalid token. |
+| `404 NOT_FOUND` | There is no row with that id for this user. Another user's id also returns 404. |
+| `500` | Read or update failed (reported to Sentry). |
+
+Every response is `Cache-Control: no-store`. The update is conditional on `opened_at is null`, so concurrent first opens record once. Clients should fire it in the background and should not retry on 4xx.
+
+Clients should also keep sending `Push Notification Opened {notification_type, route, notification_id, action}` and `Push Dismissed {notification_type, notification_id}` to Amplitude. The open rate from the server is `opened_at is not null` over `suppressed = false` rows in `notification_log`, or `Push Notification Opened` ÷ `Push Sent {outcome: sent}` in Amplitude, joined on `notification_id`.
+
+The older `POST /api/mobile/notifications/[id]/opened` is kept for compatibility. No shipped client calls it, and it overwrites `opened_at` on every call.
+
+### 7.4 Meal reminder payload and copy
+
+Meal reminders (`meal_reminder_{breakfast,lunch,snack,dinner}`) carry these data keys:
+
+| Key | Value | Who reads it |
+|---|---|---|
+| `type` | `meal_reminder_<slot>` | all |
+| `category` | `momentum` | all |
+| `screen` | `food_log` | Shipped apps route by it (Food Log tab). It stays the fallback. |
+| `mealType` | `breakfast` / `lunch` / `snack` / `dinner` (the slot) | 1.1.0+, which opens the logger with the slot preselected |
+| `route` | `log_meal_camera` | New. The meal logger opens straight into the camera. Shipped apps never read `data.route`: Android's allowlist drops it, and iOS routes by `screen`. So it is safe for old clients. |
+| `dedupeKey`, `groupKey` | `meal:<slot>:<localDate>` / thread | §3, §5 |
+| `notification_id` | the row id | §7.1 |
+
+The copy is action-led ("Lunch time — snap it in 5 seconds" / "Take a photo and FitCircle does the counting.").
+
+- Each slot has 2–3 variants in `MEAL_REMINDER_COPY` (`lib/journey/meal-reminders.ts`). The variant is picked by the user's local date (days since epoch mod n), so consecutive days differ and a cron re-run picks the same text.
+- The copy has no emoji and no invented data.
+- The only number ever shown is the user's own streak, on dinner, and only when today's claim is still open. This is why `momentum_at_risk` is suppressed after a dinner reminder.
+
+Tests: `lib/services/__tests__/push-sent-tracking.test.ts` and `api/mobile/notifications/opened/__tests__/route.test.ts`.

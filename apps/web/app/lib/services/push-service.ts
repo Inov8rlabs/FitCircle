@@ -96,6 +96,18 @@ export function apsExtras(extras: ApnsExtras | undefined): Partial<ApsDictionary
   return out;
 }
 
+/**
+ * Optional out-parameter for sendPush: what the user's devices looked like, so
+ * the caller can tell "no active token" from "every send failed" (Push Sent
+ * analytics, docs/PUSH_NOTIFICATIONS.md §7). Filled once the tokens are read.
+ */
+export interface PushSendReport {
+  /** Active push tokens found for the user (-1 = not read). */
+  activeTokens: number;
+  /** Distinct platforms of those tokens. */
+  platforms: Array<PushToken['platform']>;
+}
+
 export interface PushToken {
   id: string;
   user_id: string;
@@ -429,8 +441,12 @@ export class PushService {
    * Send a push notification to a single user (all their active devices).
    * Returns the number of successfully sent messages.
    */
-  static async sendPush(userId: string, notification: PushNotification): Promise<number> {
+  static async sendPush(userId: string, notification: PushNotification, report?: PushSendReport): Promise<number> {
     const tokens = await this.getActiveTokens(userId);
+    if (report) {
+      report.activeTokens = tokens.length;
+      report.platforms = [...new Set(tokens.map((t) => t.platform))];
+    }
 
     if (tokens.length === 0) {
       console.log(`[PushService.sendPush] No active tokens for user ${userId}`);

@@ -135,7 +135,7 @@ Automated:
 
 ### Analytics
 
-There are no server "push sent" events in the tracking plan. `notification_log` is the sent record (type, category `coach`, `data.fitzySource` = ai/template). Opens use the existing `Push Notification Opened` (Android: `notification_type` = the fitzy type, `route` = `fitzy_chat`. iOS: `route` = `fitzyTip`). iOS also sends `Fitzy Opened {surface: "push"}`. `surface` is a free string, so the tracking plan needs no change. Settings changes use `Notification Settings Changed {setting: coach}` (Android, iOS) or `coach_enabled` (web).
+Every orchestrator send also emits a server `Push Sent` event (tracking plan v33; docs/PUSH_NOTIFICATIONS.md §7), and the payload carries `notification_id` for open tracking. `notification_log` is the sent record (type, category `coach`, `data.fitzySource` = ai/template). Opens use the existing `Push Notification Opened` (Android: `notification_type` = the fitzy type, `route` = `fitzy_chat`. iOS: `route` = `fitzyTip`). iOS also sends `Fitzy Opened {surface: "push"}`. `surface` is a free string, so the tracking plan needs no change. Settings changes use `Notification Settings Changed {setting: coach}` (Android, iOS) or `coach_enabled` (web).
 
 ## 5. Interaction with existing notifications
 

@@ -289,6 +289,8 @@ describe('FCM wire shape (buildFCMMessage)', () => {
   });
 });
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+
 describe('NotificationOrchestrator.send → PushNotification', () => {
   beforeEach(() => {
     sendPush.mockClear();
@@ -302,7 +304,7 @@ describe('NotificationOrchestrator.send → PushNotification', () => {
   it('streak at risk: category + time-sensitive, existing data contract unchanged', async () => {
     await NotificationOrchestrator.send('u1', 'momentum_at_risk', { currentMomentum: 12, shieldsRemaining: 0 });
     const n = sent();
-    expect(n.data).toEqual({ type: 'momentum_at_risk', category: 'momentum', screen: 'streaks' });
+    expect(n.data).toEqual({ type: 'momentum_at_risk', category: 'momentum', screen: 'streaks', notification_id: expect.stringMatching(UUID_RE) });
     expect(n.apns).toMatchObject({ category: 'STREAK_AT_RISK', interruptionLevel: 'time-sensitive', mutableContent: false });
     expect(n.apns?.custom).toBeUndefined();
   });

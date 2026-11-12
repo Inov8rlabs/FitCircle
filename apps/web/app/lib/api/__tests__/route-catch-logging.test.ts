@@ -67,6 +67,7 @@ const ALLOWLIST: Record<string, { count: number; reason: string }> = {
   'mobile/onboarding/complete/route.ts': { count: 1, reason: 'unparseable JSON body → {}' },
   'mobile/profile/avatar/route.ts': { count: 1, reason: 'non-multipart body → 400 VALIDATION_ERROR' },
   'mobile/profile/preferences/route.ts': { count: 1, reason: 'invalid JSON body → 400 VALIDATION_ERROR' },
+  'mobile/notifications/opened/route.ts': { count: 2, reason: 'requireMobileAuth only throws Unauthorized → 401; unparseable JSON body → undefined, then validated (400)' },
   'mobile/rating-prompt/requested/route.ts': { count: 2, reason: 'requireMobileAuth only throws Unauthorized → 401; unparseable JSON body → undefined, then validated' },
   'mobile/rating-prompt/route.ts': { count: 1, reason: 'requireMobileAuth only throws Unauthorized → 401' },
   'mobile/streaks/apply-freeze/route.ts': { count: 1, reason: 'malformed JSON → default missedDate (yesterday)' },

@@ -1,5 +1,7 @@
-import { createHash } from 'crypto';
+import { createHash, randomUUID } from 'crypto';
 
+import { mealReminderCopy } from '../journey/meal-reminders';
+import { pushPlatformFor, recordPushSent, type PushSentOutcome } from '../notifications/push-sent-events';
 import { DEFERRED_REASON, isDeferrable, planDeferral } from '../notifications/quiet-hours-deferral';
 import { localClockIn, resolveNotificationTimezone } from '../notifications/user-timezone';
 import { createAdminSupabase } from '../supabase-admin';
@@ -20,7 +22,7 @@ import {
   presentationFor,
   type CircleCard,
 } from './push-presentation';
-import { PushService, type PushNotification } from './push-service';
+import { PushService, type PushNotification, type PushSendReport } from './push-service';
 
 // ============================================================================
 // TYPES
@@ -328,6 +330,7 @@ export interface NotificationTiming {
 }
 
 interface NotificationLogEntry {
+  id: string;
   user_id: string;
   notification_type: string;
   notification_category: string;
@@ -452,30 +455,12 @@ export const NOTIFICATION_TEMPLATES: Record<
     body: 'Yesterday ended a streak, today starts one. A single log is all it takes.',
     category: 'momentum',
   }),
-  // Meal-slot reminders: warm, short, no guilt (ACTIVATION_JOURNEY_SPEC §4).
-  meal_reminder_breakfast: () => ({
-    title: 'Good morning',
-    body: 'Snap breakfast and see calories and macros in seconds.',
-    category: 'momentum',
-  }),
-  meal_reminder_lunch: () => ({
-    title: 'Lunch break?',
-    body: "Snap your lunch and see what's on your plate in seconds.",
-    category: 'momentum',
-  }),
-  meal_reminder_snack: () => ({
-    title: 'Snack time',
-    body: 'Having a snack? A quick photo keeps your day complete.',
-    category: 'momentum',
-  }),
-  meal_reminder_dinner: (data) => ({
-    title: 'Dinner time',
-    body:
-      data.currentMomentum && data.currentMomentum > 0
-        ? `Snap dinner to keep your ${data.currentMomentum}-day streak going.`
-        : 'Snap dinner to round out your day.',
-    category: 'momentum',
-  }),
+  // Meal-slot reminders: specific, action-led, no guilt, no emoji (ACTIVATION_JOURNEY_SPEC §4).
+  // Variants rotate by data.localDate (lib/journey/meal-reminders.ts mealReminderCopy).
+  meal_reminder_breakfast: (data) => ({ ...mealReminderCopy('breakfast', data.localDate), category: 'momentum' }),
+  meal_reminder_lunch: (data) => ({ ...mealReminderCopy('lunch', data.localDate), category: 'momentum' }),
+  meal_reminder_snack: (data) => ({ ...mealReminderCopy('snack', data.localDate), category: 'momentum' }),
+  meal_reminder_dinner: (data) => ({ ...mealReminderCopy('dinner', data.localDate, data.currentMomentum), category: 'momentum' }),
 
   // ---- State - Circle (S5/S6/S12) ----
   circle_boost_threshold: (data) => ({
@@ -959,6 +944,13 @@ export function isCapExempt(type: NotificationType): boolean {
 }
 
 /** Meal-slot reminder types (MealReminderService). */
+/**
+ * `data.route` on meal reminders: open the meal logger straight into the camera.
+ * Additive — shipped apps route by `screen` (food_log) and ignore / drop
+ * unknown keys (Android's ALLOWED_DATA_KEYS allowlist).
+ */
+export const MEAL_REMINDER_ROUTE = 'log_meal_camera';
+
 export const MEAL_REMINDER_TYPES: ReadonlySet<NotificationType> = new Set<NotificationType>([
   'meal_reminder_breakfast',
   'meal_reminder_lunch',
@@ -1025,6 +1017,11 @@ export class NotificationOrchestrator {
 
     const content = template(data);
     const now = Date.now();
+    // The notification_log id of the ONE row this send writes, known up front so
+    // the delivered payload can carry it (data.notification_id → open tracking).
+    // The row itself is still written after the send, so the duplicate guard
+    // (which counts delivered rows) is unchanged.
+    const notificationId = randomUUID();
     const dedupeKey = typeof data.dedupeKey === 'string' && data.dedupeKey ? data.dedupeKey : undefined;
 
     // 0. Duplicate guard (docs/PUSH_NOTIFICATIONS.md §3). In-process claims
@@ -1034,7 +1031,7 @@ export class NotificationOrchestrator {
     const claimKeys: string[] = [];
     const contentKey = `c:${userId}:${type}:${content.title}\u0000${content.body}`;
     if (!sendGuard.claim(contentKey, IDENTICAL_CONTENT_WINDOW_MINUTES * 60_000, now)) {
-      await this.logNotification(userId, type, content, data, true, 'duplicate');
+      await this.logNotification(notificationId, userId, type, content, data, true, 'duplicate');
       return { sent: false, reason: 'duplicate' };
     }
     claimKeys.push(contentKey);
@@ -1042,7 +1039,7 @@ export class NotificationOrchestrator {
       const keyKey = `k:${userId}:${dedupeKey}`;
       if (!sendGuard.claim(keyKey, DEDUPE_WINDOW_HOURS * 3_600_000, now)) {
         sendGuard.release(contentKey);
-        await this.logNotification(userId, type, content, data, true, 'duplicate');
+        await this.logNotification(notificationId, userId, type, content, data, true, 'duplicate');
         return { sent: false, reason: 'duplicate' };
       }
       claimKeys.push(keyKey);
@@ -1054,14 +1051,14 @@ export class NotificationOrchestrator {
     let chatMark: { previous: number | undefined } | null = null;
     try {
       if (await this.isDuplicate(userId, type, content, dedupeKey)) {
-        await this.logNotification(userId, type, content, data, true, 'duplicate');
+        await this.logNotification(notificationId, userId, type, content, data, true, 'duplicate');
         return { sent: false, reason: 'duplicate' };
       }
 
       // 1. Check if user has this category enabled
       const isEnabled = await NotificationPreferencesService.isTypeEnabled(userId, type);
       if (!isEnabled) {
-        await this.logNotification(userId, type, content, data, true, 'category_disabled');
+        await this.logNotification(notificationId, userId, type, content, data, true, 'category_disabled');
         return { sent: false, reason: 'category_disabled' };
       }
 
@@ -1072,7 +1069,7 @@ export class NotificationOrchestrator {
       if (isCapChecked(type)) {
         const capResult = await this.checkFrequencyCap(userId, timing.timezone);
         if (!capResult.allowed) {
-          await this.logNotification(userId, type, content, data, true, 'frequency_cap');
+          await this.logNotification(notificationId, userId, type, content, data, true, 'frequency_cap');
           return { sent: false, reason: 'frequency_cap' };
         }
       }
@@ -1084,11 +1081,11 @@ export class NotificationOrchestrator {
         if (isDeferrable(type) && data.deferredRelease !== true && timing.prefs?.quiet_hours_end) {
           const plan = planDeferral(type, new Date(now), timing.timezone, timing.prefs.quiet_hours_end);
           if (plan && (await this.deferralEnabled(userId))) {
-            await this.logNotification(userId, type, content, { ...data, ...plan, timezone: timing.timezone }, true, DEFERRED_REASON);
+            await this.logNotification(notificationId, userId, type, content, { ...data, ...plan, timezone: timing.timezone }, true, DEFERRED_REASON);
             return { sent: false, reason: 'deferred', deferUntil: plan.deferUntil };
           }
         }
-        await this.logNotification(userId, type, content, data, true, 'quiet_hours');
+        await this.logNotification(notificationId, userId, type, content, data, true, 'quiet_hours');
         return { sent: false, reason: 'quiet_hours' };
       }
 
@@ -1096,6 +1093,7 @@ export class NotificationOrchestrator {
       const suppressionResult = await this.checkSuppression(userId, type);
       if (suppressionResult.suppressed) {
         await this.logNotification(
+          notificationId,
           userId,
           type,
           content,
@@ -1116,7 +1114,7 @@ export class NotificationOrchestrator {
         const conversation = type === 'chat_message' && data.conversation === true;
         if (await this.isBurst(userId, now)) {
           if (!conversation) {
-            await this.logNotification(userId, type, content, data, true, 'burst');
+            await this.logNotification(notificationId, userId, type, content, data, true, 'burst');
             return { sent: false, reason: 'burst' };
           }
           burstFollowUp = true;
@@ -1140,18 +1138,20 @@ export class NotificationOrchestrator {
 
       // The base notification is the legacy (non-quiet) one; chat_quiet devices
       // get the quiet variant / burst delivery from PushService.forDevice.
-      const notification = await this.buildPushNotification(userId, type, { ...data, quiet: false }, content, dedupeKey);
+      const notification = await this.buildPushNotification(userId, type, { ...data, quiet: false }, content, dedupeKey, notificationId);
       if (type === 'chat_message' && chatCircleId) {
         notification.chatDelivery = { quiet: data.quiet === true, burstFollowUp };
       }
-      const sentCount = await PushService.sendPush(userId, notification);
+      const report: PushSendReport = { activeTokens: -1, platforms: [] };
+      const sentCount = await PushService.sendPush(userId, notification, report);
+      const platforms = report.platforms;
 
       // 6. Log the notification — truthfully. With no registered device (or
       //    no FCM credentials) nothing was delivered, and a "sent" log row
       //    would both mislead and count against the daily frequency cap.
       if (sentCount > 0) {
         delivered = true;
-        await this.logNotification(userId, type, content, data, false);
+        await this.logNotification(notificationId, userId, type, content, data, false, undefined, { outcome: 'sent', platforms });
         console.log(
           `[NotificationOrchestrator] Sent "${type}" to user ${userId} (${sentCount} devices)`
         );
@@ -1159,7 +1159,10 @@ export class NotificationOrchestrator {
       }
       // A burst follow-up with no chat_quiet device is the old drop, as before.
       const reason = burstFollowUp ? 'burst' : 'no_delivery';
-      await this.logNotification(userId, type, content, data, true, reason);
+      // Push Sent outcome: no_token (no active device), failed (devices, none
+      // accepted it) or suppressed (a burst follow-up no device takes).
+      const outcome: PushSentOutcome = burstFollowUp ? 'suppressed' : report.activeTokens === 0 ? 'no_token' : 'failed';
+      await this.logNotification(notificationId, userId, type, content, data, true, reason, { outcome, platforms });
       return { sent: false, reason };
     } finally {
       if (!delivered) {
@@ -1284,7 +1287,8 @@ export class NotificationOrchestrator {
     type: NotificationType,
     data: NotificationData,
     content: NotificationContent,
-    dedupeKey: string | undefined
+    dedupeKey: string | undefined,
+    notificationId?: string
   ): Promise<PushNotification> {
     const isChatType = CHAT_NOTIFICATION_TYPES.includes(type);
     // All data values must be strings (FCM v1 requirement); absent keys are omitted.
@@ -1301,6 +1305,10 @@ export class NotificationOrchestrator {
     if (data.campaignSlug) pushData.campaignSlug = String(data.campaignSlug);
     // Meal-slot reminders: the slot, so 1.1.0 opens the logger preselected (older apps ignore it).
     if (MEAL_REMINDER_TYPES.has(type) && typeof data.mealType === 'string') pushData.mealType = data.mealType;
+    // Meal reminders: open the camera logger (clients that know `route`); `screen` stays the fallback.
+    if (MEAL_REMINDER_TYPES.has(type)) pushData.route = MEAL_REMINDER_ROUTE;
+    // The notification_log row id, so a tap can be reported back (POST /api/mobile/notifications/opened).
+    if (notificationId) pushData.notification_id = notificationId;
     // Fitzy chat context (the tip the push came from); clients render it as plain text.
     if (content.category === 'coach' && data.fitzyTip) {
       pushData.fitzyTip = [...String(data.fitzyTip)].slice(0, FITZY_TIP_DATA_MAX).join('');
@@ -1564,17 +1572,35 @@ export class NotificationOrchestrator {
   // PRIVATE
   // --------------------------------------------------------------------------
 
+  /**
+   * Write the send's notification_log row (with the id generated in send()) and
+   * queue its `Push Sent` Amplitude event (docs/PUSH_NOTIFICATIONS.md §7).
+   * Outcome defaults to sent / suppressed from the `suppressed` flag.
+   */
   private static async logNotification(
+    notificationId: string,
     userId: string,
     type: NotificationType,
     content: NotificationContent,
     data: NotificationData,
     suppressed: boolean,
-    suppressionReason?: string
+    suppressionReason?: string,
+    delivery?: { outcome: PushSentOutcome; platforms?: readonly string[] }
   ): Promise<void> {
     const supabaseAdmin = createAdminSupabase();
 
+    recordPushSent({
+      notificationId,
+      userId,
+      notificationType: type,
+      notificationCategory: content.category,
+      outcome: delivery?.outcome ?? (suppressed ? 'suppressed' : 'sent'),
+      suppressionReason,
+      pushPlatform: pushPlatformFor(delivery?.platforms),
+    });
+
     const entry: NotificationLogEntry = {
+      id: notificationId,
       user_id: userId,
       notification_type: type,
       notification_category: content.category,

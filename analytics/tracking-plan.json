@@ -1,7 +1,7 @@
 {
   "$schema": "./tracking-plan.schema.json",
-  "version": 31,
-  "updated": "2026-11-09",
+  "version": 33,
+  "updated": "2026-11-12",
   "conventions": {
     "eventNames": "Title Case, '<Object> <Past-tense verb>' (e.g. 'Meal Logged'). Names are frozen once shipped: rename in the analytics tool, never in code.",
     "propertyNames": "snake_case. Enum values are lowercase snake_case.",
@@ -883,6 +883,83 @@
         },
         {
           "name": "route",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "notification_id",
+          "type": "string",
+          "required": false,
+          "description": "Server notification_log id from the push payload (data.notification_id). Absent for local notifications."
+        },
+        {
+          "name": "action",
+          "type": "string",
+          "required": false,
+          "description": "default (body tap) or the action button id the user tapped (e.g. log_meal, snooze)."
+        }
+      ]
+    },
+    {
+      "name": "Push Dismissed",
+      "category": "engagement",
+      "platforms": [
+        "ios",
+        "android"
+      ],
+      "description": "User swiped away / cleared a push without opening it (Android deleteIntent; iOS dismiss action on categories that declare customDismissAction).",
+      "properties": [
+        {
+          "name": "notification_type",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "notification_id",
+          "type": "string",
+          "required": false
+        }
+      ]
+    },
+    {
+      "name": "Push Sent",
+      "category": "engagement",
+      "platforms": [
+        "server"
+      ],
+      "description": "Server attempted a push (one event per notification_log row). Sent from the backend via the Amplitude HTTP API with the user's id.",
+      "properties": [
+        {
+          "name": "notification_type",
+          "type": "string",
+          "required": true,
+          "description": "notification_log.notification_type, e.g. meal_reminder_lunch, chat_message."
+        },
+        {
+          "name": "notification_category",
+          "type": "string",
+          "required": false
+        },
+        {
+          "name": "outcome",
+          "type": "string",
+          "required": true,
+          "description": "sent | suppressed | failed | no_token"
+        },
+        {
+          "name": "suppression_reason",
+          "type": "string",
+          "required": false,
+          "description": "Orchestrator reason when outcome != sent (e.g. frequency_cap, duplicate, category_disabled, quiet_hours, deferred_quiet_hours, burst follow-up)."
+        },
+        {
+          "name": "push_platform",
+          "type": "string",
+          "required": false,
+          "description": "ios | android | both — platforms of the active tokens targeted."
+        },
+        {
+          "name": "notification_id",
           "type": "string",
           "required": false
         }
@@ -2523,6 +2600,58 @@
           "type": "string",
           "required": false,
           "description": "Paywall layout from the experiment payload: plans | plan_recap | annual_savings. Absent for non-onboarding paywalls."
+        },
+        {
+          "name": "seconds_in_sheet",
+          "type": "int",
+          "required": false,
+          "description": "Whole seconds between the store sheet / checkout opening and the cancel."
+        },
+        {
+          "name": "store_response_code",
+          "type": "string",
+          "required": false,
+          "description": "Raw store result for the cancel: Play BillingResponseCode name (USER_CANCELED, ...) or StoreKit result (userCancelled, pending). Never free text."
+        }
+      ]
+    },
+    {
+      "name": "Checkout Exit Reason",
+      "category": "monetization",
+      "platforms": [
+        "ios",
+        "android"
+      ],
+      "description": "Answer to the one-tap 'What stopped you?' prompt shown after a cancelled store sheet. Not sent when the prompt is closed without an answer.",
+      "properties": [
+        {
+          "name": "source",
+          "type": "string",
+          "required": true,
+          "description": "Snake_case trigger id: ai_limit, pro_card, settings, circle_limit, history_limit, remove_ads, body_scan, milestone, streak_shield, locked_feature, pricing_page, onboarding, landing, landing_footer (web). Never camelCase."
+        },
+        {
+          "name": "reason",
+          "type": "string",
+          "required": true,
+          "description": "price | no_card | trial_unclear | just_looking | other"
+        },
+        {
+          "name": "plan",
+          "type": "enum",
+          "enum": "plan",
+          "required": false
+        },
+        {
+          "name": "store",
+          "type": "enum",
+          "enum": "store",
+          "required": true
+        },
+        {
+          "name": "trial_eligible",
+          "type": "bool",
+          "required": false
         }
       ]
     },
