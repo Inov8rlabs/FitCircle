@@ -145,3 +145,76 @@ export function bootstrapMeans(values: readonly number[], sims: number, rand: ()
   }
   return out;
 }
+
+/**
+ * Lift of `arm` vs `control` from aligned posterior draws: 5th–95th percentile of
+ * the relative lift (arm / control − 1) and of the absolute difference (arm − control).
+ * Draws where control is 0 (relative lift undefined) are skipped for the relative interval.
+ */
+export function liftIntervals(arm: Float64Array, control: Float64Array): { rel: [number, number] | null; abs: [number, number] | null } {
+  const n = Math.min(arm.length, control.length);
+  const rel: number[] = [];
+  const abs: number[] = [];
+  for (let i = 0; i < n; i++) {
+    const a = arm[i];
+    const c = control[i];
+    if (!Number.isFinite(a) || !Number.isFinite(c)) continue;
+    abs.push(a - c);
+    if (c !== 0) rel.push(a / c - 1);
+  }
+  const q = (xs: number[]): [number, number] | null => {
+    if (!xs.length) return null;
+    xs.sort((p, r) => p - r);
+    return [quantileSorted(xs, 0.05), quantileSorted(xs, 0.95)];
+  };
+  return { rel: q(rel), abs: q(abs) };
+}
+
+/** ln Γ(x) — Lanczos approximation (g = 7, n = 9). */
+function lnGamma(x: number): number {
+  const c = [0.99999999999980993, 676.5203681218851, -1259.1392167224028, 771.32342877765313, -176.61502916214059, 12.507343278686905, -0.13857109526572012, 9.9843695780195716e-6, 1.5056327351493116e-7];
+  if (x < 0.5) return Math.log(Math.PI / Math.sin(Math.PI * x)) - lnGamma(1 - x);
+  x -= 1;
+  let a = c[0];
+  const t = x + 7.5;
+  for (let i = 1; i < 9; i++) a += c[i] / (x + i);
+  return 0.5 * Math.log(2 * Math.PI) + (x + 0.5) * Math.log(t) - t + Math.log(a);
+}
+
+/** Regularised upper incomplete gamma Q(s, x) (Numerical Recipes gser / gcf). */
+function gammaQ(s: number, x: number): number {
+  if (x <= 0) return 1;
+  if (x < s + 1) {
+    let sum = 1 / s;
+    let term = sum;
+    for (let k = 1; k < 500; k++) {
+      term *= x / (s + k);
+      sum += term;
+      if (Math.abs(term) < Math.abs(sum) * 1e-14) break;
+    }
+    return Math.max(0, 1 - sum * Math.exp(-x + s * Math.log(x) - lnGamma(s)));
+  }
+  let b = x + 1 - s;
+  let c = 1 / 1e-300;
+  let d = 1 / b;
+  let h = d;
+  for (let i = 1; i < 500; i++) {
+    const an = -i * (i - s);
+    b += 2;
+    d = an * d + b;
+    if (Math.abs(d) < 1e-300) d = 1e-300;
+    c = b + an / c;
+    if (Math.abs(c) < 1e-300) c = 1e-300;
+    d = 1 / d;
+    const delta = d * c;
+    h *= delta;
+    if (Math.abs(delta - 1) < 1e-14) break;
+  }
+  return Math.min(1, Math.exp(-x + s * Math.log(x) - lnGamma(s)) * h);
+}
+
+/** P(χ²_df ≥ stat): the p-value of a chi-square statistic. */
+export function chiSquarePValue(stat: number, df: number): number {
+  if (!(df > 0) || !Number.isFinite(stat)) return NaN;
+  return gammaQ(df / 2, stat / 2);
+}

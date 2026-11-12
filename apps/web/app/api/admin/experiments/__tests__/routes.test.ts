@@ -310,6 +310,16 @@ describe('results', () => {
     expect(revenue.arms.control.value).toBe(0); // sandbox purchase ignored
     expect(revenue.arms.variantA.value).toBeCloseTo(8.997, 2);
     expect(r.decision).toHaveProperty('candidate');
+    // Scorecard additions (additive).
+    expect(paid).toMatchObject({ title: 'Became a paying subscriber within 14 days', group: 'primary', maturityLabel: 'Users with 14 days of data' });
+    expect(paid.arms.variantA).toHaveProperty('liftCi90');
+    expect(paid.arms.variantA).toHaveProperty('pending', 0);
+    expect(r.weights).toEqual(Object.fromEntries(ARMS.map((a: any) => [a.key, a.weight])));
+    expect(r.srm).toMatchObject({ observed: { control: 10, variantA: 10, variantB: 10 }, total: 30 });
+    expect(Array.isArray(r.daily)).toBe(true);
+    expect(r.daily.reduce((s: number, d: any) => s + Object.values(d.enrolled as Record<string, number>).reduce((a, b) => a + b, 0), 0)).toBe(31);
+    expect(r.timelines.map((t: any) => t.metricKey)).toContain('paid_conversion_d14');
+    expect(r).toHaveProperty('daysRunning');
 
     const cached = await json(await RESULTS(req('/api/admin/experiments/onboarding_v2/results'), params('onboarding_v2')));
     expect(cached.body.data.cached).toBe(true);

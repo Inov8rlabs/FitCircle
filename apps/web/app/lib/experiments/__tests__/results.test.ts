@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
-import { computeResults, decide, RATE_METRICS, REVENUE_METRIC, segmentValue, type UserFacts } from '../results';
-import { betaDraws, bootstrapMeans, compareDraws, mulberry32, quantileSorted, sampleGamma, seedFrom } from '../stats';
+import { approxLift, computeResults, dailyEnrollment, decide, expectedCountsAt, liftTimelines, RATE_METRICS, REVENUE_METRIC, segmentValue, srmCheck, weightHistory, type UserFacts } from '../results';
+import { betaDraws, bootstrapMeans, chiSquarePValue, compareDraws, liftIntervals, mulberry32, quantileSorted, sampleGamma, seedFrom } from '../stats';
 
 const D = 86_400_000;
 const NOW = Date.parse('2026-12-31T00:00:00Z');
@@ -236,5 +236,137 @@ describe('segments', () => {
     expect(segmentValue(user('control', { platform: 'Android' }), 'platform')).toBe('android');
     expect(segmentValue(user('control', { channel: null }), 'channel')).toBe('unknown');
     expect(segmentValue(user('control', { country: 'ca' }), 'country')).toBe('CA');
+  });
+});
+
+describe('scorecard additions (lift intervals, copy, health, timelines)', () => {
+  const arms = ['control', 'variantA'];
+
+  it('every metric has a title, definition, numerator/denominator, plain n label and group; one primary', () => {
+    const r = computeResults([], arms, 'control', NOW, 's');
+    for (const m of r.metrics) {
+      expect(m.title.length).toBeGreaterThan(5);
+      expect(m.definition.length).toBeGreaterThan(10);
+      expect(m.numerator && m.denominator && m.maturityLabel).toBeTruthy();
+      expect(['primary', 'secondary', 'guardrail']).toContain(m.group);
+      expect(m.group === 'guardrail').toBe(m.guardrail !== null);
+    }
+    expect(r.metrics.filter((m) => m.group === 'primary').map((m) => m.key)).toEqual(['paid_conversion_d14']);
+    expect(r.metrics.find((m) => m.leadingIndicator)?.key).toBe('trial_started_d1');
+    expect(r.metrics.find((m) => m.decisionMetric)?.key).toBe('revenue_per_user_d30');
+  });
+
+  it('lift intervals: relative and absolute, centred on the observed lift, null for control', () => {
+    const users = [
+      ...many(400, (i) => user('control', { onboardingCompletedAt: i < 100 ? T0 + 1000 : null })),
+      ...many(400, (i) => user('variantA', { onboardingCompletedAt: i < 200 ? T0 + 1000 : null })),
+    ];
+    const m = metric(computeResults(users, arms, 'control', NOW, 's'), 'onboarding_completed');
+    const a = m.arms.variantA;
+    expect(a.liftVsControl).toBeCloseTo(1, 5);
+    expect(a.absLift).toBeCloseTo(0.25, 5);
+    expect(a.liftCi90![0]).toBeGreaterThan(0.6);
+    expect(a.liftCi90![1]).toBeLessThan(1.5);
+    expect(a.liftCi90![0]).toBeLessThan(1);
+    expect(a.absLiftCi90![0]).toBeGreaterThan(0.18);
+    expect(a.absLiftCi90![1]).toBeLessThan(0.32);
+    expect(m.arms.control.liftCi90).toBeNull();
+    expect(m.arms.control.absLift).toBeNull();
+  });
+
+  it('pending counts users whose window has not elapsed yet', () => {
+    const young = NOW - 2 * D;
+    const users = [user('control'), user('control', { assignedAt: young }), user('variantA', { assignedAt: young })];
+    const r = computeResults(users, arms, 'control', NOW, 's');
+    expect(metric(r, 'paid_conversion_d14').arms.control).toMatchObject({ n: 1, pending: 1 });
+    expect(metric(r, 'paid_conversion_d14').arms.variantA).toMatchObject({ n: 0, pending: 1 });
+    expect(metric(r, 'trial_started_d1').arms.variantA).toMatchObject({ n: 1, pending: 0 });
+    expect(metric(r, 'revenue_per_user_d30').arms.variantA).toMatchObject({ n: 0, pending: 1 });
+  });
+
+  it('liftIntervals skips undefined ratios', () => {
+    const r = liftIntervals(new Float64Array([0.2, 0.3]), new Float64Array([0, 0.1]));
+    expect(r.rel![0]).toBeCloseTo(2);
+    expect(r.rel![1]).toBeCloseTo(2);
+    expect(r.abs![0]).toBeCloseTo(0.2);
+  });
+
+  it('chi-square p-values match known table values', () => {
+    expect(chiSquarePValue(3.841, 1)).toBeCloseTo(0.05, 3);
+    expect(chiSquarePValue(7.815, 3)).toBeCloseTo(0.05, 3);
+    expect(chiSquarePValue(16.266, 3)).toBeCloseTo(0.001, 4);
+    expect(chiSquarePValue(0, 2)).toBe(1);
+  });
+
+  it('SRM: ok for a fair split, mismatch for a lopsided one, too_few for tiny samples', () => {
+    const w = { control: 25, variantA: 25, variantB: 25, variantC: 25 };
+    expect(srmCheck({ control: 101, variantA: 98, variantB: 103, variantC: 99 }, w).status).toBe('ok');
+    const bad = srmCheck({ control: 200, variantA: 100, variantB: 100, variantC: 100 }, w);
+    expect(bad.status).toBe('mismatch');
+    expect(bad.pValue!).toBeLessThan(0.001);
+    expect(bad.expected.control).toBe(125);
+    expect(srmCheck({ control: 3, variantA: 1, variantB: 2, variantC: 2 }, w)).toMatchObject({ status: 'too_few', pValue: null });
+    // An arm expecting < 5 users is skipped; the others are still tested.
+    const skip = srmCheck({ control: 50, variantA: 50, variantB: 1 }, w, { expectedCounts: { control: 49, variantA: 49, variantB: 3, variantC: 0 } });
+    expect(skip).toMatchObject({ status: 'ok', skippedArms: ['variantB'] });
+    // Zero-weight arms are left out of the test.
+    expect(srmCheck({ control: 50, variantA: 50, variantB: 0 }, { control: 50, variantA: 50, variantB: 0 }).status).toBe('ok');
+  });
+
+  it('SRM uses the weights in force when each user was assigned (audit history), not just today’s', () => {
+    const arm = (key: string, weight: number) => ({ key, name: key, weight, payload: {} });
+    const t1 = '2026-11-12T00:00:00Z';
+    const audit = [
+      { at: '2026-11-01T00:00:00Z', before: { status: 'draft', arms: [arm('control', 34), arm('variantA', 33), arm('variantB', 33)] }, after: { status: 'running', arms: [arm('control', 34), arm('variantA', 33), arm('variantB', 33)] } },
+      { at: t1, before: { arms: [arm('control', 34), arm('variantA', 33), arm('variantB', 33)] }, after: { arms: [arm('control', 25), arm('variantA', 25), arm('variantB', 25), arm('variantC', 25)] } },
+    ];
+    const current = { control: 25, variantA: 25, variantB: 25, variantC: 25 };
+    const h = weightHistory(current, audit);
+    expect(h).toHaveLength(2); // status-only change ignored
+    expect(h[0].weights).toEqual({ control: 34, variantA: 33, variantB: 33 });
+    const arms = Object.keys(current);
+    const before = Array.from({ length: 90 }, () => Date.parse('2026-11-05T00:00:00Z'));
+    const exp = expectedCountsAt(h, before, arms);
+    expect(exp.variantC).toBe(0);
+    expect(exp.control).toBeCloseTo(30.6);
+    const observed = { control: 31, variantA: 30, variantB: 29, variantC: 0 };
+    expect(srmCheck(observed, current).status).toBe('mismatch'); // naive: variantC "should" have 22
+    const fair = srmCheck(observed, current, { expectedCounts: exp, weightChanges: [{ at: t1, weights: current }] });
+    expect(fair.status).toBe('ok');
+    expect(fair.weightChanges).toHaveLength(1);
+    // Users in an arm that should have nobody → mismatch.
+    expect(srmCheck({ ...observed, variantC: 3 }, current, { expectedCounts: exp }).status).toBe('mismatch');
+    expect(weightHistory(current, [])).toEqual([{ from: -Infinity, weights: current }]);
+  });
+
+  it('daily enrollment buckets by UTC day and fills gaps with 0', () => {
+    const d0 = Date.parse('2026-11-12T10:00:00Z');
+    const rows = [
+      { arm: 'control', assignedAt: d0, exposedAt: d0 },
+      { arm: 'variantA', assignedAt: d0 + 2 * D, exposedAt: null },
+    ];
+    const out = dailyEnrollment(rows, arms, d0, d0 + 2 * D + 1000);
+    expect(out.map((o) => o.date)).toEqual(['2026-11-12', '2026-11-13', '2026-11-14']);
+    expect(out[0]).toEqual({ date: '2026-11-12', enrolled: { control: 1, variantA: 0 }, exposed: { control: 1, variantA: 0 } });
+    expect(out[1].enrolled).toEqual({ control: 0, variantA: 0 });
+    expect(out[2].enrolled.variantA).toBe(1);
+    expect(dailyEnrollment([], arms, null, NOW)).toEqual([]);
+  });
+
+  it('lift timelines are cumulative and skip guardrails', () => {
+    const users = [
+      ...many(50, (i) => user('control', { assignedAt: T0 + 6 * 3_600_000, trialStartedAt: i < 10 ? T0 + 7 * 3_600_000 : null })),
+      ...many(50, (i) => user('variantA', { assignedAt: T0 + 6 * 3_600_000, trialStartedAt: i < 20 ? T0 + 7 * 3_600_000 : null })),
+    ];
+    const tl = liftTimelines(users, arms, 'control', T0, T0 + 5 * D);
+    expect(tl.map((t) => t.metricKey)).not.toContain('retention_d1');
+    const trial = tl.find((t) => t.metricKey === 'trial_started_d1')!;
+    expect(trial.points[0].arms.variantA.n).toBe(0); // not mature on day 0
+    const last = trial.points.at(-1)!.arms.variantA;
+    expect(last).toMatchObject({ n: 50, x: 20, value: 0.4, lift: 1 });
+    expect(last.lo!).toBeLessThan(1);
+    expect(last.hi!).toBeGreaterThan(1);
+    expect(trial.points.at(-1)!.arms.control.lift).toBeNull();
+    expect(approxLift(1, 10, 0, 10)).toEqual({ lift: null, lo: null, hi: null });
   });
 });

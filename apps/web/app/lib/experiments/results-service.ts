@@ -15,7 +15,22 @@ import { isProductionDeployment } from '../analytics/amplitude-server';
 import { createAdminSupabase } from '../supabase-admin';
 
 import { amplitudeReadout } from './analytics';
-import { computeResults, segmentValue, trialEndOf, type ResultsBlock, type SegmentDimension, type UserFacts } from './results';
+import {
+  computeResults,
+  dailyEnrollment,
+  expectedCountsAt,
+  liftTimelines,
+  segmentValue,
+  srmCheck,
+  trialEndOf,
+  weightHistory,
+  type DailyEnrollment,
+  type MetricTimeline,
+  type ResultsBlock,
+  type SegmentDimension,
+  type SrmCheck,
+  type UserFacts,
+} from './results';
 import { ExperimentService, notFoundExperiment, selectAllPages, type AssignmentRow } from './service';
 
 export const RESULTS_CACHE_TTL_MS = 15 * 60_000;
@@ -36,6 +51,19 @@ export interface ExperimentResults extends ResultsBlock {
   segments: Array<{ value: string } & ResultsBlock> | null;
   /** Link-only Amplitude readout (user property exp_<key>). */
   amplitude: ReturnType<typeof amplitudeReadout>;
+  // --- Added 2026-11 for the Admin Tools scorecard (additive; older clients ignore them) ---
+  startedAt: string | null;
+  endedAt: string | null;
+  /** Whole days from start to end (or now). Null before the experiment starts. */
+  daysRunning: number | null;
+  /** Current arm weights (sum 100), the SRM test's expected split. */
+  weights: Record<string, number>;
+  /** Sample-ratio-mismatch check on the analysed users (overall only). */
+  srm: SrmCheck;
+  /** Enrolment / exposure per UTC day per arm (randomised users). */
+  daily: DailyEnrollment[];
+  /** Cumulative lift per day for the primary and secondary rate metrics (overall only). */
+  timelines: MetricTimeline[];
 }
 
 const cache = new Map<string, { at: number; value: ExperimentResults }>();
@@ -180,6 +208,22 @@ export async function loadUserFacts(rows: readonly AssignmentRow[]): Promise<Use
   });
 }
 
+/** Audit rows that can carry arm-weight changes (create / update / status / layer snapshots). Best effort. */
+async function loadWeightAudit(key: string): Promise<Array<{ at: string; before: unknown; after: unknown }>> {
+  const { data, error } = await createAdminSupabase()
+    .from('experiment_audit_log')
+    .select('at, before, after')
+    .eq('experiment_key', key)
+    .in('action', ['update', 'status', 'layer'])
+    .order('at', { ascending: true })
+    .limit(1000);
+  if (error) {
+    console.error('[ExperimentResults] audit read failed (SRM falls back to current weights):', error.message);
+    return [];
+  }
+  return (data ?? []) as Array<{ at: string; before: unknown; after: unknown }>;
+}
+
 export class ExperimentResultsService {
   static async results(key: string, opts: { segment?: SegmentDimension | null; fresh?: boolean; now?: Date } = {}): Promise<ExperimentResults> {
     const segment = opts.segment ?? null;
@@ -213,6 +257,16 @@ export class ExperimentResultsService {
     const seed = `${key}|${experiment.salt}`;
     const overall = computeResults(facts, arms, control, nowMs, seed);
 
+    const startedMs = experiment.startedAt ? Date.parse(experiment.startedAt) : null;
+    const endMs = experiment.endedAt ? Math.min(Date.parse(experiment.endedAt), nowMs) : nowMs;
+    const weights = Object.fromEntries(experiment.arms.map((a) => [a.key, a.weight]));
+    const bucketRows = rows
+      .filter((r) => r.reason === 'bucket')
+      .map((r) => ({ arm: r.arm, assignedAt: Date.parse(r.assigned_at), exposedAt: r.first_exposed_at ? Date.parse(r.first_exposed_at) : null }))
+      .filter((r) => Number.isFinite(r.assignedAt));
+
+    const history = weightHistory(weights, await loadWeightAudit(key));
+
     let segments: ExperimentResults['segments'] = null;
     if (segment) {
       const byValue = new Map<string, UserFacts[]>();
@@ -240,6 +294,16 @@ export class ExperimentResultsService {
       ...overall,
       segments,
       amplitude: amplitudeReadout(key, isProductionDeployment()),
+      startedAt: experiment.startedAt,
+      endedAt: experiment.endedAt,
+      daysRunning: startedMs !== null && Number.isFinite(startedMs) ? Math.max(0, Math.floor((endMs - startedMs) / 86_400_000)) : null,
+      weights,
+      srm: srmCheck(overall.population.exposed, weights, {
+        expectedCounts: expectedCountsAt(history, facts.map((u) => u.assignedAt), arms),
+        weightChanges: history.slice(1).map((h) => ({ at: new Date(h.from).toISOString(), weights: h.weights })),
+      }),
+      daily: dailyEnrollment(bucketRows, arms, startedMs, nowMs),
+      timelines: liftTimelines(facts, arms, control, startedMs, nowMs),
     };
     cache.set(cacheKey, { at: nowMs, value });
     return value;
