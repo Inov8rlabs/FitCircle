@@ -458,6 +458,22 @@
     },
     {
       "columns": [
+        "circle_id"
+      ],
+      "name": "circle_leaderboard_snapshots_circle_id_fkey",
+      "ref": "fitcircles",
+      "table": "circle_leaderboard_snapshots"
+    },
+    {
+      "columns": [
+        "user_id"
+      ],
+      "name": "circle_leaderboard_snapshots_user_id_fkey",
+      "ref": "profiles",
+      "table": "circle_leaderboard_snapshots"
+    },
+    {
+      "columns": [
         "blocked_id"
       ],
       "name": "circle_member_blocks_blocked_id_fkey",
@@ -1540,6 +1556,14 @@
       "columns": [
         "user_id"
       ],
+      "name": "user_active_days_user_id_fkey",
+      "ref": "profiles",
+      "table": "user_active_days"
+    },
+    {
+      "columns": [
+        "user_id"
+      ],
       "name": "user_attribution_user_id_fkey",
       "ref": "profiles",
       "table": "user_attribution"
@@ -1804,6 +1828,12 @@
       "generation_id",
       "ok",
       "duration_ms"
+    ],
+    "amplitude_export_sync": [
+      "hour",
+      "synced_at",
+      "events",
+      "users"
     ],
     "app_opens": [
       "user_id",
@@ -2191,6 +2221,15 @@
       "accepted_at",
       "accepted_by",
       "expires_at"
+    ],
+    "circle_leaderboard_snapshots": [
+      "circle_id",
+      "user_id",
+      "snapshot_date",
+      "metric",
+      "value",
+      "rank",
+      "created_at"
     ],
     "circle_member_blocks": [
       "id",
@@ -3692,6 +3731,15 @@
       "badge_url",
       "metadata",
       "earned_at"
+    ],
+    "user_active_days": [
+      "user_id",
+      "local_date",
+      "platform",
+      "source",
+      "first_at",
+      "last_at",
+      "event_count"
     ],
     "user_attribution": [
       "user_id",

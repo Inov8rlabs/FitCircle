@@ -29,6 +29,7 @@ export const PROMO_SCORES = {
   fitzy_recommendations: 956, // the personalized paywall card: just above pro_value, which steps aside while it shows
   pro_value: 955, // above referral (paywall reach is an activation goal), where pro_upsell sat otherwise
   meet_fitzy: 905, // just above the Fitzy focus card
+  synced_while_away: 980, // facts the user has not seen yet: right under the header
 } as const;
 
 /** Hours after sign-up before pro_value may show (never before the user has seen value). */
@@ -353,7 +354,45 @@ export const PROMO_EXCLUSIONS: ReadonlyArray<{ winner: string; loser: string }> 
   { winner: 'fitzy_recommendations', loser: 'meet_fitzy' },
 ];
 
+// ---------------------------------------------------------------------------- synced_while_away
+
+/**
+ * "Synced while you were away" (docs/PUSH_NOTIFICATIONS.md §8.5): the same facts
+ * as the health_sync_update push the user has not opened (last 24 h). A
+ * utility card (not a promo): it reports the user's own data.
+ */
+export const syncedWhileAway: PromoDefinition = {
+  key: 'synced_while_away',
+  kind: 'utility',
+  score: PROMO_SCORES.synced_while_away,
+  caps: { cooldownHoursAfterDismiss: 24 },
+  requiresState: false,
+  audience: ({ journey }) => (journey.healthSyncAway ? null : 'nothing_synced'),
+  creatives: ({ journey }) => {
+    const s = journey.healthSyncAway;
+    if (!s) return [];
+    const steps = s.kind === 'step_goal';
+    return [
+      {
+        id: `synced_while_away_${steps ? 'steps' : 'workout'}`,
+        weight: 100,
+        layout: 'banner',
+        theme: THEMES.logMeal,
+        icon: steps ? 'steps' : 'stopwatch',
+        emoji: steps ? '👟' : '⏱️',
+        eyebrow: 'Synced while you were away',
+        title: s.title.slice(0, 44),
+        body: s.body.replace(/\s*Tap to see[^.]*\.?$/, '').slice(0, 120),
+        primary: steps
+          ? { label: 'See your steps', action: { type: 'open_screen', params: { screen: 'step_history' }, fallback: [{ type: 'dismiss', params: {} }] } }
+          : { label: 'Got it', action: { type: 'dismiss', params: {} } },
+        dismissible: true,
+      },
+    ];
+  },
+};
+
 /** In evaluation order (ranking is by score, not this order). */
-export const SYSTEM_PROMOS: readonly PromoDefinition[] = [firstMeal, logMealNow, fitzyRecommendations, proValue, meetFitzy];
+export const SYSTEM_PROMOS: readonly PromoDefinition[] = [firstMeal, logMealNow, fitzyRecommendations, proValue, meetFitzy, syncedWhileAway];
 
 export const SYSTEM_PROMO_KEYS = SYSTEM_PROMOS.map((p) => p.key);

@@ -72,6 +72,7 @@ export function sampleMatchInput(now: Date = new Date()): PromoMatchInput {
       fitzyRecommendationsReady: true,
       trialEligible: true,
       fitzyPlanReady: true,
+      healthSyncAway: { title: 'Your 32-min run synced from Health Connect', body: "That counts toward today's streak. Tap to see your week.", kind: 'workout' },
     },
     liveProFeatures: new Set(['food_ai_unlimited', 'history_extended', 'ads_removed']),
   };

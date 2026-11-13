@@ -933,7 +933,7 @@
           "name": "notification_type",
           "type": "string",
           "required": true,
-          "description": "notification_log.notification_type, e.g. meal_reminder_lunch, chat_message."
+          "description": "notification_log.notification_type, e.g. meal_reminder_lunch, chat_message, winback_day3 / winback_day7 / winback_day14 / winback_day30, leaderboard_overtaken, health_sync_update."
         },
         {
           "name": "notification_category",
@@ -950,7 +950,7 @@
           "name": "suppression_reason",
           "type": "string",
           "required": false,
-          "description": "Orchestrator reason when outcome != sent (e.g. frequency_cap, duplicate, category_disabled, quiet_hours, deferred_quiet_hours, burst follow-up)."
+          "description": "Orchestrator reason when outcome != sent (e.g. frequency_cap, duplicate, category_disabled, quiet_hours, deferred_quiet_hours, burst follow-up, type_interval, lapsed_user, dormant_user, not_lapsed; docs/PUSH_NOTIFICATIONS.md §8). Never test_user: internal / test / robot accounts get no Push Sent event at all."
         },
         {
           "name": "push_platform",

@@ -1,6 +1,7 @@
+import { resolveNotificationTimezone } from '../notifications/user-timezone';
 import { createAdminSupabase } from '../supabase-admin';
 
-import { NotificationOrchestrator } from './notification-orchestrator';
+import { NotificationOrchestrator, TYPE_MIN_INTERVAL_HOURS } from './notification-orchestrator';
 
 /**
  * STATE-AWARE daily streak reminder (the remote replacement for the iOS "static" local
@@ -69,7 +70,7 @@ export class ReminderService {
     // recent streak claim (what the device actually sends) → America/New_York.
     // Most users have no preferences row, so the claim zone is the one that
     // keeps "7pm" from meaning 7pm Eastern for everyone.
-    const [{ data: prefs }, { data: streaks }, { data: recentClaims }] = await Promise.all([
+    const [{ data: prefs }, { data: streaks }, { data: recentClaims }, { data: profiles }] = await Promise.all([
       supabase.from('notification_preferences').select('user_id, quiet_hours_timezone').in('user_id', userIds),
       supabase.from('engagement_streaks').select('user_id, current_streak').in('user_id', userIds),
       supabase
@@ -78,15 +79,24 @@ export class ReminderService {
         .in('user_id', userIds)
         .order('claim_date', { ascending: false })
         .limit(userIds.length * 5),
+      supabase.from('profiles').select('id, timezone').in('id', userIds),
     ]);
     const claimTzByUser = new Map<string, string>();
     for (const c of (recentClaims ?? []) as { user_id: string; timezone: string | null }[]) {
       if (c.timezone && !claimTzByUser.has(c.user_id)) claimTzByUser.set(c.user_id, c.timezone);
     }
+    // Same resolution as every other push (lib/notifications/user-timezone.ts): a
+    // user-changed quiet-hours zone → the device zone on the profile → the latest
+    // claim's zone → America/New_York. Placeholders ('UTC' defaults) never win, so
+    // a user whose real zone is unknown is not reminded at 19:00 UTC.
+    const quietTz = new Map(((prefs ?? []) as { user_id: string; quiet_hours_timezone: string | null }[]).map((p) => [p.user_id, p.quiet_hours_timezone] as const));
+    const profileTz = new Map(((profiles ?? []) as { id: string; timezone: string | null }[]).map((p) => [p.id, p.timezone] as const));
     const tzByUser = new Map<string, string>();
-    for (const id of userIds) tzByUser.set(id, claimTzByUser.get(id) || 'America/New_York');
-    for (const p of (prefs ?? []) as { user_id: string; quiet_hours_timezone: string | null }[]) {
-      if (p.quiet_hours_timezone) tzByUser.set(p.user_id, p.quiet_hours_timezone);
+    for (const id of userIds) {
+      tzByUser.set(
+        id,
+        resolveNotificationTimezone({ quietHoursTimezone: quietTz.get(id) ?? null, profileTimezone: profileTz.get(id) ?? null, claimTimezone: claimTzByUser.get(id) ?? null })
+      );
     }
     const streakByUser = new Map(
       (streaks ?? []).map((s: any) => [s.user_id, (s.current_streak ?? 0) as number] as const),
@@ -136,6 +146,15 @@ export class ReminderService {
 
         const currentStreak = streakByUser.get(userId) ?? 0;
         const near = MILESTONES.find((m) => m.days > currentStreak && m.days - currentStreak <= 2);
+        // momentum_at_risk at most once per 3 days (the orchestrator enforces it too;
+        // checking here avoids a suppressed row every evening).
+        if (
+          !near &&
+          (await NotificationOrchestrator.hasSent(userId, 'momentum_at_risk', { withinHours: TYPE_MIN_INTERVAL_HOURS.momentum_at_risk ?? 70 }))
+        ) {
+          skippedActed++;
+          continue;
+        }
         const result = near
           ? await NotificationOrchestrator.send(userId, 'near_milestone', {
               currentMomentum: currentStreak,

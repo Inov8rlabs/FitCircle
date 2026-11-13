@@ -163,6 +163,8 @@ export interface PromoLoaders {
   warmFitzyPlan?(userId: string, timezone: string): Promise<unknown>;
   /** Free-trial length for trial copy (remote config `trial_days` for this request). */
   trialDays?(userId: string): Promise<number>;
+  /** The unopened health_sync_update push of the last 24 h, for the synced_while_away card. */
+  healthSyncAway?(userId: string, now: Date): Promise<{ title: string; body: string; kind: string } | null>;
 }
 
 /** What the promo round learns about the Pro lifecycle prompts. */
@@ -214,6 +216,22 @@ export const defaultPromoLoaders: PromoLoaders = {
   fitzyPlanReady: (userId, localDate) => fitzyPlanPreviewReady(userId, localDate),
   warmFitzyPlan: (userId, timezone) => warmFitzyPlanPreview(userId, timezone),
   trialDays: (userId) => TrialConfig.days(userId),
+  // ONE indexed read (notification_log by user + type + sent_at): the unopened health-sync push.
+  async healthSyncAway(userId, now) {
+    const { data, error } = await createAdminSupabase()
+      .from('notification_log')
+      .select('title, body, data, sent_at, opened_at')
+      .eq('user_id', userId)
+      .eq('notification_type', 'health_sync_update')
+      .eq('suppressed', false)
+      .gte('sent_at', new Date(now.getTime() - 24 * 3_600_000).toISOString())
+      .order('sent_at', { ascending: false })
+      .limit(1);
+    if (error) throw error;
+    const row = ((data ?? []) as Array<{ title: string | null; body: string | null; data: Record<string, unknown> | null; opened_at: string | null }>)[0];
+    if (!row || row.opened_at || !row.title) return null;
+    return { title: String(row.title), body: String(row.body ?? ''), kind: String(row.data?.kind ?? '') };
+  },
 };
 
 export class PromoService {

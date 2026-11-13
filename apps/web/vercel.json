@@ -119,6 +119,14 @@
     {
       "path": "/api/cron/onboarding-nudges",
       "schedule": "7,22,37,52 * * * *"
+    },
+    {
+      "path": "/api/cron/winback",
+      "schedule": "30 * * * *"
+    },
+    {
+      "path": "/api/cron/leaderboard-overtakes",
+      "schedule": "45 * * * *"
     }
   ]
 }
