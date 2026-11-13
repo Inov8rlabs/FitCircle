@@ -186,11 +186,92 @@ export function failedLoginsByAccount(rows: EventRow[], limit = 50): FailedLogin
     .slice(0, limit);
 }
 
+// ---------------------------------------------------------------------------- integrity health
+
+/**
+ * Reasons that mean the client sent NO token (so a missing pass is not our verifier's
+ * fault): missing_token / missing_device_id blocks (also behind bypass:… / reviewer:…),
+ * device-environment fail-opens, and the two token-less fail-opens.
+ */
+const NO_TOKEN_REASONS = new Set(['missing_token', 'missing_device_id', 'attestation lookup failed', 'nonce issuance not configured']);
+export function isTokenlessReason(reason: string | null | undefined): boolean {
+  const r = (reason ?? '').replace(/^(bypass:)?(reviewer:)?/, '');
+  return NO_TOKEN_REASONS.has(r) || isDeviceErrorReason(r);
+}
+/** An integrity attempt where the client sent a Play Integrity token (we had something to verify). */
+export const isTokenAttempt = (r: EventRow) => isIntegrityAttempt(r) && !isTokenlessReason(r.reason);
+
+/** `integrity_broken` thresholds (docs/INTEGRITY_CONTRACT.md, "Detection"). */
+export const INTEGRITY_HEALTH = {
+  /** Token attempts per action (24 h) before "0 passes" means broken. */
+  minTokenAttempts: 3,
+  /** Infrastructure fail-open share of an action's attempts (24 h) that means broken. */
+  maxFailOpenShare: 0.5,
+  /** Release check (scripts/smoke/prod-smoke.mjs): stricter share. */
+  releaseMaxFailOpenShare: 0.2,
+} as const;
+
+export interface IntegrityActionHealth {
+  action: string;
+  attempts: number;
+  tokenAttempts: number;
+  passes: number;
+  infraFailOpens: number;
+  /** infraFailOpens / attempts (null without attempts). */
+  failOpenShare: number | null;
+  /** Most common infra fail-open reason (e.g. `unusable`), for the alert text. */
+  topFailOpenReason: string | null;
+  broken: boolean;
+  why: string[];
+}
+
+/**
+ * Per action: is verification actually working? Broken when ≥ minTokenAttempts attempts
+ * with a token and 0 passes (the verifier never says yes: 2026-11-11), or when infra
+ * fail-opens are ≥ maxFailOpenShare of the attempts (with at least minTokenAttempts
+ * attempts). Device-environment fail-opens never count as infra. Pure.
+ */
+export function integrityHealth(rows: EventRow[], opts: { maxFailOpenShare?: number; minTokenAttempts?: number } = {}): IntegrityActionHealth[] {
+  const maxShare = opts.maxFailOpenShare ?? INTEGRITY_HEALTH.maxFailOpenShare;
+  const minTok = opts.minTokenAttempts ?? INTEGRITY_HEALTH.minTokenAttempts;
+  const by = new Map<string, EventRow[]>();
+  for (const r of rows) {
+    if (!isIntegrityAttempt(r)) continue;
+    const a = r.action ?? 'unknown';
+    by.set(a, [...(by.get(a) ?? []), r]);
+  }
+  return Array.from(by.entries())
+    .map(([action, rs]) => {
+      const attempts = sum(rs, () => true);
+      const tokenAttempts = sum(rs, isTokenAttempt);
+      const passes = sum(rs, (r) => r.result === 'pass');
+      const infraFailOpens = sum(rs, isInfraFailOpen);
+      const failOpenShare = attempts > 0 ? infraFailOpens / attempts : null;
+      const reasons = new Map<string, number>();
+      for (const r of rs) if (isInfraFailOpen(r)) reasons.set(r.reason ?? '', (reasons.get(r.reason ?? '') ?? 0) + n(r));
+      const topFailOpenReason = Array.from(reasons.entries()).sort((a, b) => b[1] - a[1])[0]?.[0] ?? null;
+      const why: string[] = [];
+      if (tokenAttempts >= minTok && passes === 0) why.push(`${tokenAttempts} attempts with a token, 0 passes`);
+      if (attempts >= minTok && failOpenShare !== null && failOpenShare >= maxShare) {
+        why.push(`${Math.round(failOpenShare * 100)}% infra fail-open (${infraFailOpens}/${attempts}${topFailOpenReason ? `, mostly "${topFailOpenReason}"` : ''})`);
+      }
+      return { action, attempts, tokenAttempts, passes, infraFailOpens, failOpenShare, topFailOpenReason, broken: why.length > 0, why };
+    })
+    .sort((a, b) => (a.action < b.action ? -1 : 1));
+}
+
 // ---------------------------------------------------------------------------- alert signals
 
 export type AttackLevel = 'normal' | 'elevated' | 'under_attack';
 export type SignalLevel = Exclude<AttackLevel, 'normal'>;
-export type SignalId = 'failed_logins' | 'signup_concentration' | 'integrity_block_rate' | 'fail_open' | 'rate_limit_hits' | 'referral_rejections';
+export type SignalId =
+  | 'failed_logins'
+  | 'signup_concentration'
+  | 'integrity_block_rate'
+  | 'fail_open'
+  | 'integrity_broken'
+  | 'rate_limit_hits'
+  | 'referral_rejections';
 
 /**
  * Spec thresholds ("alert when value > threshold"). A signal is `under_attack` when the
@@ -303,6 +384,19 @@ export function evaluateSignals(input: SignalInput): Signal[] {
       b.fail_open
     )
   );
+  // Verification broken for some action over 24 h (2026-11-11: every auth call failed open
+  // for two days while the 15-minute fail_open signal looked like noise).
+  const broken = integrityHealth(input.day).filter((a) => a.broken);
+  if (broken.length) {
+    out.push({
+      signal: 'integrity_broken',
+      level: 'elevated',
+      value: broken.length,
+      threshold: 0,
+      detail: broken.map((a) => `${a.action}: ${a.why.join('; ')}`).join(' | ') + ' (last 24 hours)',
+      baseline: null,
+    });
+  }
   out.push(worst('rate_limit_hits', [{ value: sum(input.hour, (r) => r.kind === 'rate_limit'), threshold: THRESHOLDS.rate_limit_hits, detail: 'last hour' }], b.rate_limit_hits));
   out.push(
     worst(

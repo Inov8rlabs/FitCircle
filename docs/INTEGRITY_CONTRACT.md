@@ -122,12 +122,97 @@ When verification itself is unavailable (verifier not configured, Google auth/qu
 timeout, our storage down) the request is **allowed** and the event is logged; a token that
 decodes but fails any check is always refused.
 
+### Our own bug: `503 INTEGRITY_UNAVAILABLE`
+
+When the check breaks because of a bug in OUR code (a route read the request body before the
+check, any unexpected exception inside the check), the request is refused with a retryable
+503, not allowed and not a device block:
+
+```json
+{ "success": false, "data": null,
+  "code": "INTEGRITY_UNAVAILABLE", "reason": "integrity_internal_error",
+  "message": "We couldn't check your device just now. Please try again in a minute.",
+  "error": { "code": "INTEGRITY_UNAVAILABLE", "message": "…", "details": { "reason": "integrity_internal_error", "retryable": true }, "timestamp": "…" },
+  "meta": null }
+```
+
+Headers `Retry-After: 30`, `Cache-Control: no-store`. The code is deliberately not
+`INTEGRITY_FAILED`, so the Android block screen is not shown. Android today: login / sign-up
+show the message inline with their normal retry; a refresh 503 keeps the session (tokens
+are cleared only on 401 / 403); protected calls show their generic error. The reviewer /
+bypass lists still apply on login, google and refresh. Sentry: issue
+`integrity internal error: <class>` (level error, tag `security=integrity_internal_error`).
+Event: `block` (or `fail_open` under the emergency policy) with reason
+`integrity_internal_error:<class>`.
+
+| Cause class (`failOpenClass`) | Kind | Outcome |
+|---|---|---|
+| `token_exchange`, `decode_timeout`, `decode_http`, `decode_error`, `nonce_store`, `attestation_lookup` | Google / network / our DB | fail open (allow, Sentry warning) |
+| `verifier_not_configured` (PLAY_INTEGRITY_SA_JSON or nonce secret missing) | deployment config | fail open, Sentry **error**. Not fail-closed on purpose: one missing env var would otherwise refuse every Android sign-in and refresh. The `integrity_broken` alert and the release check catch it. |
+| `body_consumed`, `unexpected` | our code | **503**, Sentry error (`integrity_internal_error_policy`) |
+
 ## Server switches (remote config, Admin Tools)
 
 | Key | Values | Default |
 |---|---|---|
 | `integrity_enforce_android` | `block` (403 on failure), `log` (verify, record, allow), `off` (no checks) | `block` |
 | `integrity_bypass_user_ids` | user ids allowed to sign in and stay signed in (login + refresh only) from builds that fail the check | `[]` |
+| `integrity_internal_error_policy` | `block` (our bug → 503 INTEGRITY_UNAVAILABLE), `fail_open` (allow + record, the pre-2026-11-13 behaviour). Emergency switch only; unreadable → `block` | `block` |
+| `integrity_device_error_fail_open` | `true` (no token because of the phone's environment → allow + record), `false` (block) | `true` |
+
+## Invariants (every change to an enforced route)
+
+1. **Never consume the request body before `checkIntegrity`.** The check hashes the raw bytes
+   (`request.clone().arrayBuffer()`); a body the route already read cannot be hashed. Read a
+   clone (`await request.clone().json()`) if the route needs the body first, or read it after
+   the check. Enforced by the static test in `lib/integrity/__tests__/enforcement.test.ts`.
+2. **Programming errors fail closed.** Only genuine external / infrastructure outages fail
+   open (table above). A new failure path in the check must pick its class explicitly;
+   anything thrown and unclassified is `unexpected` → 503.
+3. **Every enforced route has a real end-to-end verified test**:
+   `<route>/__tests__/integrity-e2e.test.ts` runs the REAL `checkIntegrity` (only Google, the
+   nonce store and the DB stubbed: `lib/integrity/__tests__/e2e-harness.ts`), sends a signed
+   `integrity_v1` request and asserts `expectVerified` (security event `pass`, not fail_open).
+   A meta-test fails when a route calls `checkIntegrity` without one. Mocking
+   `checkIntegrity` in a route test is fine for route logic, never as the only coverage.
+
+## Detection
+
+- **Alert** `integrity_broken` (security alert cron, docs/SECURITY_TELEMETRY.md): per action
+  over 24 h, ≥ 3 attempts that carried a token and 0 passes, or infrastructure fail-opens
+  ≥ 50 % of attempts. Email (subject `ACTION NEEDED: app integrity verification is broken`)
+  at most every 6 h, Sentry `security_alert: integrity_broken` at level error.
+- **Release check** "integrity health" in `scripts/smoke/prod-smoke.mjs` (so in
+  `scripts/release-preflight.sh`): each auth action (register, login, google, refresh) with
+  ≥ 3 token attempts in the last 24 h has passes > 0 and infra fail-open share < 20 %;
+  SKIP/WARN without data. The 24 h window means the check keeps failing for up to a day
+  after a fix while the bad rows age out; read the per-action numbers in its message.
+
+"Attempts with a token" excludes reasons `missing_token`, `missing_device_id` (also behind
+`bypass:` / `reviewer:`), `device_error:*`, `attestation lookup failed` and
+`nonce issuance not configured`.
+
+## Incident 2026-11-11: auth calls silently failed open for two days
+
+- **What**: from the 8003ed3 deploy (11 Nov) every token-bearing register / login / google /
+  refresh call failed open (34 `security_events` rows `integrity / fail_open / unusable`); no
+  auth call was actually verified. Protected calls (food AI, Fitzy) kept passing.
+- **Why**: (1) the auth routes ran `await request.json()` before `checkIntegrity` (added after
+  the existing parse); hashing then threw undici's "unusable" and (3) the catch-all treated
+  that bug like a Google outage and failed open. (2) The route tests mocked `checkIntegrity`
+  entirely, so the real interaction never ran. (4) The 15-minute `fail_open` alert and the
+  Sentry issues fired (value 1, "elevated", every 2 h) but read like noise and nobody acted.
+  (5) Nothing checked after the release that verifications actually passed.
+- **Fixes**: a63d92e routes read a clone, `bodySha256` refuses a used body (`body_consumed`),
+  static ordering test. 2026-11-13: programming errors fail closed (503 above,
+  `integrity_internal_error_policy`), real end-to-end route tests (invariant 3), the
+  `integrity_broken` alert with an explicit subject and a 6 h cooldown, the alert cooldown is
+  saved only after the email was accepted (a failed send retries and is a Sentry error), and
+  the release integrity-health check.
+- **Runbook** when `integrity_broken` fires: check Sentry `integrity fail-open` /
+  `integrity internal error` for the class, the action's `security_events.reason`, and the
+  last deploy; `integrity_internal_error_policy = fail_open` only if the 503s are locking
+  real users out and a fix is not minutes away.
 
 ## Related server rules
 

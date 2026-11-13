@@ -2,10 +2,13 @@
  * Security alert cron (every 15 min, /api/cron/security/alerts; docs/SECURITY_TELEMETRY.md).
  *
  *   1. evaluate the signals (last 15 min / 1 h / 24 h vs thresholds; 7-day baselines as context)
- *   2. for each firing signal not alerted in the last 2 h (security_alert_state), or escalated
- *      from elevated to under_attack: email the owner (SECURITY_ALERT_RECIPIENTS, else
- *      ADS_REPORT_RECIPIENTS) and send a Sentry message `security_alert: <signal>`
- *      (tags security_alert=<signal>, severity=elevated|attack)
+ *   2. for each firing signal not alerted within its cooldown (security_alert_state; 2 h,
+ *      6 h for integrity_broken), or escalated from elevated to under_attack: email the
+ *      owner (SECURITY_ALERT_RECIPIENTS, else ADS_REPORT_RECIPIENTS, else the ads report
+ *      default recipient) and send a Sentry message `security_alert: <signal>` (tags
+ *      security_alert=<signal>, severity=elevated|attack). The cooldown is only saved when
+ *      the email was accepted by Resend: a failed send is retried on the next run and
+ *      reported to Sentry (security_alert_email_failed, level error).
  *   3. on the run in the first quarter of each hour: the `Security Summary` Amplitude event
  */
 import * as Sentry from '@sentry/nextjs';
@@ -20,6 +23,12 @@ import { createAdminSupabase } from '@/lib/supabase-admin';
 import { currentSignals, tiles, type AttackLevel, type Signal, type SignalId } from './security-report';
 
 export const ALERT_COOLDOWN_MS = 2 * 60 * 60_000;
+/** Per-signal cooldowns that differ from ALERT_COOLDOWN_MS. */
+export const SIGNAL_COOLDOWN_MS: Partial<Record<SignalId, number>> = {
+  // A 24 h window: re-alerting every 2 h would repeat the same news.
+  integrity_broken: 6 * 60 * 60_000,
+};
+export const cooldownFor = (signal: string): number => SIGNAL_COOLDOWN_MS[signal as SignalId] ?? ALERT_COOLDOWN_MS;
 /** Sentry Cron Monitor slug around the alert cron. */
 export const SECURITY_ALERT_MONITOR_SLUG = 'security-alert-cron';
 export const ADMIN_SECURITY_URL = 'https://admintools.inov8rlabs.com/apps/fitcircle/security';
@@ -37,7 +46,7 @@ export function signalsToSend(signals: Signal[], state: AlertState[], now: Date)
     const prev = bySignal.get(s.signal);
     if (!prev) return true;
     const age = now.getTime() - Date.parse(prev.last_sent_at);
-    if (!(age < ALERT_COOLDOWN_MS)) return true;
+    if (!(age < cooldownFor(s.signal))) return true;
     return prev.last_severity === 'elevated' && s.level === 'under_attack';
   });
 }
@@ -57,13 +66,21 @@ const pct = (s: Signal, v: number) => (s.signal === 'integrity_block_rate' ? `${
 
 export function renderAlertEmail(signals: Signal[], level: AttackLevel, now: Date): { subject: string; html: string; text: string } {
   const label = level === 'under_attack' ? 'Under attack' : level === 'elevated' ? 'Elevated' : 'Normal';
-  const subject = `[FitCircle security] ${label}: ${signals.map((s) => s.signal).join(', ')}`;
+  const broken = signals.some((s) => s.signal === 'integrity_broken');
+  const subject = broken
+    ? `[FitCircle security] ACTION NEEDED: app integrity verification is broken (${signals.map((s) => s.signal).join(', ')})`
+    : `[FitCircle security] ${label}: ${signals.map((s) => s.signal).join(', ')}`;
   const lines = signals.map(
     (s) =>
       `- ${s.signal}: ${pct(s, s.value)} (threshold ${pct(s, s.threshold)}, ${s.level}${s.detail ? `, ${s.detail}` : ''}` +
       `${s.baseline != null ? `, 7-day baseline ${s.baseline.toFixed(2)}` : ''})`
   );
-  const text = `Security status: ${label} (${now.toISOString()})\n\n${lines.join('\n')}\n\nSecurity page: ${ADMIN_SECURITY_URL}\nKill switch: remote config integrity_enforce_android (block | log | off).\n`;
+  const brokenHelp = broken
+    ? `\nintegrity_broken: Android requests are NOT being verified for the actions listed (0 passes or mostly fail-open over 24 h). ` +
+      `Check Sentry "integrity fail-open" / "integrity internal error", the security_events reasons for those actions, and the last deploy. ` +
+      `Runbook: docs/INTEGRITY_CONTRACT.md (Incident 2026-11-11).\n`
+    : '';
+  const text = `Security status: ${label} (${now.toISOString()})\n\n${lines.join('\n')}\n${brokenHelp}\nSecurity page: ${ADMIN_SECURITY_URL}\nKill switch: remote config integrity_enforce_android (block | log | off).\n`;
   const rows = signals
     .map(
       (s) =>
@@ -73,7 +90,7 @@ export function renderAlertEmail(signals: Signal[], level: AttackLevel, now: Dat
     )
     .join('');
   const html = `<!doctype html><html><body style="font-family:-apple-system,Segoe UI,Roboto,sans-serif;">
-<h2>Security status: ${esc(label)}</h2><p>${esc(now.toISOString())}</p>
+<h2>Security status: ${esc(label)}</h2><p>${esc(now.toISOString())}</p>${broken ? `<p><b>${esc(brokenHelp.trim())}</b></p>` : ''}
 <table border="1" cellspacing="0" style="border-collapse:collapse;font-size:14px;">
 <tr><th>Signal</th><th>Value</th><th>Threshold</th><th>Level</th><th>Detail</th><th>7-day baseline</th></tr>${rows}</table>
 <p><a href="${esc(ADMIN_SECURITY_URL)}">Open the Security page</a>. Kill switch: remote config <code>integrity_enforce_android</code> (block | log | off).</p>
@@ -85,10 +102,24 @@ export function renderAlertEmail(signals: Signal[], level: AttackLevel, now: Dat
 export function reportAlertToSentry(s: Signal): void {
   try {
     Sentry.captureMessage(`security_alert: ${s.signal}`, {
-      level: 'warning',
+      // integrity_broken = our verification is down: an error, not a warning.
+      level: s.signal === 'integrity_broken' ? 'error' : 'warning',
       tags: { security_alert: s.signal, severity: severityTag(s) },
       fingerprint: ['security_alert', s.signal],
       extra: { value: s.value, threshold: s.threshold, baseline: s.baseline ?? null, detail: s.detail ?? null },
+    });
+  } catch {
+    // best-effort
+  }
+}
+
+function reportEmailFailure(errorName: string, signals: Signal[]): void {
+  try {
+    Sentry.captureMessage('security_alert_email_failed', {
+      level: 'error',
+      tags: { security_alert: 'email_failed', email_error: errorName.slice(0, 40) },
+      fingerprint: ['security_alert_email_failed', errorName.slice(0, 40)],
+      extra: { signals: signals.map((s) => s.signal), recipients: alertRecipients().length },
     });
   } catch {
     // best-effort
@@ -129,8 +160,13 @@ export async function runSecurityAlerts(now: Date = new Date(), opts: { dryRun?:
     const mail = renderAlertEmail(toSend, level, now);
     const res = await sendEmail({ to: alertRecipients(), subject: mail.subject, html: mail.html, text: mail.text, category: 'security_alert' });
     emailed = res.success;
-    if (!res.success) console.error('[security-alerts] email failed:', res.errorName ?? res.error);
-    await saveState(toSend, now);
+    if (res.success) {
+      await saveState(toSend, now);
+    } else {
+      // No cooldown without a delivered email: the next run (15 min) tries again.
+      console.error('[security-alerts] email failed:', res.errorName ?? res.error);
+      reportEmailFailure(res.errorName ?? 'unknown', toSend);
+    }
   }
 
   let summarySent = false;

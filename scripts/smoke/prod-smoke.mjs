@@ -40,9 +40,15 @@
 //   SMOKE_MAX_LATENCY_MS      warn (not fail) above this (default 5000)
 //   VERCEL_AUTOMATION_BYPASS_SECRET  sent as x-vercel-protection-bypass for protected previews
 //
+// Integrity health (service role only; reads prod security_events, last 24 h): for each
+//   Android session-issuing action (register, login, google, refresh) with >= 3 attempts
+//   that carried a Play Integrity token: FAIL when 0 passed, or when infrastructure
+//   fail-opens are >= 20 % of the attempts (device-environment fail-opens never count).
+//   SKIP ("WARN") when there is no data. Catches a silent fail-open like 2026-11-11.
+//
 // Flags:
 //   --base <url>  --json  --junit <path>  --writes  --require-service-role
-//   --skip-public  --setup-only (ensure fixtures and exit)  -h/--help
+//   --skip-public  --skip-integrity-health  --setup-only (ensure fixtures and exit)  -h/--help
 //
 // Exit code: 0 when every check passed (skips allowed), 1 on any failure, 2 on usage/config error.
 
@@ -63,7 +69,7 @@ const arg = (name) => {
   return i >= 0 ? argv[i + 1] : undefined;
 };
 if (flag('-h') || flag('--help')) {
-  console.log(readFileSync(fileURLToPath(import.meta.url), 'utf8').split('\n').slice(1, 48).map((l) => l.replace(/^\/\/ ?/, '')).join('\n'));
+  console.log(readFileSync(fileURLToPath(import.meta.url), 'utf8').split('\n').slice(1, 54).map((l) => l.replace(/^\/\/ ?/, '')).join('\n'));
   process.exit(0);
 }
 
@@ -74,6 +80,7 @@ const WRITES = flag('--writes') || process.env.SMOKE_WRITES === '1';
 const REQUIRE_SR = flag('--require-service-role') || process.env.SMOKE_REQUIRE_SERVICE_ROLE === '1';
 const SKIP_PUBLIC = flag('--skip-public');
 const SETUP_ONLY = flag('--setup-only');
+const SKIP_INTEGRITY_HEALTH = flag('--skip-integrity-health');
 const TIMEOUT_MS = Number(process.env.SMOKE_TIMEOUT_MS || 20000);
 const SLOW_MS = Number(process.env.SMOKE_MAX_LATENCY_MS || 5000);
 const TZ = 'America/Los_Angeles';
@@ -664,10 +671,84 @@ async function authenticate() {
   return { token: legacy.token, fx: null };
 }
 
+// ---------------------------------------------------------------- integrity health
+
+// Mirrors integrityHealth() in apps/web/app/lib/security/security-report.ts (the alert cron's
+// integrity_broken signal) with the stricter release share. Keep the two in step.
+const INTEGRITY_SESSION_ACTIONS = ['register', 'login', 'google', 'refresh'];
+const INTEGRITY_MIN_TOKEN_ATTEMPTS = 3;
+const INTEGRITY_RELEASE_MAX_FAIL_OPEN_SHARE = 0.2;
+const INTEGRITY_NO_TOKEN = new Set(['missing_token', 'missing_device_id', 'attestation lookup failed', 'nonce issuance not configured']);
+const INTEGRITY_ATTEMPT_RESULTS = new Set(['pass', 'block', 'fail_open', 'log_only', 'bypass']);
+const integrityTokenless = (reason) => {
+  const r = String(reason ?? '').replace(/^(bypass:)?(reviewer:)?/, '');
+  return INTEGRITY_NO_TOKEN.has(r) || r.startsWith('device_error:');
+};
+
+/** Pure: per-action verdict over security_events rows ({action, result, reason, count}). */
+function integrityReleaseHealth(rows) {
+  const out = [];
+  for (const action of INTEGRITY_SESSION_ACTIONS) {
+    let attempts = 0;
+    let tokenAttempts = 0;
+    let passes = 0;
+    let infra = 0;
+    const reasons = new Map();
+    for (const r of rows) {
+      if (r.action !== action || !INTEGRITY_ATTEMPT_RESULTS.has(r.result)) continue;
+      const c = Number(r.count) > 0 ? Number(r.count) : 1;
+      attempts += c;
+      if (!integrityTokenless(r.reason)) tokenAttempts += c;
+      if (r.result === 'pass') passes += c;
+      if (r.result === 'fail_open' && !String(r.reason ?? '').startsWith('device_error:')) {
+        infra += c;
+        reasons.set(r.reason ?? '', (reasons.get(r.reason ?? '') ?? 0) + c);
+      }
+    }
+    const share = attempts ? infra / attempts : 0;
+    const top = [...reasons.entries()].sort((a, b) => b[1] - a[1])[0]?.[0];
+    const problems = [];
+    if (tokenAttempts >= INTEGRITY_MIN_TOKEN_ATTEMPTS && passes === 0) problems.push(`0 passes in ${tokenAttempts} attempts with a token`);
+    if (attempts >= INTEGRITY_MIN_TOKEN_ATTEMPTS && share >= INTEGRITY_RELEASE_MAX_FAIL_OPEN_SHARE) {
+      problems.push(`${Math.round(share * 100)}% infra fail-open (${infra}/${attempts}${top ? `, mostly "${top}"` : ''})`);
+    }
+    out.push({ action, attempts, tokenAttempts, passes, infra, share, problems });
+  }
+  return out;
+}
+
+async function integrityHealthChecks() {
+  suite('integrity', 'Integrity health (prod security_events, last 24 h)');
+  await check('Android integrity verification works on every auth action', async () => {
+    if (!(SUPABASE_URL && SERVICE_KEY)) throw new Skip('WARN: no service-role key, integrity health not checked');
+    await supabaseClients();
+    const since = new Date(Date.now() - 24 * 3_600_000).toISOString();
+    const { data, error } = await sb
+      .from('security_events')
+      .select('action, result, reason, count')
+      .eq('kind', 'integrity')
+      .in('action', INTEGRITY_SESSION_ACTIONS)
+      .gte('created_at', since)
+      .limit(20000);
+    if (error) fail(`security_events: ${error.message}`);
+    const health = integrityReleaseHealth(data ?? []);
+    const summary = health.map((a) => `${a.action} ${a.passes}/${a.tokenAttempts} pass${a.infra ? `, ${a.infra} infra fail-open` : ''}`).join('; ');
+    const bad = health.filter((a) => a.problems.length);
+    if (bad.length) {
+      fail(`verification broken: ${bad.map((a) => `${a.action}: ${a.problems.join('; ')}`).join(' | ')} [${summary}]. See docs/INTEGRITY_CONTRACT.md (Incident 2026-11-11).`);
+    }
+    if (!health.some((a) => a.attempts > 0)) throw new Skip('WARN: no Android integrity attempts on auth actions in the last 24 h (nothing to judge)');
+    const thin = health.filter((a) => a.attempts > 0 && a.tokenAttempts < INTEGRITY_MIN_TOKEN_ATTEMPTS).map((a) => a.action);
+    if (thin.length) note(`integrity health: too little data to judge ${thin.join(', ')} (< ${INTEGRITY_MIN_TOKEN_ATTEMPTS} token attempts)`);
+    return { detail: summary };
+  });
+}
+
 async function main() {
   if (!JSON_OUT) console.log(`FitCircle prod smoke → ${BASE}${WRITES ? '  (+ writes)' : '  (read-only)'}`);
   if (!SKIP_PUBLIC && !SETUP_ONLY) await publicChecks();
   const auth = await authenticate();
+  if (!SETUP_ONLY && !SKIP_INTEGRITY_HEALTH) await integrityHealthChecks();
   if (SETUP_ONLY || !auth) return;
   await authedChecks(auth.token, auth.fx);
   if (WRITES) await writeChecks(auth.token, auth.fx);

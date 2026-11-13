@@ -10,6 +10,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const h = vi.hoisted(() => ({
   mode: 'block' as string,
   deviceFailOpen: 'true' as string,
+  internalPolicy: 'block' as string,
   bypass: [] as string[],
   reviewers: [] as string[],
   listCalls: [] as any[],
@@ -28,7 +29,8 @@ const h = vi.hoisted(() => ({
 
 vi.mock('@/lib/remote-config/service', () => ({
   RemoteConfigService: {
-    enumValue: async (key: string) => (key === 'integrity_device_error_fail_open' ? h.deviceFailOpen : h.mode),
+    enumValue: async (key: string) =>
+      key === 'integrity_device_error_fail_open' ? h.deviceFailOpen : key === 'integrity_internal_error_policy' ? h.internalPolicy : h.mode,
     listValue: async (key: string, ctx: any) => {
       h.listCalls.push({ key, ctx });
       return key === 'integrity_reviewer_emails' ? h.reviewers : h.bypass;
@@ -95,6 +97,7 @@ beforeEach(() => {
   Object.assign(h, {
     mode: 'block',
     deviceFailOpen: 'true',
+    internalPolicy: 'block',
     bypass: [],
     reviewers: [],
     listCalls: [],
@@ -246,11 +249,99 @@ describe('pass + request binding', () => {
     expect(await checkIntegrity(r, { action: 'login' })).toMatchObject({ allowed: true, mode: 'verified' });
   });
 
-  it('a route that consumed the body first fails open as body_consumed (2026-11-11 auth bug)', async () => {
+  it('a route that consumed the body first is blocked with a retryable 503, never a fail-open (2026-11-11 auth bug)', async () => {
     const r = req();
     await r.json();
-    expect(await checkIntegrity(r, { action: 'login' })).toMatchObject({ allowed: true, mode: 'fail_open' });
+    const d = await checkIntegrity(r, { action: 'register' });
+    expect(d).toMatchObject({ allowed: false, mode: 'blocked', reason: 'integrity_internal_error', internalErrorClass: 'body_consumed' });
     expect(failOpenClass('request body already read before the integrity check')).toBe('body_consumed');
+  });
+});
+
+describe('our programming errors fail closed (integrity_internal_error_policy)', () => {
+  const consumed = async () => {
+    const r = req();
+    await r.json();
+    return r;
+  };
+
+  it('body_consumed → 503 INTEGRITY_UNAVAILABLE (not INTEGRITY_FAILED: the app must not show the device block), Retry-After, Sentry error', async () => {
+    const d = await checkIntegrity(await consumed(), { action: 'food_ai', userId: USER });
+    expect(d.response!.status).toBe(503);
+    expect(d.response!.headers.get('retry-after')).toBe('30');
+    const body = await d.response!.json();
+    expect(body).toMatchObject({ success: false, code: 'INTEGRITY_UNAVAILABLE', reason: 'integrity_internal_error', error: { code: 'INTEGRITY_UNAVAILABLE', details: { retryable: true } } });
+    expect(body.code).not.toBe('INTEGRITY_FAILED');
+    // Android shows server sentences unless they look technical (LoginErrorResolver.looksTechnical).
+    expect(body.message).not.toMatch(/timeout|exception|null|\d{3}|error/i);
+    expect(results()).toEqual(['block:integrity_internal_error:body_consumed']);
+    expect(h.sentry).toEqual([expect.objectContaining({ message: 'integrity internal error: body_consumed', level: 'error', fingerprint: ['integrity-internal-error', 'body_consumed'] })]);
+  });
+
+  it('an unexpected exception inside the check is a block too (class unexpected)', async () => {
+    h.decode = null; // decoded.kind on null → TypeError inside the check
+    const d = await checkIntegrity(req(), { action: 'register' });
+    expect(d).toMatchObject({ allowed: false, reason: 'integrity_internal_error', internalErrorClass: 'unexpected' });
+    expect(d.response!.status).toBe(503);
+  });
+
+  it('a TypeError that mentions "nonce" is still our bug, not a nonce-store outage', async () => {
+    const { thrownErrorClass } = await import('../enforcement');
+    expect(thrownErrorClass("Cannot read properties of undefined (reading 'nonce')")).toBe('unexpected');
+    expect(thrownErrorClass('INTEGRITY_NONCE_SECRET (or JWT_SECRET) is not configured')).toBe('verifier_not_configured');
+    expect(thrownErrorClass('request body already read before the integrity check')).toBe('body_consumed');
+  });
+
+  it('login / google / refresh: the 503 is bypass-eligible (reviewers still get in), recorded with the class', async () => {
+    h.reviewers = ['fitcircle.user@gmail.com'];
+    const d = await checkIntegrity(await consumed(), { action: 'login' });
+    expect(d).toMatchObject({ allowed: false, bypassEligible: true });
+    expect(h.events).toEqual([]);
+    expect(await resolveLoginBypass(req(), d, { userId: USER, email: 'someone@gmail.com' })).toBe(false);
+    expect(await resolveLoginBypass(req(), d, { userId: USER, email: 'fitcircle.user@gmail.com' })).toBe(true);
+    expect(results()).toEqual(['block:integrity_internal_error:body_consumed', 'bypass:reviewer:integrity_internal_error:body_consumed']);
+  });
+
+  it('policy fail_open (emergency switch): allowed, recorded as fail_open, still Sentry error', async () => {
+    h.internalPolicy = 'fail_open';
+    const d = await checkIntegrity(await consumed(), { action: 'login' });
+    expect(d).toMatchObject({ allowed: true, mode: 'fail_open', internalErrorClass: 'body_consumed' });
+    expect(results()).toEqual(['fail_open:integrity_internal_error:body_consumed']);
+    expect(h.sentry[0]).toMatchObject({ level: 'error', tags: { integrity_outcome: 'fail_open' } });
+  });
+
+  it('log mode never blocks, even on our bug', async () => {
+    h.mode = 'log';
+    expect(await checkIntegrity(await consumed(), { action: 'register' })).toMatchObject({ allowed: true, mode: 'fail_open' });
+  });
+
+  it('remote config unreadable → block (the code default)', async () => {
+    const { RemoteConfigService } = await import('@/lib/remote-config/service');
+    const real = RemoteConfigService.enumValue;
+    const spy = vi.spyOn(RemoteConfigService, 'enumValue').mockImplementation(async (key: any, ctx: any) => {
+      if (key === 'integrity_internal_error_policy') throw new Error('db down');
+      return real(key, ctx);
+    });
+    const d = await checkIntegrity(await consumed(), { action: 'register' });
+    spy.mockRestore();
+    expect(d).toMatchObject({ allowed: false, reason: 'integrity_internal_error' });
+  });
+
+  it('external causes still fail open: any decode error (network, bad key) is decode_error, not unexpected', async () => {
+    h.decode = { kind: 'infra', message: 'fetch failed' };
+    const d = await checkIntegrity(req(), { action: 'login' });
+    expect(d).toMatchObject({ allowed: true, mode: 'fail_open' });
+    expect(h.sentry[0]).toMatchObject({ tags: { fail_open_reason: 'decode_error' } });
+  });
+
+  it('a missing nonce secret (thrown while verifying) is configuration: fail open, Sentry error', async () => {
+    const { isInternalErrorClass } = await import('../enforcement');
+    expect(isInternalErrorClass('verifier_not_configured')).toBe(false);
+    expect(isInternalErrorClass('body_consumed')).toBe(true);
+    expect(isInternalErrorClass('unexpected')).toBe(true);
+    h.configured = false;
+    await checkIntegrity(req(), { action: 'login' });
+    expect(h.sentry[0]).toMatchObject({ level: 'error', tags: { fail_open_reason: 'verifier_not_configured' } });
   });
 });
 
@@ -277,6 +368,29 @@ describe('routes never consume the body before checkIntegrity', () => {
     }
     expect(files.length).toBeGreaterThan(5);
     expect(offenders).toEqual([]);
+  });
+
+  it('every route calling checkIntegrity has a real end-to-end verified test (__tests__/integrity-e2e.test.ts)', async () => {
+    const { existsSync, readFileSync, readdirSync, statSync } = await import('node:fs');
+    const { dirname, join } = await import('node:path');
+    const root = join(__dirname, '../../../api');
+    const missing: string[] = [];
+    let enforced = 0;
+    const walk = (d: string) => {
+      for (const n of readdirSync(d)) {
+        const f = join(d, n);
+        if (statSync(f).isDirectory()) {
+          if (n !== '__tests__') walk(f);
+        } else if (n === 'route.ts' && readFileSync(f, 'utf8').includes('checkIntegrity(')) {
+          enforced += 1;
+          const e2e = join(dirname(f), '__tests__', 'integrity-e2e.test.ts');
+          if (!existsSync(e2e) || !readFileSync(e2e, 'utf8').includes('expectVerified(')) missing.push(f.slice(root.length));
+        }
+      }
+    };
+    walk(root);
+    expect(enforced).toBeGreaterThanOrEqual(10);
+    expect(missing).toEqual([]);
   });
 });
 

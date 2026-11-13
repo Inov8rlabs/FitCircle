@@ -1,8 +1,8 @@
 import * as Sentry from '@sentry/nextjs';
 import { describe, expect, it, vi } from 'vitest';
 
-import { ALERT_COOLDOWN_MS, renderAlertEmail, reportAlertToSentry, signalsToSend } from '../alerts';
-import { attackLevel, evaluateSignals, failedLoginsByAccount, hourlySeries, tiles, topOffenders, type EventRow, type Signal } from '../security-report';
+import { ALERT_COOLDOWN_MS, cooldownFor, renderAlertEmail, reportAlertToSentry, signalsToSend } from '../alerts';
+import { attackLevel, evaluateSignals, failedLoginsByAccount, hourlySeries, integrityHealth, isTokenlessReason, tiles, topOffenders, type EventRow, type Signal } from '../security-report';
 
 vi.mock('@sentry/nextjs', () => ({ captureMessage: vi.fn() }));
 
@@ -157,5 +157,66 @@ describe('fail-open split (infrastructure vs device environment)', () => {
       row({ result: 'pass' }),
     ]);
     expect(t).toMatchObject({ failOpens: 2, deviceErrorFailOpens: 4, integrityAttempts: 7, integrityPasses: 1, integrityBlocks: 0 });
+  });
+});
+
+describe('integrity_broken (verification not working for an action, last 24 h)', () => {
+  const day = (rows: EventRow[]) => evaluateSignals({ hour: [], quarter: [], day: rows }).filter((x) => x.signal === 'integrity_broken');
+
+  it('the 2026-11-11 incident shape fires: auth actions all fail_open "unusable", 0 passes', () => {
+    const rows = [
+      ...many(25, { action: 'google', result: 'fail_open', reason: 'unusable' }),
+      ...many(3, { action: 'google', result: 'fail_open', reason: 'device_error:prepare_-14' }),
+      ...many(6, { action: 'login', result: 'fail_open', reason: 'unusable' }),
+      ...many(4, { action: 'register', result: 'fail_open', reason: 'unusable' }),
+      ...many(15, { action: 'food_ai', result: 'pass' }),
+    ];
+    const [sig] = day(rows);
+    expect(sig).toMatchObject({ signal: 'integrity_broken', level: 'elevated', value: 3 });
+    expect(sig.detail).toContain('google: 25 attempts with a token, 0 passes; 89% infra fail-open (25/28, mostly "unusable")');
+    expect(sig.detail).toContain('login: 6 attempts with a token, 0 passes');
+    expect(sig.detail).not.toContain('food_ai');
+  });
+
+  it('our programming errors (503 blocks) fire it too: they are token attempts with no pass', () => {
+    expect(day(many(3, { action: 'login', result: 'block', reason: 'integrity_internal_error:body_consumed' }))).toHaveLength(1);
+    expect(day(many(3, { action: 'login', result: 'bypass', reason: 'reviewer:integrity_internal_error:body_consumed' }))).toHaveLength(1);
+  });
+
+  it('a healthy action with some passes is fine; fewer than 3 token attempts is not enough', () => {
+    expect(day([...many(1, { action: 'login', result: 'pass' }), ...many(5, { action: 'login', result: 'block', reason: 'device_integrity' })])).toEqual([]);
+    expect(day(many(2, { action: 'login', result: 'block', reason: 'cert_mismatch' }))).toEqual([]);
+  });
+
+  it('phones without a token (missing_token, device errors) never mean OUR verification is broken', () => {
+    expect(
+      day([
+        ...many(10, { action: 'login', result: 'block', reason: 'missing_token' }),
+        ...many(10, { action: 'login', result: 'bypass', reason: 'reviewer:missing_token' }),
+        ...many(10, { action: 'google', result: 'fail_open', reason: 'device_error:prepare_-9' }),
+      ])
+    ).toEqual([]);
+    expect(isTokenlessReason('bypass:reviewer:missing_token')).toBe(true);
+    expect(isTokenlessReason('unusable')).toBe(false);
+  });
+
+  it('infra fail-open ≥ 50 % of attempts fires even with passes', () => {
+    const h = integrityHealth([...many(2, { action: 'refresh', result: 'pass' }), ...many(2, { action: 'refresh', result: 'fail_open', reason: 'decode HTTP 503' })]);
+    expect(h[0]).toMatchObject({ action: 'refresh', passes: 2, infraFailOpens: 2, failOpenShare: 0.5, broken: true, topFailOpenReason: 'decode HTTP 503' });
+    expect(integrityHealth([...many(3, { action: 'refresh', result: 'pass' }), ...many(2, { action: 'refresh', result: 'fail_open', reason: 'decode HTTP 503' })])[0].broken).toBe(false);
+  });
+
+  it('emails at most once per 6 h; Sentry level error; explicit subject', () => {
+    const sig: Signal = { signal: 'integrity_broken', level: 'elevated', value: 1, threshold: 0, detail: 'login: 6 attempts with a token, 0 passes' };
+    expect(cooldownFor('integrity_broken')).toBe(6 * 60 * 60_000);
+    const at = (ms: number) => [{ signal: 'integrity_broken', last_sent_at: new Date(NOW.getTime() - ms).toISOString(), last_severity: 'elevated' }];
+    expect(signalsToSend([sig], at(5 * 60 * 60_000), NOW)).toEqual([]);
+    expect(signalsToSend([sig], at(6 * 60 * 60_000), NOW)).toHaveLength(1);
+    reportAlertToSentry(sig);
+    expect(Sentry.captureMessage).toHaveBeenCalledWith('security_alert: integrity_broken', expect.objectContaining({ level: 'error' }));
+    const m = renderAlertEmail([sig], 'elevated', NOW);
+    expect(m.subject).toBe('[FitCircle security] ACTION NEEDED: app integrity verification is broken (integrity_broken)');
+    expect(m.text).toContain('NOT being verified');
+    expect(m.html).toContain('NOT being verified');
   });
 });

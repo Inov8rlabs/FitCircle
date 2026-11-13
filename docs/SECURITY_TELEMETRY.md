@@ -31,8 +31,10 @@ dedupe_key`. `asn` comes from `x-vercel-ip-as-number` when the edge sends it (el
 |---|---|---|
 | Structured log | `security.<kind>` | `warn` for block / log_only / fail_open / limited / rejected / bypass; `info` for passes (10 % sample). Attributes: `kind, route, action, platform, app_version, result, reason, asn, country, ip_prefix, integrity_error` |
 | Metric (counter) | `security.event` | attributes `kind, result, reason, platform` |
-| Issue | `integrity fail-open: <class>` | `captureException`, level warning, tags `security=fail_open`, `fail_open_reason=<class>`, `integrity_action`; fingerprint `['security-fail-open', <class>]`. Classes: `verifier_not_configured, token_exchange, decode_timeout, decode_http, nonce_store, attestation_lookup, unexpected` |
-| Issue | `security_alert: <signal>` | `captureMessage`, level warning, tags `security_alert=<signal>`, `severity=elevated\|attack`; fingerprint `['security_alert', <signal>]` |
+| Issue | `integrity fail-open: <class>` | `captureException`, level warning, tags `security=fail_open`, `fail_open_reason=<class>`, `integrity_action`; fingerprint `['security-fail-open', <class>]`. Classes: `verifier_not_configured` (level error), `token_exchange, decode_timeout, decode_http, decode_error, nonce_store, attestation_lookup` (external, fail open) |
+| Issue | `integrity internal error: <class>` | OUR bug inside the check (`body_consumed`, `unexpected`): `captureException`, level error, tags `security=integrity_internal_error`, `integrity_error_class`, `integrity_action`, `integrity_outcome=block\|fail_open`; fingerprint `['integrity-internal-error', <class>]`. The request gets 503 INTEGRITY_UNAVAILABLE (docs/INTEGRITY_CONTRACT.md) |
+| Issue | `security_alert: <signal>` | `captureMessage`, level warning (`integrity_broken`: error), tags `security_alert=<signal>`, `severity=elevated\|attack`; fingerprint `['security_alert', <signal>]` |
+| Issue | `security_alert_email_failed` | the alert email was not accepted by Resend (level error, tag `email_error`); the cooldown is not saved, so the next run retries |
 | Cron monitor | `security-alert-cron` | `withMonitor`, crontab `*/15 * * * *` UTC, margin 5 min, max runtime 5 min |
 
 ## Amplitude (server-side, HTTP V2)
@@ -60,15 +62,22 @@ above 3x its threshold (block rate: above 30 %; fail-open: above 50 in 15 min):
 | `signup_concentration` | sign-ups in the last hour from one ASN / one IP prefix | 5 / 5 |
 | `integrity_block_rate` | blocks ÷ integrity attempts, last hour, with ≥ 20 attempts | 10 % |
 | `fail_open` | integrity fail-opens in the last 15 minutes | 0 |
+| `integrity_broken` | per action, last 24 h: ≥ 3 attempts with a token and 0 passes, or infra fail-opens ≥ 50 % of attempts (≥ 3 attempts). Value = number of broken actions | 0 |
 | `rate_limit_hits` | rate-limit hits in the last hour | 500 |
 | `referral_rejections` | rejected referrals in the last 24 hours | 5 |
 
 Attack status: `under_attack` if any signal is, `elevated` if any signal fires, else `normal`.
 Each alert carries the 7-day average of its measure as context.
 
-Delivery per firing signal: email to `SECURITY_ALERT_RECIPIENTS` (comma list; default the
-`ADS_REPORT_RECIPIENTS` list) and the Sentry message above. Cooldown: one alert per signal per
-2 hours (`security_alert_state`); an escalation from elevated to under_attack alerts again.
+Delivery per firing signal: email (Resend, category `security_alert`, from
+team@fitcircle.ai) to `SECURITY_ALERT_RECIPIENTS` (comma list), else `ADS_REPORT_RECIPIENTS`,
+else the ads report's built-in default recipient; and the Sentry message above. Production
+sets neither env var today, so alerts go to the built-in default. Cooldown: one alert per
+signal per 2 hours, 6 hours for `integrity_broken` (`security_alert_state`); an escalation
+from elevated to under_attack alerts again. The cooldown is saved only when Resend accepted
+the email; a failed send is retried on the next run and raises `security_alert_email_failed`.
+An `integrity_broken` email has the subject
+`[FitCircle security] ACTION NEEDED: app integrity verification is broken (...)`.
 
 ## Admin API
 

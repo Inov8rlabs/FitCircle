@@ -94,6 +94,14 @@ export const REMOTE_CONFIG_REGISTRY = {
     description:
       'true = an integrity_v1 client with no token because of its phone (outdated Play Store / Play services, Play unreachable, timeouts) is allowed and recorded as device_error:<code>. false = those requests are blocked again (missing_token).',
   },
+  integrity_internal_error_policy: {
+    type: 'enum',
+    default: 'block',
+    options: ['block', 'fail_open'],
+    unit: 'mode',
+    description:
+      'What an integrity_v1 Android request gets when the integrity check breaks on OUR side (a bug: request body read before the check, unexpected exception). block = 503 INTEGRITY_UNAVAILABLE, retryable ("try again"; never the device-block screen; refresh keeps the session). fail_open = allow and record (the pre-2026-11-13 behaviour). Emergency switch only: Google / network / database outages always fail open regardless.',
+  },
   integrity_bypass_user_ids: {
     type: 'string_list',
     default: [],

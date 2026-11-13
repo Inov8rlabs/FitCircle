@@ -29,6 +29,14 @@ describe('integrity_device_error_fail_open', () => {
   });
 });
 
+describe('integrity_internal_error_policy', () => {
+  it('is block | fail_open, default block (our bugs fail closed)', () => {
+    expect(codeDefault('integrity_internal_error_policy')).toBe('block');
+    expect(validValue('integrity_internal_error_policy', 'fail_open')).toBe('fail_open');
+    expect(validValue('integrity_internal_error_policy', 'log')).toBeNull();
+  });
+});
+
 describe('paywall plan keys (docs/PAYWALL_DEFAULT_PLAN.md)', () => {
   it('paywall_default_plan: annual | monthly, default annual', () => {
     expect(codeDefault('paywall_default_plan')).toBe('annual');

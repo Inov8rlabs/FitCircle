@@ -91,6 +91,7 @@ describe('GET list', () => {
       expect.objectContaining({ key: 'trial_days', type: 'int', min: 1, max: 31, codeDefault: 7, default: null, rules: [] }),
       expect.objectContaining({ key: 'integrity_enforce_android', type: 'enum', options: ['block', 'log', 'off'], min: null, max: null, codeDefault: 'block', default: null, rules: [] }),
       expect.objectContaining({ key: 'integrity_device_error_fail_open', type: 'enum', options: ['true', 'false'], codeDefault: 'true', default: null, rules: [] }),
+      expect.objectContaining({ key: 'integrity_internal_error_policy', type: 'enum', options: ['block', 'fail_open'], codeDefault: 'block', default: null, rules: [] }),
       expect.objectContaining({ key: 'integrity_bypass_user_ids', type: 'string_list', maxItems: 200, min: null, max: null, codeDefault: [], default: null, rules: [] }),
       expect.objectContaining({
         key: 'integrity_reviewer_emails',
@@ -232,6 +233,7 @@ describe('preview + estimate', () => {
       trial_days: { value: 7, source: 'code' },
       integrity_enforce_android: { value: 'block', source: 'code' },
       integrity_device_error_fail_open: { value: 'true', source: 'code' },
+      integrity_internal_error_policy: { value: 'block', source: 'code' },
       integrity_bypass_user_ids: { value: [], source: 'code' },
       integrity_reviewer_emails: { value: ['fitcircle.user@gmail.com', '@cloudtestlabaccounts.com'], source: 'code' },
       day1_morning_push: { value: 'on', source: 'code' },

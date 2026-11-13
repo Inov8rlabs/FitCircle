@@ -14,6 +14,13 @@
  *     decoded verdict failing any check) → block
  *   - our / Google infrastructure (verifier not configured, token exchange, quota, 5xx,
  *     timeout, nonce store down) → fail OPEN: allow, log, Sentry (security=fail_open)
+ *   - OUR programming errors (the route consumed the body before the check, any
+ *     unexpected exception inside the check) → fail CLOSED: 503 INTEGRITY_UNAVAILABLE
+ *     {reason: integrity_internal_error} (retryable; the app shows "try again", never the
+ *     device block screen), Sentry level error. Remote config
+ *     `integrity_internal_error_policy` = fail_open flips this to the old fail-open in an
+ *     emergency. Since the 2026-11-11 incident (every auth call failed open for two days
+ *     on body_consumed) a bug in our code must never silently disable the check.
  *   - no token because of the PHONE's environment or a transient Play error (the client's
  *     X-Integrity-Error, see isDeviceEnvironmentError), while remote config
  *     `integrity_device_error_fail_open` is true (default) → device fail-open: allow and
@@ -83,7 +90,9 @@ export type IntegrityFailReason =
   | 'cert_mismatch'
   | 'app_not_recognized'
   | 'device_integrity'
-  | 'unlicensed';
+  | 'unlicensed'
+  /** Our own bug inside the check (503, retryable): see integrityUnavailableResponse. */
+  | 'integrity_internal_error';
 
 export interface IntegrityDecision {
   allowed: boolean;
@@ -103,6 +112,8 @@ export interface IntegrityDecision {
   verdict?: VerdictSummary;
   /** Blocked on a login / google / refresh whose identity may be on a bypass list (see resolveBypass). */
   bypassEligible?: boolean;
+  /** Set when the decision came from our own error (failOpenClass, e.g. body_consumed). */
+  internalErrorClass?: string;
 }
 
 export interface CheckOptions {
@@ -173,6 +184,19 @@ export async function deviceErrorFailOpenEnabled(userId?: string | null): Promis
   }
 }
 
+/**
+ * Remote config `integrity_internal_error_policy` (default block). Unreadable → block (the
+ * code default): an outage of remote config must not re-open the 2026-11-11 hole.
+ */
+export async function internalErrorPolicy(userId?: string | null): Promise<'block' | 'fail_open'> {
+  try {
+    const v = await RemoteConfigService.enumValue('integrity_internal_error_policy', { userId: userId || PLACEHOLDER_USER, platform: 'android' });
+    return v === 'fail_open' ? 'fail_open' : 'block';
+  } catch {
+    return 'block';
+  }
+}
+
 const MESSAGE = "This device can't run FitCircle. Install FitCircle from Google Play on a device with Google Play services that isn't rooted.";
 
 export function integrityFailedResponse(reason: IntegrityFailReason): NextResponse {
@@ -187,6 +211,35 @@ export function integrityFailedResponse(reason: IntegrityFailReason): NextRespon
       meta: null,
     },
     { status: 403, headers: { 'Cache-Control': 'no-store' } }
+  );
+}
+
+/** Error code of a 503 caused by our own bug (NOT INTEGRITY_FAILED: the app must not show its device block). */
+export const INTEGRITY_UNAVAILABLE_CODE = 'INTEGRITY_UNAVAILABLE';
+/**
+ * Shown by the Android app as-is (LoginErrorResolver passes server sentences through), so
+ * plain words only: no status codes or "timeout" (its looksTechnical filter drops those).
+ */
+const UNAVAILABLE_MESSAGE = "We couldn't check your device just now. Please try again in a minute.";
+export const INTEGRITY_RETRY_AFTER_SECONDS = 30;
+
+/**
+ * 503 for an integrity check that broke on OUR side. Retryable: a refresh that gets it
+ * keeps the session (Android TokenRefreshManager clears tokens only on 401/403).
+ */
+export function integrityUnavailableResponse(): NextResponse {
+  const reason: IntegrityFailReason = 'integrity_internal_error';
+  return NextResponse.json(
+    {
+      success: false,
+      data: null,
+      code: INTEGRITY_UNAVAILABLE_CODE,
+      reason,
+      message: UNAVAILABLE_MESSAGE,
+      error: { code: INTEGRITY_UNAVAILABLE_CODE, message: UNAVAILABLE_MESSAGE, details: { reason, retryable: true }, timestamp: new Date().toISOString() },
+      meta: null,
+    },
+    { status: 503, headers: { 'Cache-Control': 'no-store', 'Retry-After': String(INTEGRITY_RETRY_AFTER_SECONDS) } }
   );
 }
 
@@ -291,6 +344,34 @@ async function event(request: NextRequest, action: IntegrityAction, outcome: Int
   }
 }
 
+/**
+ * Fail-open classes caused by something OUTSIDE our code: Google, our database, or a
+ * deployment's configuration. These fail open (a Google outage must not lock everyone out).
+ *
+ * `verifier_not_configured` (PLAY_INTEGRITY_SA_JSON / nonce secret missing) counts as
+ * external on purpose: it is a deployment-wide configuration fault, not a code path. Failing
+ * closed on it would refuse every Android sign-in and refresh on one missing env var, which
+ * is the outage the fail-open exists to prevent; it is caught instead by the
+ * `integrity_broken` alert (0 passes) and the release integrity-health check within hours.
+ * `decode_error` = any other error the Google decode step returned (network, bad key).
+ */
+export const EXTERNAL_FAIL_OPEN_CLASSES: ReadonlySet<string> = new Set([
+  'verifier_not_configured',
+  'token_exchange',
+  'decode_timeout',
+  'decode_http',
+  'decode_error',
+  'nonce_store',
+  'attestation_lookup',
+]);
+
+/** Our own bugs: these fail CLOSED (integrity_internal_error_policy, default block). */
+export const INTERNAL_ERROR_CLASSES: ReadonlySet<string> = new Set(['body_consumed', 'unexpected']);
+
+export function isInternalErrorClass(cls: string): boolean {
+  return !EXTERNAL_FAIL_OPEN_CLASSES.has(cls);
+}
+
 /** Stable class of a fail-open cause (Sentry fingerprint; no secrets in it). */
 export function failOpenClass(message: string): string {
   const m = message.toLowerCase();
@@ -304,12 +385,22 @@ export function failOpenClass(message: string): string {
   return 'unexpected';
 }
 
-function reportFailOpen(action: IntegrityAction, message: string) {
+/**
+ * Class of an exception thrown inside checkIntegrity. Only a missing configuration is
+ * external; anything else thrown there is our bug (every I/O helper returns its failure
+ * instead of throwing), so it is never classified by keywords like "nonce" in a TypeError.
+ */
+export function thrownErrorClass(message: string): string {
+  const cls = failOpenClass(message);
+  return cls === 'body_consumed' || cls === 'verifier_not_configured' ? cls : 'unexpected';
+}
+
+function reportFailOpen(action: IntegrityAction, message: string, cls: string = failOpenClass(message)) {
   console.error(`[integrity] fail-open on ${action}: ${message}`);
   try {
-    const cls = failOpenClass(message);
     Sentry.captureException(new Error(`integrity fail-open: ${cls}`), {
-      level: 'warning',
+      // A missing verifier config is ours to fix today; Google blips are warnings.
+      level: cls === 'verifier_not_configured' ? 'error' : 'warning',
       tags: { security: 'fail_open', fail_open_reason: cls, integrity_action: action },
       fingerprint: ['security-fail-open', cls],
       extra: { message: message.slice(0, 200) },
@@ -319,9 +410,23 @@ function reportFailOpen(action: IntegrityAction, message: string) {
   }
 }
 
+function reportInternalError(action: IntegrityAction, message: string, cls: string, outcome: 'block' | 'fail_open') {
+  console.error(`[integrity] internal error on ${action} (${cls}, ${outcome}): ${message}`);
+  try {
+    Sentry.captureException(new Error(`integrity internal error: ${cls}`), {
+      level: 'error',
+      tags: { security: 'integrity_internal_error', integrity_error_class: cls, integrity_action: action, integrity_outcome: outcome },
+      fingerprint: ['integrity-internal-error', cls],
+      extra: { message: message.slice(0, 200) },
+    });
+  } catch {
+    // Sentry is best-effort
+  }
+}
+
 /**
- * Decide one request. Never throws: an unexpected error is an infrastructure error
- * (fail open).
+ * Decide one request. Never throws. External / infrastructure errors fail open; our own
+ * programming errors fail closed (503, integrity_internal_error_policy).
  */
 export async function checkIntegrity(request: NextRequest, opts: CheckOptions): Promise<IntegrityDecision> {
   if (!isIntegrityClient(request)) return { allowed: true, mode: 'legacy', deviceId: null, attestedDeviceId: null };
@@ -349,10 +454,34 @@ export async function checkIntegrity(request: NextRequest, opts: CheckOptions): 
     return { allowed: false, mode: 'blocked', reason, response: integrityFailedResponse(reason), deviceId, attestedDeviceId: null, verdict, bypassEligible };
   };
 
-  const failOpen = async (message: string): Promise<IntegrityDecision> => {
-    reportFailOpen(action, message);
+  const failOpen = async (message: string, cls?: string): Promise<IntegrityDecision> => {
+    reportFailOpen(action, message, cls);
     await event(request, action, 'fail_open', { reason: message.slice(0, 120), userId, deviceId });
     return { allowed: true, mode: 'fail_open', deviceId, attestedDeviceId: null };
+  };
+
+  // OUR bug (body consumed before the check, unexpected exception): blocked with a
+  // retryable 503 unless log mode or integrity_internal_error_policy = fail_open.
+  const internalError = async (message: string, cls: string): Promise<IntegrityDecision> => {
+    const policy = mode === 'log' ? 'fail_open' : await internalErrorPolicy(userId);
+    reportInternalError(action, message, cls, policy === 'block' ? 'block' : 'fail_open');
+    const reason = `integrity_internal_error:${cls}`;
+    if (policy === 'fail_open') {
+      await event(request, action, 'fail_open', { reason, userId, deviceId });
+      return { allowed: true, mode: 'fail_open', deviceId, attestedDeviceId: null, internalErrorClass: cls };
+    }
+    const bypassEligible = BYPASS_ACTIONS.has(action);
+    if (!bypassEligible) await event(request, action, 'block', { reason, userId, deviceId });
+    return {
+      allowed: false,
+      mode: 'blocked',
+      reason: 'integrity_internal_error',
+      response: integrityUnavailableResponse(),
+      deviceId,
+      attestedDeviceId: null,
+      bypassEligible,
+      internalErrorClass: cls,
+    };
   };
 
   // The phone could not produce a token for an environmental / transient reason: allow and
@@ -381,23 +510,23 @@ export async function checkIntegrity(request: NextRequest, opts: CheckOptions): 
     const token = (request.headers.get(INTEGRITY_HEADERS.token) ?? '').trim();
     const nonce = (request.headers.get(INTEGRITY_HEADERS.nonce) ?? '').trim();
     if (!token) {
-      if (attestationLookupFailed) return await failOpen('attestation lookup failed');
+      if (attestationLookupFailed) return await failOpen('attestation lookup failed', 'attestation_lookup');
       // The device could not produce a token. A block, except: a nonce we could not issue
       // (our signing secret is missing) and device-environment errors (see above).
-      if (clientError === 'nonce_unavailable' && !nonceIssuanceConfigured()) return await failOpen('nonce issuance not configured');
+      if (clientError === 'nonce_unavailable' && !nonceIssuanceConfigured()) return await failOpen('nonce issuance not configured', 'verifier_not_configured');
       if (clientError && isDeviceEnvironmentError(clientError) && (await deviceErrorFailOpenEnabled(userId))) return await deviceFailOpen(clientError);
       return await fail('missing_token');
     }
     if (!isWellFormedNonce(nonce)) return await fail('nonce_invalid');
 
     const client = playIntegrityClient();
-    if (!client.isConfigured()) return await failOpen('verifier not configured');
+    if (!client.isConfigured()) return await failOpen('verifier not configured', 'verifier_not_configured');
 
     // Hash the raw body bytes before anything parses them (multipart included).
     const path = requestPath(request);
     const bodyHash = await bodySha256(request);
     const consumed = await consumeNonce(nonce, deviceId, { path, bodySha256: bodyHash });
-    if (consumed === 'error') return await failOpen('nonce store unavailable');
+    if (consumed === 'error') return await failOpen('nonce store unavailable', 'nonce_store');
     if (consumed === 'expired') return await fail('nonce_expired');
     if (consumed === 'replayed') return await fail('nonce_replayed');
     if (consumed !== 'ok') return await fail('nonce_invalid');
@@ -405,7 +534,11 @@ export async function checkIntegrity(request: NextRequest, opts: CheckOptions): 
     const expectedHash = computeRequestHash({ method: request.method, path, bodySha256: bodyHash, nonce, deviceId });
 
     const decoded = await client.decode(token);
-    if (decoded.kind === 'infra') return await failOpen(decoded.message);
+    if (decoded.kind === 'infra') {
+      // Everything the decode step reports is Google / network / key config: external.
+      const cls = failOpenClass(decoded.message);
+      return await failOpen(decoded.message, EXTERNAL_FAIL_OPEN_CLASSES.has(cls) ? cls : 'decode_error');
+    }
     if (decoded.kind === 'client') return await fail('token_invalid');
 
     const cfg = client.config!;
@@ -420,7 +553,10 @@ export async function checkIntegrity(request: NextRequest, opts: CheckOptions): 
     await event(request, action, 'pass', { userId, deviceId, verdict: result.summary });
     return { allowed: true, mode: 'verified', deviceId, attestedDeviceId: deviceId, verdict: result.summary };
   } catch (err: any) {
-    return await failOpen(err?.message ?? 'unexpected error');
+    const message = String(err?.message ?? 'unexpected error');
+    const cls = thrownErrorClass(message);
+    if (cls === 'verifier_not_configured') return await failOpen(message, cls);
+    return await internalError(message, cls);
   }
 }
 
@@ -453,7 +589,8 @@ export async function resolveBypass(
   const platform = parseClientPlatform(request.headers.get('x-app-platform') ?? request.headers.get('x-platform'));
   const reviewer = !userBypass && id.email ? await isReviewerEmail(id.email, { userId, platform, allowDomains: action === 'google' }).catch(() => false) : false;
   const bypass = userBypass || reviewer;
-  const reason = reviewer ? `reviewer:${decision.reason ?? 'failed'}` : (decision.reason ?? null);
+  const base = decision.internalErrorClass ? `${decision.reason ?? 'failed'}:${decision.internalErrorClass}` : (decision.reason ?? null);
+  const reason = reviewer ? `reviewer:${base ?? 'failed'}` : base;
   await event(request, action, bypass ? 'bypass' : 'block', { reason, userId, deviceId: decision.deviceId, verdict: decision.verdict });
   return bypass;
 }

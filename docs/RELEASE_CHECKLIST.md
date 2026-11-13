@@ -100,6 +100,13 @@ If the smoke fails right after a deploy: check it is not a smoke-script mistake
   chats inbox and messages, food log, nutrition, plate score, entitlements, app
   update policy and more. Each asserts HTTP 2xx, `success === true` on envelope
   routes, `Cache-Control: no-store`, and the fields the iOS/Android models require.
+- **Integrity health** (service role; prod `security_events`, last 24 h): each Android
+  auth action (register, login, google, refresh) with ≥ 3 attempts that carried a Play
+  Integrity token must have passes > 0 and an infrastructure fail-open share < 20 %
+  (device-environment fail-opens never count). FAIL otherwise; SKIP ("WARN") when there
+  is no data. Catches a silent fail-open like 2026-11-11 (docs/INTEGRITY_CONTRACT.md).
+  The window is 24 h, so after a fix it keeps failing until the bad rows age out;
+  `--skip-integrity-health` skips it (say why in the release notes).
 - **`--writes`** (off by default): posts a chat message in the smoke circle,
   reads it back, deletes it, and checks it is gone. Only ever on the smoke
   account and the smoke circle.
