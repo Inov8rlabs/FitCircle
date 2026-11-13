@@ -217,6 +217,9 @@ export function userIdFromAccessToken(token: string): string | null {
 }
 
 async function bodySha256(request: NextRequest): Promise<string> {
+  // A body the route already read can't be hashed (undici throws "unusable") and the check
+  // would fail open. Routes must read a clone (`await request.clone().json()`) before calling us.
+  if (request.bodyUsed) throw new Error('request body already read before the integrity check');
   const buf = await request.clone().arrayBuffer();
   return sha256Hex(new Uint8Array(buf));
 }
@@ -297,6 +300,7 @@ export function failOpenClass(message: string): string {
   if (m.includes('decode http')) return 'decode_http';
   if (m.includes('nonce')) return 'nonce_store';
   if (m.includes('attestation')) return 'attestation_lookup';
+  if (m.includes('body already read')) return 'body_consumed';
   return 'unexpected';
 }
 

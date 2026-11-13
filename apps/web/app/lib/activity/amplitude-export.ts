@@ -60,6 +60,20 @@ export const AMPLITUDE_INACTIVE_EVENT_TYPES: ReadonlySet<string> = new Set([
 ]);
 export const AMPLITUDE_INACTIVE_EVENT_PREFIXES: readonly string[] = ['[Experiment]'];
 
+/**
+ * On iOS and Android only these count as the user using the app: the app came to the foreground
+ * or a screen was shown. Every other event can also fire from a background process start (Health
+ * Connect / HealthKit sync, widget and complication refresh, push delivery, WorkManager jobs), and
+ * a user who really opened the app always sends at least one of these. 2026-11-13 check: with any
+ * event, Android D1 counted 22 returners where Amplitude's foreground signal found 14.
+ * Web has no background starts, so any (non-excluded) web event counts.
+ */
+export const AMPLITUDE_MOBILE_FOREGROUND_EVENT_TYPES: ReadonlySet<string> = new Set([
+  '[Amplitude] Application Opened',
+  'Screen Viewed',
+  '[Amplitude] Screen Viewed',
+]);
+
 export interface AmplitudeRawEvent {
   user_id?: string | null;
   event_type?: string | null;
@@ -101,6 +115,7 @@ export function toActiveEvent(e: AmplitudeRawEvent): ActiveEvent | null {
   if (AMPLITUDE_INACTIVE_EVENT_PREFIXES.some((p) => eventType.startsWith(p))) return null;
   const platform = normalizeAmplitudePlatform(e.platform);
   if (!platform) return null;
+  if (platform !== 'web' && !AMPLITUDE_MOBILE_FOREGROUND_EVENT_TYPES.has(eventType)) return null;
   // iOS sends UUID().uuidString (upper case); profile ids are lower case.
   const userId = String(e.user_id ?? '').trim().toLowerCase();
   if (!UUID_RE.test(userId)) return null;

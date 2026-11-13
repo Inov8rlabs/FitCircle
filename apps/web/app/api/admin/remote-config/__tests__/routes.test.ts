@@ -104,6 +104,9 @@ describe('GET list', () => {
       expect.objectContaining({ key: 'day1_morning_push', type: 'enum', options: ['on', 'off'], codeDefault: 'on', default: null, rules: [] }),
       expect.objectContaining({ key: 'day1_morning_push_hour', type: 'int', min: 6, max: 11, codeDefault: 8, default: null, rules: [] }),
       expect.objectContaining({ key: 'quiet_hours_deferral', type: 'enum', options: ['on', 'off'], codeDefault: 'on', default: null, rules: [] }),
+      // Paywall default plan (docs/PAYWALL_DEFAULT_PLAN.md).
+      expect.objectContaining({ key: 'paywall_default_plan', type: 'enum', options: ['annual', 'monthly'], codeDefault: 'annual', default: null, rules: [] }),
+      expect.objectContaining({ key: 'paywall_badge_plan', type: 'enum', options: ['annual', 'monthly', 'none'], codeDefault: 'annual', default: null, rules: [] }),
     ]);
   });
 });
@@ -132,6 +135,29 @@ describe('defaults', () => {
       ['default', 'delete', 'ani@inov8rlabs.com'],
     ]);
     expect(audit[0]).toMatchObject({ before: null, after: expect.objectContaining({ value: 8 }) });
+  });
+
+  it('enum keys (paywall plan): admin default + rule are stored as strings and validated against the options', async () => {
+    const K = 'paywall_default_plan';
+    let r = await json(await PUT_DEFAULT(req(`/api/admin/remote-config/${K}/default`, { method: 'PUT', body: { value: 'monthly' } }), keyParams(K)));
+    expect(r.status).toBe(200);
+    expect(db.getRows('remote_config_defaults')).toEqual([expect.objectContaining({ config_key: K, value: 'monthly' })]);
+    expect(await RemoteConfigService.enumValue(K, { userId: null })).toBe('monthly');
+
+    r = await json(await PUT_DEFAULT(req(`/api/admin/remote-config/${K}/default`, { method: 'PUT', body: { value: 'none' } }), keyParams(K)));
+    expect(r.status).toBe(400);
+    expect(r.body.error.details.issues).toEqual([{ path: 'value', message: 'Expected one of: annual, monthly' }]);
+
+    const created = await json(
+      await CREATE_RULE(
+        req(`/api/admin/remote-config/paywall_badge_plan/rules`, { method: 'POST', body: { name: 'Android no badge', enabled: true, priority: 1, audience: { platforms: ['android'] }, value: 'none' } }),
+        keyParams('paywall_badge_plan')
+      )
+    );
+    expect(created.status).toBe(201);
+    expect(created.body.data).toMatchObject({ value: 'none', valid: true });
+    expect(await RemoteConfigService.enumValue('paywall_badge_plan', { userId: null, platform: 'android' })).toBe('none');
+    expect(await RemoteConfigService.enumValue('paywall_badge_plan', { userId: null, platform: 'ios' })).toBe('annual');
   });
 
   it('unknown key → 404', async () => {
@@ -211,6 +237,8 @@ describe('preview + estimate', () => {
       day1_morning_push: { value: 'on', source: 'code' },
       day1_morning_push_hour: { value: 8, source: 'code' },
       quiet_hours_deferral: { value: 'on', source: 'code' },
+      paywall_default_plan: { value: 'annual', source: 'code' },
+      paywall_badge_plan: { value: 'annual', source: 'code' },
     });
     expect(body.data.context).toMatchObject({ platform: 'ios', country: 'US', channel: 'apple_ads', signupAt: '2026-11-01T00:00:00Z' });
     expect((await PREVIEW(req('/api/admin/remote-config/preview', { method: 'POST', body: { userId: 'x' } }))).status).toBe(400);

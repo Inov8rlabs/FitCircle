@@ -29,7 +29,7 @@ const U2 = '22222222-2222-4222-8222-222222222222';
 
 const ev = (over: Partial<AmplitudeRawEvent> = {}): AmplitudeRawEvent => ({
   user_id: U1,
-  event_type: 'Meal Logged',
+  event_type: 'Screen Viewed',
   event_time: '2026-11-10 14:05:06.123456',
   platform: 'iOS',
   ...over,
@@ -45,7 +45,7 @@ describe('export parser', () => {
   it('reads every gzipped JSON-lines file in the zip and skips bad lines', () => {
     const zip = exportZip({ '746168/746168_2026-11-10_14#0.json.gz': [ev(), ev({ user_id: U2 })], '746168/746168_2026-11-10_14#1.json.gz': [ev({ event_type: 'Screen Viewed' })] });
     const withBad = zipSync({ 'x.json.gz': new Uint8Array(gzipSync('{"user_id":"a"}\nnot json\n')) });
-    expect(parseAmplitudeExportZip(zip).events.map((e) => e.event_type)).toEqual(['Meal Logged', 'Meal Logged', 'Screen Viewed']);
+    expect(parseAmplitudeExportZip(zip).events.map((e) => e.event_type)).toEqual(['Screen Viewed', 'Screen Viewed', 'Screen Viewed']);
     expect(parseAmplitudeExportZip(withBad)).toEqual({ events: [{ user_id: 'a' }], badLines: 1 });
   });
 
@@ -69,7 +69,7 @@ describe('export parser', () => {
 
 describe('active-event filter', () => {
   it('keeps client user actions, lower-cases iOS upper-case ids, normalizes platform', () => {
-    expect(toActiveEvent(ev({ user_id: U1.toUpperCase(), platform: 'iOS' }))).toEqual({ userId: U1, at: '2026-11-10T14:05:06.123Z', platform: 'ios', eventType: 'Meal Logged' });
+    expect(toActiveEvent(ev({ user_id: U1.toUpperCase(), platform: 'iOS' }))).toEqual({ userId: U1, at: '2026-11-10T14:05:06.123Z', platform: 'ios', eventType: 'Screen Viewed' });
     expect(toActiveEvent(ev({ platform: 'Android' }))?.platform).toBe('android');
     expect(toActiveEvent(ev({ platform: 'Web' }))?.platform).toBe('web');
   });
@@ -84,6 +84,18 @@ describe('active-event filter', () => {
     expect(toActiveEvent(ev({ event_type: 'Health Sync Completed' }))).toBeNull();
     expect(toActiveEvent(ev({ event_type: '[Experiment] Exposure' }))).toBeNull();
     expect(toActiveEvent(ev({ event_type: '[Amplitude] Application Opened' }))).not.toBeNull();
+  });
+
+  it('on iOS / Android counts only foreground events (app opened, screen viewed); any web event counts', () => {
+    for (const platform of ['iOS', 'Android']) {
+      expect(toActiveEvent(ev({ platform, event_type: 'Screen Viewed' }))).not.toBeNull();
+      expect(toActiveEvent(ev({ platform, event_type: '[Amplitude] Application Opened' }))).not.toBeNull();
+      // Can fire from a background process start (sync, widget refresh, push delivery):
+      expect(toActiveEvent(ev({ platform, event_type: 'Meal Logged' }))).toBeNull();
+      expect(toActiveEvent(ev({ platform, event_type: 'Widget Refreshed' }))).toBeNull();
+    }
+    expect(toActiveEvent(ev({ platform: 'Web', event_type: 'Meal Logged' }))?.platform).toBe('web');
+    expect(toActiveEvent(ev({ platform: 'Web', event_type: '[Amplitude] Page Viewed' }))?.platform).toBe('web');
   });
 });
 
@@ -159,6 +171,14 @@ describe('AmplitudeSyncService', () => {
     const first = await AmplitudeSyncService.cronSync(now, { fetcher });
     expect(first.from).toBe('20261108T18');
     expect(first.hours).toHaveLength(24);
+  });
+
+  it('never syncs or marks an hour Amplitude has not finished exporting (backfill of today)', async () => {
+    const now = new Date('2026-11-10T18:40:00Z'); // latest complete hour: T14
+    const r = await AmplitudeSyncService.syncRange('20261110T13', '20261110T23', { fetcher, now });
+    expect(r.map((h) => h.hour)).toEqual(['20261110T13', '20261110T14']);
+    expect(db.rows('amplitude_export_sync').map((x) => x.hour)).toEqual(['20261110T13', '20261110T14']);
+    expect(await AmplitudeSyncService.syncRange('20261110T20', '20261110T23', { fetcher, now })).toEqual([]);
   });
 
   it('FinanceData.activity reads Amplitude days (first and last instant)', async () => {

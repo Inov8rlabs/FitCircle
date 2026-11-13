@@ -45,7 +45,8 @@ export type RcAudience = z.infer<typeof audienceSchema>;
 
 /** Facts the audience is evaluated against. `undefined` fields were not loaded; null = unknown. */
 export interface AudienceFacts {
-  userId: string;
+  /** null = signed-out caller: user-scoped conditions (userIds, percent, channel, signup, experiment) never match. */
+  userId: string | null;
   now: Date;
   platform: RcPlatform | null;
   appVersion: string | null;
@@ -72,9 +73,9 @@ const lower = (s: string) => s.toLowerCase();
  * else the first failing condition (shown by the admin preview).
  */
 export function audienceMismatch(a: RcAudience, f: AudienceFacts, ruleId: string): string | null {
-  const uid = lower(f.userId);
-  if (a.excludeUserIds?.some((id) => lower(id) === uid)) return 'excludeUserIds';
-  if (a.userIds && !a.userIds.some((id) => lower(id) === uid)) return 'userIds';
+  const uid = f.userId ? lower(f.userId) : null;
+  if (uid && a.excludeUserIds?.some((id) => lower(id) === uid)) return 'excludeUserIds';
+  if (a.userIds && (!uid || !a.userIds.some((id) => lower(id) === uid))) return 'userIds';
   if (a.platforms && (!f.platform || !a.platforms.includes(f.platform))) return 'platforms';
   if (a.appVersionGte || a.appVersionLt) {
     const v = parseVersion(f.appVersion);
@@ -96,6 +97,6 @@ export function audienceMismatch(a: RcAudience, f: AudienceFacts, ruleId: string
     const arm = f.experimentArms?.[a.experiment.key] ?? null;
     if (!arm || !a.experiment.arms.includes(arm)) return 'experiment';
   }
-  if (a.percent !== undefined && !(bucketOf(uid, a.bucketSalt ?? ruleId) < a.percent)) return 'percent';
+  if (a.percent !== undefined && (!uid || !(bucketOf(uid, a.bucketSalt ?? ruleId) < a.percent))) return 'percent';
   return null;
 }

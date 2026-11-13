@@ -77,6 +77,11 @@ export function mergeActiveDayRows(existing: ActiveDayRow[], incoming: ActiveDay
   });
 }
 
+/** Start of the latest UTC hour whose export is complete: the hour ending at least EXPORT_LAG_HOURS ago. */
+export function latestCompleteHourMs(now: Date): number {
+  return Math.floor((now.getTime() - EXPORT_LAG_HOURS * HOUR_MS) / HOUR_MS) * HOUR_MS - HOUR_MS;
+}
+
 export class AmplitudeSyncService {
   static async isSynced(hour: string): Promise<boolean> {
     const { data, error } = await db().from('amplitude_export_sync').select('hour').eq('hour', hour).maybeSingle();
@@ -132,10 +137,16 @@ export class AmplitudeSyncService {
   }
 
   /** Every hour in [fromHour, toHour] (inclusive), in order, at most maxHours. */
-  static async syncRange(fromHour: string, toHour: string, opts: { force?: boolean; maxHours?: number; fetcher?: HourFetcher } = {}): Promise<HourResult[]> {
+  static async syncRange(
+    fromHour: string,
+    toHour: string,
+    opts: { force?: boolean; maxHours?: number; fetcher?: HourFetcher; now?: Date } = {}
+  ): Promise<HourResult[]> {
     const start = hourStartMs(fromHour);
-    const end = hourStartMs(toHour);
-    if (!Number.isFinite(start) || !Number.isFinite(end)) throw new Error('hours must be YYYYMMDDTHH');
+    if (!Number.isFinite(start) || !Number.isFinite(hourStartMs(toHour))) throw new Error('hours must be YYYYMMDDTHH');
+    // Never sync (and so never mark done) an hour Amplitude can't have exported in full yet:
+    // a marked hour is skipped by every later run, so its events would be lost for good.
+    const end = Math.min(hourStartMs(toHour), latestCompleteHourMs(opts.now ?? new Date()));
     const out: HourResult[] = [];
     for (let t = start; t <= end && out.length < (opts.maxHours ?? Infinity); t += HOUR_MS) {
       out.push(await this.syncHour(hourKey(t), opts));
@@ -148,10 +159,10 @@ export class AmplitudeSyncService {
     const { data, error } = await db().from('amplitude_export_sync').select('hour').order('hour', { ascending: false }).limit(1);
     if (error) throw new Error(`amplitude_export_sync: ${error.message ?? error}`);
     const last = ((data ?? []) as Array<{ hour: string }>)[0]?.hour ?? null;
-    const endMs = Math.floor((now.getTime() - EXPORT_LAG_HOURS * HOUR_MS) / HOUR_MS) * HOUR_MS - HOUR_MS;
+    const endMs = latestCompleteHourMs(now);
     const startMs = last ? hourStartMs(last) + HOUR_MS : Math.floor(now.getTime() / HOUR_MS) * HOUR_MS - CRON_LOOKBACK_HOURS * HOUR_MS;
     if (startMs > endMs) return { from: null, to: null, lastSynced: last, hours: [] as HourResult[] };
-    const hours = await this.syncRange(hourKey(startMs), hourKey(endMs), { maxHours: MAX_HOURS_PER_RUN, fetcher: opts.fetcher });
+    const hours = await this.syncRange(hourKey(startMs), hourKey(endMs), { maxHours: MAX_HOURS_PER_RUN, fetcher: opts.fetcher, now });
     return { from: hourKey(startMs), to: hours.length ? hours[hours.length - 1].hour : null, lastSynced: last, hours };
   }
 

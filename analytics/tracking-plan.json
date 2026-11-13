@@ -1,7 +1,7 @@
 {
   "$schema": "./tracking-plan.schema.json",
-  "version": 33,
-  "updated": "2026-11-12",
+  "version": 34,
+  "updated": "2026-11-13",
   "conventions": {
     "eventNames": "Title Case, '<Object> <Past-tense verb>' (e.g. 'Meal Logged'). Names are frozen once shipped: rename in the analytics tool, never in code.",
     "propertyNames": "snake_case. Enum values are lowercase snake_case.",
@@ -210,6 +210,23 @@
       "normal",
       "elevated",
       "under_attack"
+    ],
+    "default_plan": [
+      "annual",
+      "monthly"
+    ],
+    "default_plan_source": [
+      "request",
+      "experiment",
+      "remote",
+      "cached",
+      "fallback"
+    ],
+    "intro_eligibility": [
+      "eligible",
+      "ineligible",
+      "unknown",
+      "server_promoted"
     ]
   },
   "globalProperties": [
@@ -2299,7 +2316,20 @@
           "name": "trial_eligible",
           "type": "bool",
           "required": false,
-          "description": "The selected/primary plan offered a free trial to this user."
+          "description": "The selected or bought plan starts with a free trial the store will honor (iOS and Android: the store's intro-offer eligibility for this user, not just a trial configured on the product). See intro_eligibility for the raw check."
+        },
+        {
+          "name": "intro_eligibility",
+          "type": "enum",
+          "enum": "intro_eligibility",
+          "required": false,
+          "description": "Intro-offer (free trial) eligibility for the selected or bought plan: eligible / ineligible = the store's answer for this user; unknown = the store couldn't say (check failed, timed out or unsupported); server_promoted = the trial comes from a server-side promotion rather than the store's own intro-offer check. Absent until the plans load."
+        },
+        {
+          "name": "trial_days_offered",
+          "type": "int",
+          "required": false,
+          "description": "Free-trial length in days the selected or bought plan offers this user (e.g. 7). Absent (null) when no trial is offered or the length is unknown."
         },
         {
           "name": "paywall_layout",
@@ -2312,7 +2342,7 @@
           "type": "enum",
           "enum": "plan",
           "required": false,
-          "description": "The plan selected when the event fired: the paywall default (monthly) or the person's own choice. Absent until the plans load."
+          "description": "The plan selected when the event fired: the paywall's pre-selected plan (see default_plan) or the person's own choice. Absent until the plans load."
         },
         {
           "name": "plans_shown",
@@ -2325,6 +2355,20 @@
           "type": "string",
           "required": false,
           "description": "Why the plans didn't load, snake_case store SDK error code (Android: RevenueCat PurchasesErrorCode, e.g. purchase_not_allowed_error = Play BILLING_UNAVAILABLE); no_plans for an offering without plans. Absent when the plans loaded."
+        },
+        {
+          "name": "default_plan",
+          "type": "enum",
+          "enum": "default_plan",
+          "required": false,
+          "description": "Plan the paywall pre-selected when it opened (PAYWALL_DEFAULT_PLAN.md), after the unavailable-plan fallback. iOS 1.1.4 b98+ / Android 1.1.4 vc61+; absent on older apps (which pre-select monthly) and until the plans load."
+        },
+        {
+          "name": "default_plan_source",
+          "type": "enum",
+          "enum": "default_plan_source",
+          "required": false,
+          "description": "Where default_plan came from: request (deep-link plan= / caller preselect), experiment (the arm's own rule, e.g. variantB annualOnly), remote (fresh GET /api/mobile/paywall/config applied before the person touched a plan), cached (paywall_config_v1 on the device), fallback (built-in annual)."
         }
       ]
     },
@@ -2366,7 +2410,20 @@
           "name": "trial_eligible",
           "type": "bool",
           "required": false,
-          "description": "The selected/primary plan offered a free trial to this user."
+          "description": "The selected or bought plan starts with a free trial the store will honor (iOS and Android: the store's intro-offer eligibility for this user, not just a trial configured on the product). See intro_eligibility for the raw check."
+        },
+        {
+          "name": "intro_eligibility",
+          "type": "enum",
+          "enum": "intro_eligibility",
+          "required": false,
+          "description": "Intro-offer (free trial) eligibility for the selected or bought plan: eligible / ineligible = the store's answer for this user; unknown = the store couldn't say (check failed, timed out or unsupported); server_promoted = the trial comes from a server-side promotion rather than the store's own intro-offer check. Absent until the plans load."
+        },
+        {
+          "name": "trial_days_offered",
+          "type": "int",
+          "required": false,
+          "description": "Free-trial length in days the selected or bought plan offers this user (e.g. 7). Absent (null) when no trial is offered or the length is unknown."
         },
         {
           "name": "paywall_layout",
@@ -2463,7 +2520,20 @@
           "name": "trial_eligible",
           "type": "bool",
           "required": false,
-          "description": "The selected/primary plan offered a free trial to this user."
+          "description": "The selected or bought plan starts with a free trial the store will honor (iOS and Android: the store's intro-offer eligibility for this user, not just a trial configured on the product). See intro_eligibility for the raw check."
+        },
+        {
+          "name": "intro_eligibility",
+          "type": "enum",
+          "enum": "intro_eligibility",
+          "required": false,
+          "description": "Intro-offer (free trial) eligibility for the selected or bought plan: eligible / ineligible = the store's answer for this user; unknown = the store couldn't say (check failed, timed out or unsupported); server_promoted = the trial comes from a server-side promotion rather than the store's own intro-offer check. Absent until the plans load."
+        },
+        {
+          "name": "trial_days_offered",
+          "type": "int",
+          "required": false,
+          "description": "Free-trial length in days the selected or bought plan offers this user (e.g. 7). Absent (null) when no trial is offered or the length is unknown."
         },
         {
           "name": "is_trial",
@@ -2533,7 +2603,20 @@
           "name": "trial_eligible",
           "type": "bool",
           "required": false,
-          "description": "The selected/primary plan offered a free trial to this user."
+          "description": "The selected or bought plan starts with a free trial the store will honor (iOS and Android: the store's intro-offer eligibility for this user, not just a trial configured on the product). See intro_eligibility for the raw check."
+        },
+        {
+          "name": "intro_eligibility",
+          "type": "enum",
+          "enum": "intro_eligibility",
+          "required": false,
+          "description": "Intro-offer (free trial) eligibility for the selected or bought plan: eligible / ineligible = the store's answer for this user; unknown = the store couldn't say (check failed, timed out or unsupported); server_promoted = the trial comes from a server-side promotion rather than the store's own intro-offer check. Absent until the plans load."
+        },
+        {
+          "name": "trial_days_offered",
+          "type": "int",
+          "required": false,
+          "description": "Free-trial length in days the selected or bought plan offers this user (e.g. 7). Absent (null) when no trial is offered or the length is unknown."
         },
         {
           "name": "is_trial",
@@ -2593,7 +2676,20 @@
           "name": "trial_eligible",
           "type": "bool",
           "required": false,
-          "description": "The selected/primary plan offered a free trial to this user."
+          "description": "The selected or bought plan starts with a free trial the store will honor (iOS and Android: the store's intro-offer eligibility for this user, not just a trial configured on the product). See intro_eligibility for the raw check."
+        },
+        {
+          "name": "intro_eligibility",
+          "type": "enum",
+          "enum": "intro_eligibility",
+          "required": false,
+          "description": "Intro-offer (free trial) eligibility for the selected or bought plan: eligible / ineligible = the store's answer for this user; unknown = the store couldn't say (check failed, timed out or unsupported); server_promoted = the trial comes from a server-side promotion rather than the store's own intro-offer check. Absent until the plans load."
+        },
+        {
+          "name": "trial_days_offered",
+          "type": "int",
+          "required": false,
+          "description": "Free-trial length in days the selected or bought plan offers this user (e.g. 7). Absent (null) when no trial is offered or the length is unknown."
         },
         {
           "name": "paywall_layout",
@@ -2651,7 +2747,21 @@
         {
           "name": "trial_eligible",
           "type": "bool",
-          "required": false
+          "required": false,
+          "description": "The selected or bought plan starts with a free trial the store will honor (iOS and Android: the store's intro-offer eligibility for this user, not just a trial configured on the product). See intro_eligibility for the raw check."
+        },
+        {
+          "name": "intro_eligibility",
+          "type": "enum",
+          "enum": "intro_eligibility",
+          "required": false,
+          "description": "Intro-offer (free trial) eligibility for the selected or bought plan: eligible / ineligible = the store's answer for this user; unknown = the store couldn't say (check failed, timed out or unsupported); server_promoted = the trial comes from a server-side promotion rather than the store's own intro-offer check. Absent until the plans load."
+        },
+        {
+          "name": "trial_days_offered",
+          "type": "int",
+          "required": false,
+          "description": "Free-trial length in days the selected or bought plan offers this user (e.g. 7). Absent (null) when no trial is offered or the length is unknown."
         }
       ]
     },
@@ -2705,7 +2815,20 @@
           "name": "trial_eligible",
           "type": "bool",
           "required": false,
-          "description": "The selected/primary plan offered a free trial to this user."
+          "description": "The selected or bought plan starts with a free trial the store will honor (iOS and Android: the store's intro-offer eligibility for this user, not just a trial configured on the product). See intro_eligibility for the raw check."
+        },
+        {
+          "name": "intro_eligibility",
+          "type": "enum",
+          "enum": "intro_eligibility",
+          "required": false,
+          "description": "Intro-offer (free trial) eligibility for the selected or bought plan: eligible / ineligible = the store's answer for this user; unknown = the store couldn't say (check failed, timed out or unsupported); server_promoted = the trial comes from a server-side promotion rather than the store's own intro-offer check. Absent until the plans load."
+        },
+        {
+          "name": "trial_days_offered",
+          "type": "int",
+          "required": false,
+          "description": "Free-trial length in days the selected or bought plan offers this user (e.g. 7). Absent (null) when no trial is offered or the length is unknown."
         },
         {
           "name": "paywall_layout",

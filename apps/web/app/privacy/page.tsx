@@ -9,8 +9,8 @@ export const metadata: Metadata = {
 
 // Update this date whenever the policy text changes. It must never be computed
 // at render time: a policy that always shows today's date is misleading.
-const LAST_UPDATED = 'October 22, 2026';
-const POLICY_VERSION = '1.2';
+const LAST_UPDATED = 'November 13, 2026';
+const POLICY_VERSION = '1.3';
 
 function ThirdParty({
   name,
@@ -170,6 +170,14 @@ export default function PrivacyPolicyPage() {
                 <Link href="/settings/privacy" className="text-cyan-400 hover:underline">Privacy Settings</Link>.
                 In the mobile apps, analytics record which features are used, not the health values you log.
               </p>
+              <p className="text-slate-300 leading-relaxed mt-4">
+                <strong className="text-white">Session replay.</strong> For a small sample of sessions, the website
+                (with your consent) and the mobile apps record how screens are used, such as taps, scrolls and
+                which screen is open, so we can find and fix confusing or broken parts of the app. Replays are
+                linked to a random account ID, never your name or email. Text you type is masked, and photos and
+                screens that show health data or chat messages are not recorded. Replays are processed by
+                Amplitude on our behalf.
+              </p>
 
               <h3 className="text-xl font-semibold text-white mb-3 mt-6">3.3 Advertising</h3>
               <p className="text-slate-300 leading-relaxed">
@@ -307,8 +315,8 @@ export default function PrivacyPolicyPage() {
                   Processes purchases made on our website. We never receive your full card details.
                 </ThirdParty>
                 <ThirdParty name="Amplitude" purpose="analytics" href="https://amplitude.com/privacy">
-                  Records which features are used so we can improve the Service. On the website it is active
-                  only if you consent to analytics cookies.
+                  Records which features are used, and a sample of masked session replays (section 3.2), so we
+                  can improve the Service. On the website it is active only if you consent to analytics cookies.
                 </ThirdParty>
                 <ThirdParty name="Sentry" purpose="crash and error reporting" href="https://sentry.io/privacy/">
                   Receives crash reports and performance diagnostics so we can fix problems.

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { REVIEW_EMAILS } from '@/lib/ads/test-users';
 
-import { codeDefault, validValue } from '../registry';
+import { CLIENT_VISIBLE_KEYS, codeDefault, keyDef, validValue } from '../registry';
 
 describe('integrity_reviewer_emails', () => {
   it('defaults to the review demo account(s) and the Play pre-launch robot domain', () => {
@@ -26,5 +26,25 @@ describe('integrity_device_error_fail_open', () => {
     expect(validValue('integrity_device_error_fail_open', 'false')).toBe('false');
     expect(validValue('integrity_device_error_fail_open', true)).toBeNull();
     expect(validValue('integrity_device_error_fail_open', 'off')).toBeNull();
+  });
+});
+
+describe('paywall plan keys (docs/PAYWALL_DEFAULT_PLAN.md)', () => {
+  it('paywall_default_plan: annual | monthly, default annual', () => {
+    expect(codeDefault('paywall_default_plan')).toBe('annual');
+    expect(validValue('paywall_default_plan', 'monthly')).toBe('monthly');
+    expect(validValue('paywall_default_plan', 'annual')).toBe('annual');
+    for (const bad of ['none', 'Annual', 'weekly', '', 1, null]) expect(validValue('paywall_default_plan', bad)).toBeNull();
+  });
+
+  it('paywall_badge_plan: annual | monthly | none, default annual', () => {
+    expect(codeDefault('paywall_badge_plan')).toBe('annual');
+    for (const ok of ['annual', 'monthly', 'none']) expect(validValue('paywall_badge_plan', ok)).toBe(ok);
+    for (const bad of ['lifetime', true, ['annual']]) expect(validValue('paywall_badge_plan', bad)).toBeNull();
+  });
+
+  it('only the paywall keys are client visible', () => {
+    expect([...CLIENT_VISIBLE_KEYS]).toEqual(['paywall_default_plan', 'paywall_badge_plan']);
+    for (const k of CLIENT_VISIBLE_KEYS) expect(keyDef(k).type).toBe('enum');
   });
 });

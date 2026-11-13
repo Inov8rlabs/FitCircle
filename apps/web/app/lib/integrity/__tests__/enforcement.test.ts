@@ -239,6 +239,45 @@ describe('pass + request binding', () => {
     await checkIntegrity(r, { action: 'login' });
     expect(await r.json()).toEqual({ email: 'a@b.co', password: 'x' });
   });
+
+  it('a route that read a CLONE of the body first is still verified', async () => {
+    const r = req();
+    expect(await r.clone().json()).toEqual({ email: 'a@b.co', password: 'x' });
+    expect(await checkIntegrity(r, { action: 'login' })).toMatchObject({ allowed: true, mode: 'verified' });
+  });
+
+  it('a route that consumed the body first fails open as body_consumed (2026-11-11 auth bug)', async () => {
+    const r = req();
+    await r.json();
+    expect(await checkIntegrity(r, { action: 'login' })).toMatchObject({ allowed: true, mode: 'fail_open' });
+    expect(failOpenClass('request body already read before the integrity check')).toBe('body_consumed');
+  });
+});
+
+describe('routes never consume the body before checkIntegrity', () => {
+  it('every route calling checkIntegrity reads the body only through a clone, or after the check', async () => {
+    const { readFileSync, readdirSync, statSync } = await import('node:fs');
+    const { join } = await import('node:path');
+    const root = join(__dirname, '../../../api');
+    const files: string[] = [];
+    const walk = (d: string) => {
+      for (const n of readdirSync(d)) {
+        const f = join(d, n);
+        if (statSync(f).isDirectory()) { if (n !== '__tests__') walk(f); } else if (n === 'route.ts') files.push(f);
+      }
+    };
+    walk(root);
+    const offenders: string[] = [];
+    for (const f of files) {
+      const src = readFileSync(f, 'utf8');
+      const check = src.indexOf('checkIntegrity(');
+      if (check < 0) continue;
+      const before = src.slice(0, check);
+      if (/await\s+request\.(json|text|formData|arrayBuffer|blob)\(\)/.test(before)) offenders.push(f.slice(root.length));
+    }
+    expect(files.length).toBeGreaterThan(5);
+    expect(offenders).toEqual([]);
+  });
 });
 
 describe('session attestations', () => {

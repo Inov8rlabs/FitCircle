@@ -63,7 +63,12 @@ const UNDEFINED_TABLE = '42P01';
 
 /** Per-request context. `undefined` = "not known by the caller" (filled from headers / lazily). */
 export interface RemoteConfigContext {
-  userId: string;
+  /**
+   * null = signed-out caller (GET /api/mobile/paywall/config). Admin defaults and
+   * request-only rules (platform / app version / country) still apply; user-scoped
+   * conditions never match and no per-user rows are read.
+   */
+  userId: string | null;
   now?: Date;
   platform?: RcPlatform | null;
   appVersion?: string | null;
@@ -151,6 +156,12 @@ class FactLoader {
     };
     this.channelLoaded = this.ctx.channel !== undefined;
     this.signupLoaded = this.ctx.signupAt !== undefined;
+    if (!this.facts.userId) {
+      // Signed out: nothing per-user to read; unknown facts never match.
+      this.facts.channel ??= null;
+      this.facts.signupAt ??= null;
+      this.channelLoaded = this.signupLoaded = true;
+    }
     return this.facts;
   }
 
@@ -159,11 +170,12 @@ class FactLoader {
     const needs = audienceNeeds(audience);
     const supabase = createAdminSupabase();
     const jobs: Promise<void>[] = [];
+    const userId = f.userId; // null only when signed out, and then channel/signup are pre-marked loaded
     if (needs.channel && !this.channelLoaded) {
       this.channelLoaded = true;
       jobs.push(
         (async () => {
-          const { data, error } = await supabase.from('user_attribution').select('channel, country').eq('user_id', f.userId).maybeSingle();
+          const { data, error } = await supabase.from('user_attribution').select('channel, country').eq('user_id', userId).maybeSingle();
           f.channel = error ? null : ((data?.channel as string | null) ?? null);
           if (!f.country && !error && typeof data?.country === 'string') f.country = data.country.toUpperCase();
         })().catch(() => {
@@ -175,7 +187,7 @@ class FactLoader {
       this.signupLoaded = true;
       jobs.push(
         (async () => {
-          const { data, error } = await supabase.from('profiles').select('created_at').eq('id', f.userId).maybeSingle();
+          const { data, error } = await supabase.from('profiles').select('created_at').eq('id', userId).maybeSingle();
           f.signupAt = error ? null : ((data?.created_at as string | null) ?? null);
         })().catch(() => {
           f.signupAt = null;
@@ -184,14 +196,14 @@ class FactLoader {
     }
     if (needs.experiment && !(needs.experiment in this.arms)) {
       const key = needs.experiment;
-      this.arms[key] = null;
-      jobs.push(
+      this.arms[key] = null; // signed out: stays null (no assignment), so experiment rules never match
+      if (userId) jobs.push(
         (async () => {
           const { data, error } = await supabase
             .from('experiment_assignments')
             .select('arm')
             .eq('experiment_key', key)
-            .eq('user_id', f.userId)
+            .eq('user_id', userId)
             .maybeSingle();
           this.arms[key] = error ? null : ((data?.arm as string | null) ?? null);
         })().catch(() => {

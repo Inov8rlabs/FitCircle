@@ -5,7 +5,9 @@
  *
  * Types: `int` (bounded integer), `enum` (one of `options`), `string_list` (array of
  * strings matching `itemPattern`, at most `maxItems`). Server-side only: no client
- * endpoint serves these values.
+ * endpoint serves these values, EXCEPT the keys in CLIENT_VISIBLE_KEYS, which
+ * GET /api/mobile/paywall/config serves (docs/PAYWALL_DEFAULT_PLAN.md). That route
+ * reads exactly those keys by name; it never takes a key from the request.
  *
  * Premium abuse ceilings are deliberately NOT here (lib/config/tier-limits.ts).
  */
@@ -134,7 +136,28 @@ export const REMOTE_CONFIG_REGISTRY = {
     description:
       'on = setup / meal-reminder / Day-1 pushes that hit quiet hours are held and released at the end of quiet hours (user-local, at most one held push per user per morning, cap re-checked). off = they are dropped as before.',
   },
+  // Paywall default plan (docs/PAYWALL_DEFAULT_PLAN.md). Served to the apps by
+  // GET /api/mobile/paywall/config (iOS 1.1.4 b98+, Android 1.1.4 vc61+; older apps keep monthly).
+  paywall_default_plan: {
+    type: 'enum',
+    default: 'annual',
+    options: ['annual', 'monthly'],
+    unit: 'plan',
+    description:
+      'Plan pre-selected when a paywall opens (onboarding, standard, contextual, Locked). A deep-link plan= or an experiment arm that forces a plan (e.g. annualOnly) still wins. Read by the apps at launch / sign-in and re-checked when the paywall opens.',
+  },
+  paywall_badge_plan: {
+    type: 'enum',
+    default: 'annual',
+    options: ['annual', 'monthly', 'none'],
+    unit: 'plan',
+    description:
+      'Plan row that shows the "Most popular" badge on the paywall. none = no badge. Hidden when that plan is not in the store offering.',
+  },
 } as const satisfies Record<string, RemoteConfigKeyDef>;
+
+/** The only keys a client endpoint may serve (GET /api/mobile/paywall/config). */
+export const CLIENT_VISIBLE_KEYS = ['paywall_default_plan', 'paywall_badge_plan'] as const satisfies readonly RemoteConfigKey[];
 
 export type RemoteConfigKey = keyof typeof REMOTE_CONFIG_REGISTRY;
 

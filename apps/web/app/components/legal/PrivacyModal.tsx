@@ -114,6 +114,7 @@ export function PrivacyModal({ open, onClose }: PrivacyModalProps) {
               <ul className="list-disc list-inside text-sm space-y-1 ml-4">
                 <li><strong>Essential cookies:</strong> Required for authentication and core features</li>
                 <li><strong>Analytics cookies:</strong> Optional, help us improve the app (Amplitude)</li>
+                <li><strong>Session replay:</strong> A sample of sessions records how screens are used (Amplitude). Typed text is masked; photos, health and chat screens are not recorded</li>
               </ul>
               <p className="text-sm mt-2">
                 You can manage cookie preferences at any time.

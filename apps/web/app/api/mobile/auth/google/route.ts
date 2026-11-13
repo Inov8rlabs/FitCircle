@@ -80,7 +80,8 @@ export async function POST(request: NextRequest) {
     const rateLimitResponse = await enforceAbuseLimits(request, 'social_login');
     if (rateLimitResponse) return rateLimitResponse;
 
-    const body = await request.json();
+    // Read a clone: checkIntegrity hashes the raw body afterwards, which needs the original unread.
+    const body = await request.clone().json();
     const parsed = parseLenient(googleAuthSchema, body);
     const idToken = parsed.googleIdToken || parsed.idToken!;
 

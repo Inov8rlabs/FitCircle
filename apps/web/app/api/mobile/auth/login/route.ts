@@ -19,7 +19,8 @@ const loginSchema = z.object({
 export async function POST(request: NextRequest) {
   try {
     // Parse and validate request body
-    const body = await request.json();
+    // Read a clone: checkIntegrity hashes the raw body afterwards, which needs the original unread.
+    const body = await request.clone().json();
     const validatedData = parseLenient(loginSchema, body);
 
     // Shared limits: 10 / 15 min per IP, 5 / 15 min per account (canonical email).

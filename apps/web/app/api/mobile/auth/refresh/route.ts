@@ -17,7 +17,8 @@ export async function POST(request: NextRequest) {
     if (rateLimitResponse) return rateLimitResponse;
 
     // Parse and validate request body
-    const body = await request.json();
+    // Read a clone: checkIntegrity hashes the raw body afterwards, which needs the original unread.
+    const body = await request.clone().json();
     const validatedData = parseLenient(refreshSchema, body);
 
     // Android integrity_v1 clients re-attest on every refresh (new session id).
