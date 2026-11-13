@@ -19,6 +19,19 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
   try {
+    // Backfill one UTC day (?backfill_day=YYYY-MM-DD): the 24 hours of that day, already-synced
+    // hours skipped. Lets the backfill run server-side, where the Amplitude secret lives.
+    const day = request.nextUrl.searchParams.get('backfill_day');
+    if (day !== null) {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) return NextResponse.json({ error: 'backfill_day must be YYYY-MM-DD' }, { status: 400 });
+      const compact = day.replace(/-/g, '');
+      const hours = await AmplitudeSyncService.syncRange(`${compact}T00`, `${compact}T23`);
+      const done = hours.filter((h) => !h.skipped);
+      return NextResponse.json(
+        { success: true, data: { day, hours: done.length, skipped: hours.length - done.length, activeEvents: done.reduce((s, h) => s + h.activeEvents, 0), rows: done.reduce((s, h) => s + h.rows, 0) } },
+        { headers: { 'cache-control': 'no-store' } }
+      );
+    }
     const r = await AmplitudeSyncService.cronSync();
     const synced = r.hours.filter((h) => !h.skipped);
     return NextResponse.json(
