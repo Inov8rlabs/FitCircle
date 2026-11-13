@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from 'crypto';
 
 import { mealReminderCopy } from '../journey/meal-reminders';
+import { audienceSuppression } from '../notifications/audience';
 import { pushPlatformFor, recordPushSent, type PushSentOutcome } from '../notifications/push-sent-events';
 import { DEFERRED_REASON, isDeferrable, planDeferral } from '../notifications/quiet-hours-deferral';
 import { localClockIn, resolveNotificationTimezone } from '../notifications/user-timezone';
@@ -23,6 +24,7 @@ import {
   type CircleCard,
 } from './push-presentation';
 import { PushService, type PushNotification, type PushSendReport } from './push-service';
+import { UserAudienceService } from './user-audience-service';
 
 // ============================================================================
 // TYPES
@@ -197,7 +199,16 @@ export type NotificationType =
   | 'onboarding_finish_reminder'
   // Transactional: free Pro (referral / complimentary) ends tomorrow, and has ended (docs/PRO_LIFECYCLE_PROMPTS.md; ProLifecyclePushService).
   | 'pro_expiring_reminder'
-  | 'pro_expired';
+  | 'pro_expired'
+  // Win-back ladder for lapsed users (docs/PUSH_NOTIFICATIONS.md §8.4; WinbackService). Copy in data.title/body.
+  | 'winback_day3'
+  | 'winback_day7'
+  | 'winback_day14'
+  | 'winback_day30'
+  // A real circle member moved past the recipient on the circle leaderboard (§8.6; LeaderboardOvertakeService).
+  | 'leaderboard_overtaken'
+  // Background health sync brought meaningful new data (§8.5; HealthSyncPushService).
+  | 'health_sync_update';
 
 interface NotificationContent {
   title: string;
@@ -301,6 +312,14 @@ export const TYPE_SCREEN_MAP: Record<NotificationType, NotificationScreen> = {
   // Shipped apps can only open Home from these; the Pro lifecycle card (with the paywall button) is on Home.
   pro_expiring_reminder: 'dashboard',
   pro_expired: 'dashboard',
+  // Win-back: food log (data.route = log_meal_camera for 1.1.0+), circle, Home, campaign (screen per send).
+  winback_day3: 'food_log',
+  winback_day7: 'circle_detail',
+  winback_day14: 'dashboard',
+  winback_day30: 'campaign',
+  // Circle detail opens on its Leaderboard tab in both apps (no circleId → the circles list).
+  leaderboard_overtaken: 'circle_detail',
+  health_sync_update: 'dashboard',
 };
 
 /** Coach pushes: Android "Coach" channel (FCM falls back to the default channel on older builds). */
@@ -311,6 +330,9 @@ export const FITZY_TIP_DATA_MAX = 400;
 /** Types whose screen is chosen per send (data.screen), from this allowlist. */
 const SCREEN_OVERRIDE_TYPES: Partial<Record<NotificationType, ReadonlySet<NotificationScreen>>> = {
   day1_morning: new Set<NotificationScreen>(['dashboard', 'food_log', 'circles', 'circle_detail', 'challenges']),
+  winback_day7: new Set<NotificationScreen>(['circle_detail', 'circles', 'dashboard']),
+  winback_day30: new Set<NotificationScreen>(['campaign', 'dashboard', 'fitzy_chat']),
+  health_sync_update: new Set<NotificationScreen>(['dashboard', 'exercise_log']),
 };
 
 export function screenFor(type: NotificationType, data: NotificationData): NotificationScreen {
@@ -320,6 +342,8 @@ export function screenFor(type: NotificationType, data: NotificationData): Notif
   if ((screen === 'circle_detail' || screen === 'circle_chat') && !data.circleId) {
     return 'circles';
   }
+  // A campaign screen needs its slug; the win-back day-30 push without one opens Home.
+  if (screen === 'campaign' && type !== 'campaign' && !data.campaignSlug) return 'dashboard';
   return screen;
 }
 
@@ -406,17 +430,9 @@ export const NOTIFICATION_TEMPLATES: Record<
   }),
 
   // ---- Streak state + logging reminders ----
-  momentum_at_risk: (data) => ({
-    title: 'Your streak ends at midnight',
-    body: `Your ${data.currentMomentum || 0}-day streak ends at midnight unless you log a meal or workout${
-      data.unlimited
-        ? ' — Pro shields have your back if you can\'t.'
-        : typeof data.shieldsRemaining === 'number' && data.shieldsRemaining > 0
-          ? ` — or a shield (${data.shieldsRemaining} left) will cover you.`
-          : '. No shields left to cover a miss!'
-    }`,
-    category: 'momentum',
-  }),
+  // Specific and guilt-free (2026-11-13): the real streak, what one log does, and the
+  // shield safety net only when the user actually has one. At most once per 3 days.
+  momentum_at_risk: (data) => momentumAtRiskCopy(data),
   near_milestone: (data) => {
     const days = data.daysAway || 0;
     return {
@@ -715,7 +731,48 @@ export const NOTIFICATION_TEMPLATES: Record<
     body: stripEmoji(String(data.body || 'Thanks for trying Pro. You can get it back anytime from your Home screen.')),
     category: 'journey',
   }),
+  // Win-back ladder: copy built from the user's real data by lib/journey/winback.ts (journey toggle).
+  winback_day3: (data) => prebuilt(data, 'Log tonight in 2 taps', 'Snap your dinner and FitCircle does the counting.', 'journey'),
+  winback_day7: (data) => prebuilt(data, 'Pick up where you left off', 'One log tonight gets your week going again.', 'journey'),
+  winback_day14: (data) => prebuilt(data, 'Ready for a fresh start?', 'One meal or workout today starts a new streak.', 'journey'),
+  winback_day30: (data) => prebuilt(data, 'FitCircle is here when you are', 'Open the app and log one thing. That is all it takes.', 'journey'),
+  // Circle leaderboard pass (lib/circles/overtake.ts builds the copy; Circles toggle).
+  leaderboard_overtaken: (data) => prebuilt(data, 'Someone moved past you', 'Open your circle to see the leaderboard.', 'circle'),
+  // Health sync news (lib/health-sync/push.ts builds the copy; Celebrations toggle).
+  health_sync_update: (data) => prebuilt(data, 'New activity synced', 'Tap to see your day.', 'celebration'),
 };
+
+/** momentum_at_risk copy from the user's real streak + shields. Pure. */
+export function momentumAtRiskCopy(data: NotificationData): NotificationContent {
+  const n = Math.max(0, Math.floor(Number(data.currentMomentum) || 0));
+  if (n === 0) {
+    return {
+      title: 'One log starts a streak',
+      body: 'Log a meal or a workout today and tomorrow is day 2.',
+      category: 'momentum',
+    };
+  }
+  const shields = typeof data.shieldsRemaining === 'number' ? data.shieldsRemaining : null;
+  const net = data.unlimited
+    ? ' If today gets away from you, Pro shields cover it.'
+    : shields !== null && shields > 0
+      ? ` If today gets away from you, a shield covers it (${shields} left).`
+      : '';
+  return {
+    title: `Keep your ${n}-day streak going`,
+    body: `One meal or workout logged today makes it ${n + 1} days.${net}`,
+    category: 'momentum',
+  };
+}
+
+/** Copy built per user by a service (data.title / data.body), emoji stripped, with a fallback. */
+function prebuilt(data: NotificationData, title: string, body: string, category: NotificationCategory): NotificationContent {
+  return {
+    title: stripEmoji(String(data.title || title)) || title,
+    body: stripEmoji(String(data.body || body)) || body,
+    category,
+  };
+}
 
 /** " and 2 other circles" for a cross-circle coalesced push; "" otherwise. */
 function otherCirclesSuffix(data: NotificationData): string {
@@ -744,6 +801,17 @@ const SUPPRESSION_CHAINS: Array<{ blocker: NotificationType; blocked: Notificati
   // Don't send challenge_ending right after halfway.
   { blocker: 'challenge_halfway', blocked: 'challenge_ending_tomorrow', windowMinutes: 1440 },
 ];
+
+/**
+ * Per-type minimum spacing between DELIVERED pushes of the same type to one user
+ * (suppression_reason 'type_interval'). momentum_at_risk: at most once per 3 days
+ * (70 h, so the same evening slot three days later still qualifies).
+ */
+export const TYPE_MIN_INTERVAL_HOURS: Partial<Record<NotificationType, number>> = {
+  momentum_at_risk: 70,
+  leaderboard_overtaken: 20,
+  health_sync_update: 20,
+};
 
 // Frequency cap: at most this many *nudges* per user per local day. Anything
 // in CAP_EXEMPT_TYPES neither counts toward it nor is blocked by it, so the
@@ -1017,6 +1085,10 @@ export class NotificationOrchestrator {
 
     const content = template(data);
     const now = Date.now();
+    // Lifecycle + real-vs-test audience (lib/notifications/audience.ts). Loaded first
+    // so every log row of this send knows whether it is a test account (Push Sent
+    // metrics skip those). Null = unknown → no audience gating (fail open).
+    const audience = await UserAudienceService.forUser(userId);
     // The notification_log id of the ONE row this send writes, known up front so
     // the delivered payload can carry it (data.notification_id → open tracking).
     // The row itself is still written after the send, so the duplicate guard
@@ -1053,6 +1125,22 @@ export class NotificationOrchestrator {
       if (await this.isDuplicate(userId, type, content, dedupeKey)) {
         await this.logNotification(notificationId, userId, type, content, data, true, 'duplicate');
         return { sent: false, reason: 'duplicate' };
+      }
+
+      // 0b. Audience (docs/PUSH_NOTIFICATIONS.md §8): test accounts get no
+      //     non-transactional pushes; dormant users only transactional ones;
+      //     lapsed users no daily habit nudges; win-back only while lapsed.
+      const blocked = audience ? audienceSuppression(type, audience) : null;
+      if (blocked) {
+        await this.logNotification(notificationId, userId, type, content, data, true, blocked);
+        return { sent: false, reason: blocked };
+      }
+
+      // 0c. Per-type spacing (TYPE_MIN_INTERVAL_HOURS), e.g. momentum_at_risk once per 3 days.
+      const minInterval = TYPE_MIN_INTERVAL_HOURS[type];
+      if (minInterval && (await this.hasSent(userId, type, { withinHours: minInterval }))) {
+        await this.logNotification(notificationId, userId, type, content, data, true, 'type_interval');
+        return { sent: false, reason: 'type_interval' };
       }
 
       // 1. Check if user has this category enabled
@@ -1176,6 +1264,7 @@ export class NotificationOrchestrator {
   /** Test hook: forget the in-process duplicate / burst state. */
   static resetInProcessGuards(): void {
     sendGuard.reset();
+    UserAudienceService.resetCache();
   }
 
   /**
@@ -1306,7 +1395,7 @@ export class NotificationOrchestrator {
     // Meal-slot reminders: the slot, so 1.1.0 opens the logger preselected (older apps ignore it).
     if (MEAL_REMINDER_TYPES.has(type) && typeof data.mealType === 'string') pushData.mealType = data.mealType;
     // Meal reminders: open the camera logger (clients that know `route`); `screen` stays the fallback.
-    if (MEAL_REMINDER_TYPES.has(type)) pushData.route = MEAL_REMINDER_ROUTE;
+    if (MEAL_REMINDER_TYPES.has(type) || type === 'winback_day3') pushData.route = MEAL_REMINDER_ROUTE;
     // The notification_log row id, so a tap can be reported back (POST /api/mobile/notifications/opened).
     if (notificationId) pushData.notification_id = notificationId;
     // Fitzy chat context (the tip the push came from); clients render it as plain text.
@@ -1589,7 +1678,11 @@ export class NotificationOrchestrator {
   ): Promise<void> {
     const supabaseAdmin = createAdminSupabase();
 
-    recordPushSent({
+    // Internal / test / robot accounts: the row is kept (with the verdict in
+    // data.testUser) but no `Push Sent` event, so push metrics are real users only.
+    const testReason = UserAudienceService.cachedTestReason(userId);
+    if (testReason) data = { ...data, testUser: testReason };
+    else recordPushSent({
       notificationId,
       userId,
       notificationType: type,

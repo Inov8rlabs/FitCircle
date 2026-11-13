@@ -306,7 +306,8 @@ export class HomeFeedService {
     const planLoader = loaders.fitzyPlanReady;
     const wantPlan = !!planLoader && profileIsFreeForTeaser(profile);
     const trialDaysLoader = loaders.trialDays;
-    const [facts, state, liveProFeatures, lifecycle, styles, fitzyPlanReady, trialDays] = await Promise.all([
+    const syncLoader = loaders.healthSyncAway;
+    const [facts, state, liveProFeatures, lifecycle, styles, fitzyPlanReady, trialDays, healthSyncAway] = await Promise.all([
       softly(() => loaders.journeyFacts(profile.id, localDate), PROMO_LOADER_TIMEOUT_MS),
       softly(() => loaders.promoState(profile.id), PROMO_LOADER_TIMEOUT_MS),
       softly(() => loaders.liveProFeatures()),
@@ -316,6 +317,8 @@ export class HomeFeedService {
       wantPlan ? softly(() => planLoader.call(loaders, profile.id, localDate), PROMO_LOADER_TIMEOUT_MS) : Promise.resolve(null),
       // Trial length for trial copy (remote config `trial_days`; cached snapshot, no per-user read).
       trialDaysLoader ? softly(() => trialDaysLoader.call(loaders, profile.id)) : Promise.resolve(null),
+      // "Synced while you were away" (docs/PUSH_NOTIFICATIONS.md §8.5): the unopened health-sync push, if any.
+      syncLoader ? softly(() => syncLoader.call(loaders, profile.id, now), PROMO_LOADER_TIMEOUT_MS) : Promise.resolve(null),
     ]);
     // No real preview yet (e.g. onboarding finished before this shipped): produce one after the
     // response so the teaser can show next session. Never blocks the feed.
@@ -323,7 +326,7 @@ export class HomeFeedService {
       const warm = loaders.warmFitzyPlan;
       runAfterResponse(() => warm.call(loaders, profile.id, timezone), 'fitzy plan preview');
     }
-    return { facts, state, liveProFeatures, timezone, localDate, lifecycle, styles, fitzyPlanReady, trialDays };
+    return { facts, state, liveProFeatures, timezone, localDate, lifecycle, styles, fitzyPlanReady, trialDays, healthSyncAway };
   }
 
   /** Pure-ish: promo candidates + what they replace, for composeFeed. */
@@ -340,6 +343,7 @@ export class HomeFeedService {
     const journey = {
       ...buildJourneyContext(profile, data.facts, { now: ctx.now, timezone: data.timezone, localDate: data.localDate }),
       fitzyPlanReady: data.fitzyPlanReady ?? null,
+      healthSyncAway: data.healthSyncAway ?? null,
       ...(trialDays !== undefined ? { trialDays } : {}),
     };
     const lc = data.lifecycle ?? null;
@@ -545,6 +549,8 @@ export interface PromoRoundData {
   fitzyPlanReady?: boolean | null;
   /** Free-trial length (remote config `trial_days`); null = not loaded → code default. */
   trialDays?: number | null;
+  /** The unopened health-sync push of the last 24 h (null = none / not read). */
+  healthSyncAway?: { title: string; body: string; kind: string } | null;
 }
 
 /** Free (known) + onboarding complete + a goal: the only users the fitzy_recommendations teaser can target. */

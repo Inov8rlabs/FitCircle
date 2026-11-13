@@ -2,9 +2,13 @@ import { type NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
+import { platformFrom } from '@/lib/services/app-open-service';
 import { ExerciseService } from '@/lib/services/exercise-service';
+import { HealthSyncPushService } from '@/lib/services/health-sync-push-service';
 import { resolveClientTimezone } from '@/lib/streaks/client-timezone';
+import { localToday } from '@/lib/streaks/streak-calculator';
 import { createAdminSupabase } from '@/lib/supabase-admin';
+import { runAfterResponse } from '@/lib/utils/after-response';
 import { parseLenient, validationMessage } from '@/lib/validation/lenient-parse';
 import { isoInstant, optionalPositiveMeasure } from '@/lib/validators/exercise-fields';
 import { exerciseSourceInputSchema, resolveExerciseSource } from '@/lib/validators/exercise-source';
@@ -75,17 +79,25 @@ export async function POST(request: NextRequest) {
 
     // Synced workouts of >= 10 min claim their streak day (workout-claim-policy);
     // the outcome rides back in meta.streak so the client can refresh the card.
-    const result = await ExerciseService.bulkSyncExercises(
-      user.id,
-      { exercises, timezone: resolveClientTimezone(request, body?.timezone) },
-      supabaseAdmin
-    );
+    const timezone = resolveClientTimezone(request, body?.timezone);
+    const result = await ExerciseService.bulkSyncExercises(user.id, { exercises, timezone }, supabaseAdmin);
 
     if (result.error) {
       return NextResponse.json(
         { success: false, data: null, error: { code: 'SYNC_FAILED', message: result.error.message } },
         { status: 400 }
       );
+    }
+
+    // Health sync update push (docs/PUSH_NOTIFICATIONS.md §8.5): NEW workouts only,
+    // decided after the response (never affects the sync).
+    const created = new Set((result.data?.results ?? []).filter((r) => r.status === 'created').map((r) => r.healthkit_workout_id));
+    if (created.size > 0) {
+      const workouts = exercises
+        .filter((e) => created.has(e.healthkit_workout_id))
+        .map((e) => ({ exerciseType: e.exercise_type, minutes: e.duration_minutes, date: e.date || localToday(timezone) }));
+      const streak = result.streak;
+      runAfterResponse(() => HealthSyncPushService.onWorkoutsSynced(user.id, { workouts, platform: platformFrom(request), streak }), 'health-sync push');
     }
 
     return NextResponse.json({

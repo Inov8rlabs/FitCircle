@@ -104,7 +104,7 @@ export const EXTRA_CARDS: ReadonlyArray<{ type: CardType; after: CardType }> = [
  * exempt from the promo density guardrails, and pinned to position ≤ 2.
  * Must match the `kind: 'utility'` system promos (lib/promos/system-promos.ts).
  */
-export const UTILITY_PROMO_IDS: ReadonlySet<string> = new Set(['promo:first_meal']);
+export const UTILITY_PROMO_IDS: ReadonlySet<string> = new Set(['promo:first_meal', 'promo:synced_while_away']);
 
 /** Promo-category card (guardrails): promo-kind catalog types, except utility promos. */
 export function isPromoCard(c: { id: string; type: CardType }): boolean {

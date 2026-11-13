@@ -113,6 +113,18 @@ const TYPE_CATEGORY_MAP: Record<string, NotificationCategory> = {
   // Transactional (docs/PRO_LIFECYCLE_PROMPTS.md): free Pro ending / ended — see TRANSACTIONAL_TYPES.
   pro_expiring_reminder: 'journey',
   pro_expired: 'journey',
+
+  // Win-back ladder for lapsed users (docs/PUSH_NOTIFICATIONS.md §8.4) — the journey toggle silences it.
+  winback_day3: 'journey',
+  winback_day7: 'journey',
+  winback_day14: 'journey',
+  winback_day30: 'journey',
+
+  // A circle member moved past you on the leaderboard (§8.6) — the Circles toggle.
+  leaderboard_overtaken: 'circle',
+
+  // Background health sync brought something worth seeing (§8.5) — the Celebrations toggle.
+  health_sync_update: 'celebration',
 };
 
 /**

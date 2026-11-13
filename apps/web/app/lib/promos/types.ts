@@ -172,6 +172,12 @@ export interface JourneyContext {
   trialDays?: number;
   /** A REAL free weekly-plan preview exists (plan-warmup.ts). null/undefined = not read → the teaser doesn't match. */
   fitzyPlanReady?: boolean | null;
+  /**
+   * The latest health_sync_update push delivered in the last 24 h and not opened
+   * (docs/PUSH_NOTIFICATIONS.md §8.5) — the `synced_while_away` card repeats its facts.
+   * null/undefined = none or not read.
+   */
+  healthSyncAway?: { title: string; body: string; kind: string } | null;
 }
 
 /** What the client said it can render and run (`cards=…promo@1`, `actions=`, `promoLayouts=`). */

@@ -2,7 +2,9 @@ import { type NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
+import { platformFrom } from '@/lib/services/app-open-service';
 import { ChallengeStepsSyncService } from '@/lib/services/challenge-steps-sync-service';
+import { HealthSyncPushService } from '@/lib/services/health-sync-push-service';
 import { MobileAPIService } from '@/lib/services/mobile-api-service';
 import type { BulkSyncResult } from '@/lib/types/tracking';
 import { runAfterResponse } from '@/lib/utils/after-response';
@@ -154,6 +156,13 @@ export async function POST(request: NextRequest) {
 
     // Steps circle challenges count synced steps (after the response; never throws).
     if (insertedCount + updatedCount > 0) runAfterResponse(() => ChallengeStepsSyncService.syncUser(user.id), 'challenge-steps-sync');
+
+    // Health sync update push (docs/PUSH_NOTIFICATIONS.md §8.5): today's synced steps reached the goal.
+    const written = validatedData.steps_data.filter((e) => results.some((r) => r.date === e.date && (r.action === 'inserted' || r.action === 'updated')));
+    if (written.length > 0) {
+      const entries = written.map((e) => ({ date: e.date, steps: e.steps }));
+      runAfterResponse(() => HealthSyncPushService.onStepsSynced(user.id, { entries, platform: platformFrom(request) }), 'health-sync push');
+    }
 
     console.log(
       `[Bulk Sync] Completed for user ${user.id}: inserted=${insertedCount}, updated=${updatedCount}, skipped=${skippedCount}, failed=${failedCount}`

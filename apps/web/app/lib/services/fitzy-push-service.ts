@@ -45,6 +45,7 @@ import {
   type SentRow,
   type Skip,
 } from '../fitzy/push';
+import { resolveNotificationTimezone } from '../notifications/user-timezone';
 import { addDays } from '../streaks/streak-calculator';
 import { createAdminSupabase } from '../supabase-admin';
 import type { FitzyTier } from '../types/fitzy';
@@ -134,20 +135,28 @@ export class FitzyPushService {
     summary.candidates = userIds.length;
     if (!userIds.length) return summary;
 
-    // Timezone priority mirrors ReminderService: notification_preferences → latest streak claim → New York.
-    const [prefRows, claimRows] = await Promise.all([
+    // Timezone: the shared resolution (lib/notifications/user-timezone.ts) — a user-changed
+    // quiet-hours zone → the device zone on the profile → the latest claim → New York.
+    // Placeholder zones ('UTC' profile default, the untouched New York preference) never win.
+    const [prefRows, claimRows, tzProfileRows] = await Promise.all([
       chunked(userIds, async (part) => ((await supabase.from('notification_preferences').select('*').in('user_id', part)).data ?? [])),
       chunked(userIds, async (part) =>
         ((await supabase.from('streak_claims').select('user_id, timezone, claim_date').in('user_id', part).order('claim_date', { ascending: false }).limit(part.length * 5)).data ?? []) as any[]
       ),
+      chunked(userIds, async (part) => ((await supabase.from('profiles').select('id, timezone').in('id', part)).data ?? []) as any[]),
     ]);
+    const profileTz = new Map<string, string | null>(tzProfileRows.map((p) => [p.id, p.timezone ?? null]));
     const prefsByUser = new Map<string, any>(prefRows.map((p) => [p.user_id, p]));
     const claimTz = new Map<string, string>();
     for (const c of claimRows) if (c.timezone && !claimTz.has(c.user_id)) claimTz.set(c.user_id, c.timezone);
 
     const inWindow: UserCtx[] = [];
     for (const userId of userIds) {
-      const tz = prefsByUser.get(userId)?.quiet_hours_timezone || claimTz.get(userId) || DEFAULT_TZ;
+      const tz = resolveNotificationTimezone({
+        quietHoursTimezone: prefsByUser.get(userId)?.quiet_hours_timezone ?? null,
+        profileTimezone: profileTz.get(userId) ?? null,
+        claimTimezone: claimTz.get(userId) ?? null,
+      });
       let local: UserCtx['local'];
       try {
         local = localParts(tz, now);
