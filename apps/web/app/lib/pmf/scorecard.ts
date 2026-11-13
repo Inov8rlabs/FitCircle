@@ -91,7 +91,7 @@ export interface PmfFacts {
   eventsByUser: Map<string, RevenueEvent[]>;
   /** Memberships of real users in private, live circles (public / demo / cancelled / draft circles removed). */
   memberships: PmfMembership[];
-  /** First activity signal (Home feed load or app open); retention only counts sign-ups after it. */
+  /** Start of the activity signal (first synced Amplitude hour, else first Home feed load / app open); retention only counts sign-ups after it. */
   activitySince: string | null;
 }
 

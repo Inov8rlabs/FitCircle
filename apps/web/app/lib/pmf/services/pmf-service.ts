@@ -5,10 +5,12 @@
  *                                   test-user exclusion (lib/ads/test-users.ts)
  *  - AdsViralityService.loadFacts   invites, referrals, circle joins → per-user virality (ADS_METRICS_METHODOLOGY §8)
  *  - AdsReportService.loadMetrics   campaign-level ad spend
- *  - FinanceData.activity           Home feed loads + app opens (activity signal)
+ *  - FinanceData.activity           Amplitude user actions (user_active_days) + Home feed loads + app opens (activity signal)
+ *  - AmplitudeSyncService.coverage  first / last synced Amplitude hour (retention gate, staleness note)
  *  - FinanceData.productionEvents   every PRODUCTION subscription event (subscription state / churn / ARPU)
  * Pure math: lib/pmf/scorecard.ts and lib/pmf/insights.ts.
  */
+import { AmplitudeSyncService } from '../../activity/amplitude-sync-service';
 import { reportTimeZone } from '../../ads/config';
 import { addDays, todayInTz } from '../../ads/dates';
 import type { CohortUser, RevenueEvent } from '../../ads/metrics';
@@ -20,6 +22,7 @@ import { membershipInterval, PUBLIC_CIRCLE_IDS, viralityOutcomes, type ViralityM
 import { CampaignError } from '../../campaigns/http';
 import { FinanceData } from '../../finance/services/finance-data';
 import { DEFAULT_NOTIFICATION_TZ, isPlaceholderTimezone } from '../../notifications/user-timezone';
+import { activityNotes, activitySinceOf, signalStarts } from '../activity-signal';
 import { SOURCES } from '../catalog';
 import { buildInsights, SIGNAL_NOTE_PREFIX } from '../insights';
 import { buildKpis, pmfScore, type PmfFacts, type PmfMembership, type PmfPlatform, type PmfUser } from '../scorecard';
@@ -117,7 +120,7 @@ export class PmfService {
     const activityFrom = new Date(Date.parse(`${addDays(spanStart, -31)}T00:00:00Z`) - 14 * 3600_000).toISOString();
     const nowIso = now.toISOString();
 
-    const [{ cohort: adsCohort, excluded }, activity, mealRows, allEvents, metricRows, feedSince, opensSince] = await Promise.all([
+    const [{ cohort: adsCohort, excluded }, activity, mealRows, allEvents, metricRows, feedSince, opensSince, amplitude] = await Promise.all([
       AdsReportService.reportCohort({ start: spanStart, end: today, today, timeZone, includeTest: false, now }),
       FinanceData.activity(activityFrom, nowIso),
       selectAll<{ id: string; user_id: string; created_at: string }>(() =>
@@ -135,7 +138,9 @@ export class PmfService {
       AdsReportService.loadMetrics(spanStart, today),
       this.firstAt('home_feed_decisions', 'created_at'),
       this.firstAt('app_opens', 'first_open_at'),
+      AmplitudeSyncService.coverage(),
     ]);
+    const signal = { amplitudeSince: amplitude.since, amplitudeThrough: amplitude.through, feedSince, opensSince };
 
     // Everyone we may count: cohort + anyone active / logging / paying in the span.
     const otherIds = new Set<string>([...activity.rows.map((r) => r.userId), ...mealRows.map((r) => r.user_id), ...allEvents.map((e) => e.user_id).filter((x): x is string => !!x)]);
@@ -228,7 +233,7 @@ export class PmfService {
 
     const memberships = await this.loadMemberships([...act.keys()], isReal);
 
-    const activitySince = [feedSince, opensSince].filter((x): x is string => !!x).sort((a, b) => Date.parse(a) - Date.parse(b))[0] ?? null;
+    const activitySince = activitySinceOf(signal);
     const facts: PmfFacts = {
       now,
       today,
@@ -247,7 +252,7 @@ export class PmfService {
     // A new activity signal starting inside the compared windows inflates activity KPIs; say so on the row and in insights.
     for (const k of kpis) {
       if (!ACTIVITY_KPIS.has(k.id)) continue;
-      for (const [label, since] of [['App-open recording (app_opens)', opensSince], ['Home feed logging (home_feed_decisions)', feedSince]] as const) {
+      for (const [label, since] of signalStarts(signal)) {
         if (!since) continue;
         const day = since.slice(0, 10);
         if (day > k.previous.window.start && day <= k.current.window.end) {
@@ -277,10 +282,10 @@ export class PmfService {
         currentWindow: cur,
         previousWindow: prev,
       },
-      signals: { activitySince, appOpensSince: opensSince },
+      signals: { activitySince, appOpensSince: opensSince, amplitudeSince: amplitude.since, amplitudeThrough: amplitude.through },
       notes: [
         `Days are ${timeZone} calendar days, except retention, which uses each user’s own time zone (profile time zone, else ${DEFAULT_NOTIFICATION_TZ}).`,
-        `Active = an app open (app_opens, since ${opensSince ? opensSince.slice(0, 10) : 'n/a'}), a Home feed load (home_feed_decisions, 1.0.8+ apps, since ${feedSince ? feedSince.slice(0, 10) : 'n/a'}, kept 90 days) or a logged meal. Retention counts only sign-ups after the first activity signal; DAU / MAU windows that reach before it are undercounted.`,
+        ...activityNotes(signal, now),
         'Cohort KPIs use sign-ups old enough for their whole window (e.g. D7 uses sign-ups at least 8 days old), so each KPI shows its own sign-up dates. Previous = the same-length window just before.',
         'Trend sparklines: 12 weekly buckets ending at the current window’s end, same definition per bucket.',
         'Revenue is net of store fees and tax, cash basis, PRODUCTION RevenueCat events only (Ads Console rules, docs/ADS_METRICS_METHODOLOGY.md §4). Spend is campaign-level Apple Ads / Google Ads / Meta delivery.',

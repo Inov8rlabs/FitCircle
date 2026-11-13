@@ -195,7 +195,7 @@ export const PNL_DEFINITIONS: Record<string, string> = {
   cumulativeNet: 'Running sum of net from the start of the range.',
   newUsers: 'Sign-ups (profiles created) in the period, test / internal accounts excluded (report time zone).',
   payers: 'Users whose first paid subscription charge fell in the period (test users excluded).',
-  dauAvg: 'Average distinct daily active users (home_feed_decisions / app_opens, test users excluded) over days with activity data.',
+  dauAvg: 'Average distinct daily active users (Amplitude user actions / home_feed_decisions / app_opens, test users excluded) over days with activity data.',
   cac: 'UA spend ÷ new users (blended: organic sign-ups included).',
   aiCostPerDau: 'Production AI spend ÷ Σ daily active users in the period.',
 };

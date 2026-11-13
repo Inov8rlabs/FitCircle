@@ -1,6 +1,6 @@
 /**
  * Read-only loaders for the finance reports (service role). Every loader of a table that may not
- * exist yet (migration 134: ai_cost_daily, ai_usage_events, ai_gateway_credits; 133: app_opens)
+ * exist yet (migration 134: ai_cost_daily, ai_usage_events, ai_gateway_credits; 133: app_opens; 136: user_active_days)
  * returns empty + a note instead of failing the report.
  */
 import { addDays } from '../../ads/dates';
@@ -109,7 +109,7 @@ export class FinanceData {
     };
   }
 
-  /** Activity signals in [from, to): Home feed loads and app opens. */
+  /** Activity signals in [from, to): Home feed loads, app opens and Amplitude user actions (user_active_days). */
   static async activity(from: string, to: string): Promise<Loaded<ActivityRow[]>> {
     const notes: string[] = [];
     const out: ActivityRow[] = [];
@@ -135,6 +135,28 @@ export class FinanceData {
       for (const r of rows) out.push({ userId: r.user_id, at: r.first_open_at, platform: normPlatform(r.platform) });
     } catch (e) {
       notes.push(missing('app_opens', e));
+    }
+    try {
+      // Amplitude user actions (migration 136): first and last counted event of each local day.
+      const rows = await selectAll<{ user_id: string; local_date: string; platform: string | null; first_at: string; last_at: string | null }>(() =>
+        db()
+          .from('user_active_days')
+          .select('user_id, local_date, platform, first_at, last_at')
+          .eq('source', 'amplitude')
+          .gte('first_at', from)
+          .lt('first_at', to)
+          .order('first_at', { ascending: true })
+          .order('user_id', { ascending: true })
+          .order('local_date', { ascending: true })
+          .order('platform', { ascending: true })
+      );
+      for (const r of rows) {
+        const platform = normPlatform(r.platform);
+        out.push({ userId: r.user_id, at: r.first_at, platform });
+        if (r.last_at && r.last_at !== r.first_at && Date.parse(r.last_at) < Date.parse(to)) out.push({ userId: r.user_id, at: r.last_at, platform });
+      }
+    } catch (e) {
+      notes.push(missing('user_active_days', e));
     }
     return { rows: out, note: notes.length ? notes.join(' ') : null };
   }

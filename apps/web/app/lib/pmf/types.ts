@@ -152,7 +152,7 @@ export interface PmfReport {
   score: PmfScore;
   population: PmfPopulation;
   /** First instant each activity signal exists (null = none). */
-  signals: { activitySince: string | null; appOpensSince: string | null };
+  signals: { activitySince: string | null; appOpensSince: string | null; amplitudeSince?: string | null; amplitudeThrough?: string | null };
   notes: string[];
   sources: Array<{ id: ThresholdSource; label: string; detail: string }>;
 }

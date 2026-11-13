@@ -42,6 +42,9 @@ const PENDING_RELATIONS: string[] = [
   'ai_gateway_credits',
   // 135_ga4_conversion_sends.sql (docs/GA4_SERVER_CONVERSIONS.md) — written, not applied yet.
   'ga4_conversion_sends',
+  // 136_user_active_days.sql (Amplitude activity for PMF / Finance) — written, not applied yet.
+  'user_active_days',
+  'amplitude_export_sync',
 ];
 
 const APP_DIR = join(__dirname, '..', '..', 'app');

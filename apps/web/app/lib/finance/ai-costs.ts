@@ -147,7 +147,7 @@ export const AI_COST_DEFINITIONS: Record<string, string> = {
   evalDev: 'Evaluation and development spend: environment ≠ production (local scripts, previews, model bake-offs) and eval fixture users (…00e7, 00000000-0000-4000-8000-000000000000).',
   unattributed: 'Billed spend we cannot attribute: before the per-call ledger, calls without a gateway user (all Fitzy, coach, body-comp, grounding and embedding calls); with the ledger, gateway spend above it (other projects / keys on the account, failed ledger writes). Never estimated into other classes.',
   ledger: 'Σ per-call cost from ai_usage_events (providerMetadata.gateway.gatewayCost). Reconciliation: diff = ledger − gateway; |diff| > 2 % is flagged.',
-  dau: 'Distinct signed-in users who opened the app that UTC day (home_feed_decisions or app_opens), test users excluded unless includeTest. UTC so it lines up with gateway days.',
+  dau: 'Distinct signed-in users who used the app that UTC day (Amplitude user actions, home_feed_decisions or app_opens), test users excluded unless includeTest. UTC so it lines up with gateway days.',
   costPerDauDay: 'Production AI spend ÷ Σ daily active users over the range (cost per active user-day).',
   costPerAiUser: 'User-attributed AI spend ÷ users with at least one attributed model call in the range.',
   segment: 'As of the range end, from RevenueCat production events: paying = at least one paid, unrefunded charge; trial = started a free trial and never paid; free = everyone else (complimentary Pro grants count as free).',

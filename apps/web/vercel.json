@@ -25,6 +25,10 @@
       "schedule": "15 9 * * *"
     },
     {
+      "path": "/api/cron/activity/amplitude-sync",
+      "schedule": "20 * * * *"
+    },
+    {
       "path": "/api/cron/streaks/daily-check",
       "schedule": "0 0 * * *"
     },
