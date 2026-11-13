@@ -28,6 +28,9 @@ import { createAdminSupabase } from '../supabase-admin';
 import { CampaignService, featuredCampaign } from './campaign-service';
 import { NotificationOrchestrator } from './notification-orchestrator';
 import { UsageService } from './usage-service';
+
+/** Largest free-scan allowance a win-back push will quote (trial-first rule today: 21). */
+const MAX_QUOTED_FREE_SCANS = 100;
 import { UserAudienceService, type UserAudience } from './user-audience-service';
 
 type Row = Record<string, any>;
@@ -216,7 +219,11 @@ export class WinbackService {
         const isPro = p?.subscription_tier === 'premium' || p?.subscription_tier === 'enterprise';
         let scansLeft: number | null = null;
         try {
-          scansLeft = (await UsageService.foodAiAllowance(a.userId, isPro ? 'premium' : 'free', gateLive, p?.created_at ?? null)).remaining;
+          const allowance = await UsageService.foodAiAllowance(a.userId, isPro ? 'premium' : 'free', gateLive, p?.created_at ?? null);
+          // A cron has no request, so remote config can't see the user's app version and answers
+          // with the old-client default (1000). Only quote a number that is a real trial-first
+          // allowance; anything larger means "we can't tell" → the generic variant.
+          scansLeft = allowance.total !== null && allowance.total <= MAX_QUOTED_FREE_SCANS ? allowance.remaining : null;
         } catch {
           scansLeft = null; // unknown → the generic variant (never a guessed number)
         }
