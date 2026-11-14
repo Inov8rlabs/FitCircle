@@ -6,7 +6,7 @@ import { checkIntegrity, recordSessionAttestation, resolveLoginBypass } from '@/
 import { enforceAbuseLimits, requestDeviceId } from '@/lib/security/abuse-limits';
 import { recordSecurityEvent } from '@/lib/security/security-events';
 import { MobileAPIService } from '@/lib/services/mobile-api-service';
-import { toMobileUser } from '@/lib/services/mobile-profile-response';
+import { toMobileUser, withTestAccountHeader } from '@/lib/services/mobile-profile-response';
 import { authEmailSchema } from '@/lib/validation/auth-email';
 import { parseLenient, validationMessage } from '@/lib/validation/lenient-parse';
 
@@ -132,13 +132,13 @@ export async function POST(request: NextRequest) {
         access_token: tokens.access_token,
         refresh_token: tokens.refresh_token,
         expires_in: Math.floor((tokens.expires_at - Date.now() / 1000)),
-        user: toMobileUser(profile, { id: data.user.id, email: data.user.email }),
+        user: toMobileUser(profile, { id: data.user.id, email: data.user.email }, { headers: request.headers }),
       },
       error: null,
       meta: null,
     };
 
-    return NextResponse.json(responsePayload);
+    return withTestAccountHeader(NextResponse.json(responsePayload), responsePayload.data.user);
   } catch (error) {
     console.error('Mobile login error:', error);
 

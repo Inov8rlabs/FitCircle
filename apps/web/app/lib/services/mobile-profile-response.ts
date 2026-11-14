@@ -20,7 +20,10 @@
  */
 import { isProfileGender } from '@/lib/validation/profile-validation';
 
+import { testAccountReason, type AudienceTestReason } from '../notifications/audience';
 import { PRIVACY_DEFAULTS } from '../privacy/defaults';
+
+import { isTestDeviceRequest } from './test-device-service';
 
 type Json = Record<string, any>;
 
@@ -176,14 +179,69 @@ export function toMobileGoals(goals: unknown): Json[] {
     });
 }
 
+/** Extra facts for the `test_account` flag that are not on the profile row. */
+export interface MobileUserContext {
+  /** The request's headers: `X-Test-Device: 1` marks a Test Lab / Play pre-launch device. */
+  headers?: Pick<Headers, 'get'>;
+  /** user_attribution.is_test (Apple's mock AdServices payload), when the caller has it. */
+  mockAttribution?: boolean;
+}
+
+/** Response header set (value "1") on mobile user responses for a test account. */
+export const TEST_ACCOUNT_HEADER = 'X-Test-Account';
+
 /**
- * Exactly the fields of the iOS `User`, each guaranteed decodable.
+ * `test_account` / `test_account_kind` (docs/TEST_ACCOUNT_CONTRACT.md): the
+ * server's verdict that this is not a real customer, so the apps mute their
+ * own telemetry (Sentry, product analytics, ad attribution, push registration).
+ * Same rules as the Ads Console / PMF / push audience
+ * (lib/ads/test-users.ts + profiles.metadata.test_device): internal team and
+ * admins, the App Review demo account, Test Lab / Play pre-launch robots
+ * (domain, generated Play tester addresses, X-Test-Device), QA domains and
+ * Apple's mock attribution. Internal and review accounts are muted too: they
+ * are excluded from every analytics cohort anyway.
+ */
+export function testAccountFields(
+  row: Json,
+  email: string,
+  context: MobileUserContext = {}
+): { test_account: boolean; test_account_kind: AudienceTestReason | null } {
+  const kind =
+    testAccountReason({
+      email,
+      isAdmin: row.is_admin === true,
+      mockAttribution: context.mockAttribution === true,
+      metadata: asObject(row.metadata),
+    }) ?? (context.headers && isTestDeviceRequest(context.headers) ? 'test_device' : null);
+  return { test_account: kind !== null, test_account_kind: kind };
+}
+
+/**
+ * `user` (a toMobileUser / toMobileProfile result) with the request's
+ * `X-Test-Device` signal applied, for routes whose user was built without the
+ * request (GET /api/mobile/profile).
+ */
+export function withRequestTestSignal<T extends Json>(user: T, headers: Pick<Headers, 'get'>): T {
+  if (!user || user.test_account === true || !isTestDeviceRequest(headers)) return user;
+  return { ...user, test_account: true, test_account_kind: 'test_device' };
+}
+
+/** Sets `X-Test-Account: 1` on `response` when `user` is a test account. Returns `response`. */
+export function withTestAccountHeader<R extends { headers: Headers }>(response: R, user: Json | null | undefined): R {
+  if (user?.test_account === true) response.headers.set(TEST_ACCOUNT_HEADER, '1');
+  return response;
+}
+
+/**
+ * Exactly the fields of the iOS `User`, each guaranteed decodable, plus the
+ * additive `test_account` / `test_account_kind` (old clients ignore them).
  * `authUser` is the signed-in auth user where the route has it: its id/email
  * are authoritative, and cover a missing or incomplete row.
  */
 export function toMobileUser(
   profile: Json | null | undefined,
-  authUser: { id?: string; email?: string | null } = {}
+  authUser: { id?: string; email?: string | null } = {},
+  context: MobileUserContext = {}
 ): Json {
   const row = asObject(profile);
   const email = authUser.email || (typeof row.email === 'string' && row.email) || '';
@@ -215,6 +273,7 @@ export function toMobileUser(
     last_active_at: formatDateForIOS(row.last_active_at) || now,
     created_at: formatDateForIOS(row.created_at) || now,
     updated_at: formatDateForIOS(row.updated_at) || now,
+    ...testAccountFields(row, email, context),
   };
 }
 

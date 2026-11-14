@@ -28,7 +28,11 @@ vi.mock('@/lib/services/mobile-api-service', () => ({
     },
   },
 }));
-vi.mock('@/lib/services/mobile-profile-response', () => ({ toProfileUpdateResponse: (p: unknown) => p }));
+vi.mock('@/lib/services/mobile-profile-response', () => ({
+  toProfileUpdateResponse: (p: unknown) => p,
+  withRequestTestSignal: (p: unknown) => p,
+  withTestAccountHeader: (r: unknown) => r,
+}));
 
 import { POST as register } from '../../auth/register/route';
 import { POST as complete } from '../onboarding/complete/route';

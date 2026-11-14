@@ -1,6 +1,6 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { toMobileGoals, toMobileUser, withPreferenceDefaults } from '../mobile-profile-response';
+import { toMobileGoals, toMobileProfile, toMobileUser, withPreferenceDefaults, withRequestTestSignal, withTestAccountHeader } from '../mobile-profile-response';
 
 const AUTH = { id: '11111111-1111-1111-1111-111111111111', email: 'ani@privaterelay.appleid.com' };
 
@@ -109,5 +109,67 @@ describe('withPreferenceDefaults', () => {
   it('reads legacy camelCase privacy keys', () => {
     const prefs = withPreferenceDefaults({ privacy: { profileVisibility: 'friends', showWeight: false } });
     expect(prefs.privacy).toMatchObject({ profile_visibility: 'friends', show_weight: false });
+  });
+});
+
+describe('test_account / test_account_kind (docs/TEST_ACCOUNT_CONTRACT.md)', () => {
+  const ENV_KEYS = ['ADS_TEST_EMAILS', 'ADS_TEST_EMAIL_DOMAINS'];
+  const saved: Record<string, string | undefined> = {};
+  beforeEach(() => {
+    for (const k of ENV_KEYS) {
+      saved[k] = process.env[k];
+      delete process.env[k];
+    }
+  });
+  afterEach(() => {
+    for (const k of ENV_KEYS) if (saved[k] === undefined) delete process.env[k];
+    else process.env[k] = saved[k];
+  });
+
+  const kind = (row: Record<string, any> | null, email: string, ctx?: Parameters<typeof toMobileUser>[2]) => {
+    const u = toMobileUser(row, { id: AUTH.id, email }, ctx);
+    return [u.test_account, u.test_account_kind];
+  };
+
+  it('a real user is always sent false / null (keys always present)', () => {
+    expect(kind(null, 'jane.doe@gmail.com')).toEqual([false, null]);
+    expect(kind({ metadata: null, is_admin: false }, 'jane.doe@gmail.com')).toEqual([false, null]);
+    expect(kind({ metadata: { welcome_email: {} } }, 'janedoe12@gmail.com')).toEqual([false, null]);
+  });
+
+  it('every non-real kind', () => {
+    expect(kind({ is_admin: true }, 'jane.doe@gmail.com')).toEqual([true, 'internal']);
+    expect(kind({}, 'ani@fitcircle.ai')).toEqual([true, 'internal']);
+    expect(kind({}, 'fitcircle.user@gmail.com')).toEqual([true, 'review']);
+    expect(kind({}, 'robot@cloudtestlabaccounts.com')).toEqual([true, 'test_lab']);
+    expect(kind({}, 'qa@example.com')).toEqual([true, 'qa']);
+    expect(kind({}, 'jordanbaker.48213@gmail.com')).toEqual([true, 'play_testers']);
+    expect(kind({}, 'jane.doe@gmail.com', { mockAttribution: true })).toEqual([true, 'mock_attribution']);
+    expect(kind({ metadata: { test_device: { at: 'x' } } }, 'jane.doe@gmail.com')).toEqual([true, 'test_device']);
+    expect(kind({}, 'jane.doe@gmail.com', { headers: new Headers({ 'x-test-device': '1' }) })).toEqual([true, 'test_device']);
+  });
+
+  it('the email rules win over the device signal (more specific kind)', () => {
+    expect(kind({ metadata: { test_device: { at: 'x' } } }, 'jordanbaker.48213@gmail.com')).toEqual([true, 'play_testers']);
+  });
+
+  it('toMobileProfile carries it; the profile row cannot override it', () => {
+    const p = toMobileProfile({ id: AUTH.id, email: 'qa@example.com', test_account: false });
+    expect([p.test_account, p.test_account_kind]).toEqual([true, 'qa']);
+  });
+
+  it('withRequestTestSignal only upgrades a real user on X-Test-Device', () => {
+    const real = toMobileUser({}, { id: AUTH.id, email: 'jane.doe@gmail.com' });
+    expect(withRequestTestSignal(real, new Headers())).toBe(real);
+    expect(withRequestTestSignal(real, new Headers({ 'x-test-device': '1' }))).toMatchObject({ test_account: true, test_account_kind: 'test_device' });
+    const qa = toMobileUser({}, { id: AUTH.id, email: 'qa@example.com' });
+    expect(withRequestTestSignal(qa, new Headers({ 'x-test-device': '1' })).test_account_kind).toBe('qa');
+  });
+
+  it('withTestAccountHeader sets X-Test-Account: 1 only for test accounts', () => {
+    const r1 = withTestAccountHeader(new Response('{}'), { test_account: true });
+    const r2 = withTestAccountHeader(new Response('{}'), { test_account: false });
+    const r3 = withTestAccountHeader(new Response('{}'), null);
+    expect([r1.headers.get('x-test-account'), r2.headers.get('x-test-account'), r3.headers.get('x-test-account')]).toEqual(['1', null, null]);
   });
 });

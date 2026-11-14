@@ -2,7 +2,7 @@ import { createClient } from '@supabase/supabase-js';
 import { type NextRequest, NextResponse } from 'next/server';
 
 import { verifyMobileAuth } from '@/lib/middleware/mobile-auth';
-import { toMobileUser } from '@/lib/services/mobile-profile-response';
+import { toMobileUser, withTestAccountHeader } from '@/lib/services/mobile-profile-response';
 
 export async function GET(request: NextRequest) {
   try {
@@ -64,7 +64,7 @@ export async function GET(request: NextRequest) {
 
     const responsePayload = {
       success: true,
-      data: toMobileUser(profile, { id: user.id, email: user.email }),
+      data: toMobileUser(profile, { id: user.id, email: user.email }, { headers: request.headers }),
       error: null,
       meta: null,
     };
@@ -73,7 +73,7 @@ export async function GET(request: NextRequest) {
     const response = NextResponse.json(responsePayload);
     response.headers.set('Cache-Control', 'private, no-store');
 
-    return response;
+    return withTestAccountHeader(response, responsePayload.data);
   } catch (error: any) {
     console.error('[Mobile API] Session error:', {
       message: error?.message,

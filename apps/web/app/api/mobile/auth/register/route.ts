@@ -14,7 +14,7 @@ import {
   signupRequiresConfirmation,
 } from '@/lib/services/email-signup-service';
 import { MobileAPIService } from '@/lib/services/mobile-api-service';
-import { toMobileUser } from '@/lib/services/mobile-profile-response';
+import { toMobileUser, withTestAccountHeader } from '@/lib/services/mobile-profile-response';
 import { isTestDeviceRequest, recordTestDeviceSignal } from '@/lib/services/test-device-service';
 import {
   USERNAME_PATTERN,
@@ -174,18 +174,19 @@ export async function POST(request: NextRequest) {
     });
 
     // Return mobile-friendly response matching login format
-    return NextResponse.json(
+    const mobileUser = toMobileUser(profile, { id: authData.user.id, email: authData.user.email }, { headers: request.headers });
+    return withTestAccountHeader(NextResponse.json(
       {
         success: true,
         data: {
           access_token: tokens.access_token,
           refresh_token: tokens.refresh_token,
           expires_in: Math.floor((tokens.expires_at - Date.now() / 1000)),
-          user: toMobileUser(profile, { id: authData.user.id, email: authData.user.email }),
+          user: mobileUser,
         },
       },
       { status: 201 }
-    );
+    ), mobileUser);
   } catch (error) {
     console.error('Mobile register error:', error);
 

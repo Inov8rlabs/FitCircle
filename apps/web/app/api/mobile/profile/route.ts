@@ -3,7 +3,7 @@ import { z } from 'zod';
 
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { MobileAPIService } from '@/lib/services/mobile-api-service';
-import { toProfileUpdateResponse } from '@/lib/services/mobile-profile-response';
+import { toProfileUpdateResponse, withRequestTestSignal, withTestAccountHeader } from '@/lib/services/mobile-profile-response';
 import { resolveClientTimezone } from '@/lib/streaks/client-timezone';
 import { AgeRequirementError, ageRequirementBody, isUnderMinimumAge } from '@/lib/validation/age-requirement';
 import { isFutureCalendarDate, normalizeDateOfBirth } from '@/lib/validation/date-of-birth';
@@ -28,7 +28,7 @@ export async function GET(request: NextRequest) {
     const user = await requireMobileAuth(request);
 
     // Get profile with stats
-    const profile = await MobileAPIService.getUserProfileWithStats(user.id);
+    const profile = withRequestTestSignal(await MobileAPIService.getUserProfileWithStats(user.id), request.headers);
 
     const response = NextResponse.json({
       success: true,
@@ -44,7 +44,7 @@ export async function GET(request: NextRequest) {
     // Never cacheable: URLCache/browser caches key by URL, not Authorization.
     response.headers.set('Cache-Control', 'private, no-store');
 
-    return response;
+    return withTestAccountHeader(response, profile);
   } catch (error: any) {
     console.error('[Mobile API] Get profile error:', {
       userId: error.userId,
@@ -180,17 +180,21 @@ export async function PUT(request: NextRequest) {
       void MobileAPIService.syncAuthMetadataName(user.id, updates.display_name).catch(() => undefined);
     }
 
-    return NextResponse.json({
-      success: true,
-      data: {
-        // The stored row plus the nested preference defaults iOS needs to decode it.
-        user: toProfileUpdateResponse(updatedProfile),
-      },
-      meta: {
-        requestTime: Date.now() - startTime,
-      },
-      error: null,
-    });
+    // The stored row plus the nested preference defaults iOS needs to decode it.
+    const updatedUser = updatedProfile ? withRequestTestSignal(toProfileUpdateResponse(updatedProfile)!, request.headers) : toProfileUpdateResponse(updatedProfile);
+    return withTestAccountHeader(
+      NextResponse.json({
+        success: true,
+        data: {
+          user: updatedUser,
+        },
+        meta: {
+          requestTime: Date.now() - startTime,
+        },
+        error: null,
+      }),
+      updatedUser
+    );
   } catch (error: any) {
     console.error('[Mobile API] Update profile error:', {
       userId: error.userId,

@@ -31,7 +31,7 @@ vi.mock('@/lib/services/mobile-api-service', () => ({
   },
 }));
 
-import { PUT } from '../route';
+import { GET, PUT } from '../route';
 
 const put = (body: unknown, headers: Record<string, string> = {}) =>
   PUT(
@@ -242,5 +242,33 @@ describe('PUT /api/mobile/profile', () => {
       expect(state.updates).toEqual([{}]);
       expect(state.authSync).toEqual([]);
     });
+  });
+});
+
+describe('test_account on GET/PUT /api/mobile/profile', () => {
+  const get = (headers: Record<string, string> = {}) =>
+    GET(new Request('http://localhost/api/mobile/profile', { headers: { authorization: 'Bearer t', ...headers } }) as any);
+
+  it('the service result passes through; X-Test-Device upgrades a real user; header mirrors the flag', async () => {
+    state.row = { ...state.row, test_account: false, test_account_kind: null };
+    let res = await get();
+    expect((await res.json()).data.user).toMatchObject({ test_account: false, test_account_kind: null });
+    expect(res.headers.get('x-test-account')).toBeNull();
+
+    res = await get({ 'x-test-device': '1' });
+    expect((await res.json()).data.user).toMatchObject({ test_account: true, test_account_kind: 'test_device' });
+    expect(res.headers.get('x-test-account')).toBe('1');
+  });
+
+  it('PUT returns the flag computed from the stored row', async () => {
+    state.row = { ...state.row, email: 'qa@example.com' };
+    const res = await put({ bio: 'hi' });
+    expect(res.status).toBe(200);
+    expect((await res.json()).data.user).toMatchObject({ test_account: true, test_account_kind: 'qa' });
+    expect(res.headers.get('x-test-account')).toBe('1');
+
+    state.row = { ...state.row, email: 'a@b.com' };
+    const real = await put({ bio: 'hi' });
+    expect((await real.json()).data.user).toMatchObject({ test_account: false, test_account_kind: null });
   });
 });

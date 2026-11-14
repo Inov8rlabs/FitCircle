@@ -9,7 +9,7 @@ import { recordSecurityEvent } from '@/lib/security/security-events';
 import { AppleTokenService } from '@/lib/services/apple-token-service';
 import { setEmailCanonical } from '@/lib/services/email-signup-service';
 import { MobileAPIService } from '@/lib/services/mobile-api-service';
-import { toMobileUser } from '@/lib/services/mobile-profile-response';
+import { toMobileUser, withTestAccountHeader } from '@/lib/services/mobile-profile-response';
 import { SocialAuthError, findOrCreateSocialUser } from '@/lib/services/social-auth-service';
 import { isTestDeviceRequest, recordTestDeviceSignal } from '@/lib/services/test-device-service';
 import { triggerWelcomeEmail } from '@/lib/services/welcome-email-service';
@@ -140,19 +140,20 @@ export async function POST(request: NextRequest) {
 
     console.log('[Apple Auth] Sign-in successful for user:', userId);
 
-    return NextResponse.json({
+    const mobileUser = toMobileUser(profile, { id: userId, email }, { headers: request.headers });
+    return withTestAccountHeader(NextResponse.json({
       success: true,
       data: {
         access_token: tokens.access_token,
         refresh_token: tokens.refresh_token,
         expires_in: Math.floor(tokens.expires_at - Date.now() / 1000),
-        user: toMobileUser(profile, { id: userId, email }),
+        user: mobileUser,
         // First sign-in with this Apple ID: clients route to onboarding.
         is_new_user: isNewUser,
       },
       error: null,
       meta: null,
-    });
+    }), mobileUser);
   } catch (error) {
     console.error('[Apple Auth] Error:', error);
 
