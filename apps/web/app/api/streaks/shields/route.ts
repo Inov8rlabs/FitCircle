@@ -13,7 +13,10 @@ import { StreakClaimingService } from '@/lib/services/streak-claiming-service';
  *   "milestone_shields": 2,
  *   "purchased": 0,
  *   "total": 3,
- *   "last_freeze_reset": "2025-10-21T00:00:00Z",
+ *   "unlimited": false,
+ *   "cap": 3,                       // = shield_rules.max_balance
+ *   "shield_rules": { "earn_interval_days": 7, "starter_count": 2, "max_balance": 3 },
+ *   "last_freeze_reset": null,
  *   "next_freeze_reset": "2025-10-28T00:00:00Z"
  * }
  */

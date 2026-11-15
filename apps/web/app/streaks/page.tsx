@@ -30,11 +30,13 @@ import { AnalyticsEvents, analytics } from '@/lib/analytics';
 import { useTrackOnce } from '@/lib/analytics/react';
 import {
   type ClaimableDay,
+  type ShieldRules,
   type ShieldStatus,
   type StreakEngagement,
   type EngagementHistoryEntry,
   streakClient,
 } from '@/lib/api/streak-client';
+import { outOfShieldsLine, shieldEarnLine } from '@/lib/streaks/shield-copy';
 import { MILESTONES as CANONICAL_MILESTONES } from '@/lib/streaks/streak-config';
 import { useAuthStore } from '@/stores/auth-store';
 
@@ -242,6 +244,7 @@ export default function StreaksPage() {
           <ShieldDialog
             available={shield.available}
             unlimited={shield.unlimited}
+            rules={shield.rules}
             date={shieldDialogDate}
             onConfirm={() => activateShield(shieldDialogDate)}
             onCancel={() => setShieldDialogDate(null)}
@@ -437,6 +440,9 @@ function ShieldWidget({ shield }: { shield: ShieldStatus; onUseShield: () => voi
             ? 'Unlimited with Pro: your streak is always protected'
             : `${shield.available} of ${shield.max} available · tap a missed day to use one`}
         </p>
+        {!shield.unlimited && shield.rules && (
+          <p className="text-footnote text-fg-tertiary" data-testid="shield-rules">{shieldEarnLine(shield.rules)}</p>
+        )}
       </div>
       <span className="text-title2 font-bold tabular-nums text-brand-indigo">{shield.unlimited ? '∞' : shield.available}</span>
       <ChevronRight className="h-4 w-4 text-fg-tertiary" aria-hidden />
@@ -519,8 +525,8 @@ function MilestoneCelebration({
 }
 
 function ShieldDialog({
-  available, unlimited, date, onConfirm, onCancel,
-}: { available: number; unlimited: boolean; date: string; onConfirm: () => void; onCancel: () => void }) {
+  available, unlimited, rules, date, onConfirm, onCancel,
+}: { available: number; unlimited: boolean; rules: ShieldRules | null; date: string; onConfirm: () => void; onCancel: () => void }) {
   const canUse = unlimited || available > 0;
   // Out of shields: this dialog is a Pro upsell card.
   useTrackOnce(AnalyticsEvents.proCardShown({ source: 'streak_shield' }), !canUse);
@@ -544,7 +550,7 @@ function ShieldDialog({
             ? `Pro includes unlimited shields. Use one to reclaim ${formatDay(date)}?`
             : available > 0
               ? `You have ${available} shield${available === 1 ? '' : 's'} available. Use one to reclaim ${formatDay(date)}?`
-              : 'You’re out of shields. Earn one per week of streak (bonus each month) — or get FitCircle Pro for unlimited shields, so your streak is always protected.'}
+              : outOfShieldsLine(rules)}
         </p>
         <div className="flex gap-2">
           {canUse ? (

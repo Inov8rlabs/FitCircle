@@ -49,10 +49,19 @@ async function call<T = any>(path: string, opts: RequestOptions = {}): Promise<T
 // ---------------------------------------------------------------------------
 // Types — match the backend response shapes
 
+/** Server `shield_rules` (remote config, Admin Tools). Never hard-code these numbers. */
+export interface ShieldRules {
+  earn_interval_days: number;
+  starter_count: number;
+  max_balance: number;
+}
+
 export interface StreakEngagement {
   current_streak: number;
   longest_streak: number;
   streak_freezes_available: number;
+  shields_unlimited?: boolean;
+  shield_rules?: ShieldRules;
   paused: boolean;
   pause_end_date: string | null;
   last_engagement_date: string | null;
@@ -76,6 +85,8 @@ export interface ShieldStatus {
   can_activate: boolean;
   /** Pro users have unlimited shields — render ∞ and ignore `available`. */
   unlimited: boolean;
+  /** The user's shield economy, or null from a server that predates it. */
+  rules: ShieldRules | null;
 }
 
 export interface ClaimResult {
@@ -133,14 +144,16 @@ export const streakClient = {
       total: number;
       cap: number;
       unlimited: boolean;
+      shield_rules?: ShieldRules;
     }>('/api/streaks/shields');
     return {
       available: raw.total ?? 0,
-      max: raw.cap ?? 3,
+      max: raw.shield_rules?.max_balance ?? raw.cap ?? 0,
       used: 0,
       next_free_at: null,
       can_activate: raw.unlimited || (raw.total ?? 0) > 0,
       unlimited: raw.unlimited === true,
+      rules: raw.shield_rules ?? null,
     };
   },
 

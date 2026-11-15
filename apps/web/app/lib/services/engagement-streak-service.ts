@@ -1,3 +1,10 @@
+import { logIgnoredQueryError } from '@/lib/api/route-errors';
+
+import { DEFAULT_SHIELD_RULES, shieldRulesDto } from '../streaks/shield-rules';
+import { localToday, addDays, daysBetween, calculateStreak,
+  isWithinRetroactiveWindow,
+} from '../streaks/streak-calculator';
+import { shieldXpPrice } from '../streaks/streak-config';
 import { createAdminSupabase } from '../supabase-admin';
 import {
   type EngagementStreak,
@@ -11,15 +18,10 @@ import {
   STREAK_ERROR_CODES,
 } from '../types/streak';
 import { StreakClaimError, CLAIM_ERROR_CODES } from '../types/streak-claiming';
-import { localToday, addDays, daysBetween, calculateStreak,
-  isWithinRetroactiveWindow,
-} from '../streaks/streak-calculator';
-import { shieldXpPrice } from '../streaks/streak-config';
 
 import { MomentumService } from './momentum-service';
-import { StreakShieldService } from './streak-shield-service';
 import { StreakClaimingService } from './streak-claiming-service';
-import { logIgnoredQueryError } from '@/lib/api/route-errors';
+import { StreakShieldService } from './streak-shield-service';
 
 /**
  * EngagementStreakService
@@ -215,6 +217,7 @@ export class EngagementStreakService {
     // inserted is visible even across the UTC boundary. (For the usual case,
     // a shield on yesterday, this is the same day as before: missedDate + 1.)
     const streak = await this.updateEngagementStreak(userId, today);
+    await this.overlayShieldInventory(userId, streak);
     return { ...streak, protected_date: targetDate };
   }
 
@@ -236,7 +239,7 @@ export class EngagementStreakService {
     if (error) throw error;
 
     if (!streakRecord) {
-      return {
+      const empty: EngagementStreakResponse = {
         current_streak: 0,
         longest_streak: 0,
         freezes_available: DEFAULT_STREAK_FREEZES,
@@ -245,6 +248,8 @@ export class EngagementStreakService {
         pause_start_date: null,
         last_engagement_date: null,
       };
+      await this.overlayShieldInventory(userId, empty);
+      return empty;
     }
 
     const { data: claims, error: claimsError } = await supabaseAdmin
@@ -269,13 +274,7 @@ export class EngagementStreakService {
     // Report the live shield inventory (single source of truth), not the
     // mirrored legacy column.
     const response = this.formatStreakResponse(streakRecord);
-    try {
-      const inventory = await StreakShieldService.getInventory(userId);
-      response.freezes_available = inventory.available;
-      response.shields_unlimited = inventory.unlimited;
-    } catch (e) {
-      console.error('[getEngagementStreak] shield inventory error (using mirror):', e);
-    }
+    await this.overlayShieldInventory(userId, response);
 
     // What a shield costs and what the user can spend. `xp_balance` is only
     // known once the spent ledger exists (migration 095); until then it is null.
@@ -286,6 +285,23 @@ export class EngagementStreakService {
         ? Math.max(0, (ledger.total_points || 0) - ledger.points_spent)
         : null;
     return response;
+  }
+
+  /**
+   * Live shield inventory (single source of truth) + the resolved shield rules
+   * (`shield_rules`, additive) onto a streak response. On error the mirror
+   * value stays and the rules fall back to the code defaults.
+   */
+  private static async overlayShieldInventory(userId: string, response: EngagementStreakResponse): Promise<void> {
+    try {
+      const inventory = await StreakShieldService.getInventory(userId);
+      response.freezes_available = inventory.available;
+      response.shields_unlimited = inventory.unlimited;
+      response.shield_rules = shieldRulesDto(inventory.rules);
+    } catch (e) {
+      console.error('[getEngagementStreak] shield inventory error (using mirror):', e);
+      response.shield_rules = shieldRulesDto(DEFAULT_SHIELD_RULES);
+    }
   }
 
   // ============================================================================

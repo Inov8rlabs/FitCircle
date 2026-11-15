@@ -15,15 +15,17 @@
 
 import { type SupabaseClient } from '@supabase/supabase-js';
 
-import { MILESTONES, milestoneCrossed, nextMilestone, streakColor } from '../streaks/streak-config';
+import { logIgnoredQueryError } from '@/lib/api/route-errors';
+
+import { DEFAULT_SHIELD_RULES } from '../streaks/shield-rules';
 import { localToday, addDays, calculateStreak } from '../streaks/streak-calculator';
+import { MILESTONES, SHIELD_RULES, milestoneCrossed, nextMilestone, streakColor } from '../streaks/streak-config';
 import { StreakClaimError, CLAIM_ERROR_CODES } from '../types/streak-claiming';
 
 import { EngagementStreakService } from './engagement-streak-service';
 import { MomentumService } from './momentum-service';
 import { StreakClaimingService } from './streak-claiming-service';
 import { StreakShieldService } from './streak-shield-service';
-import { logIgnoredQueryError } from '@/lib/api/route-errors';
 
 // ============================================================================
 // TYPES
@@ -83,6 +85,11 @@ export interface StreakStatusResponse {
   pointsSpent?: number;
   /** Additional field: spendable XP = totalPoints - pointsSpent. Absent while the spent ledger is unavailable. */
   pointsBalance?: number;
+  /**
+   * Additional field: the user's resolved shield economy (remote config). camelCase
+   * like the rest of this payload; the snake_case endpoints serve it as `shield_rules`.
+   */
+  shieldRules?: { earnIntervalDays: number; starterCount: number; maxBalance: number };
 }
 
 export interface UseFreezeResponse {
@@ -96,6 +103,21 @@ export interface UseFreezeResponse {
 // ============================================================================
 
 const XP_PER_CHECKIN = 10;
+
+/** Live shield balance + resolved rules for the status payload. Never throws. */
+async function shieldSnapshot(userId: string): Promise<{
+  available: number | null;
+  unlimited: boolean | undefined;
+  rules: NonNullable<StreakStatusResponse['shieldRules']>;
+}> {
+  try {
+    const inventory = await StreakShieldService.getInventory(userId);
+    return { available: inventory.available, unlimited: inventory.unlimited, rules: { ...inventory.rules } };
+  } catch (e) {
+    console.error('[getStreakStatus] shield inventory error (using mirror):', e);
+    return { available: null, unlimited: undefined, rules: { ...DEFAULT_SHIELD_RULES } };
+  }
+}
 const XP_MILESTONE_BONUS = 5;
 
 
@@ -137,7 +159,7 @@ export async function performDailyCheckIn(
         current_streak: 0,
         longest_streak: 0,
         last_engagement_date: null,
-        streak_freezes_available: 1,
+        streak_freezes_available: SHIELD_RULES.STARTER_SHIELDS, // legacy mirror seed; StreakShieldService owns the real balance
         streak_freezes_used_this_week: 0,
         total_points: 0,
       })
@@ -374,17 +396,20 @@ export async function getStreakStatus(
       current_streak: 0,
       longest_streak: 0,
       last_engagement_date: null,
-      streak_freezes_available: 1,
+      streak_freezes_available: SHIELD_RULES.STARTER_SHIELDS, // legacy mirror seed; StreakShieldService owns the real balance
       total_points: 0,
     });
 
     const first = nextMilestone(0);
+    const shields = await shieldSnapshot(userId);
     return {
       currentStreak: 0,
       longestStreak: 0,
       lastCheckInDate: null,
       hasCheckedInToday: false,
-      freezesAvailable: 1,
+      freezesAvailable: shields.available ?? SHIELD_RULES.STARTER_SHIELDS,
+      shieldsUnlimited: shields.unlimited,
+      shieldRules: shields.rules,
       nextMilestone: first?.days || null,
       daysUntilNextMilestone: first?.days || null,
       canCheckInAgain: true,
@@ -413,15 +438,9 @@ export async function getStreakStatus(
   }
 
   // Shield inventory (single source of truth) — fall back to the mirror column.
-  let freezesAvailable = streak.streak_freezes_available || 0;
-  let shieldsUnlimited: boolean | undefined;
-  try {
-    const inventory = await StreakShieldService.getInventory(userId);
-    freezesAvailable = inventory.available;
-    shieldsUnlimited = inventory.unlimited;
-  } catch (e) {
-    console.error('[getStreakStatus] shield inventory error (using mirror):', e);
-  }
+  const shields = await shieldSnapshot(userId);
+  const freezesAvailable = shields.available ?? (streak.streak_freezes_available || 0);
+  const shieldsUnlimited = shields.unlimited;
 
   const longestStreak = Math.max(currentStreak, streak.longest_streak);
   const next = nextMilestone(currentStreak);
@@ -433,6 +452,7 @@ export async function getStreakStatus(
     hasCheckedInToday,
     freezesAvailable,
     shieldsUnlimited,
+    shieldRules: shields.rules,
     nextMilestone: next?.days || null,
     daysUntilNextMilestone: next ? next.days - currentStreak : null,
     canCheckInAgain: true, // Can always update mood/energy/weight

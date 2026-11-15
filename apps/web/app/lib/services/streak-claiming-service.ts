@@ -14,6 +14,19 @@
  * lib/streaks/streak-calculator for the date-handling rules.
  */
 
+import { logIgnoredQueryError } from '@/lib/api/route-errors';
+
+import { shieldRulesDto } from '../streaks/shield-rules';
+import {
+  localToday,
+  localDayOf,
+  addDays,
+  isValidTimezone,
+  isWithinGracePeriod,
+  isWithinRetroactiveWindow,
+  calculateStreak,
+} from '../streaks/streak-calculator';
+import { SHIELD_RULES } from '../streaks/streak-config';
 import { createAdminSupabase } from '../supabase-admin';
 import {
   StreakClaim,
@@ -31,19 +44,9 @@ import {
   CLAIM_ERROR_CODES,
   CLAIMING_CONSTANTS,
 } from '../types/streak-claiming';
-import { SHIELD_RULES } from '../streaks/streak-config';
-import {
-  localToday,
-  localDayOf,
-  addDays,
-  isValidTimezone,
-  isWithinGracePeriod,
-  isWithinRetroactiveWindow,
-  calculateStreak,
-} from '../streaks/streak-calculator';
-import { StreakShieldService } from './streak-shield-service';
+
 import { MomentumService } from './momentum-service';
-import { logIgnoredQueryError } from '@/lib/api/route-errors';
+import { StreakShieldService } from './streak-shield-service';
 
 /** Normalize route inputs (Date at UTC midnight, or YYYY-MM-DD string). */
 function toDayStr(date: Date | string): string {
@@ -508,6 +511,7 @@ export class StreakClaimingService {
       total: inventory.available,
       unlimited: inventory.unlimited,
       cap: inventory.cap,
+      shield_rules: shieldRulesDto(inventory.rules),
       last_freeze_reset: null,
       next_freeze_reset: nextMonday.toISOString(),
     };

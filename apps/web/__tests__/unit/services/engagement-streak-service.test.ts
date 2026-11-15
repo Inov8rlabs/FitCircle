@@ -6,10 +6,13 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+
+import { resetRemoteConfigCache } from '@/lib/remote-config/service';
 import { EngagementStreakService } from '@/lib/services/engagement-streak-service';
-import { StreakError } from '@/lib/types/streak';
 import { addDays } from '@/lib/streaks/streak-calculator';
 import { createAdminSupabase } from '@/lib/supabase-admin';
+import { StreakError } from '@/lib/types/streak';
+
 import { makeStreakDb, type FakeSupabase } from '../../helpers/fake-supabase';
 
 vi.mock('@/lib/supabase-admin');
@@ -56,6 +59,7 @@ beforeEach(() => {
   vi.setSystemTime(NOW);
   db = makeStreakDb();
   (createAdminSupabase as any).mockReturnValue(db);
+  resetRemoteConfigCache();
 });
 
 afterEach(() => {
@@ -146,6 +150,27 @@ describe('getEngagementStreak', () => {
     const result = await EngagementStreakService.getEngagementStreak(USER);
     expect(result.freezes_available).toBe(2);
     expect(result.shields_unlimited).toBe(false);
+  });
+
+  it('serves shield_rules (additive) from remote config', async () => {
+    seedUser({ shields: 1, claims: [TODAY] });
+    expect((await EngagementStreakService.getEngagementStreak(USER)).shield_rules).toEqual({
+      earn_interval_days: 7,
+      starter_count: 2,
+      max_balance: 3,
+    });
+    db.seed('remote_config_defaults', [
+      { config_key: 'streak_shield_starter_count', value: 1, updated_by: null, updated_at: '2026-11-13T00:00:00Z' },
+    ]);
+    resetRemoteConfigCache();
+    expect((await EngagementStreakService.getEngagementStreak(USER)).shield_rules?.starter_count).toBe(1);
+  });
+
+  it('a brand-new user (no streak row) gets the live starter balance + rules', async () => {
+    db.seed('profiles', [{ id: USER, subscription_tier: 'free' }]);
+    const result = await EngagementStreakService.getEngagementStreak(USER);
+    expect(result.freezes_available).toBe(2);
+    expect(result.shield_rules).toEqual({ earn_interval_days: 7, starter_count: 2, max_balance: 3 });
   });
 
   it('flags unlimited shields for Pro users', async () => {

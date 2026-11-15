@@ -13,6 +13,7 @@
  */
 
 import { REVIEW_EMAILS, TEST_LAB_DOMAINS } from '@/lib/ads/test-users';
+import { SHIELD_RULES } from '@/lib/streaks/streak-config';
 
 export type RemoteConfigType = 'int' | 'enum' | 'string_list';
 
@@ -160,7 +161,36 @@ export const REMOTE_CONFIG_REGISTRY = {
     options: ['annual', 'monthly', 'none'],
     unit: 'plan',
     description:
-      'Plan row that shows the "Most popular" badge on the paywall. none = no badge. Hidden when that plan is not in the store offering.',
+      'Plan row that shows the "Best value" badge on the paywall. none = no badge. Hidden when that plan is not in the store offering.',
+  },
+  // Streak shield economy (docs/STREAKS-SPEC.md). Served to every app and the web
+  // as `shield_rules` on the streak responses, so no client hard-codes these numbers.
+  streak_shield_earn_interval_days: {
+    type: 'int',
+    default: SHIELD_RULES.EARN_INTERVAL_DAYS,
+    min: 3,
+    max: 60,
+    unit: 'streak days',
+    description:
+      'Free users earn exactly 1 streak shield each time their streak reaches a multiple of this many days (7 = day 7, 14, 21, ...). Pro users have unlimited shields. Never retroactive: only streak growth after the change earns at the new interval.',
+  },
+  streak_shield_starter_count: {
+    type: 'int',
+    default: SHIELD_RULES.STARTER_SHIELDS,
+    min: 0,
+    max: 3,
+    unit: 'shields',
+    description:
+      'Shields a new user starts with, granted once when they complete onboarding (an inventory first created any other way starts with the same number). Never above the max balance. Existing users are not topped up when this changes.',
+  },
+  streak_shield_max_balance: {
+    type: 'int',
+    default: SHIELD_RULES.MAX_SHIELD_BALANCE,
+    min: 1,
+    max: 10,
+    unit: 'shields',
+    description:
+      'Most shields a free user can bank across all shield types (earned, starter, bought with XP). Shields earned while the bank is full are dropped. Lowering it never takes shields away; users above it just stop earning until they are below it.',
   },
 } as const satisfies Record<string, RemoteConfigKeyDef>;
 

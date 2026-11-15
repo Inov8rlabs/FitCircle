@@ -1,5 +1,7 @@
 # Daily Streak Check-In Feature - Product Specification
 
+> **Shield economy superseded (2026-11-13).** The streak-shield / freeze earning, starter and cap rules in this historical document are out of date. Current rules: docs/STREAKS-SPEC.md (1 shield per 7-day streak, no monthly bonus, 2 starter shields at onboarding completion, bank up to 3; all three tunable in Admin Tools).
+
 **Version:** 1.0
 **Last Updated:** 2025-10-31
 **Status:** Ready for Implementation

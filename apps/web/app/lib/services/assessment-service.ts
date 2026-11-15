@@ -1,5 +1,8 @@
-import { createAdminSupabase } from '../supabase-admin';
 import { logIgnoredQueryError } from '@/lib/api/route-errors';
+
+import { createAdminSupabase } from '../supabase-admin';
+
+import { grantStarterShields, isRecentCompletion } from './streak-shield-service';
 
 // ============================================================================
 // TYPES
@@ -404,7 +407,7 @@ export class AssessmentService {
     // Get current profile
     const { data: profile, error: profileError } = await supabaseAdmin
       .from('profiles')
-      .select('total_xp, current_level, onboarding_completed')
+      .select('total_xp, current_level, onboarding_completed, onboarding_completed_at')
       .eq('id', userId)
       .single();
 
@@ -413,8 +416,11 @@ export class AssessmentService {
       throw profileError;
     }
 
-    // If already completed, return early
+    // If already completed, return early. A retry shortly after completion
+    // still (idempotently) settles the starter shields, in case the first
+    // call completed onboarding but failed before granting them.
     if (profile.onboarding_completed) {
+      if (isRecentCompletion(profile.onboarding_completed_at)) await grantStarterShields(userId);
       return { success: true, xpAwarded: 0 };
     }
 
@@ -448,6 +454,9 @@ export class AssessmentService {
         completed_at: new Date().toISOString(),
       })
       .eq('user_id', userId);
+
+    // Starter streak shields (docs/STREAKS-SPEC.md): once, idempotent, never fails completion.
+    await grantStarterShields(userId);
 
     // Finishing onboarding can qualify a referral whose first activity came first.
     import('./referral-service')

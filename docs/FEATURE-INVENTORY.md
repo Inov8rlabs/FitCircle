@@ -89,7 +89,7 @@ The dashboard shows three vitals cards (weight, BMI, water) for a 7-day window, 
 One engagement streak per user, claimed automatically by the server whenever the user logs a meal, completes a check-in, or syncs a workout of at least 10 minutes; no separate "claim" tap is needed.
 
 - Daily check-in: a short flow for mood, energy, optional weight (typed or pulled from Apple Health), notes, and how the previous day went. It can back-fill a past day, ends in a celebration, and feeds the dashboard streak card.
-- Shields (streak freezes): a new user starts with 1; free users earn +1 every 7 consecutive days and +1 extra every 30, banked up to 3. A shield auto-covers a single missed day; Pro users have unlimited shields. Streaks can be paused, and a freeze can be purchased.
+- Shields (streak freezes): a new user gets 2 when they finish onboarding; free users earn exactly 1 per 7-day streak, banked up to 3 (all three numbers are Admin Tools remote config; see docs/STREAKS-SPEC.md). A shield auto-covers a single missed day; Pro users have unlimited shields. Streaks can be paused, and a freeze can be purchased.
 - Milestones with celebrations at 3, 7, 14, 30, 60, 100, 180, 365, 500, 730 and 1,000 days, each with a badge; milestone moments can be shared as cards.
 - Momentum: a flame that levels up with the streak (Spark 0–6 days, Flame 7–13, Blaze 14–29, Inferno 30–99, Eternal 100+), with a momentum screen, milestones and best-momentum tracking.
 - Metric streaks alongside the main one: consecutive days of measurements or photos, and streak history with an activity-history detail view.
@@ -178,7 +178,7 @@ No free trial at launch. Purchases run through StoreKit (iOS), Play Billing (And
 | 5 Fitzy messages per day | Unlimited (200/day ceiling) |
 | 14 days of history and trends | Full history |
 | 2 active circles created | Unlimited |
-| Shields earned weekly, banked up to 3 | Unlimited shields |
+| Shields: 2 to start, 1 earned per 7-day streak, banked up to 3 (remote config) | Unlimited shields |
 | Body-composition logging | Plus photo scan, trends, segmental data, coach |
 | Standard share cards | Custom themes |
 | Banner and interstitial ads (with ATT prompt) | Ad-free |

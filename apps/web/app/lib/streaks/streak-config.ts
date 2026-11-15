@@ -8,11 +8,17 @@
  * (Android: ClaimMilestone.kt, iOS: StreakMilestone/AppConstants).
  *
  * Shield economy (see docs/STREAKS-SPEC.md):
- * - Free users EARN shields by maintaining the streak:
- *     +1 for every 7 consecutive days (weekly), and
- *     +1 extra for every 30 consecutive days (monthly).
- *   Balance is capped at MAX_SHIELD_BALANCE so shields stay scarce and the
- *   streak keeps meaning (Duolingo caps equipped freezes for the same reason).
+ * - Free users EARN exactly +1 shield each time the streak crosses a multiple
+ *   of the earn interval (default 7 days). There is no extra monthly bonus.
+ * - New users get a starter balance (default 2) when they complete onboarding
+ *   (StreakShieldService.grantOnboardingStarter); an inventory created any
+ *   other way starts at the same starter balance.
+ *   Balance is capped at the max balance (default 3) so shields stay scarce and
+ *   the streak keeps meaning (Duolingo caps equipped freezes for the same reason).
+ * - The three numbers are admin-tunable through remote config
+ *   (streak_shield_earn_interval_days / streak_shield_starter_count /
+ *   streak_shield_max_balance); the values below are only the code defaults.
+ *   Always read them through resolveShieldRules() (lib/streaks/shield-rules.ts).
  * - Pro users have unlimited shields: protection never decrements a balance.
  * - Shields auto-apply to a single missed day; with no shields left the
  *   streak breaks and clients surface the Pro paywall.
@@ -53,19 +59,25 @@ export const MILESTONES: StreakMilestoneDef[] = [
 
 /** Shield economy constants. */
 export const SHIELD_RULES = {
-  /** +1 shield each time the streak crosses a multiple of this (weekly). */
-  WEEKLY_EARN_INTERVAL: 7,
-  /** +1 extra shield each time the streak crosses a multiple of this (monthly). */
-  MONTHLY_EARN_INTERVAL: 30,
   /**
+   * Code default: +1 shield each time the streak crosses a multiple of this.
+   * Remote config: streak_shield_earn_interval_days.
+   */
+  EARN_INTERVAL_DAYS: 7,
+  /**
+   * Code default. Remote config: streak_shield_max_balance.
    * Max shields a free user can bank across all shield types. Duolingo's
    * experiments found 2 equipped freezes optimal and a 3rd net-negative
    * (trains skipping); we allow 3 because our earn cadence is slower than
    * gem-purchase. Overflow earns are simply not banked.
    */
   MAX_SHIELD_BALANCE: 3,
-  /** New users start with 1 shield so their first slip doesn't kill the habit. */
-  STARTER_SHIELDS: 1,
+  /**
+   * Code default: shields a new user starts with (granted at onboarding
+   * completion) so their first slips don't kill the habit.
+   * Remote config: streak_shield_starter_count.
+   */
+  STARTER_SHIELDS: 2,
   /** Only auto-protect this many consecutive missed days before the streak breaks (free users). */
   MAX_CONSECUTIVE_AUTO_PROTECTS: 2,
   /**
@@ -103,19 +115,20 @@ export const RETROACTIVE_WINDOW_DAYS = 7;
 export const GRACE_PERIOD_HOURS = 3;
 
 /**
- * Shields earned when a streak moves from oldStreak to newStreak.
- * Awards accumulate across every weekly/monthly boundary crossed, so a
- * retroactive claim that jumps the streak several days still pays out
- * each earned shield exactly once.
+ * Shields earned when a streak moves from oldStreak to newStreak: one per
+ * multiple of `intervalDays` crossed. Pure — callers pass the resolved
+ * interval (resolveShieldRules().earnIntervalDays). Awards accumulate across
+ * every boundary crossed, so a retroactive claim that jumps the streak several
+ * days still pays out each earned shield exactly once. Ignores the balance cap.
  */
-export function shieldsEarnedBetween(oldStreak: number, newStreak: number): number {
+export function shieldsEarnedBetween(
+  oldStreak: number,
+  newStreak: number,
+  intervalDays: number = SHIELD_RULES.EARN_INTERVAL_DAYS
+): number {
   if (newStreak <= oldStreak) return 0;
-  const crossings = (interval: number) =>
-    Math.floor(newStreak / interval) - Math.floor(oldStreak / interval);
-  return (
-    crossings(SHIELD_RULES.WEEKLY_EARN_INTERVAL) +
-    crossings(SHIELD_RULES.MONTHLY_EARN_INTERVAL)
-  );
+  const interval = Number.isInteger(intervalDays) && intervalDays > 0 ? intervalDays : SHIELD_RULES.EARN_INTERVAL_DAYS;
+  return Math.floor(newStreak / interval) - Math.floor(Math.max(0, oldStreak) / interval);
 }
 
 /** The milestone reached at exactly `days`, if any. */

@@ -1,5 +1,7 @@
 import { type NextRequest, NextResponse } from 'next/server';
 
+import { StreakShieldService } from '@/lib/services/streak-shield-service';
+import { DEFAULT_SHIELD_RULES, shieldRulesDto, type ShieldRulesDto } from '@/lib/streaks/shield-rules';
 import { createServerSupabase } from '@/lib/supabase-server';
 
 /**
@@ -36,19 +38,35 @@ export async function GET(request: NextRequest) {
       );
     }
 
+    // Live shield balance + the resolved shield rules (remote config); the
+    // engagement_streaks column is only a legacy mirror.
+    let shields: { streak_freezes_available?: number; shields_unlimited?: boolean; shield_rules: ShieldRulesDto };
+    try {
+      const inventory = await StreakShieldService.getInventory(user.id);
+      shields = {
+        streak_freezes_available: inventory.available,
+        shields_unlimited: inventory.unlimited,
+        shield_rules: shieldRulesDto(inventory.rules),
+      };
+    } catch (e) {
+      console.error('[GET /api/streaks/engagement] shield inventory error (using mirror):', e);
+      shields = { shield_rules: shieldRulesDto(DEFAULT_SHIELD_RULES) };
+    }
+
     // If no streak record exists, return default values
     if (!streak) {
       return NextResponse.json({
         current_streak: 0,
         longest_streak: 0,
-        streak_freezes_available: 1,
+        streak_freezes_available: DEFAULT_SHIELD_RULES.starterCount,
         paused: false,
         pause_end_date: null,
         last_engagement_date: null,
+        ...shields,
       });
     }
 
-    return NextResponse.json(streak);
+    return NextResponse.json({ ...streak, ...shields });
 
   } catch (error) {
     console.error('[GET /api/streaks/engagement] Error:', error);

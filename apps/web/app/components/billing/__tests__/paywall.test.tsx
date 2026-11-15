@@ -98,6 +98,9 @@ describe('/upgrade paywall layout', () => {
     expect(screen.getByTestId('paywall-features')).toHaveTextContent('Unlimited AI logging');
     expect(await screen.findByTestId('plan-annual')).toBeInTheDocument();
     expect(screen.getByTestId('plan-comparison')).toBeInTheDocument();
+    // Free shields row: rule copy from the shield economy defaults, never "Earn with XP".
+    expect(screen.getByTestId('plan-comparison')).toHaveTextContent('Earn 1 every 7 days of streak · bank up to 3');
+    expect(screen.getByTestId('plan-comparison')).not.toHaveTextContent('Earn with XP');
   });
 
   it('tells Pro members they are already Pro instead of showing plans', async () => {

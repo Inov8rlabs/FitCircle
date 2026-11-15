@@ -13,13 +13,14 @@
 
 import { type SupabaseClient } from '@supabase/supabase-js';
 
+import { shieldRulesDto, type ShieldRulesDto } from '../streaks/shield-rules';
+import { localToday, addDays, calculateStreak } from '../streaks/streak-calculator';
 import {
   MILESTONES,
   milestoneCrossed,
   nextMilestone,
   type StreakMilestoneDef,
 } from '../streaks/streak-config';
-import { localToday, addDays, calculateStreak } from '../streaks/streak-calculator';
 
 import { useFreeze as useShieldForToday } from './daily-checkin-service';
 import { StreakClaimingService } from './streak-claiming-service';
@@ -156,9 +157,9 @@ export async function getUserStreak(
 /** Live shield availability for route responses. */
 export async function getShieldAvailability(
   userId: string
-): Promise<{ available: number; unlimited: boolean }> {
+): Promise<{ available: number; unlimited: boolean; shield_rules: ShieldRulesDto }> {
   const inventory = await StreakShieldService.getInventory(userId);
-  return { available: inventory.available, unlimited: inventory.unlimited };
+  return { available: inventory.available, unlimited: inventory.unlimited, shield_rules: shieldRulesDto(inventory.rules) };
 }
 
 /**

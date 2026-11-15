@@ -1,5 +1,7 @@
 # Multi-Tier Streak System - Integration Guide
 
+> **Shield economy superseded (2026-11-13).** The streak-shield / freeze earning, starter and cap rules in this historical document are out of date. Current rules: docs/STREAKS-SPEC.md (1 shield per 7-day streak, no monthly bonus, 2 starter shields at onboarding completion, bank up to 3; all three tunable in Admin Tools).
+
 ## Overview
 
 This guide documents how to integrate the Multi-Tier Streak System into existing FitCircle services.

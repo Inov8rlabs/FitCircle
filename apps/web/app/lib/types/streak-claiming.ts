@@ -1,3 +1,5 @@
+import type { ShieldRulesDto } from '../streaks/shield-rules';
+
 // ============================================================================
 // Streak Claiming System Type Definitions
 // ============================================================================
@@ -99,6 +101,11 @@ export interface ShieldStatus {
   unlimited: boolean;
   /** Max shields a free user can bank. */
   cap: number;
+  /**
+   * Additional field: the user's resolved shield economy (remote config). `cap`
+   * above always equals shield_rules.max_balance.
+   */
+  shield_rules?: ShieldRulesDto;
   /** @deprecated weekly freeze resets no longer exist; always null. */
   last_freeze_reset: string | null;
   /** @deprecated weekly freeze resets no longer exist; always null. */

@@ -1,6 +1,8 @@
-import type { IconKey } from '../design/icons';
-import { createAdminSupabase } from '../supabase-admin';
 import { logIgnoredQueryError } from '@/lib/api/route-errors';
+
+import type { IconKey } from '../design/icons';
+import { SHIELD_RULES } from '../streaks/streak-config';
+import { createAdminSupabase } from '../supabase-admin';
 
 // ============================================================================
 // TYPES
@@ -494,7 +496,7 @@ export class MomentumService {
           momentum_flame_level: 1,
           grace_day_used_this_week: false,
           grace_day_week_start: this.formatDate(this.getMondayOfWeek(new Date())),
-          streak_freezes_available: 1,
+          streak_freezes_available: SHIELD_RULES.STARTER_SHIELDS, // legacy mirror seed; StreakShieldService owns the real balance
           streak_freezes_used_this_week: 0,
           auto_freeze_reset_date: this.formatDate(
             new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)

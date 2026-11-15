@@ -1,3 +1,6 @@
+import type { ShieldRulesDto } from '../streaks/shield-rules';
+import { SHIELD_RULES } from '../streaks/streak-config';
+
 // ============================================================================
 // Multi-Tier Streak System Type Definitions
 // ============================================================================
@@ -103,6 +106,11 @@ export interface EngagementStreakResponse {
   shield_price_xp?: number | null;
   /** Additional field: spendable XP, null while the spent ledger is unavailable. */
   xp_balance?: number | null;
+  /**
+   * Additional field: the user's resolved shield economy (remote config).
+   * Clients render rule copy and caps from this, never from constants.
+   */
+  shield_rules?: ShieldRulesDto;
 }
 
 /** One day of a metric's 30-day trend. */
@@ -199,10 +207,11 @@ export interface MetricFrequencyConfig {
 // ============================================================================
 
 // Engagement Streak Constants
-export const MAX_STREAK_FREEZES = 5;
-export const DEFAULT_STREAK_FREEZES = 1;
-export const FREEZE_RESET_INTERVAL_DAYS = 7;
-export const FREEZE_EARN_STREAK_DAYS = 7;
+// Shield (freeze) economy numbers live in lib/streaks/streak-config.ts
+// (code defaults) + remote config (lib/streaks/shield-rules.ts). This is only
+// the seed for the legacy engagement_streaks.streak_freezes_available mirror,
+// which StreakShieldService overwrites with the real balance.
+export const DEFAULT_STREAK_FREEZES = SHIELD_RULES.STARTER_SHIELDS;
 export const MAX_PAUSE_DURATION_DAYS = 90;
 
 // Metric Frequency Configurations

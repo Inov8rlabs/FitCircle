@@ -240,6 +240,9 @@ Adding a key needs a deploy. Changing a value does not.
 |---|---|---|---|---|
 | `free_food_ai_analyses_total` | int | 5 | 0–1000 | analyses (lifetime) |
 | `free_fitzy_messages_per_day` | int | 0 | 0–200 | messages/day |
+| `streak_shield_earn_interval_days` | int | 7 | 3–60 | streak days (docs/STREAKS-SPEC.md) |
+| `streak_shield_starter_count` | int | 2 | 0–3 | shields (docs/STREAKS-SPEC.md) |
+| `streak_shield_max_balance` | int | 3 | 1–10 | shields (docs/STREAKS-SPEC.md) |
 
 Premium abuse ceilings stay in code (`lib/config/tier-limits.ts`).
 

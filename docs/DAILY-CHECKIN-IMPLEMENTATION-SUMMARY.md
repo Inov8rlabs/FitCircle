@@ -1,5 +1,7 @@
 # Daily Streak Check-In Backend Implementation Summary
 
+> **Shield economy superseded (2026-11-13).** The streak-shield / freeze earning, starter and cap rules in this historical document are out of date. Current rules: docs/STREAKS-SPEC.md (1 shield per 7-day streak, no monthly bonus, 2 starter shields at onboarding completion, bank up to 3; all three tunable in Admin Tools).
+
 ## Overview
 
 Implemented the backend API for the Daily Streak Check-In feature as specified in `/docs/DAILY-STREAK-CHECKIN-SPEC.md`. This implementation includes complete business logic for streak tracking, XP/points rewards, freeze mechanics, and milestone achievements.

@@ -13,6 +13,7 @@ import {
 } from '../types/onboarding';
 
 import { PersonaService } from './persona-service';
+import { grantStarterShields, isRecentCompletion } from './streak-shield-service';
 
 // ============================================================================
 // ONBOARDING SERVICE
@@ -350,13 +351,17 @@ export class OnboardingService {
     // Get user profile
     const { data: profile, error: profileError } = await supabaseAdmin
       .from('profiles')
-      .select('id, display_name, persona, total_xp, current_level')
+      .select('id, display_name, persona, total_xp, current_level, onboarding_completed, onboarding_completed_at')
       .eq('id', userId)
       .single();
 
     if (profileError || !profile) {
       throw new Error('User not found');
     }
+    // Starter shields only for a completion happening now (or a retry of one):
+    // a user who finished onboarding long ago never gets a retroactive grant.
+    const grantsStarter =
+      profile.onboarding_completed !== true || isRecentCompletion(profile.onboarding_completed_at);
 
     // Award XP (250 for completing onboarding)
     const xpAwarded = 250;
@@ -404,6 +409,9 @@ export class OnboardingService {
         completed_at: new Date().toISOString(),
       })
       .eq('user_id', userId);
+
+    // Starter streak shields (docs/STREAKS-SPEC.md): once, idempotent, never fails completion.
+    if (grantsStarter) await grantStarterShields(userId);
 
     // Finishing onboarding can qualify a referral whose first activity came first.
     import('./referral-service')

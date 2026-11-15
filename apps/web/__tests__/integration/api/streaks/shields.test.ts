@@ -3,14 +3,16 @@
  * (This file previously contained only `expect(true)` placeholders.)
  */
 
-import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { NextRequest } from 'next/server';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 
-import { GET as getShields } from '@/api/streaks/shields/route';
 import { POST as activateFreeze } from '@/api/streaks/freeze/activate/route';
-import { createAdminSupabase } from '@/lib/supabase-admin';
-import { SHIELD_RULES } from '@/lib/streaks/streak-config';
+import { GET as getShields } from '@/api/streaks/shields/route';
+import { resetRemoteConfigCache } from '@/lib/remote-config/service';
 import { addDays, localToday } from '@/lib/streaks/streak-calculator';
+import { SHIELD_RULES } from '@/lib/streaks/streak-config';
+import { createAdminSupabase } from '@/lib/supabase-admin';
+
 import { makeStreakDb, type FakeSupabase } from '../../../helpers/fake-supabase';
 
 vi.mock('@/lib/supabase-admin');
@@ -59,6 +61,7 @@ beforeEach(() => {
   db = makeStreakDb();
   authedUser = { id: USER };
   (createAdminSupabase as any).mockReturnValue(db);
+  resetRemoteConfigCache();
 });
 
 describe('GET /api/streaks/shields', () => {
@@ -79,6 +82,23 @@ describe('GET /api/streaks/shields', () => {
     expect(body.cap).toBe(SHIELD_RULES.MAX_SHIELD_BALANCE);
     // Legacy decoders expect a date here — kept populated for compat.
     expect(typeof body.next_freeze_reset).toBe('string');
+  });
+
+  it('serves the resolved shield_rules (code defaults 7 / 2 / 3)', async () => {
+    seedUser({ shields: 1 });
+    const body = await (await getShields(jsonRequest('/api/streaks/shields'))).json();
+    expect(body.shield_rules).toEqual({ earn_interval_days: 7, starter_count: 2, max_balance: 3 });
+  });
+
+  it('shield_rules and cap follow Admin Tools (remote config)', async () => {
+    seedUser({ shields: 1 });
+    db.seed('remote_config_defaults', [
+      { config_key: 'streak_shield_earn_interval_days', value: 5, updated_by: null, updated_at: '2026-11-13T00:00:00Z' },
+      { config_key: 'streak_shield_max_balance', value: 4, updated_by: null, updated_at: '2026-11-13T00:00:00Z' },
+    ]);
+    const body = await (await getShields(jsonRequest('/api/streaks/shields'))).json();
+    expect(body.shield_rules).toEqual({ earn_interval_days: 5, starter_count: 2, max_balance: 4 });
+    expect(body.cap).toBe(4);
   });
 
   it('reports unlimited for Pro users', async () => {

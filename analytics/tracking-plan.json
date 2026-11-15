@@ -1,6 +1,6 @@
 {
   "$schema": "./tracking-plan.schema.json",
-  "version": 34,
+  "version": 35,
   "updated": "2026-11-13",
   "conventions": {
     "eventNames": "Title Case, '<Object> <Past-tense verb>' (e.g. 'Meal Logged'). Names are frozen once shipped: rename in the analytics tool, never in code.",
@@ -198,6 +198,12 @@
       "fitzy",
       "referral_claim",
       "entitlement_sync"
+    ],
+    "shield_grant_reason": [
+      "onboarding_starter",
+      "lazy_first_touch",
+      "streak_earned",
+      "purchased"
     ],
     "security_result": [
       "pass",
@@ -1595,6 +1601,28 @@
       ],
       "description": "A shield protected the streak (observed by the client).",
       "properties": []
+    },
+    {
+      "name": "Streak Shield Granted",
+      "category": "streaks",
+      "platforms": [
+        "server"
+      ],
+      "description": "Server: streak shields were added to a free user's bank (docs/STREAKS-SPEC.md). Sent server-side via the Amplitude HTTP API with the user's id, only when count > 0 (a capped earn or an already-granted starter sends nothing). reason: onboarding_starter = starter balance at onboarding completion (a top-up can add fewer than streak_shield_starter_count); lazy_first_touch = starter balance seeded when the shield inventory was first created another way (e.g. web onboarding); streak_earned = earned by the streak crossing a multiple of streak_shield_earn_interval_days; purchased = bought with XP or a verified purchase.",
+      "properties": [
+        {
+          "name": "reason",
+          "type": "enum",
+          "enum": "shield_grant_reason",
+          "required": true
+        },
+        {
+          "name": "count",
+          "type": "int",
+          "required": true,
+          "description": "Shields actually banked by this grant (after the cap)."
+        }
+      ]
     },
     {
       "name": "Review Prompt Requested",

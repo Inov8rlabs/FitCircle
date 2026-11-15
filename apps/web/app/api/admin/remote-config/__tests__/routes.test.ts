@@ -108,6 +108,9 @@ describe('GET list', () => {
       // Paywall default plan (docs/PAYWALL_DEFAULT_PLAN.md).
       expect.objectContaining({ key: 'paywall_default_plan', type: 'enum', options: ['annual', 'monthly'], codeDefault: 'annual', default: null, rules: [] }),
       expect.objectContaining({ key: 'paywall_badge_plan', type: 'enum', options: ['annual', 'monthly', 'none'], codeDefault: 'annual', default: null, rules: [] }),
+      expect.objectContaining({ key: 'streak_shield_earn_interval_days', type: 'int', min: 3, max: 60, codeDefault: 7, default: null, rules: [] }),
+      expect.objectContaining({ key: 'streak_shield_starter_count', type: 'int', min: 0, max: 3, codeDefault: 2, default: null, rules: [] }),
+      expect.objectContaining({ key: 'streak_shield_max_balance', type: 'int', min: 1, max: 10, codeDefault: 3, default: null, rules: [] }),
     ]);
   });
 });
@@ -241,6 +244,9 @@ describe('preview + estimate', () => {
       quiet_hours_deferral: { value: 'on', source: 'code' },
       paywall_default_plan: { value: 'annual', source: 'code' },
       paywall_badge_plan: { value: 'annual', source: 'code' },
+      streak_shield_earn_interval_days: { value: 7, source: 'code' },
+      streak_shield_starter_count: { value: 2, source: 'code' },
+      streak_shield_max_balance: { value: 3, source: 'code' },
     });
     expect(body.data.context).toMatchObject({ platform: 'ios', country: 'US', channel: 'apple_ads', signupAt: '2026-11-01T00:00:00Z' });
     expect((await PREVIEW(req('/api/admin/remote-config/preview', { method: 'POST', body: { userId: 'x' } }))).status).toBe(400);

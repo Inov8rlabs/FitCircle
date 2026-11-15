@@ -44,6 +44,7 @@ export async function GET(request: NextRequest) {
       freeze_available: shields.unlimited || shields.available > 0,
       shields_available: shields.available,
       shields_unlimited: shields.unlimited,
+      shield_rules: shields.shield_rules,
       next_milestone: nextMilestone,
     });
   } catch (error: any) {

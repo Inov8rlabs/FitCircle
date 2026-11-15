@@ -40,9 +40,23 @@ describe('shieldsEarnedBetween', () => {
     expect(shieldsEarnedBetween(20, 21)).toBe(1);
   });
 
-  it('earns +1 extra at each 30-day boundary', () => {
-    expect(shieldsEarnedBetween(29, 30)).toBe(1); // 30 is not a multiple of 7
-    expect(shieldsEarnedBetween(209, 210)).toBe(2); // 210 = 7×30 and 30×7 → both
+  it('pays no monthly bonus: 30-day multiples earn nothing extra', () => {
+    expect(shieldsEarnedBetween(29, 30)).toBe(0); // 30 is not a multiple of 7
+    expect(shieldsEarnedBetween(59, 60)).toBe(0);
+    expect(shieldsEarnedBetween(209, 210)).toBe(1); // 210 = 7×30 → just the one 7-day shield
+  });
+
+  it('uses the interval it is given (remote config)', () => {
+    expect(shieldsEarnedBetween(9, 10, 10)).toBe(1);
+    expect(shieldsEarnedBetween(6, 7, 10)).toBe(0);
+    expect(shieldsEarnedBetween(0, 31, 10)).toBe(3);
+    expect(shieldsEarnedBetween(0, 60, 3)).toBe(20);
+  });
+
+  it('falls back to the code default for a nonsensical interval', () => {
+    expect(shieldsEarnedBetween(6, 7, 0)).toBe(1);
+    expect(shieldsEarnedBetween(6, 7, -3)).toBe(1);
+    expect(shieldsEarnedBetween(6, 7, 2.5)).toBe(1);
   });
 
   it('earns nothing between boundaries', () => {
@@ -51,8 +65,8 @@ describe('shieldsEarnedBetween', () => {
   });
 
   it('accumulates across multiple crossed boundaries (retroactive catch-up)', () => {
-    // 0 → 31: crosses 7,14,21,28 (4 weekly) + 30 (1 monthly)
-    expect(shieldsEarnedBetween(0, 31)).toBe(5);
+    // 0 → 31: crosses 7, 14, 21, 28 → exactly 4 (no 30-day bonus)
+    expect(shieldsEarnedBetween(0, 31)).toBe(4);
   });
 
   it('never awards when the streak shrinks or is equal', () => {
@@ -93,10 +107,10 @@ describe('milestone helpers', () => {
 
 describe('SHIELD_RULES', () => {
   it('keeps the economy sane', () => {
-    expect(SHIELD_RULES.WEEKLY_EARN_INTERVAL).toBe(7);
-    expect(SHIELD_RULES.MONTHLY_EARN_INTERVAL).toBe(30);
-    expect(SHIELD_RULES.MAX_SHIELD_BALANCE).toBeGreaterThanOrEqual(2);
-    expect(SHIELD_RULES.MAX_SHIELD_BALANCE).toBeLessThanOrEqual(5);
+    expect(SHIELD_RULES.EARN_INTERVAL_DAYS).toBe(7);
+    expect(SHIELD_RULES.STARTER_SHIELDS).toBe(2);
+    expect(SHIELD_RULES.MAX_SHIELD_BALANCE).toBe(3);
+    expect(SHIELD_RULES.STARTER_SHIELDS).toBeLessThanOrEqual(SHIELD_RULES.MAX_SHIELD_BALANCE);
     expect(SHIELD_RULES.MAX_CONSECUTIVE_AUTO_PROTECTS).toBeGreaterThanOrEqual(1);
   });
 });

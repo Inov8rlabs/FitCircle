@@ -10,6 +10,7 @@ import { rememberCheckout, webProductId } from '@/lib/analytics/checkout';
 import { PRO_PRICES_USD } from '@/lib/config/pricing';
 import { TIER_LIMITS } from '@/lib/config/tier-limits';
 import { trialDayAdjective } from '@/lib/config/trial';
+import { DEFAULT_SHIELD_RULES_DTO, shieldPlanLine, type ShieldRulesLike } from '@/lib/streaks/shield-copy';
 
 const PRICE_MONTHLY = PRO_PRICES_USD.monthly;
 const PRICE_ANNUAL = PRO_PRICES_USD.annual;
@@ -223,7 +224,13 @@ export function PricingCards({ source = 'pricing_page', trialDays = 0 }: { sourc
 export function PlanComparison({
   foodAiTotal = TIER_LIMITS.free.foodAiAnalysesTotal,
   fitzyPerDay = TIER_LIMITS.free.fitzyMessagesPerDay,
-}: { foodAiTotal?: number | null; fitzyPerDay?: number | null } = {}) {
+  shieldRules,
+}: {
+  foodAiTotal?: number | null;
+  fitzyPerDay?: number | null;
+  /** Server `shield_rules` when the page has them; otherwise the code defaults. */
+  shieldRules?: ShieldRulesLike | null;
+} = {}) {
   const food = foodAiTotal ?? TIER_LIMITS.free.foodAiAnalysesTotal;
   const fitzy = fitzyPerDay ?? TIER_LIMITS.free.fitzyMessagesPerDay;
   const rows: Array<[string, string, string]> = [
@@ -232,7 +239,7 @@ export function PlanComparison({
     ['Body composition', 'Logging', 'Photo scan, trends, coach'],
     ['History & analytics', 'Last 14 days', 'Full history'],
     ['Circles', 'Join unlimited · create 2', 'Create unlimited'],
-    ['Streak shields', 'Earn with XP', 'Unlimited'],
+    ['Streak shields', shieldPlanLine(shieldRules ?? DEFAULT_SHIELD_RULES_DTO), 'Unlimited'],
     ['Ads', 'Shown', 'Ad-free'],
     ['Style', '—', 'Pro badge + custom share themes'],
   ];
