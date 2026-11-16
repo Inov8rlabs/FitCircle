@@ -96,5 +96,6 @@ describe('customer id casing', () => {
     const s = await SubscriptionService.fetchRevenueCatState('abc-1');
     expect(s.active).toBe(true);
     expect(s.productId).toBe('com.inov8rlabs.fitcircle.pro.annual');
+    expect(s.sandbox).toBe(true);
   });
 });

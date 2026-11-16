@@ -64,6 +64,8 @@ export interface RevenueCatState {
   willRenew: boolean;
   platform: 'app_store' | 'play_store' | 'stripe' | 'promotional' | null;
   productId: string | null;
+  /** The subscription giving access is a store sandbox (test) purchase. */
+  sandbox?: boolean;
 }
 
 function mapStore(store: string | undefined): string | null {
@@ -427,6 +429,10 @@ export class SubscriptionService {
    */
   private static async applyTrialBookkeeping(userId: string, event: RevenueCatEvent): Promise<void> {
     if (event.type !== 'INITIAL_PURCHASE' && event.type !== 'RENEWAL') return;
+    // Sandbox (test) purchases never count as trials: they still grant access
+    // (App Review buys in sandbox against production) but must not inflate
+    // trial counts or use up the account's trial eligibility.
+    if (event.environment === 'SANDBOX') return;
     try {
       const supabase = createAdminSupabase();
       let prior: PriorTrial | null = null;
@@ -522,7 +528,7 @@ export class SubscriptionService {
       .eq('id', userId);
 
     // Webhook dropped during a trial: backfill the trial dates (best-effort, migration 112).
-    if (state.trialing && state.expiresAt) {
+    if (state.trialing && state.expiresAt && !state.sandbox) {
       try {
         const { data, error } = await supabase.from('profiles').select('trial_started_at, trial_ends_at').eq('id', userId).maybeSingle();
         if (!error && data && (!data.trial_started_at || data.trial_ends_at !== state.expiresAt)) {
@@ -609,6 +615,7 @@ export class SubscriptionService {
       willRenew: ['will_renew', 'will_change_product', 'has_already_renewed'].includes(sub.auto_renewal_status),
       platform: mapStore(String(sub.store ?? '').toUpperCase()) as RevenueCatState['platform'],
       productId: storeIdOf(sub.product_id),
+      sandbox: String(sub.environment ?? '').toLowerCase() === 'sandbox',
     };
   }
 

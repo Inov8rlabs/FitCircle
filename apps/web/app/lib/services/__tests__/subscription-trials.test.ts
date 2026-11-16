@@ -72,6 +72,16 @@ describe('trialPatchFor (pure)', () => {
 });
 
 describe('processRevenueCatEvent writes the trial columns', () => {
+  it('a sandbox (test) trial grants access but writes no trial dates', async () => {
+    await SubscriptionService.processRevenueCatEvent(ev({ period_type: 'TRIAL', price: 0, environment: 'SANDBOX' }));
+    expect(profile().subscription_tier).toBe('premium');
+    expect(profile().trial_started_at).toBeNull();
+    expect(profile().trial_ends_at).toBeNull();
+    await SubscriptionService.processRevenueCatEvent(ev({ type: 'RENEWAL', environment: 'SANDBOX', is_trial_conversion: true, event_timestamp_ms: T0 + 3 * DAY + 5000 }));
+    expect(profile().trial_converted_at).toBeNull();
+  });
+
+
   it('trial start → trialing + trial dates; conversion → active + trial_converted_at', async () => {
     await SubscriptionService.processRevenueCatEvent(ev({ period_type: 'TRIAL', price: 0 }));
     expect(profile()).toMatchObject({
