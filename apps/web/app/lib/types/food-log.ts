@@ -26,6 +26,13 @@ export interface NutritionData {
 }
 
 export interface FoodLogEntry {
+  /** Migration 139 (ENGAGEMENT_115_SPEC §14.6): 'draft' = a Draft meal that counts nowhere until confirmed. */
+  entry_status?: 'confirmed' | 'draft';
+  draft_created_at?: string | null;
+  draft_method?: string | null;
+  draft_analysis_id?: string | null;
+  /** Migration 138: explicit per-meal circle list (null = legacy rule: every circle with tier 'full'). */
+  share_circle_ids?: string[] | null;
   id: string;
   user_id: string;
   entry_type: EntryType;
@@ -149,6 +156,17 @@ export interface CreateFoodLogEntryInput extends NutritionColumnsInput {
   visibility?: Visibility;
   /** Explicit "Share with my circles" choice (docs/FOOD_ENTRY_PRIVACY_SPEC.md). */
   share_with_circles?: boolean;
+  /**
+   * 1.1.5 (ENGAGEMENT_115_SPEC §4.4): the circles to share with. Honoured only with
+   * share_with_circles:true; absent → the legacy rule (every circle with tier 'full').
+   */
+  share_circle_ids?: string[];
+  /**
+   * 1.1.5: every circle row the user SAW on the share card. With share_circle_ids, the server
+   * remembers each choice (meal_share_circle_prefs), like POST /share {remember:true}. Absent =
+   * the defaults are not touched. Handled by the routes, not by FoodLogService.
+   */
+  share_seen_circle_ids?: string[];
   tags?: string[];
 }
 
@@ -167,6 +185,17 @@ export interface UpdateFoodLogEntryInput extends NutritionColumnsInput {
   visibility?: Visibility;
   /** Explicit "Share with my circles" choice (docs/FOOD_ENTRY_PRIVACY_SPEC.md). */
   share_with_circles?: boolean;
+  /**
+   * 1.1.5 (ENGAGEMENT_115_SPEC §4.4): the circles to share with. Honoured only with
+   * share_with_circles:true; absent → the legacy rule (every circle with tier 'full').
+   */
+  share_circle_ids?: string[];
+  /**
+   * 1.1.5: every circle row the user SAW on the share card. With share_circle_ids, the server
+   * remembers each choice (meal_share_circle_prefs), like POST /share {remember:true}. Absent =
+   * the defaults are not touched. Handled by the routes, not by FoodLogService.
+   */
+  share_seen_circle_ids?: string[];
   tags?: string[];
 }
 

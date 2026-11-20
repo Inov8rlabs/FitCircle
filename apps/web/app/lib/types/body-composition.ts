@@ -6,6 +6,8 @@
 
 import { z } from 'zod';
 
+import type { FitzyAllowance, FoodScanAllowance } from '../usage/allowance';
+
 // ============================================================================
 // Sources & feature keys
 // ============================================================================
@@ -112,6 +114,13 @@ export interface EntitlementsResponse {
   proBadge?: { marker: boolean; offerId: string | null };
   /** Earliest paid or trial start on record (ISO 8601), or null. */
   memberSince?: string | null;
+  /**
+   * 1.1.5 (docs/ENGAGEMENT_115_SPEC.md §2.3, §3.3): free allowances, computed for every tier
+   * (Pro → mode 'unlimited'). Older clients ignore it.
+   */
+  allowances?: { foodScans: FoodScanAllowance; fitzy: FitzyAllowance };
+  /** 1.1.5 user-scoped client switches (§1.3), from remote config meal_share_prompt / streak_save_offer. */
+  clientConfig?: { mealSharePrompt: boolean; streakSaveOffer: boolean };
 }
 
 // ============================================================================

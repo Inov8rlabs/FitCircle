@@ -66,6 +66,17 @@ describe('MealReminderService.run', () => {
     expect(send).toHaveBeenCalledWith(NY, 'meal_reminder_lunch', expect.objectContaining({ mealType: 'lunch', dedupeKey: 'meal:lunch:2026-10-26', localDate: '2026-10-26', currentMomentum: 0 }));
   });
 
+  it('1.1.5: the slot a D+1 dont_miss_twice push named today is skipped; other slots are unchanged', async () => {
+    db.rows('notification_log').push({ user_id: NY, notification_type: 'dont_miss_twice', data: { mealType: 'lunch', localDate: '2026-10-26' }, suppressed: false, sent_at: '2026-10-26T13:00:00Z' });
+    const r = await MealReminderService.run({ now: NOW });
+    expect(r.sent).toBe(0);
+    expect(r.skipped.dont_miss_twice_slot).toBe(1);
+    // Yesterday's D+1 push for lunch does not block today's lunch reminder.
+    db.rows('notification_log').length = 0;
+    db.rows('notification_log').push({ user_id: NY, notification_type: 'dont_miss_twice', data: { mealType: 'breakfast', localDate: '2026-10-26' }, suppressed: false, sent_at: '2026-10-26T13:00:00Z' });
+    expect((await MealReminderService.run({ now: NOW })).sent).toBe(1);
+  });
+
   it('a second run in the same window does not resend (dedupe key already attempted)', async () => {
     await MealReminderService.run({ now: NOW });
     const r = await MealReminderService.run({ now: new Date(NOW.getTime() + 15 * 60_000) });

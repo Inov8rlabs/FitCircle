@@ -40,6 +40,7 @@ import type {
   ExerciseTrackingType,
 } from '../types/exercise';
 import { logIgnoredQueryError } from '@/lib/api/route-errors';
+import { confirmedOnly } from '@/lib/meal-drafts/config';
 
 // MET values for calorie estimation (MET × weight_kg × duration_hours)
 const MET_VALUES: Record<string, number> = {
@@ -1634,9 +1635,8 @@ export class ExerciseService {
       const exerciseCount = (exercises || []).length;
 
       // Food calories consumed (from food_log_entries)
-      const { data: foodLogs, error: foodError } = await supabase
-        .from('food_log_entries')
-        .select('nutrition_data')
+      const { data: foodLogs, error: foodError } = await confirmedOnly(supabase.from('food_log_entries')
+        .select('nutrition_data'))
         .eq('user_id', userId)
         .eq('entry_date', date)
         .is('deleted_at', null);

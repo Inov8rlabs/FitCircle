@@ -17,11 +17,13 @@ import { createAdminSupabase } from '../supabase-admin';
 
 import { ChatNotificationService, type SystemPushIntent } from './chat-notification-service';
 import { CircleChatService } from './circle-chat-service';
-import { isEntryPrivate, isRecentMeal, isShareableType, scrubbedMealPayload } from './food-entry-privacy';
+import { explicitShareList, isEntryPrivate, isRecentMeal, isShareableType, mealVisibleInCircle, scrubbedMealPayload } from './food-entry-privacy';
 
 export { scrubbedMealPayload };
 import { FoodPrivacyService } from './food-privacy-service';
+
 import { logIgnoredQueryError } from '@/lib/api/route-errors';
+import { isDraftEntry } from '@/lib/meal-drafts/config';
 
 /** What the meal card renders. Snake_case like every other system payload. */
 export interface MealPostPayload {
@@ -37,7 +39,13 @@ export interface MealPostPayload {
   image_id: string | null;
   /** App-relative proxy path the client resolves against its API base. */
   photo_path: string | null;
+  /** 1.1.5 additive (ENGAGEMENT_115_SPEC §4.4): primary image size, so clients size the thumbnail before it loads. */
+  image_width: number | null;
+  image_height: number | null;
 }
+
+type MealPost = { id: string; fitcircle_id?: string | null; system_payload: Record<string, unknown> | null };
+type ImageDims = { width: number | null; height: number | null };
 
 /**
  * The slice of a food_log_entries row this service reads. Deliberately loose
@@ -61,6 +69,8 @@ export interface EntryLike {
   fat_g?: number | null;
   has_images?: boolean | null;
   deleted_at?: string | null;
+  /** Migration 138: explicit per-meal circle list; null / absent = legacy rule (tier 'full'). */
+  share_circle_ids?: string[] | null;
 }
 
 // food_log_entries.entry_type is 'food' | 'water' | 'supplement' (the meal slot
@@ -78,6 +88,8 @@ export class CircleMealPostService {
   /** Only meals/snacks that the owner shares (not water/supplements, not private, not deleted). */
   static isShareableMeal(entry: EntryLike): boolean {
     if (!entry || entry.deleted_at) return false;
+    // A Draft meal (ENGAGEMENT_115_SPEC §14.6) is never shared, whatever its privacy says.
+    if (isDraftEntry(entry as { entry_status?: unknown })) return false;
     if (!isShareableType(entry.entry_type)) return false;
     // Fail closed: a missing is_private is the column default (private).
     return !isEntryPrivate(entry);
@@ -136,9 +148,10 @@ export class CircleMealPostService {
     return imageId ? `/api/mobile/food-log/images/${imageId}?size=medium` : null;
   }
 
-  static buildPayload(entry: EntryLike, imageId: string | null): MealPostPayload {
+  static buildPayload(entry: EntryLike, imageId: string | null, dims: ImageDims = { width: null, height: null }): MealPostPayload {
     const num = (v: unknown): number | null =>
       typeof v === 'number' && Number.isFinite(v) ? Math.round(v) : null;
+    const dim = (v: unknown): number | null => (typeof v === 'number' && Number.isInteger(v) && v > 0 ? v : null);
     return {
       entry_id: entry.id,
       title: this.titleOf(entry) || this.slotTitle(entry.meal_type),
@@ -150,6 +163,8 @@ export class CircleMealPostService {
       fat_g: num(entry.fat_g),
       image_id: imageId,
       photo_path: this.photoPath(imageId),
+      image_width: imageId ? dim(dims.width) : null,
+      image_height: imageId ? dim(dims.height) : null,
     };
   }
 
@@ -167,55 +182,81 @@ export class CircleMealPostService {
     try {
       if (!this.isShareableMeal(entry)) return;
       const notify = opts.notify ?? isRecentMeal(entry.logged_at);
-      const circleIds = await this.circlesSharingFull(entry.user_id);
+      const circleIds = await this.targetCircles(entry);
       if (circleIds.length === 0) return;
-
-      const [actorName, imageId] = await Promise.all([
-        this.actorName(entry.user_id),
-        entry.has_images ? this.primaryImageId(entry.id) : Promise.resolve(null),
-      ]);
-      const body = this.renderBody(actorName, entry);
-      const payload = this.buildPayload(entry, imageId);
-
-      // One card per circle, ONE push per recipient for the meal however many
-      // circles they share with the poster (docs/PUSH_NOTIFICATIONS.md §2).
-      const intents = await Promise.all(
-        circleIds.map(async (circleId): Promise<SystemPushIntent | null> => {
-          try {
-            const post = await CircleChatService.emitSystemPost({
-              fitcircleId: circleId,
-              eventType: 'meal_logged',
-              priority: 'p1',
-              renderHint: 'meal_card',
-              body,
-              refId: entry.id,
-              actorUserIds: [entry.user_id],
-              systemPayload: payload as unknown as Record<string, unknown>,
-            });
-            return {
-              kind: 'member_post',
-              eventKey: `meal_logged:${entry.user_id}:${entry.id}`,
-              circleId,
-              circleName: await this.circleName(circleId),
-              // Same push as a typed message: excludes the poster, honours mutes.
-              body: body.replace(`${actorName} `, ''),
-              eventType: 'meal_logged',
-              actorUserIds: [entry.user_id],
-              actorName,
-              senderUserId: entry.user_id,
-              messageId: post.id,
-            };
-          } catch (err) {
-            console.error(`[CircleMealPostService.onMealLogged] circle ${circleId}:`, err);
-            return null;
-          }
-        })
-      );
-      const posted = intents.filter((i): i is SystemPushIntent => i !== null);
-      if (notify && posted.length > 0) void ChatNotificationService.notifySystemEvent(posted).catch(() => {});
+      await this.postToCircles(entry, circleIds, notify);
     } catch (err) {
       console.error('[CircleMealPostService.onMealLogged] swallowed:', err);
     }
+  }
+
+  /**
+   * Make the live cards match the entry's target circles (ENGAGEMENT_115_SPEC §4.4): retract
+   * cards in circles no longer targeted FIRST (throws, so the caller can fail the request and
+   * the client retry), then post to targeted circles without a live card. Push only for a meal
+   * eaten in the last 2 hours that was never posted before (L10 / L11, unchanged).
+   */
+  static async syncMealCircles(entry: EntryLike): Promise<{ posted: number; retracted: number; targetCircleIds: string[] }> {
+    const posts = await this.postsFor(entry.id);
+    const targets = this.isShareableMeal(entry) ? await this.targetCircles(entry) : [];
+    const targetSet = new Set(targets);
+    const stale = posts.filter((p) => !p.fitcircle_id || !targetSet.has(p.fitcircle_id));
+    if (stale.length > 0) await this.tombstone(stale.map((p) => p.id), stale);
+    const live = new Set(posts.filter((p) => p.fitcircle_id && targetSet.has(p.fitcircle_id)).map((p) => p.fitcircle_id as string));
+    const missing = targets.filter((id) => !live.has(id));
+    let posted = 0;
+    if (missing.length > 0) {
+      const notify = isRecentMeal(entry.logged_at) && !(await this.everPosted(entry.id));
+      posted = await this.postToCircles(entry, missing, notify);
+    }
+    return { posted, retracted: stale.length, targetCircleIds: targets };
+  }
+
+  /** One card per circle, ONE push per recipient however many circles they share with the poster. */
+  private static async postToCircles(entry: EntryLike, circleIds: string[], notify: boolean): Promise<number> {
+    const [actorName, image] = await Promise.all([
+      this.actorName(entry.user_id),
+      entry.has_images ? this.primaryImage(entry.id) : Promise.resolve(null),
+    ]);
+    const body = this.renderBody(actorName, entry);
+    const payload = this.buildPayload(entry, image?.id ?? null, image ?? undefined);
+
+    // docs/PUSH_NOTIFICATIONS.md §2.
+    const intents = await Promise.all(
+      circleIds.map(async (circleId): Promise<SystemPushIntent | null> => {
+        try {
+          const post = await CircleChatService.emitSystemPost({
+            fitcircleId: circleId,
+            eventType: 'meal_logged',
+            priority: 'p1',
+            renderHint: 'meal_card',
+            body,
+            refId: entry.id,
+            actorUserIds: [entry.user_id],
+            systemPayload: payload as unknown as Record<string, unknown>,
+          });
+          return {
+            kind: 'member_post',
+            eventKey: `meal_logged:${entry.user_id}:${entry.id}`,
+            circleId,
+            circleName: await this.circleName(circleId),
+            // Same push as a typed message: excludes the poster, honours mutes.
+            body: body.replace(`${actorName} `, ''),
+            eventType: 'meal_logged',
+            actorUserIds: [entry.user_id],
+            actorName,
+            senderUserId: entry.user_id,
+            messageId: post.id,
+          };
+        } catch (err) {
+          console.error(`[CircleMealPostService.postToCircles] circle ${circleId}:`, err);
+          return null;
+        }
+      })
+    );
+    const posted = intents.filter((i): i is SystemPushIntent => i !== null);
+    if (notify && posted.length > 0) void ChatNotificationService.notifySystemEvent(posted).catch(() => {});
+    return posted.length;
   }
 
   /**
@@ -226,6 +267,7 @@ export class CircleMealPostService {
     try {
       const posts = await this.postsFor(entryId);
       if (posts.length === 0) return;
+      const dims = await this.imageDims(imageId);
       const supabaseAdmin = createAdminSupabase();
       await Promise.all(
         posts
@@ -238,6 +280,8 @@ export class CircleMealPostService {
                   ...(p.system_payload ?? {}),
                   image_id: imageId,
                   photo_path: this.photoPath(imageId),
+                  image_width: dims.width,
+                  image_height: dims.height,
                 },
                 updated_at: new Date().toISOString(),
               })
@@ -252,6 +296,8 @@ export class CircleMealPostService {
   /** The entry changed. Update the card, or tombstone it if it became private. */
   static async onMealUpdated(entry: EntryLike): Promise<void> {
     try {
+      // An explicit per-meal list (1.1.5): make the cards match it, then refresh them below.
+      if (explicitShareList(entry) && this.isShareableMeal(entry)) await this.syncMealCircles(entry);
       const posts = await this.postsFor(entry.id);
       if (posts.length === 0) {
         // Became shareable (e.g. private → circle) after creation: post it now.
@@ -274,11 +320,12 @@ export class CircleMealPostService {
         posts.map((p) => {
           const existing = (p.system_payload ?? {}) as Partial<MealPostPayload>;
           const imageId = existing.image_id ?? null;
+          const dims = { width: existing.image_width ?? null, height: existing.image_height ?? null };
           return supabaseAdmin
             .from('circle_messages')
             .update({
               body,
-              system_payload: { ...existing, ...this.buildPayload(entry, imageId) },
+              system_payload: { ...existing, ...this.buildPayload(entry, imageId, dims) },
               updated_at: new Date().toISOString(),
             })
             .eq('id', p.id);
@@ -347,9 +394,11 @@ export class CircleMealPostService {
     if (!this.isShareableMeal(entry)) return false;
     const shared = await this.sharedActiveCircles(entry.user_id, viewerId);
     if (shared.length === 0) return false;
+    const list = explicitShareList(entry);
+    if (list) return shared.some((circleId) => list.includes(circleId));
     const privacy = new FoodPrivacyService();
     for (const circleId of shared) {
-      if ((await privacy.getTier(circleId, entry.user_id)) === 'full') return true;
+      if (mealVisibleInCircle(entry, circleId, await privacy.getTier(circleId, entry.user_id))) return true;
     }
     return false;
   }
@@ -358,7 +407,12 @@ export class CircleMealPostService {
   // PRIVATE
   // ==========================================================================
 
-  private static async circlesSharingFull(userId: string): Promise<string[]> {
+  /**
+   * Active circles of the owner where this meal is shown (mealVisibleInCircle): the explicit
+   * per-meal list ∩ active memberships, else every active circle with tier 'full' (legacy).
+   */
+  static async targetCircles(entry: Pick<EntryLike, 'user_id' | 'share_circle_ids'>): Promise<string[]> {
+    const userId = entry.user_id;
     const supabaseAdmin = createAdminSupabase();
     const { data, error } = await supabaseAdmin
       .from('fitcircle_members')
@@ -367,9 +421,11 @@ export class CircleMealPostService {
       .eq('status', 'active');
     if (error) throw error;
     const ids = (data ?? []).map((r) => r.fitcircle_id as string).filter(Boolean);
+    const list = explicitShareList(entry);
+    if (list) return ids.filter((id) => list.includes(id));
     const privacy = new FoodPrivacyService();
     const tiers = await Promise.all(ids.map((id) => privacy.getTier(id, userId)));
-    return ids.filter((_, i) => tiers[i] === 'full');
+    return ids.filter((id, i) => mealVisibleInCircle(entry, id, tiers[i]));
   }
 
   private static async sharedActiveCircles(ownerId: string, viewerId: string): Promise<string[]> {
@@ -391,18 +447,16 @@ export class CircleMealPostService {
       .map(([id]) => id);
   }
 
-  private static async postsFor(
-    entryId: string
-  ): Promise<Array<{ id: string; system_payload: Record<string, unknown> | null }>> {
+  private static async postsFor(entryId: string): Promise<MealPost[]> {
     const supabaseAdmin = createAdminSupabase();
     const { data, error } = await supabaseAdmin
       .from('circle_messages')
-      .select('id, system_payload')
+      .select('id, fitcircle_id, system_payload')
       .eq('system_event_type', 'meal_logged')
       .eq('system_event_ref', entryId)
       .is('deleted_at', null);
     if (error) throw error;
-    return (data ?? []) as Array<{ id: string; system_payload: Record<string, unknown> | null }>;
+    return (data ?? []) as MealPost[];
   }
 
   /**
@@ -449,18 +503,29 @@ export class CircleMealPostService {
     return (data ?? []).length > 0;
   }
 
-  private static async primaryImageId(entryId: string): Promise<string | null> {
+  /** The entry's primary image with its stored size (food_log_images.width / height). */
+  private static async primaryImage(entryId: string): Promise<{ id: string; width: number | null; height: number | null } | null> {
     const supabaseAdmin = createAdminSupabase();
     const { data, error: dataError } = await supabaseAdmin
       .from('food_log_images')
-      .select('id')
+      .select('id, width, height')
       .eq('food_log_entry_id', entryId)
       .is('deleted_at', null)
       .order('display_order', { ascending: true })
       .limit(1)
       .maybeSingle();
-    logIgnoredQueryError('CircleMealPostService.primaryImageId', dataError);
-    return (data?.id as string | undefined) ?? null;
+    logIgnoredQueryError('CircleMealPostService.primaryImage', dataError);
+    if (!data?.id) return null;
+    const n = (v: unknown) => (typeof v === 'number' && Number.isInteger(v) && v > 0 ? v : null);
+    return { id: data.id as string, width: n((data as any).width), height: n((data as any).height) };
+  }
+
+  private static async imageDims(imageId: string): Promise<ImageDims> {
+    const supabaseAdmin = createAdminSupabase();
+    const { data, error } = await supabaseAdmin.from('food_log_images').select('width, height').eq('id', imageId).maybeSingle();
+    logIgnoredQueryError('CircleMealPostService.imageDims', error);
+    const n = (v: unknown) => (typeof v === 'number' && Number.isInteger(v) && v > 0 ? v : null);
+    return { width: n((data as any)?.width), height: n((data as any)?.height) };
   }
 
   private static async actorName(userId: string): Promise<string> {

@@ -1,3 +1,5 @@
+import { logIgnoredQueryError } from '@/lib/api/route-errors';
+
 import { createAdminSupabase } from '../supabase-admin';
 import {
   type FoodFeedCardDTO,
@@ -15,9 +17,9 @@ import {
   REACTION_KINDS,
 } from '../types/food-feed';
 
-import { isEntryPrivate } from './food-entry-privacy';
+import { explicitShareList, isEntryPrivate } from './food-entry-privacy';
 import { FoodPrivacyService } from './food-privacy-service';
-import { logIgnoredQueryError } from '@/lib/api/route-errors';
+import { confirmedOnly } from '@/lib/meal-drafts/config';
 
 /**
  * CircleFoodFeedService — promotes food logs into circle content (PRD v4 §6.3).
@@ -89,9 +91,8 @@ export class CircleFoodFeedService {
    */
   static async getEntryOwnerId(entryId: string, viewerId?: string): Promise<string> {
     const supabaseAdmin = createAdminSupabase();
-    const { data, error } = await supabaseAdmin
-      .from('food_log_entries')
-      .select('user_id, deleted_at, is_private, visibility')
+    const { data, error } = await confirmedOnly(supabaseAdmin.from('food_log_entries')
+      .select('user_id, deleted_at, is_private, visibility'))
       .eq('id', entryId)
       .maybeSingle();
 
@@ -99,6 +100,38 @@ export class CircleFoodFeedService {
     if (!data || data.deleted_at) throw new Error('NotFound');
     if (viewerId !== undefined && data.user_id !== viewerId && isEntryPrivate(data)) throw new Error('NotFound');
     return data.user_id as string;
+  }
+
+  /**
+   * 1.1.5 per-meal circle lists (ENGAGEMENT_115_SPEC §4.4): a meal shared to an explicit list
+   * can only be reacted to by members of one of those circles. Null list (every shipped client,
+   * every old row) / column missing → no extra check (the legacy rule above applies).
+   */
+  private static async assertInListedCircle(entryId: string, reactorId: string, ownerId: string): Promise<void> {
+    if (reactorId === ownerId) return;
+    const supabaseAdmin = createAdminSupabase();
+    const { data, error } = await confirmedOnly(supabaseAdmin.from('food_log_entries').select('share_circle_ids')).eq('id', entryId).maybeSingle();
+    if (error) {
+      if (error.code === '42703' || error.code === 'PGRST204') return;
+      throw error;
+    }
+    const list = explicitShareList(data as { share_circle_ids?: unknown } | null);
+    if (!list) return;
+    if (list.length === 0) throw new Error('Forbidden');
+    const { data: rows, error: membersError } = await supabaseAdmin
+      .from('fitcircle_members')
+      .select('fitcircle_id, user_id')
+      .in('fitcircle_id', list)
+      .in('user_id', [reactorId, ownerId])
+      .eq('status', 'active');
+    if (membersError) throw membersError;
+    const by = new Map<string, Set<string>>();
+    for (const r of (rows ?? []) as Array<{ fitcircle_id: string; user_id: string }>) {
+      const set = by.get(r.fitcircle_id) ?? new Set<string>();
+      set.add(r.user_id);
+      by.set(r.fitcircle_id, set);
+    }
+    if (!Array.from(by.values()).some((u) => u.has(reactorId) && u.has(ownerId))) throw new Error('Forbidden');
   }
 
   /**
@@ -186,33 +219,43 @@ export class CircleFoodFeedService {
 
     // Reverse-chron entries from the tier-allowed members, still gated by the per-log
     // visibility column ('circle'|'shared') and the per-log "hide this" (deleted_at) override.
-    let query = supabaseAdmin
-      .from('food_log_entries')
-      .select(FEED_ENTRY_COLUMNS)
-      .in('user_id', memberIds)
-      .is('deleted_at', null)
-      // Both privacy columns must say "shared" (FOOD_ENTRY_PRIVACY_SPEC): a row
-      // with is_private=true is never shown, whatever its visibility says.
-      .eq('is_private', false)
-      .in('visibility', FEED_VISIBLE_TIERS as unknown as string[])
-      .order('logged_at', { ascending: false })
-      .limit(limit + 1);
+    const runQuery = (columns: string) => {
+      let query = confirmedOnly(supabaseAdmin.from('food_log_entries')
+        .select(columns))
+        .in('user_id', memberIds)
+        .is('deleted_at', null)
+        // Both privacy columns must say "shared" (FOOD_ENTRY_PRIVACY_SPEC): a row
+        // with is_private=true is never shown, whatever its visibility says.
+        .eq('is_private', false)
+        .in('visibility', FEED_VISIBLE_TIERS as unknown as string[])
+        .order('logged_at', { ascending: false })
+        .limit(limit + 1);
+      if (params.before) query = query.lt('logged_at', params.before);
+      return query;
+    };
 
-    if (params.before) {
-      query = query.lt('logged_at', params.before);
+    // 1.1.5 per-meal circle lists (ENGAGEMENT_115_SPEC §4.4, migration 138): a meal shared to a
+    // list shows only in those circles. Before 138 the column is missing → legacy rule only.
+    let { data, error } = await runQuery(`${FEED_ENTRY_COLUMNS}, share_circle_ids`);
+    if (error && (error.code === '42703' || error.code === 'PGRST204') && String(error.message ?? '').includes('share_circle_ids')) {
+      ({ data, error } = await runQuery(FEED_ENTRY_COLUMNS));
     }
-
-    const { data, error } = await query;
     if (error) throw error;
 
-    const rows = (data ?? []) as FeedEntryRow[];
-    const hasMore = rows.length > limit;
-    const pageRows = hasMore ? rows.slice(0, limit) : rows;
+    const raw = (data ?? []) as unknown as Array<FeedEntryRow & { share_circle_ids?: string[] | null }>;
+    const hasMore = raw.length > limit;
+    const pageRaw = hasMore ? raw.slice(0, limit) : raw;
+    // Pagination runs on the raw page so a filtered-out meal never ends the feed early.
+    const pageRows = pageRaw.filter((r) => {
+      if (r.user_id === viewerUserId) return true;
+      const list = explicitShareList(r);
+      return list ? list.includes(fitcircleId) : true;
+    }) as FeedEntryRow[];
 
     const cards = await this.mapRowsToCards(pageRows, viewerUserId);
 
     const nextBefore =
-      hasMore && pageRows.length > 0 ? pageRows[pageRows.length - 1].logged_at : null;
+      hasMore && pageRaw.length > 0 ? pageRaw[pageRaw.length - 1].logged_at : null;
 
     return { cards, hasMore, nextBefore };
   }
@@ -233,6 +276,7 @@ export class CircleFoodFeedService {
     this.assertValidReaction(reaction);
     const ownerId = await this.getEntryOwnerId(entryId, userId);
     await this.assertSharesActiveCircle(userId, ownerId);
+    await this.assertInListedCircle(entryId, userId, ownerId);
 
     const supabaseAdmin = createAdminSupabase();
     const { error } = await supabaseAdmin
@@ -259,6 +303,7 @@ export class CircleFoodFeedService {
     this.assertValidReaction(reaction);
     const ownerId = await this.getEntryOwnerId(entryId, userId);
     await this.assertSharesActiveCircle(userId, ownerId);
+    await this.assertInListedCircle(entryId, userId, ownerId);
 
     const supabaseAdmin = createAdminSupabase();
     const { error } = await supabaseAdmin
@@ -329,9 +374,8 @@ export class CircleFoodFeedService {
     const ownerById = await this.fetchOwners(memberIds);
 
     // All calorie-bearing entry-days for these members within the range, in ONE query.
-    let entryQuery = supabaseAdmin
-      .from('food_log_entries')
-      .select('user_id, entry_date')
+    let entryQuery = confirmedOnly(supabaseAdmin.from('food_log_entries')
+      .select('user_id, entry_date'))
       .in('user_id', memberIds)
       .is('deleted_at', null)
       .not('calories', 'is', null);

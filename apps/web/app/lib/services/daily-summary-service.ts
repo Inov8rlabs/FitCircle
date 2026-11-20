@@ -28,7 +28,13 @@
 // were summarized this tick ("Your circles today" / "Ani's Crew: you checked
 // in · Step-Up Circle: 2 of 6 checked in"), deduped per local date. It used
 // to be one chat_message push per circle per night.
+//
+// Chat post off by default (2026-11-17): the nightly cards cluttered circle
+// chat, so remote config `circle_daily_summary_post` (code default 'off')
+// stops writing them; the bundled push is unchanged. 1.1.5 apps show the live
+// status above the thread (CircleTodayCheckinsService) and hide stored posts.
 
+import { RemoteConfigService } from '../remote-config/service';
 import { createAdminSupabase } from '../supabase-admin';
 import type { ActivitySignal } from '../types/circle-chat-engine';
 import { getDateInTimezone } from '../utils/timezone';
@@ -214,6 +220,23 @@ export class DailySummaryService {
     }
   }
 
+  /**
+   * Remote config `circle_daily_summary_post` (code default off, 2026-11-17):
+   * whether the cron writes the daily_summary CHAT POST. The bundled push is
+   * independent of it. Resolved without a user (cron); a lookup failure
+   * falls back to the code default (off).
+   */
+  static async chatPostEnabled(now: Date): Promise<boolean> {
+    const value = await RemoteConfigService.enumValue('circle_daily_summary_post', {
+      userId: null,
+      now,
+      platform: null,
+      appVersion: null,
+      country: null,
+    }).catch(() => 'off');
+    return value === 'on';
+  }
+
   // ---- entrypoint ---------------------------------------------------------------
 
   /**
@@ -229,6 +252,7 @@ export class DailySummaryService {
     let circlesProcessed = 0;
     let postsAttempted = 0;
     const summarized: SummarizedCircle[] = [];
+    const postToChat = await this.chatPostEnabled(now);
 
     // 1. All currently-running circles, with the zone their day is measured in.
     const { data: circles, error: circlesError } = await supabaseAdmin
@@ -330,6 +354,22 @@ export class DailySummaryService {
           occurredAt: nowISO,
           payload: { checkedIn, total },
         };
+
+        // 8. Chat post switched off (default since 1.1.5 moved the status out
+        //    of the thread): no circle_messages row, but the push still goes
+        //    out with the same copy. Repeat hourly ticks are absorbed by the
+        //    push's per-day dedupeKey.
+        if (!postToChat) {
+          summarized.push({
+            circleId: circle.id,
+            circleName: circle.name ?? 'Your circle',
+            localDate,
+            total,
+            checkedInIds,
+            body: engine.renderCopy({ eventType: 'daily_summary', actors: [], payload: { checkedIn, total } }),
+          });
+          continue;
+        }
 
         postsAttempted++;
         // The engine handles rate-limit / quiet-hours / dedupe-by-window and the

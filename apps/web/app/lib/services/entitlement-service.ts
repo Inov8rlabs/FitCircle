@@ -4,6 +4,7 @@ import type { CampaignRow } from '../campaigns/model';
 import { TIER_LIMITS, LEGACY_LIMITS } from '../config/tier-limits';
 import { activeOffer, memberSinceFrom, MEMBER_EVENT_TYPES, proBadgeFor, type SubscriptionEventRow } from '../entitlements/pro-badge';
 import { swrCache } from '../home-feed/cache';
+import { RemoteConfigService } from '../remote-config/service';
 import { isValidTimezone } from '../streaks/streak-calculator';
 import { createAdminSupabase } from '../supabase-admin';
 import {
@@ -13,6 +14,7 @@ import {
   type SubscriptionTier,
   ALL_FEATURE_KEYS,
 } from '../types/body-composition';
+import { DEFAULT_ALLOWANCE_TIMEZONE, UNLIMITED_FITZY_ALLOWANCE, unmeteredFoodScanAllowance, type FoodScanAllowance } from '../usage/allowance';
 
 import { CampaignService } from './campaign-service';
 import { FeatureFlagService } from './feature-flag-service';
@@ -52,6 +54,9 @@ export class EntitlementService {
     const supabase = createAdminSupabase();
     const now = opts.now ?? new Date();
     const timezone = isValidTimezone(opts.timezone) ? opts.timezone : 'UTC';
+    // Allowance windows use the request zone, else the profile zone, else New York (§2.1) —
+    // pass the raw value through so UsageService can apply that fallback.
+    const requestTz = isValidTimezone(opts.timezone) ? opts.timezone : null;
     const [{ data: profile }, { data: gates }, flag, trialGate, extras] = await Promise.all([
       supabase
         .from('profiles')
@@ -91,7 +96,7 @@ export class EntitlementService {
     // Free-tier limits from remote config (TRIAL_FIRST_SPEC §5–§6): only resolved for free users
     // with the gate live; the food allowance adds one count query.
     const live = (k: string) => features[k]?.requiredTier === 'premium';
-    const [fitzyFree, foodAi] = await Promise.all([
+    const [fitzyFree, foodAi, foodScans, fitzyAllowance, clientConfig] = await Promise.all([
       tier === 'free' && live('fitzy_unlimited')
         ? UsageService.freeFitzyLimit(userId).catch(() => TIER_LIMITS.free.fitzyMessagesPerDay)
         : Promise.resolve(null),
@@ -99,7 +104,21 @@ export class EntitlementService {
         total: tier === 'free' && live('food_ai_unlimited') ? TIER_LIMITS.free.foodAiAnalysesTotal : null,
         remaining: null,
       })),
+      // 1.1.5 allowances (ENGAGEMENT_115_SPEC §2.3, §3.3). Never fail the entitlement read.
+      UsageService.foodScanAllowance(userId, tier, live('food_ai_unlimited'), requestTz).catch((e: unknown) => {
+        console.error('[EntitlementService] foodScanAllowance failed:', e instanceof Error ? e.message : String(e));
+        return null;
+      }),
+      UsageService.fitzyAllowanceFor(userId, tier, live('fitzy_unlimited'), requestTz).catch((e: unknown) => {
+        console.error('[EntitlementService] fitzyAllowance failed:', e instanceof Error ? e.message : String(e));
+        return null;
+      }),
+      readClientConfig(userId),
     ]);
+    // Legacy meter: 1.1.5 requests (daily allowance resolved > 0) see what the next scan may use;
+    // every other request keeps the lifetime remaining (1.1.2–1.1.4 pre-gate on it).
+    const foodAiRemaining =
+      foodScans && foodScans.dailyLimit !== null && foodScans.remaining !== null ? foodScans.remaining : foodAi.remaining;
 
     const subscriptionsEnabled = flag.enabled === true;
     const trial = trialState(tier, profile?.subscription_status, profile?.subscription_expires_at, trialGate.trialEndsAt);
@@ -110,8 +129,13 @@ export class EntitlementService {
         ...computeLimits(tier, features),
         ...(fitzyFree !== null ? { fitzyMessagesPerDay: fitzyFree } : {}),
         foodAiAnalysesTotal: foodAi.total,
-        foodAiAnalysesRemaining: foodAi.remaining,
+        foodAiAnalysesRemaining: foodAiRemaining,
       },
+      allowances: {
+        foodScans: foodScans ?? fallbackFoodScans(tier === 'free' && live('food_ai_unlimited'), tier, foodAi, requestTz ?? DEFAULT_ALLOWANCE_TIMEZONE),
+        fitzy: fitzyAllowance ?? { ...UNLIMITED_FITZY_ALLOWANCE },
+      },
+      clientConfig,
       // Additive (1.1.0): the Home crown marker + "member since" for Pro status.
       proBadge: proBadgeFor({
         offer: extras.offer,
@@ -189,6 +213,39 @@ export function normalizeTier(raw: string | null | undefined): SubscriptionTier 
 }
 
 type OnboardingGate = 'none' | 'subscription_required';
+
+/**
+ * allowances.foodScans when the allowance read failed: the lifetime numbers already read
+ * (never 'unlimited' for a metered free user).
+ */
+function fallbackFoodScans(
+  metered: boolean,
+  tier: SubscriptionTier,
+  lifetime: { total: number | null; remaining: number | null },
+  timezone: string
+): FoodScanAllowance {
+  if (!metered) return unmeteredFoodScanAllowance(tier === 'premium' ? 'unlimited' : 'legacy', timezone);
+  const remaining = lifetime.remaining ?? 0;
+  return {
+    mode: remaining > 0 ? 'starter' : 'exhausted',
+    remaining,
+    starterTotal: lifetime.total,
+    starterRemaining: remaining,
+    dailyLimit: null,
+    dailyRemaining: null,
+    resetsAt: null,
+    timezone,
+  };
+}
+
+/** entitlements.clientConfig (ENGAGEMENT_115_SPEC §1.3, §8). Fail-soft to the code defaults (both on). */
+async function readClientConfig(userId: string): Promise<{ mealSharePrompt: boolean; streakSaveOffer: boolean }> {
+  const [mealSharePrompt, streakSaveOffer] = await Promise.all([
+    RemoteConfigService.enumValue('meal_share_prompt', { userId }).catch(() => 'on'),
+    RemoteConfigService.enumValue('streak_save_offer', { userId }).catch(() => 'on'),
+  ]);
+  return { mealSharePrompt: mealSharePrompt !== 'off', streakSaveOffer: streakSaveOffer !== 'off' };
+}
 
 /** profiles.trial_ends_at + onboarding_gate (migration 112). Never throws. */
 async function readTrialAndGate(

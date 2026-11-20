@@ -52,6 +52,7 @@ const daysAgo = (d: number) => new Date(NOW.getTime() - d * 86_400_000).toISOStr
 const ACTIVE = 'a0000000-0000-4000-8000-000000000001';
 const LAPSED = 'a0000000-0000-4000-8000-000000000002';
 const TESTER = 'a0000000-0000-4000-8000-000000000003';
+const TEAM = 'a0000000-0000-4000-8000-000000000009';
 const DORMANT = 'a0000000-0000-4000-8000-000000000004';
 
 const logs = () => h.db.getRows('notification_log') as any[];
@@ -64,10 +65,11 @@ beforeEach(() => {
   h.db.seed('profiles', [
     { id: ACTIVE, email: 'active.person@gmail.com', timezone: 'America/New_York', created_at: daysAgo(40), last_active_at: daysAgo(1) },
     { id: LAPSED, email: 'lapsed.person@gmail.com', timezone: 'America/New_York', created_at: daysAgo(40), last_active_at: daysAgo(3), subscription_tier: 'free', longest_streak: 0 },
-    { id: TESTER, email: 'qa@fitcircle.ai', timezone: 'America/New_York', created_at: daysAgo(40), last_active_at: daysAgo(0) },
+    { id: TEAM, email: 'ani@fitcircle.ai', timezone: 'America/New_York', created_at: daysAgo(40), last_active_at: daysAgo(0) },
+    { id: TESTER, email: 'qa@example.com', timezone: 'America/New_York', created_at: daysAgo(40), last_active_at: daysAgo(0) },
     { id: DORMANT, email: 'gone.person@gmail.com', timezone: 'America/New_York', created_at: daysAgo(90), last_active_at: daysAgo(45) },
   ]);
-  h.db.seed('push_tokens', [ACTIVE, LAPSED, TESTER, DORMANT].map((user_id) => ({ id: `t-${user_id}`, user_id, is_active: true })));
+  h.db.seed('push_tokens', [ACTIVE, LAPSED, TESTER, DORMANT, TEAM].map((user_id) => ({ id: `t-${user_id}`, user_id, is_active: true })));
   h.calls = [];
   h.scans = { total: 5, remaining: 3 };
   process.env.AMPLITUDE_SERVER_API_KEY = 'test-amplitude-key';
@@ -88,12 +90,18 @@ describe('audience gate in NotificationOrchestrator.send', () => {
 
   it('test accounts: no nudges, chat still delivered, and no Push Sent events at all', async () => {
     expect(await NotificationOrchestrator.send(TESTER, 'momentum_at_risk', { currentMomentum: 4 })).toEqual({ sent: false, reason: 'test_user' });
-    expect(lastLog()).toMatchObject({ suppression_reason: 'test_user', data: expect.objectContaining({ testUser: 'internal' }) });
+    expect(lastLog()).toMatchObject({ suppression_reason: 'test_user', data: expect.objectContaining({ testUser: 'qa' }) });
     expect(await NotificationOrchestrator.send(TESTER, 'chat_message', { friendName: 'Priya', circleName: 'Crew', preview: 'hi', circleId: 'c1' })).toMatchObject({ sent: true });
     expect(pendingPushSentEvents().filter((e) => e.user_id === TESTER)).toEqual([]);
     // A real user's rows still produce events.
     await NotificationOrchestrator.send(ACTIVE, 'momentum_at_risk', { currentMomentum: 4 });
     expect(pendingPushSentEvents().filter((e) => e.user_id === ACTIVE)).toHaveLength(1);
+  });
+
+  it('team (internal) accounts get nudges like real users, tagged and kept out of Push Sent analytics', async () => {
+    expect(await NotificationOrchestrator.send(TEAM, 'momentum_at_risk', { currentMomentum: 4 })).toEqual({ sent: true });
+    expect(lastLog()).toMatchObject({ suppressed: false, data: expect.objectContaining({ testUser: 'internal' }) });
+    expect(pendingPushSentEvents().filter((e) => e.user_id === TEAM)).toEqual([]);
   });
 
   it('momentum_at_risk: new copy and at most once per 3 days', async () => {
@@ -163,5 +171,50 @@ describe('GET /api/cron/winback', () => {
     expect(h.calls).toHaveLength(0);
     const bad = await GET(new NextRequest('http://localhost/api/cron/winback?as_of=2026-11-13', { headers: { authorization: 'Bearer cron-test' } }));
     expect(bad.status).toBe(400);
+  });
+});
+
+describe('1.1.5 streak pushes on the wire (ENGAGEMENT_115_SPEC §5.2, §5.4)', () => {
+  const dataOf = (i: number) => h.calls[i].n.data;
+
+  it('dont_miss_twice: food_log + camera route + slot/variant/day keys; workout → exercise_log; unknown routes dropped', async () => {
+    expect(
+      await NotificationOrchestrator.send(ACTIVE, 'dont_miss_twice', {
+        title: "Don't miss two days", body: "You usually log lunch around 12 pm. Snap today's and you're back on track.",
+        screen: 'food_log', route: 'log_meal_camera', mealType: 'lunch', variant: 'meal', missedDate: '2026-11-12', streakDays: 0, dedupeKey: 'dmt:2026-11-12',
+      })
+    ).toEqual({ sent: true });
+    expect(h.calls[0].n).toMatchObject({ title: "Don't miss two days" });
+    expect(dataOf(0)).toMatchObject({
+      type: 'dont_miss_twice', category: 'momentum', screen: 'food_log', route: 'log_meal_camera', mealType: 'lunch',
+      variant: 'meal', missedDate: '2026-11-12', streakDays: '0', dedupeKey: 'dmt:2026-11-12', notification_id: expect.any(String),
+    });
+    NotificationOrchestrator.resetInProcessGuards();
+    await NotificationOrchestrator.send(LAPSED, 'dont_miss_twice', { screen: 'exercise_log', variant: 'workout', missedDate: '2026-11-12' });
+    expect(lastLog()).toMatchObject({ suppression_reason: 'lapsed_user' }); // habit push: active users only
+    h.db.getRows('notification_log').length = 0;
+    await NotificationOrchestrator.send(ACTIVE, 'dont_miss_twice', { title: 'x', body: 'y', screen: 'exercise_log', route: 'evil', variant: 'workout', missedDate: '2026-11-11', dedupeKey: 'dmt:2026-11-11' });
+    expect(dataOf(1)).toMatchObject({ screen: 'exercise_log' });
+    expect(dataOf(1).route).toBeUndefined();
+  });
+
+  it('streak_save_offer: streaks + streak_save route + offer keys; one per 44 h; milestone_achieved: streaks + streak_milestone', async () => {
+    await NotificationOrchestrator.send(ACTIVE, 'streak_save_offer', {
+      title: 'Save your 12-day streak', body: 'You missed yesterday. A streak shield can still keep all 12 days. Today only.',
+      route: 'streak_save', missedDate: '2026-11-12', lostStreak: 12, offerId: 'o-1', dedupeKey: 'streak_save:2026-11-12',
+    });
+    expect(dataOf(0)).toMatchObject({ type: 'streak_save_offer', screen: 'streaks', route: 'streak_save', missedDate: '2026-11-12', lostStreak: '12', offerId: 'o-1' });
+    NotificationOrchestrator.resetInProcessGuards();
+    for (const r of logs()) r.sent_at = daysAgo(1); // the DB stamps sent_at: delivered 24 h ago
+    expect(await NotificationOrchestrator.send(ACTIVE, 'streak_save_offer', { title: 'a', body: 'b', missedDate: '2026-11-13', dedupeKey: 'streak_save:2026-11-13' })).toEqual({ sent: false, reason: 'type_interval' });
+
+    await NotificationOrchestrator.send(ACTIVE, 'milestone_achieved', { title: '7-day streak', body: '1-Week Warrior: 7 days in a row. Tap to celebrate.', route: 'streak_milestone', milestone: 7, dedupeKey: 'streak_milestone:7:2026-11-13' });
+    expect(h.calls.at(-1)!.n).toMatchObject({ title: '7-day streak', data: expect.objectContaining({ type: 'milestone_achieved', category: 'celebration', screen: 'streaks', route: 'streak_milestone', milestone: '7' }) });
+  });
+
+  it('a delivered D+1 push replaces the win-back day 3 step', async () => {
+    h.db.seed('notification_log', [{ id: 'n1', user_id: LAPSED, notification_type: 'dont_miss_twice', data: { missedDate: daysAgo(1).slice(0, 10) }, suppressed: false, sent_at: daysAgo(0.5) }]);
+    const r = await WinbackService.run({ dryRun: true, now: NOW });
+    expect(r.decisions.find((x) => x.userId === LAPSED)).toMatchObject({ skip: 'replaced_by_dont_miss_twice' });
   });
 });

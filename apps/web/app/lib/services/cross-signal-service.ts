@@ -15,6 +15,7 @@ import {
 import { BodyCompTrendsService } from './body-comp-trends-service';
 import { EntitlementService } from './entitlement-service';
 import { logIgnoredQueryError } from '@/lib/api/route-errors';
+import { confirmedOnly } from '@/lib/meal-drafts/config';
 
 /**
  * CrossSignalService — gentle, correlational cross-signal insights (PRD v4 §6.10).
@@ -80,9 +81,8 @@ export class CrossSignalService {
     );
 
     // food_log_entries: multiple rows per day -> sum protein_g / calories per entry_date.
-    const { data: food, error: foodError } = await supabase
-      .from('food_log_entries')
-      .select('entry_date, protein_g, calories')
+    const { data: food, error: foodError } = await confirmedOnly(supabase.from('food_log_entries')
+      .select('entry_date, protein_g, calories'))
       .eq('user_id', userId)
       .is('deleted_at', null)
       .gte('entry_date', since);

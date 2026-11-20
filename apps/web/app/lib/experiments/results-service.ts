@@ -32,6 +32,7 @@ import {
   type UserFacts,
 } from './results';
 import { ExperimentService, notFoundExperiment, selectAllPages, type AssignmentRow } from './service';
+import { confirmedOnly } from '@/lib/meal-drafts/config';
 
 export const RESULTS_CACHE_TTL_MS = 15 * 60_000;
 const CHUNK = 200;
@@ -131,9 +132,8 @@ export async function loadUserFacts(rows: readonly AssignmentRow[]): Promise<Use
     ),
     inChunks(ids, (part) =>
       selectAllPages<Record<string, any>>(() =>
-        supabase
-          .from('food_log_entries')
-          .select('id, user_id, entry_type, created_at, deleted_at')
+        confirmedOnly(supabase.from('food_log_entries')
+          .select('id, user_id, entry_type, created_at, deleted_at'))
           .in('user_id', part)
           .gte('created_at', since)
           .order('id', { ascending: true })

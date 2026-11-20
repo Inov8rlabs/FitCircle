@@ -1,7 +1,9 @@
+import { DMT_TOUCH_HOURS } from '../journey/dont-miss-twice';
 import { resolveNotificationTimezone } from '../notifications/user-timezone';
 import { createAdminSupabase } from '../supabase-admin';
 
 import { NotificationOrchestrator, TYPE_MIN_INTERVAL_HOURS } from './notification-orchestrator';
+import { confirmedOnly } from '@/lib/meal-drafts/config';
 
 /**
  * STATE-AWARE daily streak reminder (the remote replacement for the iOS "static" local
@@ -146,6 +148,16 @@ export class ReminderService {
 
         const currentStreak = streakByUser.get(userId) ?? 0;
         const near = MILESTONES.find((m) => m.days > currentStreak && m.days - currentStreak <= 2);
+        // 1.1.5 (ENGAGEMENT_115_SPEC §5.2): on D+1 the dont_miss_twice / streak_save_offer push
+        // already asked for today's log; no second streak nudge the same day.
+        if (
+          !near &&
+          ((await NotificationOrchestrator.hasSent(userId, 'dont_miss_twice', { withinHours: DMT_TOUCH_HOURS })) ||
+            (await NotificationOrchestrator.hasSent(userId, 'streak_save_offer', { withinHours: DMT_TOUCH_HOURS })))
+        ) {
+          skippedActed++;
+          continue;
+        }
         // momentum_at_risk at most once per 3 days (the orchestrator enforces it too;
         // checking here avoids a suppressed row every evening).
         if (
@@ -188,9 +200,8 @@ export class ReminderService {
 
   /** Did the user log a (non-deleted, calorie-bearing) food entry on their local date? */
   private static async loggedFoodToday(supabase: any, userId: string, localDate: string): Promise<boolean> {
-    const { data } = await supabase
-      .from('food_log_entries')
-      .select('id')
+    const { data } = await confirmedOnly(supabase.from('food_log_entries')
+      .select('id'))
       .eq('user_id', userId)
       .eq('entry_date', localDate)
       .not('calories', 'is', null)

@@ -8,6 +8,7 @@ import { AiConsentRequiredError, ConsentService } from '@/lib/services/consent-s
 import { NutritionIntelligenceService } from '@/lib/services/nutrition-intelligence-service';
 import { UpgradeRequiredError } from '@/lib/services/usage-service';
 import { safeParseLenient } from '@/lib/validation/lenient-parse';
+import { readAnalysisJobId } from '@/lib/validation/analysis-job-id';
 
 // LLM parse can exceed the platform default function timeout; give it room.
 export const maxDuration = 60;
@@ -80,6 +81,7 @@ export async function POST(request: NextRequest) {
         parsed.data.grams,
         parsed.data.quantity,
         parsed.data.servingUnit,
+        { jobId: readAnalysisJobId(request) },
       );
 
       return NextResponse.json({
@@ -98,7 +100,7 @@ export async function POST(request: NextRequest) {
             data: null,
             error: {
               code: 'UPGRADE_REQUIRED',
-              message: foodAiUpgradeMessage(estimateError.limit, estimateError.trialEligible === true, false, estimateError.trialDays),
+              message: foodAiUpgradeMessage(estimateError.limit, estimateError.trialEligible === true, false, estimateError.trialDays, estimateError.extra?.phase),
               // Trial-first (TRIAL_FIRST_SPEC §5): legacy {feature, used, limit} + additive paywall.
               details: foodAiUpgradeDetails(estimateError),
               timestamp: new Date().toISOString(),

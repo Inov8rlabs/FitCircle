@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { ExerciseService } from '@/lib/services/exercise-service';
 import { StreakClaimingService } from '@/lib/services/streak-claiming-service';
+import { requestShowsStreakCelebration } from '@/lib/streaks/celebration';
 import { resolveClientTimezone } from '@/lib/streaks/client-timezone';
 import { workoutCountsForStreak } from '@/lib/streaks/workout-claim-policy';
 import { createAdminSupabase } from '@/lib/supabase-admin';
@@ -100,6 +101,7 @@ export async function POST(request: NextRequest) {
           timezone,
           source: 'exercise_log',
           referenceId: result.data?.exercise?.id,
+          inAppCelebration: requestShowsStreakCelebration(request),
         })
       : null;
 

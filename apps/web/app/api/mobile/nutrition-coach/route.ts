@@ -2,7 +2,7 @@ import { type NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 
 import { aiConsentFail } from '@/lib/consents/http';
-import { fitzyUpgradeMessage, paywallFor } from '@/lib/fitzy/paywall';
+import { fitzyUpgradeEnvelope } from '@/lib/fitzy/http';
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { AiConsentRequiredError, ConsentService } from '@/lib/services/consent-service';
 import { NutritionCoachService } from '@/lib/services/nutrition-coach-service';
@@ -91,20 +91,16 @@ export async function POST(request: NextRequest) {
     if (error instanceof AiConsentRequiredError) return aiConsentFail(error);
 
     if (error instanceof UpgradeRequiredError) {
+      // Shares the Fitzy budget (trial-first: 0/day free; 1.1.5: the weekly window). Same envelope; paywall additive.
+      const envelope = fitzyUpgradeEnvelope(error, "You've used today's free coach messages — go Pro for unlimited coaching.");
       return NextResponse.json(
         {
           success: false,
           data: null,
           error: {
             code: 'UPGRADE_REQUIRED',
-            // Shares the Fitzy budget (trial-first: 0/day free). Same envelope; paywall additive.
-            message: error.limit > 0 ? "You've used today's free coach messages — go Pro for unlimited coaching." : fitzyUpgradeMessage(error.limit, error.trialEligible === true),
-            details: {
-              feature: error.feature,
-              used: error.used,
-              limit: error.limit,
-              paywall: paywallFor('fitzy_quota', { trialEligible: error.trialEligible === true, trialDays: error.trialDays }),
-            },
+            message: envelope.message,
+            details: envelope.details,
             timestamp: new Date().toISOString(),
           },
           meta: null,

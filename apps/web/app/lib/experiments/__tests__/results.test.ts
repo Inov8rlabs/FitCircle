@@ -370,3 +370,21 @@ describe('scorecard additions (lift intervals, copy, health, timelines)', () => 
     expect(approxLift(1, 10, 0, 10)).toEqual({ lift: null, lo: null, hi: null });
   });
 });
+
+describe('first_meal_24h_after_onboarding (onboarding_meal_step primary, ENGAGEMENT_115_SPEC §14.8)', () => {
+  const H = 3_600_000;
+  it('counts a confirmed meal between assignment and onboarding + 24 h; only users who finished onboarding ≥ 24 h ago', () => {
+    const done = T0 + 2 * H;
+    const users = [
+      user('control', { onboardingCompletedAt: done, mealAt: [T0 + H] }), // meal during onboarding → yes
+      user('control', { onboardingCompletedAt: done, mealAt: [done + 23 * H] }), // yes
+      user('control', { onboardingCompletedAt: done, mealAt: [done + 25 * H] }), // too late → no
+      user('control', { onboardingCompletedAt: null, mealAt: [T0 + H] }), // never finished → not in denominator
+      user('variantB', { onboardingCompletedAt: NOW - 2 * H, assignedAt: NOW - 3 * H }), // < 24 h → pending
+    ];
+    const m = metric(computeResults(users, ['control', 'variantB'], 'control', NOW, 's'), 'first_meal_24h_after_onboarding');
+    expect(m.arms.control).toMatchObject({ n: 3, x: 2 });
+    expect(m.arms.variantB).toMatchObject({ n: 0, pending: 1 });
+    expect(RATE_METRICS.find((d) => d.key === 'first_meal_24h_after_onboarding')?.group).toBe('secondary');
+  });
+});

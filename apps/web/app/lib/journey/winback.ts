@@ -49,7 +49,8 @@ export type WinbackSkip =
   | 'outside_window'
   | 'already_sent'
   | 'spacing'
-  | 'replaced_by_trigger';
+  | 'replaced_by_trigger'
+  | 'replaced_by_dont_miss_twice';
 
 export interface WinbackHistory {
   /** Steps delivered in THIS lapse episode (data.lapseStart = lifecycle.lastSeenLocalDate). */
@@ -58,7 +59,12 @@ export interface WinbackHistory {
   lastWinbackAt: string | null;
   /** Last delivered leaderboard_overtaken / health_sync_update. */
   lastTriggerAt: string | null;
+  /** 1.1.5: last delivered dont_miss_twice / streak_save_offer (counts as the win-back touch). */
+  lastDontMissTwiceAt?: string | null;
 }
+
+/** A D+1 push this recent counts as the day's win-back touch (ENGAGEMENT_115_SPEC §5.2): day 3 slides. */
+export const DMT_REPLACES_WINBACK_HOURS = 44;
 
 export function selectWinbackStep(input: {
   lifecycle: Lifecycle | null;
@@ -77,6 +83,7 @@ export function selectWinbackStep(input: {
   const within = (iso: string | null, hours: number) => !!iso && input.now.getTime() - Date.parse(iso) < hours * 3_600_000;
   if (within(input.history.lastWinbackAt, WINBACK_MIN_SPACING_HOURS)) return { skip: 'spacing' };
   if (within(input.history.lastTriggerAt, REPLACED_WINDOW_HOURS)) return { skip: 'replaced_by_trigger' };
+  if (within(input.history.lastDontMissTwiceAt ?? null, DMT_REPLACES_WINBACK_HOURS)) return { skip: 'replaced_by_dont_miss_twice' };
   return { step };
 }
 

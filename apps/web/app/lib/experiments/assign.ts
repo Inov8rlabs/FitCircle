@@ -4,7 +4,10 @@
  * Order:
  *   1. override                 → override arm        (persisted, reason=override)
  *   2. existing assignment      → that arm, always    (sticky, even if weights changed)
- *   3. not eligible (audience)  → fallback_arm        (NOT persisted: may become eligible later)
+ *      except: hard-paywall experiment + invited + not yet exposed + still onboarding
+ *                               → fallback_arm        (row REWRITTEN to reason=fallback: excluded)
+ *   3. not eligible (audience, or the hard-paywall rules below)
+ *                               → fallback_arm        (NOT persisted: may become eligible later)
  *   4. layered + outside slice  → fallback_arm        (persisted, reason=layer)
  *   5. concluded                → winner_arm          (persisted, reason=winner)
  *   6. draft / paused           → fallback_arm        (persisted, reason=fallback)
@@ -48,12 +51,22 @@ export interface AssignmentContext {
   onboardingCompleted: boolean | null;
   /** Active complimentary Pro grant (team, friends, reviewer) — never enrolled. */
   hasComplimentaryGrant: boolean;
+  /**
+   * Arrived through a friend: a `referrals` row as invitee (link, code, email invite,
+   * circle-join claim) or membership of a friend's non-public circle. Only read when the
+   * experiment has a live hard-paywall arm (undefined = not looked up = not invited).
+   */
+  invited?: boolean;
+  /** profiles.subscription_tier is premium (paid or store trial). */
+  isPro?: boolean;
   now: Date;
 }
 
 export interface ExistingAssignment {
   arm: string;
   reason: AssignmentReason;
+  /** first_exposed_at is set. Unknown (undefined) counts as exposed: never rewritten. */
+  exposed?: boolean;
 }
 
 export interface AssignmentDecision {
@@ -64,6 +77,8 @@ export interface AssignmentDecision {
   enrolled: boolean;
   /** Write (upsert) the assignment row. */
   persist: boolean;
+  /** Overwrite an existing (non-override) row instead of first-write-wins (invited exclusion). */
+  replace?: boolean;
   /** Why the user is not eligible (decision step 3), else null. */
   ineligible: string | null;
 }
@@ -95,6 +110,45 @@ export function ineligibilityReason(audience: ExperimentAudience, ctx: Assignmen
     if (ctx.onboardingCompleted !== false) return 'onboarding_completed';
     const created = ctx.profileCreatedAt ? Date.parse(ctx.profileCreatedAt) : NaN;
     if (Number.isNaN(created) || ctx.now.getTime() - created >= NEW_USER_WINDOW_MS) return 'not_new_user';
+  }
+  return null;
+}
+
+// ---------------------------------------------------------------------------
+// Hard-paywall arms ("Forced trial (no close)", onboarding_paywall, 1.1.5)
+// ---------------------------------------------------------------------------
+
+/**
+ * Per experiment: the first app version whose clients render `paywall: "hard"` as the hard
+ * paywall. onboarding_paywall: 1.1.5 (forced trial) — 1.1.0–1.1.4 iOS/Android map "hard" to
+ * control, so serving them the arm would put control experiences in the hard arm.
+ * (onboarding_v2 renders it from its own audience minimum, 1.2.0.)
+ */
+export const HARD_PAYWALL_MIN_APP_VERSION: Readonly<Record<string, string>> = { onboarding_paywall: '1.1.5' };
+
+export const isHardPaywallArm = (arm: Pick<ExperimentArm, 'payload'> | null | undefined): boolean => arm?.payload?.paywall === 'hard';
+
+/** The experiment can randomise someone into a hard-paywall arm right now (weight > 0). */
+export function hasLiveHardArm(experiment: Pick<Experiment, 'arms'>): boolean {
+  return experiment.arms.some((a) => a.weight > 0 && isHardPaywallArm(a));
+}
+
+/**
+ * Derived from the arms (not the stored audience, so an Admin Tools audience edit can never
+ * drop it): while a hard-paywall arm has weight, these users are outside the WHOLE experiment
+ * (fallback arm, not analysed) — excluded before randomisation so every arm loses them alike.
+ *   invited  → friends always get the closable paywall
+ *   pro      → nothing to sell (paid / trialing / review demo account)
+ *   app_version_hard_paywall → client < 1.1.5 would render "hard" as control
+ */
+export function hardPaywallIneligibility(experiment: Pick<Experiment, 'key' | 'arms'>, ctx: AssignmentContext): string | null {
+  if (!hasLiveHardArm(experiment)) return null;
+  if (ctx.invited) return 'invited';
+  if (ctx.isPro) return 'pro';
+  const min = HARD_PAYWALL_MIN_APP_VERSION[experiment.key];
+  if (min) {
+    const v = parseVersion(ctx.appVersion);
+    if (!v || compareVersions(v, parseVersion(min)!) < 0) return 'app_version_hard_paywall';
   }
   return null;
 }
@@ -135,12 +189,13 @@ export function decideAssignment(
 ): AssignmentDecision {
   const armByKey = (key: string | null | undefined) => experiment.arms.find((a) => a.key === key) ?? null;
   const fallback = armByKey(experiment.fallbackArm) ?? experiment.arms[0];
-  const make = (arm: ExperimentArm, reason: AssignmentReason, persist: boolean, ineligible: string | null = null): AssignmentDecision => ({
+  const make = (arm: ExperimentArm, reason: AssignmentReason, persist: boolean, ineligible: string | null = null, replace = false): AssignmentDecision => ({
     arm: arm.key,
     payload: arm.payload ?? {},
     reason,
     enrolled: reason === 'bucket',
     persist,
+    ...(replace ? { replace: true } : {}),
     ineligible,
   });
 
@@ -151,14 +206,25 @@ export function decideAssignment(
     return make(arm, 'override', !unchanged);
   }
 
-  // 2. Sticky: whatever was decided first is returned forever.
+  // 2. Sticky: whatever was decided first is returned forever — except a user who turned out
+  //    to be invited (claim after the first assign call) and has not been exposed yet: they
+  //    are taken out of the experiment (row rewritten to the fallback arm, reason=fallback),
+  //    whatever arm they had, so no arm keeps or loses them selectively.
   if (state.existing) {
     const arm = armByKey(state.existing.arm);
-    if (arm) return make(arm, state.existing.reason, false);
+    if (arm) {
+      // Only mid-onboarding: rows of users who already finished are history and never move.
+      const unexposed = state.existing.exposed === false && ctx.onboardingCompleted === false;
+      if (hasLiveHardArm(experiment) && ctx.invited && unexposed && state.existing.reason !== 'override') {
+        const already = state.existing.reason === 'fallback' && state.existing.arm === fallback.key;
+        return make(fallback, 'fallback', !already, 'invited', !already);
+      }
+      return make(arm, state.existing.reason, false);
+    }
   }
 
-  // 3. Audience.
-  const why = ineligibilityReason(experiment.audience, ctx);
+  // 3. Audience (stored), then the hard-paywall rules (derived from the arms).
+  const why = ineligibilityReason(experiment.audience, ctx) ?? hardPaywallIneligibility(experiment, ctx);
   if (why) return make(fallback, 'fallback', false, why);
 
   // 4. Layer slice (mutual exclusion). A missing layer row is never "inside".

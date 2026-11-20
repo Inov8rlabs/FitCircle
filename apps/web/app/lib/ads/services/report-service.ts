@@ -34,6 +34,7 @@ import { AD_CHANNELS, GROUP_BYS } from '../types';
 
 import { chunk, db, selectAll } from './db';
 import { AdsSyncService } from './sync-service';
+import { confirmedOnly } from '@/lib/meal-drafts/config';
 
 const MAX_RANGE_DAYS = 400;
 const DAY_MS = 86_400_000;
@@ -173,9 +174,8 @@ export class AdsReportService {
       const [attr, food, checkins, subs] = await Promise.all([
         selectAll<AttributionRow>(() => db().from('user_attribution').select('*').in('user_id', ids).order('user_id', { ascending: true })),
         selectAll<{ id: string; user_id: string; created_at: string; input_method: string | null }>(() =>
-          db()
-            .from('food_log_entries')
-            .select('id, user_id, created_at, input_method')
+          confirmedOnly(db().from('food_log_entries')
+            .select('id, user_id, created_at, input_method'))
             .in('user_id', ids)
             .gte('created_at', actFrom)
             .lt('created_at', actTo)

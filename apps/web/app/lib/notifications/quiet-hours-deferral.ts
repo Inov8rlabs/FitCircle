@@ -37,6 +37,8 @@ export const DEFERRABLE_PRIORITY: readonly NotificationType[] = [
   'meal_reminder_lunch',
   'meal_reminder_snack',
   'meal_reminder_dinner',
+  // 1.1.5: a milestone reached by a 2 am sync is held until quiet hours end (ENGAGEMENT_115_SPEC §5.2).
+  'milestone_achieved',
 ];
 export const DEFERRABLE_TYPES: ReadonlySet<NotificationType> = new Set(DEFERRABLE_PRIORITY);
 

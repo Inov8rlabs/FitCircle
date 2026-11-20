@@ -249,6 +249,14 @@ export class SubscriptionService {
     // Promo conversion hook (pro_value → Subscription Started). No-op while promos are off; never throws.
     if (event.type === 'INITIAL_PURCHASE') await PromoService.recordConversion(profile.id, 'subscription_started');
 
+    // 1.1.5 streak save backstop (ENGAGEMENT_115_SPEC §5.3): a user who opened a save offer and then
+    // went Pro gets that day protected even if the app never calls activate. Never throws.
+    if (patch.subscription_tier === 'premium') {
+      await import('./streak-save-service')
+        .then(({ StreakSaveService }) => StreakSaveService.applyAfterPurchase(profile.id))
+        .catch((err: any) => console.error('[SubscriptionService] streak save backstop failed:', err?.message));
+    }
+
     if (payment) {
       const { error: paymentError } = await supabase.from('payments').insert({
         user_id: profile.id,

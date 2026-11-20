@@ -101,7 +101,7 @@ describe.each([
   it('old build (1.1.2) → the protective defaults', async () => {
     const body = await (await entitlements(as(base, '1.1.2'))).json();
     expect(body.data.limits).toMatchObject({ fitzyMessagesPerDay: 5, foodAiAnalysesTotal: 1000 });
-    await expect(UsageService.assertFitzyQuota(USER)).resolves.toBeUndefined();
+    await expect(UsageService.assertFitzyQuota(USER)).resolves.toMatchObject({ tier: expect.stringMatching(/^(free|pro)$/) });
     await expect(UsageService.reserveFoodAi(USER, 'h')).resolves.toBeTruthy();
   });
 });

@@ -40,6 +40,7 @@ import type {
   TrialsListQuery,
   TrialTestFlag,
 } from './types';
+import { confirmedOnly } from '@/lib/meal-drafts/config';
 
 const PROFILE_COLS =
   'id, email, email_canonical, display_name, username, created_at, is_admin, metadata, country_code, subscription_tier, subscription_status, subscription_platform, subscription_product_id, subscription_expires_at, subscription_will_renew, trial_started_at, trial_ends_at, trial_converted_at';
@@ -465,8 +466,8 @@ export class TrialsAdminService {
     const [foodLogEntries, mealsLogged, firstMeal, lastMeal, checkIns, fitzyConversations, fitzyMessages, circlesJoined] = await Promise.all([
       countRows('food_log_entries', (q) => q.eq('user_id', userId).is('deleted_at', null)),
       countRows('food_log_entries', (q) => q.eq('user_id', userId).eq('entry_type', 'food').is('deleted_at', null)),
-      db().from('food_log_entries').select('logged_at').eq('user_id', userId).eq('entry_type', 'food').is('deleted_at', null).order('logged_at', { ascending: true }).limit(1),
-      db().from('food_log_entries').select('logged_at').eq('user_id', userId).eq('entry_type', 'food').is('deleted_at', null).order('logged_at', { ascending: false }).limit(1),
+      confirmedOnly(db().from('food_log_entries').select('logged_at')).eq('user_id', userId).eq('entry_type', 'food').is('deleted_at', null).order('logged_at', { ascending: true }).limit(1),
+      confirmedOnly(db().from('food_log_entries').select('logged_at')).eq('user_id', userId).eq('entry_type', 'food').is('deleted_at', null).order('logged_at', { ascending: false }).limit(1),
       countRows('daily_tracking', (q) => q.eq('user_id', userId)),
       countRows('fitzy_conversations', (q) => q.eq('user_id', userId)),
       countRows('fitzy_messages', (q) => q.eq('user_id', userId).eq('role', 'user')),

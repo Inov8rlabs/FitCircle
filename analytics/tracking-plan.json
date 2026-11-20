@@ -1,6 +1,6 @@
 {
   "$schema": "./tracking-plan.schema.json",
-  "version": 35,
+  "version": 36,
   "updated": "2026-11-13",
   "conventions": {
     "eventNames": "Title Case, '<Object> <Past-tense verb>' (e.g. 'Meal Logged'). Names are frozen once shipped: rename in the analytics tool, never in code.",
@@ -233,6 +233,45 @@
       "ineligible",
       "unknown",
       "server_promoted"
+    ],
+    "scan_allowance_mode": [
+      "starter",
+      "daily",
+      "exhausted"
+    ],
+    "share_prompt_outcome": [
+      "shared",
+      "dismissed",
+      "edited"
+    ],
+    "paywall_position": [
+      "end",
+      "after_meal"
+    ],
+    "trial_reminder_channel": [
+      "push",
+      "email"
+    ],
+    "meal_review_outcome": [
+      "saved",
+      "discarded",
+      "later",
+      "back"
+    ],
+    "meal_capture_cancel_stage": [
+      "consent",
+      "permission",
+      "camera",
+      "preview",
+      "paywall"
+    ],
+    "meal_step_variant": [
+      "control",
+      "example_describe"
+    ],
+    "meal_draft_resolution": [
+      "confirmed",
+      "discarded"
     ]
   },
   "globalProperties": [
@@ -669,6 +708,13 @@
           "type": "string",
           "required": false,
           "description": "Onboarding flow: v1 (classic) or v2 (tour). Absent on builds before 1.1.1."
+        },
+        {
+          "name": "meal_step_variant",
+          "type": "enum",
+          "enum": "meal_step_variant",
+          "required": false,
+          "description": "1.1.5+: onboarding_meal_step experiment arm. ENGAGEMENT_115_SPEC §14.8."
         }
       ]
     },
@@ -686,6 +732,19 @@
           "type": "string",
           "required": false,
           "description": "Onboarding flow: v1 (classic) or v2 (tour). Absent on builds before 1.1.1."
+        },
+        {
+          "name": "meal_step_variant",
+          "type": "enum",
+          "enum": "meal_step_variant",
+          "required": false,
+          "description": "1.1.5+: onboarding_meal_step experiment arm. ENGAGEMENT_115_SPEC §14.8."
+        },
+        {
+          "name": "next_meal_nudge",
+          "type": "bool",
+          "required": false,
+          "description": "1.1.5+: the user chose \"Do it at my next meal\" (asks for the first-meal push)."
         }
       ]
     },
@@ -709,6 +768,13 @@
           "type": "string",
           "required": false,
           "description": "Onboarding flow: v1 (classic) or v2 (tour). Absent on builds before 1.1.1."
+        },
+        {
+          "name": "meal_step_variant",
+          "type": "enum",
+          "enum": "meal_step_variant",
+          "required": false,
+          "description": "1.1.5+: onboarding_meal_step experiment arm. ENGAGEMENT_115_SPEC §14.8."
         }
       ]
     },
@@ -956,7 +1022,7 @@
           "name": "notification_type",
           "type": "string",
           "required": true,
-          "description": "notification_log.notification_type, e.g. meal_reminder_lunch, chat_message, winback_day3 / winback_day7 / winback_day14 / winback_day30, leaderboard_overtaken, health_sync_update."
+          "description": "notification_log.notification_type, e.g. meal_reminder_lunch, chat_message, winback_day3 / winback_day7 / winback_day14 / winback_day30, leaderboard_overtaken, health_sync_update, dont_miss_twice / streak_save_offer / milestone_achieved (1.1.5, ENGAGEMENT_115_SPEC §5)."
         },
         {
           "name": "notification_category",
@@ -1280,6 +1346,12 @@
           "type": "bool",
           "required": false,
           "description": "The meal was saved shared with the user's circles (share_with_circles). Water/supplements: omit."
+        },
+        {
+          "name": "from_draft",
+          "type": "bool",
+          "required": false,
+          "description": "1.1.5+: the meal was a Draft the user confirmed (ENGAGEMENT_115_SPEC §14.6)."
         }
       ]
     },
@@ -1426,6 +1498,29 @@
           "name": "source",
           "type": "string",
           "required": false
+        },
+        {
+          "name": "allowance_mode",
+          "type": "enum",
+          "enum": "scan_allowance_mode",
+          "required": false,
+          "description": "Food only (1.1.5): the scan allowance phase when the limit was hit (allowances.foodScans.mode)."
+        },
+        {
+          "name": "window",
+          "type": "enum",
+          "values": [
+            "week",
+            "day"
+          ],
+          "required": false,
+          "description": "Fitzy only (1.1.5): the free-message window that ran out."
+        },
+        {
+          "name": "blocked_before_upload",
+          "type": "bool",
+          "required": false,
+          "description": "true = the app knew the allowance was 0 and opened the paywall without uploading; false = the server refused (UPGRADE_REQUIRED)."
         }
       ]
     },
@@ -1588,6 +1683,17 @@
           "name": "milestone",
           "type": "int",
           "required": true
+        },
+        {
+          "name": "trigger",
+          "type": "enum",
+          "values": [
+            "claim_response",
+            "pending",
+            "push"
+          ],
+          "required": false,
+          "description": "1.1.5: what showed the celebration: a create/claim response meta.streak.milestone, GET /streaks/celebrations on launch/foreground, or a milestone_achieved push tap."
         }
       ]
     },
@@ -2219,6 +2325,12 @@
           "name": "is_suggestion",
           "type": "bool",
           "required": false
+        },
+        {
+          "name": "remaining_after",
+          "type": "int",
+          "required": false,
+          "description": "Free users only (1.1.5): free messages left in the window after this one (chat response remaining). Omit for Pro."
         }
       ]
     },
@@ -2332,7 +2444,7 @@
           "name": "source",
           "type": "string",
           "required": true,
-          "description": "Snake_case trigger id: ai_limit, pro_card, settings, circle_limit, history_limit, remove_ads, body_scan, milestone, streak_shield, locked_feature, pricing_page, onboarding, landing, landing_footer (web), first_meal_aha (post-first-meal soft paywall), feed_pro_value (home feed pro_value promo), pro_expiring_card / pro_expired_card / trial_expiring_card (Pro lifecycle home card: free Pro ending, ended, store trial ending — PRO_LIFECYCLE_PROMPTS.md; Android prefixes promo sources with 'promo:'), fitzy (a locked Fitzy Pro feature or the Fitzy Pro card), fitzy_send (trial-first: a free user tried to SEND a Fitzy message, from the pre-send gate or the server's UPGRADE_REQUIRED; TRIAL_FIRST_SPEC §1), fitzy_recommendations (home feed fitzy_recommendations teaser; TRIAL_FIRST_SPEC §3), food_ai (the free lifetime AI food analysis allowance is used up; TRIAL_FIRST_SPEC §5). Never camelCase."
+          "description": "Snake_case trigger id: ai_limit, pro_card, settings, circle_limit, history_limit, remove_ads, body_scan, milestone, streak_shield, locked_feature, pricing_page, onboarding, landing, landing_footer (web), first_meal_aha (post-first-meal soft paywall), feed_pro_value (home feed pro_value promo), pro_expiring_card / pro_expired_card / trial_expiring_card (Pro lifecycle home card: free Pro ending, ended, store trial ending — PRO_LIFECYCLE_PROMPTS.md; Android prefixes promo sources with 'promo:'), fitzy (a locked Fitzy Pro feature or the Fitzy Pro card), fitzy_send (trial-first: a free user tried to SEND a Fitzy message, from the pre-send gate or the server's UPGRADE_REQUIRED; TRIAL_FIRST_SPEC §1), fitzy_recommendations (home feed fitzy_recommendations teaser; TRIAL_FIRST_SPEC §3), food_ai (the free lifetime AI food analysis allowance is used up; TRIAL_FIRST_SPEC §5). food_scan_limit (1.1.5: out of free AI scans, the scan paywall with the captured photo; ENGAGEMENT_115_SPEC §2.4), fitzy_weekly_limit (1.1.5: the week's free Fitzy messages are used up; §3.4), streak_save (1.1.5: save a just-broken streak with Pro; §5.3). Never camelCase."
         },
         {
           "name": "is_hard",
@@ -2397,6 +2509,19 @@
           "enum": "default_plan_source",
           "required": false,
           "description": "Where default_plan came from: request (deep-link plan= / caller preselect), experiment (the arm's own rule, e.g. variantB annualOnly), remote (fresh GET /api/mobile/paywall/config applied before the person touched a plan), cached (paywall_config_v1 on the device), fallback (built-in annual)."
+        },
+        {
+          "name": "trial_timeline_shown",
+          "type": "bool",
+          "required": false,
+          "description": "1.1.5+: the trial timeline (Today → reminder → first charge, real dates) was rendered under the plans on this paywall. ENGAGEMENT_115_SPEC §14.1."
+        },
+        {
+          "name": "paywall_position",
+          "type": "enum",
+          "required": false,
+          "description": "Onboarding paywall only (1.1.5+): end = after the summary (default); after_meal = right after the first-meal step with a logged meal. ENGAGEMENT_115_SPEC §14.2.",
+          "enum": "paywall_position"
         }
       ]
     },
@@ -2414,7 +2539,7 @@
           "name": "source",
           "type": "string",
           "required": true,
-          "description": "Snake_case trigger id: ai_limit, pro_card, settings, circle_limit, history_limit, remove_ads, body_scan, milestone, streak_shield, locked_feature, pricing_page, onboarding, landing, landing_footer (web), first_meal_aha (post-first-meal soft paywall), feed_pro_value (home feed pro_value promo), pro_expiring_card / pro_expired_card / trial_expiring_card (Pro lifecycle home card: free Pro ending, ended, store trial ending — PRO_LIFECYCLE_PROMPTS.md; Android prefixes promo sources with 'promo:'), fitzy, fitzy_send, fitzy_recommendations, food_ai (trial-first sources; see Paywall Viewed.source). Never camelCase."
+          "description": "Snake_case trigger id: ai_limit, pro_card, settings, circle_limit, history_limit, remove_ads, body_scan, milestone, streak_shield, locked_feature, pricing_page, onboarding, landing, landing_footer (web), first_meal_aha (post-first-meal soft paywall), feed_pro_value (home feed pro_value promo), pro_expiring_card / pro_expired_card / trial_expiring_card (Pro lifecycle home card: free Pro ending, ended, store trial ending — PRO_LIFECYCLE_PROMPTS.md; Android prefixes promo sources with 'promo:'), fitzy, fitzy_send, fitzy_recommendations, food_ai (trial-first sources; see Paywall Viewed.source). food_scan_limit (1.1.5: out of free AI scans, the scan paywall with the captured photo; ENGAGEMENT_115_SPEC §2.4), fitzy_weekly_limit (1.1.5: the week's free Fitzy messages are used up; §3.4), streak_save (1.1.5: save a just-broken streak with Pro; §5.3). Never camelCase."
         },
         {
           "name": "plan",
@@ -2518,7 +2643,7 @@
           "name": "source",
           "type": "string",
           "required": true,
-          "description": "Snake_case trigger id: ai_limit, pro_card, settings, circle_limit, history_limit, remove_ads, body_scan, milestone, streak_shield, locked_feature, pricing_page, onboarding, landing, landing_footer (web). Never camelCase."
+          "description": "Snake_case trigger id: ai_limit, pro_card, settings, circle_limit, history_limit, remove_ads, body_scan, milestone, streak_shield, locked_feature, pricing_page, onboarding, landing, landing_footer (web). food_scan_limit (1.1.5: out of free AI scans, the scan paywall with the captured photo; ENGAGEMENT_115_SPEC §2.4), fitzy_weekly_limit (1.1.5: the week's free Fitzy messages are used up; §3.4), streak_save (1.1.5: save a just-broken streak with Pro; §5.3). Never camelCase."
         },
         {
           "name": "plan",
@@ -2674,7 +2799,7 @@
           "name": "source",
           "type": "string",
           "required": true,
-          "description": "Snake_case trigger id: ai_limit, pro_card, settings, circle_limit, history_limit, remove_ads, body_scan, milestone, streak_shield, locked_feature, pricing_page, onboarding, landing, landing_footer (web). Never camelCase."
+          "description": "Snake_case trigger id: ai_limit, pro_card, settings, circle_limit, history_limit, remove_ads, body_scan, milestone, streak_shield, locked_feature, pricing_page, onboarding, landing, landing_footer (web). food_scan_limit (1.1.5: out of free AI scans, the scan paywall with the captured photo; ENGAGEMENT_115_SPEC §2.4), fitzy_weekly_limit (1.1.5: the week's free Fitzy messages are used up; §3.4), streak_save (1.1.5: save a just-broken streak with Pro; §5.3). Never camelCase."
         },
         {
           "name": "plan",
@@ -5213,6 +5338,377 @@
           "name": "nonce_replays",
           "type": "int",
           "required": true
+        }
+      ]
+    },
+    {
+      "name": "Food Scan Meter Viewed",
+      "category": "nutrition",
+      "platforms": [
+        "ios",
+        "android"
+      ],
+      "description": "1.1.5: the free AI scan meter was shown on the scan entry (camera / library sheet or meal preview). Free users only. Counts are allowance counters, not health data.",
+      "properties": [
+        {
+          "name": "mode",
+          "type": "enum",
+          "enum": "scan_allowance_mode",
+          "required": true
+        },
+        {
+          "name": "remaining",
+          "type": "int",
+          "required": false
+        },
+        {
+          "name": "is_last",
+          "type": "bool",
+          "required": false,
+          "description": "remaining == 1."
+        }
+      ]
+    },
+    {
+      "name": "Food Scan Paywall Resolved",
+      "category": "monetization",
+      "platforms": [
+        "ios",
+        "android"
+      ],
+      "description": "1.1.5: how the food_scan_limit paywall (with the captured photo) ended.",
+      "properties": [
+        {
+          "name": "outcome",
+          "type": "enum",
+          "values": [
+            "purchased",
+            "manual",
+            "dismissed"
+          ],
+          "required": true
+        },
+        {
+          "name": "mode",
+          "type": "enum",
+          "enum": "scan_allowance_mode",
+          "required": false
+        },
+        {
+          "name": "had_saved_entry",
+          "type": "bool",
+          "required": false,
+          "description": "The server refusal carried details.savedEntryId (Option B)."
+        }
+      ]
+    },
+    {
+      "name": "Meal Share Prompt Viewed",
+      "category": "social",
+      "platforms": [
+        "ios",
+        "android"
+      ],
+      "description": "1.1.5: the Share to circles card on the meal-logged success sheet was shown.",
+      "properties": [
+        {
+          "name": "circle_count",
+          "type": "int",
+          "required": true
+        },
+        {
+          "name": "default_on_count",
+          "type": "int",
+          "required": false
+        },
+        {
+          "name": "already_shared",
+          "type": "bool",
+          "required": false
+        }
+      ]
+    },
+    {
+      "name": "Meal Share Prompt Resolved",
+      "category": "social",
+      "platforms": [
+        "ios",
+        "android"
+      ],
+      "description": "1.1.5: the user tapped Share, dismissed the card, or edited an already-shared meal's circles.",
+      "properties": [
+        {
+          "name": "outcome",
+          "type": "enum",
+          "enum": "share_prompt_outcome",
+          "required": true
+        },
+        {
+          "name": "shared_circle_count",
+          "type": "int",
+          "required": false
+        },
+        {
+          "name": "toggled_off_count",
+          "type": "int",
+          "required": false,
+          "description": "Rows the user turned off that were default_on."
+        },
+        {
+          "name": "toggled_on_count",
+          "type": "int",
+          "required": false,
+          "description": "Rows the user turned on that were not default_on."
+        }
+      ]
+    },
+    {
+      "name": "Chat Photo Viewed",
+      "category": "social",
+      "platforms": [
+        "ios",
+        "android"
+      ],
+      "description": "1.1.5: a circle chat photo was opened in the full-screen viewer.",
+      "properties": [
+        {
+          "name": "kind",
+          "type": "enum",
+          "values": [
+            "meal_card",
+            "user_photo"
+          ],
+          "required": true
+        },
+        {
+          "name": "zoomed",
+          "type": "bool",
+          "required": false
+        }
+      ]
+    },
+    {
+      "name": "Streak Save Offer Viewed",
+      "category": "streaks",
+      "platforms": [
+        "ios",
+        "android"
+      ],
+      "description": "1.1.5: the save-your-streak flow opened (sheet or paywall) from GET /streaks/save-offer.",
+      "properties": [
+        {
+          "name": "path",
+          "type": "enum",
+          "values": [
+            "activate",
+            "paywall"
+          ],
+          "required": true
+        },
+        {
+          "name": "lost_streak",
+          "type": "int",
+          "required": false
+        },
+        {
+          "name": "entry",
+          "type": "enum",
+          "values": [
+            "push",
+            "dashboard_card",
+            "streaks_screen"
+          ],
+          "required": false
+        }
+      ]
+    },
+    {
+      "name": "Streak Saved",
+      "category": "streaks",
+      "platforms": [
+        "ios",
+        "android"
+      ],
+      "description": "1.1.5: a just-broken streak was restored via the save flow.",
+      "properties": [
+        {
+          "name": "method",
+          "type": "enum",
+          "values": [
+            "shield",
+            "pro_unlimited",
+            "after_purchase"
+          ],
+          "required": true
+        },
+        {
+          "name": "lost_streak",
+          "type": "int",
+          "required": false
+        }
+      ]
+    },
+    {
+      "name": "Trial Reminder Sent",
+      "category": "monetization",
+      "platforms": [
+        "server"
+      ],
+      "description": "Server: the one trial-ending reminder for a store trial was delivered (10:00 local, 24-48 h before the trial ends). ENGAGEMENT_115_SPEC §14.1.",
+      "properties": [
+        {
+          "name": "channel",
+          "type": "enum",
+          "required": true,
+          "description": "push, or email when the push could not be delivered.",
+          "enum": "trial_reminder_channel"
+        },
+        {
+          "name": "trial_days",
+          "type": "int",
+          "required": false,
+          "description": "Length of the trial in days."
+        }
+      ]
+    },
+    {
+      "name": "Meal Review Shown",
+      "category": "nutrition",
+      "platforms": [
+        "ios",
+        "android"
+      ],
+      "description": "1.1.5+: the AI meal result (review screen) was shown. MEAL_LOG_ABANDONMENT_2026-11 / ENGAGEMENT_115_SPEC §14.4.",
+      "properties": [
+        {
+          "name": "job_id",
+          "type": "string",
+          "required": true,
+          "description": "Client analysis job id; the same id on Meal Review Closed and on every analysis event of this attempt."
+        },
+        {
+          "name": "auto_opened",
+          "type": "bool",
+          "required": true,
+          "description": "true = the app opened the result itself; false = the user tapped a ready row / card."
+        },
+        {
+          "name": "source",
+          "type": "string",
+          "required": false,
+          "description": "Where the attempt started: onboarding, food_log, home_card, quick_add, meal_reminder, …"
+        }
+      ]
+    },
+    {
+      "name": "Meal Review Closed",
+      "category": "nutrition",
+      "platforms": [
+        "ios",
+        "android"
+      ],
+      "description": "1.1.5+: the review screen closed. One per Meal Review Shown.",
+      "properties": [
+        {
+          "name": "job_id",
+          "type": "string",
+          "required": true,
+          "description": "Same id as Meal Review Shown."
+        },
+        {
+          "name": "outcome",
+          "type": "enum",
+          "enum": "meal_review_outcome",
+          "required": true,
+          "description": "saved | discarded | later (kept as a ready draft) | back (left without choosing)."
+        },
+        {
+          "name": "edit_count",
+          "type": "int",
+          "required": false,
+          "description": "Item edits made on the review screen."
+        },
+        {
+          "name": "reanalyzed",
+          "type": "bool",
+          "required": false,
+          "description": "The user asked for a re-analysis."
+        }
+      ]
+    },
+    {
+      "name": "Meal Capture Cancelled",
+      "category": "nutrition",
+      "platforms": [
+        "ios",
+        "android"
+      ],
+      "description": "1.1.5+: a photo/library attempt ended before upload.",
+      "properties": [
+        {
+          "name": "stage",
+          "type": "enum",
+          "enum": "meal_capture_cancel_stage",
+          "required": true,
+          "description": "consent (AI consent declined) | permission (camera/photos denied) | camera (camera closed with no photo) | preview (photo discarded at preview) | paywall (scan limit paywall closed without buying)."
+        },
+        {
+          "name": "source",
+          "type": "string",
+          "required": false,
+          "description": "Same values as Meal Review Shown.source."
+        }
+      ]
+    },
+    {
+      "name": "Meal Draft Created",
+      "category": "nutrition",
+      "platforms": [
+        "server"
+      ],
+      "description": "Server: an AI meal result left unsaved for 30 min was kept as a Draft meal (not counted until confirmed). ENGAGEMENT_115_SPEC §14.6.",
+      "properties": [
+        {
+          "name": "method",
+          "type": "string",
+          "required": false,
+          "description": "photo | voice | text (the analysis method)."
+        }
+      ]
+    },
+    {
+      "name": "Meal Draft Resolved",
+      "category": "nutrition",
+      "platforms": [
+        "ios",
+        "android"
+      ],
+      "description": "1.1.5+: the user confirmed or discarded a Draft meal.",
+      "properties": [
+        {
+          "name": "resolution",
+          "type": "enum",
+          "enum": "meal_draft_resolution",
+          "required": true,
+          "description": "confirmed | discarded."
+        },
+        {
+          "name": "age_minutes",
+          "type": "int",
+          "required": false,
+          "description": "Minutes since the draft was created."
+        },
+        {
+          "name": "edited",
+          "type": "bool",
+          "required": false,
+          "description": "Items were changed before confirming."
+        },
+        {
+          "name": "surface",
+          "type": "string",
+          "required": false,
+          "description": "food_log | home_card | push | meal_detail."
         }
       ]
     }

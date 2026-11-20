@@ -3,9 +3,10 @@ import { z } from 'zod';
 
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { StreakClaimingService } from '@/lib/services/streak-claiming-service';
-import { StreakClaimError, CLAIM_ERROR_CODES } from '@/lib/types/streak-claiming';
-import { localToday } from '@/lib/streaks/streak-calculator';
+import { requestShowsStreakCelebration } from '@/lib/streaks/celebration';
 import { readJsonBody } from '@/lib/streaks/request-body';
+import { localToday } from '@/lib/streaks/streak-calculator';
+import { StreakClaimError, CLAIM_ERROR_CODES } from '@/lib/types/streak-claiming';
 import { parseLenient, validationMessage } from '@/lib/validation/lenient-parse';
 
 // Validation schema
@@ -66,12 +67,10 @@ export async function POST(request: NextRequest) {
     const method = claimDateString === userToday ? 'explicit' : 'retroactive';
 
     // 4. Claim the streak
-    const result = await StreakClaimingService.claimStreak(
-      user.id,
-      claimDateString,
-      timezone,
-      method
-    );
+    const result = await StreakClaimingService.claimStreak(user.id, claimDateString, timezone, method, {
+      // 1.1.5: an app with streak_celebration_v1 shows the milestone itself (ENGAGEMENT_115_SPEC §5.4).
+      inAppCelebration: requestShowsStreakCelebration(request),
+    });
 
     console.log(`[POST /api/streaks/claim] User ${user.id} claimed streak for ${claimDate || 'today'}`);
 

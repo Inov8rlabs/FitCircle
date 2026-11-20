@@ -55,6 +55,7 @@ import { FitzyFocusService } from './fitzy-focus-service';
 import { FitzyService } from './fitzy-service';
 import { CAP_EXEMPT_TYPES, NotificationOrchestrator, isWithinQuietWindow, startOfLocalDay } from './notification-orchestrator';
 import { UsageService } from './usage-service';
+import { confirmedOnly } from '@/lib/meal-drafts/config';
 
 const DEFAULT_TZ = 'America/New_York';
 /** Quiet window assumed for users without a preferences row (the createDefaults window). */
@@ -185,7 +186,7 @@ export class FitzyPushService {
       ),
       chunked(ids, async (part) => ((await supabase.from('streak_claims').select('user_id, claim_date').in('user_id', part).gte('claim_date', sinceDate)).data ?? []) as any[]),
       chunked(ids, async (part) =>
-        ((await supabase.from('food_log_entries').select('user_id, entry_date, entry_type, protein_g, water_ml').in('user_id', part).gte('entry_date', since8).is('deleted_at', null)).data ?? []) as any[]
+        ((await confirmedOnly(supabase.from('food_log_entries').select('user_id, entry_date, entry_type, protein_g, water_ml')).in('user_id', part).gte('entry_date', since8).is('deleted_at', null)).data ?? []) as any[]
       ),
       chunked(ids, async (part) =>
         ((await supabase.from('exercise_logs').select('user_id, exercise_date').in('user_id', part).gte('exercise_date', sinceDate).eq('is_deleted', false)).data ?? []) as any[]

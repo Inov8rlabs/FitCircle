@@ -10,6 +10,7 @@ import type { CoachResponse, INutritionCoachService } from '../types/nutrition-c
 
 import { DietaryPreferencesService } from './dietary-preferences-service';
 import { UsageService } from './usage-service';
+import { confirmedOnly } from '@/lib/meal-drafts/config';
 
 /**
  * NutritionCoachService — the AI Nutrition Coach (PRD v4 §6.9).
@@ -115,10 +116,10 @@ export class NutritionCoachService implements INutritionCoachService {
   ): Promise<CoachResponse> {
     // 0. Tier-aware daily quota — shares the Fitzy coach budget (fitzy_message_log), since
     // both are Sonnet-backed coach calls. Throws UpgradeRequiredError / RateLimited.
-    await UsageService.assertFitzyQuota(userId);
+    const quota = await UsageService.assertFitzyQuota(userId);
     // Server-side AI consent (ConsentService), after the paywall and before anything is recorded.
     if (opts.assertAiConsent) await opts.assertAiConsent();
-    await UsageService.recordFitzyMessage(userId);
+    await UsageService.recordFitzyMessage(userId, quota);
 
     // 1. Gather light, compact grounding context (aggregates only — never raw food rows).
     const context = await this.buildContext(userId, circleId);
@@ -243,9 +244,8 @@ export class NutritionCoachService implements INutritionCoachService {
       since.setUTCDate(since.getUTCDate() - 7);
       const sinceDate = since.toISOString().split('T')[0];
 
-      const { data: entries, error: entriesError } = await supabase
-        .from('food_log_entries')
-        .select('calories, protein_g, carbs_g, fat_g, entry_date')
+      const { data: entries, error: entriesError } = await confirmedOnly(supabase.from('food_log_entries')
+        .select('calories, protein_g, carbs_g, fat_g, entry_date'))
         .eq('user_id', userId)
         .gte('entry_date', sinceDate)
         .is('deleted_at', null);

@@ -127,6 +127,7 @@ export type EmailCategory =
   | 'campaign'
   | 'onboarding_nudge'
   | 'notification'
+  | 'trial_reminder'
   | 'ads_report'
   | 'security_alert'
   | 'other';

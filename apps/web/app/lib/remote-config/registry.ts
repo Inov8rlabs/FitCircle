@@ -192,10 +192,104 @@ export const REMOTE_CONFIG_REGISTRY = {
     description:
       'Most shields a free user can bank across all shield types (earned, starter, bought with XP). Shields earned while the bank is full are dropped. Lowering it never takes shields away; users above it just stop earning until they are below it.',
   },
+  // Trial timeline on every paywall placement (docs/ENGAGEMENT_115_SPEC.md §14.1). Served as
+  // `trialTimeline: boolean` by GET /api/mobile/paywall/config (1.1.5 apps; older apps ignore it).
+  paywall_trial_timeline: {
+    type: 'enum',
+    default: 'on',
+    options: ['on', 'off'],
+    unit: 'switch',
+    description:
+      'on = every paywall placement shows the trial timeline (today / reminder / first charge) under the plan cards when the selected plan has a confirmed free trial (never shown otherwise). off = hidden on every placement except where the onboarding_paywall arm payload trial_timeline says true (the arm payload wins on onboarding).',
+  },
+  // Release 1.1.5 engagement (docs/ENGAGEMENT_115_SPEC.md §8). The daily-scan and weekly-Fitzy
+  // allowances stay 0 by default; deploy adds `{platforms:['ios'|'android'], appVersionGte:'1.1.5'}`
+  // rules (→ 2 and → 3). Requests without a version (crons, web, old builds) resolve 0 = 1.1.4 behaviour.
+  free_food_ai_daily_after_total: {
+    type: 'int',
+    default: 0,
+    min: 0,
+    max: 50,
+    unit: 'scans per local day',
+    description:
+      'Free AI scans per local day (X-Client-Timezone) once the lifetime starter allowance (free_food_ai_analyses_total) is used up. 0 = none (the starter allowance is all a free user gets, 1.1.4 behaviour). Only give it to apps >= 1.1.5 via version rules: older apps pre-gate on the lifetime count.',
+  },
+  free_fitzy_messages_per_week: {
+    type: 'int',
+    default: 0,
+    min: 0,
+    max: 100,
+    unit: 'messages per local week (Mon 00:00)',
+    description:
+      'Free Fitzy messages per local week (Monday 00:00 in X-Client-Timezone). > 0 replaces free_fitzy_messages_per_day for that request. 0 = off (the daily key applies). Onboarding-tour messages and messages sent on a trial never count. Only for apps >= 1.1.5 via version rules.',
+  },
+  meal_share_prompt: {
+    type: 'enum',
+    default: 'on',
+    options: ['on', 'off'],
+    unit: 'switch',
+    description:
+      'Served as entitlements clientConfig.mealSharePrompt. on = the 1.1.5 meal-logged success sheet shows the "Share to circles" card (nothing is posted until the user taps Share). off = the success sheet shows without the card.',
+  },
+  meal_share_large_circle_threshold: {
+    type: 'int',
+    default: 20,
+    min: 2,
+    max: 500,
+    unit: 'active members',
+    description:
+      'Circles with more active members than this (the user included) start with the share toggle OFF on the meal-logged success sheet (share-targets reason large_circle).',
+  },
+  streak_save_offer: {
+    type: 'enum',
+    default: 'on',
+    options: ['on', 'off'],
+    unit: 'switch',
+    description:
+      'on = the next-day push for a free user whose streak broke with no shield is a streak_save_offer (save it with Pro), and entitlements clientConfig.streakSaveOffer shows the dashboard "Save your streak" card instead of the auto-fired shield paywall. off = a plain dont_miss_twice push and the old dashboard behaviour.',
+  },
+  streak_save_offer_min_streak: {
+    type: 'int',
+    default: 3,
+    min: 2,
+    max: 30,
+    unit: 'streak days',
+    description: 'Smallest lost streak that gets a streak save offer (push + GET /streaks/save-offer). Shorter streaks get the streak_restart variant.',
+  },
+  streak_milestone_push: {
+    type: 'enum',
+    default: 'on',
+    options: ['on', 'off'],
+    unit: 'switch',
+    description:
+      'on = a milestone_achieved push when a streak milestone was reached but the app did not show the celebration in-app (no streak_celebration_v1 client feature, or a background sync claim). off = never pushed (the in-app pending celebration still works).',
+  },
+  dont_miss_twice_push: {
+    type: 'enum',
+    default: 'on',
+    options: ['on', 'off'],
+    unit: 'switch',
+    description:
+      'Per-user switch for the next-day "Don\'t miss twice" / streak save push (cron, so only userIds / percent rules match: there is no platform or version). The hard kill is the env DONT_MISS_TWICE_PUSH_ENABLED.',
+  },
+  // 1.1.5 (2026-11-17): the nightly "N of M checked in today" summary cards cluttered circle chat.
+  // 1.1.5 apps show a live "Today: N of M checked in" strip above the thread instead
+  // (GET /circles/:id/messages todayCheckins). Global switch: the cron has no user context.
+  circle_daily_summary_post: {
+    type: 'enum',
+    default: 'off',
+    options: ['on', 'off'],
+    unit: 'switch',
+    description:
+      'on = the nightly circle-daily-summary cron writes a daily_summary chat post ("2 of 6 checked in today") into each circle with a check-in (pre-1.1.5 behaviour). off = no chat post; the bundled circle_daily_summary push still goes out. Already-stored posts are untouched (1.1.5 apps hide them, older apps still show them). Resolved without a user (only the admin default applies).',
+  },
 } as const satisfies Record<string, RemoteConfigKeyDef>;
 
-/** The only keys a client endpoint may serve (GET /api/mobile/paywall/config). */
-export const CLIENT_VISIBLE_KEYS = ['paywall_default_plan', 'paywall_badge_plan'] as const satisfies readonly RemoteConfigKey[];
+/**
+ * The only keys a client endpoint may serve: the paywall keys (default plan, badge, trial timeline) via GET /api/mobile/paywall/config,
+ * the 1.1.5 switches via GET /api/mobile/entitlements `clientConfig` (user-scoped).
+ */
+export const CLIENT_VISIBLE_KEYS = ['paywall_default_plan', 'paywall_badge_plan', 'paywall_trial_timeline', 'meal_share_prompt', 'streak_save_offer'] as const satisfies readonly RemoteConfigKey[];
 
 export type RemoteConfigKey = keyof typeof REMOTE_CONFIG_REGISTRY;
 

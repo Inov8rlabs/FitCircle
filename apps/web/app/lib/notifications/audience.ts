@@ -4,8 +4,9 @@
  * send(), so every caller (crons, hooks, fan-outs) gets the same rules.
  *
  * Suppression reasons (notification_log.suppression_reason / Push Sent):
- *   test_user    internal, review, robot (Play pre-launch / Test Lab), QA or
+ *   test_user    review, robot (Play pre-launch / Test Lab), QA, Play tester or
  *                X-Test-Device account: no non-transactional pushes at all.
+ *                Internal (team) accounts are NOT muted: they get every push.
  *   dormant_user > 30 local days since the last foreground use: only
  *                transactional pushes (and a health-sync update, §8.5).
  *   lapsed_user  3–30 days: daily habit nudges stop (meal reminders,
@@ -56,6 +57,9 @@ export const HABIT_TYPES: ReadonlySet<NotificationType> = new Set<NotificationTy
   'fitzy_weekly_recap',
   'fitzy_weekly_plan',
   'daily_drop',
+  // 1.1.5 next-day push (ENGAGEMENT_115_SPEC §5.2): active users only; lapsed users get the win-back ladder.
+  'dont_miss_twice',
+  'streak_save_offer',
 ]);
 
 export const WINBACK_TYPES: ReadonlySet<NotificationType> = new Set<NotificationType>([
@@ -81,7 +85,10 @@ export function isTransactionalAudience(type: NotificationType): boolean {
 /** Why `type` must not go to this user, or null. */
 export function audienceSuppression(type: NotificationType, facts: AudienceFacts): AudienceSuppression | null {
   if (isTransactionalAudience(type)) return null;
-  if (facts.testReason) return 'test_user';
+  // Team accounts (admins, our own domains) get pushes like real users so we
+  // live with what customers get; they stay excluded from metrics via the
+  // testUser tag. Robots, reviewers, QA and Play testers stay muted.
+  if (facts.testReason && facts.testReason !== 'internal') return 'test_user';
   const stage = facts.stage;
   if (WINBACK_TYPES.has(type)) return isLapsed(stage) ? null : stage === 'dormant' ? 'dormant_user' : stage === null ? null : 'not_lapsed';
   if (stage === 'dormant' && !DORMANT_ALLOWED_TYPES.has(type)) return 'dormant_user';

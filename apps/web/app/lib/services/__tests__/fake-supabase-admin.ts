@@ -72,7 +72,7 @@ export class FakeDb {
   }
 }
 
-type Filter = { kind: 'eq' | 'neq' | 'gte' | 'lt' | 'ilike'; col: string; val: any } | { kind: 'in'; col: string; vals: any[] } | { kind: 'notIs'; col: string; val: any };
+type Filter = { kind: 'eq' | 'neq' | 'gte' | 'lt' | 'ilike'; col: string; val: any } | { kind: 'in'; col: string; vals: any[] } | { kind: 'notIs'; col: string; val: any } | { kind: 'or'; terms: Array<{ col: string; op: string; val: string }> };
 
 class FakeQuery implements PromiseLike<any> {
   private op: 'select' | 'insert' | 'update' | 'delete' = 'select';
@@ -115,6 +115,15 @@ class FakeQuery implements PromiseLike<any> {
   gte(col: string, val: any) { this.filters.push({ kind: 'gte', col, val }); return this; }
   lt(col: string, val: any) { this.filters.push({ kind: 'lt', col, val }); return this; }
   in(col: string, vals: any[]) { this.filters.push({ kind: 'in', col, vals }); return this; }
+  /** PostgREST `or('a.is.null,b.neq.x')` — only `is` / `eq` / `neq` terms. */
+  or(expr: string) {
+    const terms = expr.split(',').map((t) => {
+      const [col, op, ...rest] = t.split('.');
+      return { col, op, val: rest.join('.') };
+    });
+    this.filters.push({ kind: 'or', terms });
+    return this;
+  }
   not(col: string, _op: string, val: any) { this.filters.push({ kind: 'notIs', col, val }); return this; }
   limit(_n: number) { return this; }
   order(_c: string, _o?: any) { return this; }
@@ -150,6 +159,14 @@ class FakeQuery implements PromiseLike<any> {
           case 'lt': return row[f.col] != null && row[f.col] < f.val;
           case 'in': return f.vals.includes(row[f.col]);
           case 'notIs': return row[f.col] !== f.val;
+          case 'or':
+            return f.terms.some((t) => {
+              const v = row[t.col] ?? null;
+              if (t.op === 'is') return t.val === 'null' ? v === null : String(v) === t.val;
+              if (t.op === 'eq') return v !== null && String(v) === t.val;
+              if (t.op === 'neq') return v !== null && String(v) !== t.val;
+              return false;
+            });
         }
       })
     );

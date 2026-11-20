@@ -3,7 +3,7 @@ import { z } from 'zod';
 
 import { aiConsentFail } from '@/lib/consents/http';
 import { parseFitzyContext } from '@/lib/fitzy/context';
-import { fitzyUpgradeMessage, paywallFor } from '@/lib/fitzy/paywall';
+import { fitzyUpgradeEnvelope } from '@/lib/fitzy/http';
 import { checkIntegrity } from '@/lib/integrity/enforcement';
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { enforceAbuseLimits } from '@/lib/security/abuse-limits';
@@ -115,21 +115,18 @@ export async function POST(request: NextRequest) {
     if (error instanceof AiConsentRequiredError) return aiConsentFail(error);
 
     if (error instanceof UpgradeRequiredError) {
+      // Trial-first (TRIAL_FIRST_SPEC §1): same 429 envelope + trigger as before so shipped
+      // clients keep opening their paywall; copy + trialDays/trialEligible (and the 1.1.5
+      // weekly window, ENGAGEMENT_115_SPEC §3.3) are additive.
+      const envelope = fitzyUpgradeEnvelope(error);
       return NextResponse.json(
         {
           success: false,
           data: null,
           error: {
             code: 'UPGRADE_REQUIRED',
-            // Trial-first (TRIAL_FIRST_SPEC §1): same 429 envelope + trigger as before so shipped
-            // clients keep opening their paywall; copy + trialDays/trialEligible are additive.
-            message: fitzyUpgradeMessage(error.limit, error.trialEligible === true),
-            details: {
-              feature: error.feature,
-              used: error.used,
-              limit: error.limit,
-              paywall: paywallFor('fitzy_quota', { trialEligible: error.trialEligible === true, trialDays: error.trialDays }),
-            },
+            message: envelope.message,
+            details: envelope.details,
             timestamp: new Date().toISOString(),
           },
           meta: null,

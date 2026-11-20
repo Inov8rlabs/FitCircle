@@ -415,3 +415,142 @@ describe('POST /api/mobile/onboarding/gate + entitlements gate', () => {
     expect((await POST_GATE(req('/api/mobile/onboarding/gate', { body: {} }))).status).toBe(400);
   });
 });
+
+describe('onboarding_paywall forced-trial arm (1.1.5): invited / old-client / Pro exclusion + no app gate', () => {
+  const FRIEND = 'f0000000-0000-4000-8000-0000000000ff';
+  const PRIVATE_CIRCLE = 'c0000000-0000-4000-8000-000000000001';
+  const PUBLIC_CIRCLE = 'dc69b1b5-9fb6-4f50-8f5f-0f1776af82be';
+  const PAYWALL_ARMS = [
+    { key: 'control', name: 'Plans + trial timeline', weight: 50, payload: { layout: 'plans', paywall: 'soft', trial_timeline: true } },
+    { key: 'variantA', name: 'Your plan recap', weight: 0, payload: { layout: 'plan_recap', paywall: 'soft' } },
+    { key: 'variantB', name: 'Annual with savings vs monthly', weight: 0, payload: { layout: 'annual_savings', paywall: 'soft' } },
+    { key: 'variantC', name: 'Later after 5s', weight: 0, payload: { layout: 'plans', paywall: 'soft', trial_timeline: true, later_delay_s: 5 } },
+    { key: 'variantD', name: 'After first meal', weight: 0, payload: { layout: 'plans', paywall: 'soft', trial_timeline: true, paywall_position: 'after_meal' } },
+    { key: 'variantE', name: 'Forced trial (no close)', weight: 50, payload: { layout: 'plans', paywall: 'hard', trial_timeline: true } },
+  ];
+  // 100 % forced so "eligible" is observable as variantE.
+  const ALL_FORCED = PAYWALL_ARMS.map((a) => ({ ...a, weight: a.key === 'variantE' ? 100 : 0 }));
+
+  beforeEach(() => {
+    db = new FakeSupabase({
+      experiments: {
+        uniqueKey: ['key'],
+        rows: [
+          {
+            ...EXPERIMENT,
+            key: 'onboarding_paywall',
+            arms: ALL_FORCED,
+            audience: { platforms: ['ios', 'android'], minAppVersion: '1.1.0', newUsersOnly: true, excludeUserIds: [DEMO] },
+          },
+        ],
+      },
+      experiment_assignments: { uniqueKey: ['experiment_key', 'user_id'] },
+      experiment_overrides: { uniqueKey: ['experiment_key', 'user_id'] },
+      experiment_audit_log: {},
+      profiles: { uniqueKey: ['id'], rows: [profile()] },
+      complimentary_grants: {},
+      referrals: {},
+      fitcircle_members: {},
+      fitcircles: { rows: [{ id: PRIVATE_CIRCLE, visibility: 'private' }, { id: PUBLIC_CIRCLE, visibility: 'public' }] },
+      onboarding_progress: { uniqueKey: ['user_id'] },
+      feature_gates: {},
+      feature_flags: { rows: [{ name: 'subscriptions', is_enabled: true, rollout_percentage: 100 }] },
+    });
+    vi.mocked(createAdminSupabase).mockReturnValue(db as any);
+    authedUser = profile();
+  });
+
+  const assignPaywall = async (headers: Record<string, string> = { 'x-app-version': '1.1.5' }) =>
+    (await (await POST_ASSIGN(req('/api/mobile/experiments/assign', { body: { keys: ['onboarding_paywall'] }, headers }))).json()).data.assignments
+      .onboarding_paywall;
+  const CONTROL_FALLBACK = { arm: 'control', payload: PAYWALL_ARMS[0].payload, enrolled: false, name: 'Plans + trial timeline', reason: 'fallback' };
+
+  it('a new, non-invited 1.1.5 user is randomised into the forced arm', async () => {
+    expect(await assignPaywall()).toMatchObject({ arm: 'variantE', payload: { paywall: 'hard' }, enrolled: true, reason: 'bucket' });
+    expect(await assignPaywall({ 'x-app-version': '1.1.6', 'x-app-platform': 'android' })).toMatchObject({ arm: 'variantE' });
+  });
+
+  it.each(['1.1.4', '1.1.0', '1.0.9'])('client %s (renders "hard" as control) → control, not persisted', async (v) => {
+    expect(await assignPaywall({ 'x-app-version': v })).toEqual(CONTROL_FALLBACK);
+    expect(assignments()).toHaveLength(0);
+  });
+
+  it('no X-App-Version → control', async () => {
+    expect(await assignPaywall({ 'x-app-version': '' })).toEqual(CONTROL_FALLBACK);
+  });
+
+  it.each([
+    ['referral claim (link / code / email invite)', () => db.seed('referrals', [{ id: 'r1', invitee_id: USER, inviter_id: FRIEND, status: 'pending' }])],
+    ['device-rejected referral claim', () => db.seed('referrals', [{ id: 'r1', invitee_id: USER, inviter_id: FRIEND, status: 'rejected' }])],
+    ["friend's private circle (invite link / code / email invite accepted)", () =>
+      db.seed('fitcircle_members', [{ id: 'm1', fitcircle_id: PRIVATE_CIRCLE, user_id: USER, invited_by: FRIEND, status: 'active' }])],
+  ])('invited via %s → control, not persisted', async (_label, seed) => {
+    seed();
+    expect(await assignPaywall()).toEqual(CONTROL_FALLBACK);
+    expect(assignments()).toHaveLength(0);
+  });
+
+  it('a public circle or own circle is not an invite', async () => {
+    db.seed('fitcircle_members', [
+      { id: 'm1', fitcircle_id: PUBLIC_CIRCLE, user_id: USER, invited_by: FRIEND, status: 'active' },
+      { id: 'm2', fitcircle_id: PRIVATE_CIRCLE, user_id: USER, invited_by: USER, status: 'active' },
+    ]);
+    expect(await assignPaywall()).toMatchObject({ arm: 'variantE', enrolled: true });
+  });
+
+  it('Pro (paid / trialing) → control', async () => {
+    authedUser = profile({ subscription_tier: 'premium' });
+    expect(await assignPaywall()).toEqual(CONTROL_FALLBACK);
+  });
+
+  it('review demo account → control (audience exclusion still applies)', async () => {
+    authedUser = profile({ id: DEMO });
+    expect(await assignPaywall()).toEqual(CONTROL_FALLBACK);
+  });
+
+  it('invited AFTER being randomised (claim after the first assign) → row rewritten to control/fallback while unexposed', async () => {
+    expect((await assignPaywall()).arm).toBe('variantE');
+    db.seed('referrals', [{ id: 'r1', invitee_id: USER, inviter_id: FRIEND, status: 'pending' }]);
+    expect(await assignPaywall()).toEqual(CONTROL_FALLBACK);
+    expect(assignments()).toHaveLength(1);
+    expect(assignments()[0]).toMatchObject({ arm: 'control', reason: 'fallback' });
+    expect(await assignPaywall()).toEqual(CONTROL_FALLBACK); // stable
+  });
+
+  it('already exposed, onboarding finished, or a QA override → the sticky arm is kept', async () => {
+    expect((await assignPaywall()).arm).toBe('variantE');
+    assignments()[0].first_exposed_at = NOW.toISOString();
+    db.seed('referrals', [{ id: 'r1', invitee_id: USER, inviter_id: FRIEND, status: 'pending' }]);
+    expect((await assignPaywall()).arm).toBe('variantE');
+    assignments()[0].first_exposed_at = null;
+    authedUser = profile({ onboarding_completed: true });
+    expect((await assignPaywall()).arm).toBe('variantE');
+    authedUser = profile();
+    db.seed('experiment_overrides', [{ experiment_key: 'onboarding_paywall', user_id: USER, arm: 'variantE' }]);
+    expect(await assignPaywall()).toMatchObject({ arm: 'variantE', reason: 'override' });
+  });
+
+  it('forced arm at weight 0 → invited users enter as before (rules only while it can be drawn)', async () => {
+    db.getRows('experiments')[0].arms = PAYWALL_ARMS.map((a) => ({ ...a, weight: a.key === 'control' ? 100 : 0 }));
+    db.seed('referrals', [{ id: 'r1', invitee_id: USER, inviter_id: FRIEND, status: 'pending' }]);
+    expect(await assignPaywall({ 'x-app-version': '1.1.4' })).toMatchObject({ arm: 'control', enrolled: true, reason: 'bucket' });
+  });
+
+  it('invite lookup failure fails closed (control)', async () => {
+    const realFrom = db.from.bind(db);
+    vi.spyOn(db, 'from').mockImplementation(((t: string) => {
+      if (t === 'referrals') throw new Error('boom');
+      return realFrom(t);
+    }) as any);
+    expect(await assignPaywall()).toEqual(CONTROL_FALLBACK);
+  });
+
+  it('POST /onboarding/gate for a forced-arm user records the paywall view but never sets the app gate', async () => {
+    expect((await assignPaywall()).arm).toBe('variantE');
+    const gate = (await (await POST_GATE(req('/api/mobile/onboarding/gate', { body: { reached: true } }))).json()).data;
+    expect(gate).toEqual({ gate: 'none' });
+    expect(db.getRows('profiles')[0]).toMatchObject({ onboarding_gate: 'none', onboarding_paywall_at: NOW.toISOString() });
+    const ent = (await (await GET_ENTITLEMENTS(req('/api/mobile/entitlements', { method: 'GET' }))).json()).data;
+    expect(ent).toMatchObject({ gate: 'none', locked: false });
+  });
+});

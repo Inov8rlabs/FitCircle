@@ -135,7 +135,7 @@ class Query implements PromiseLike<any> {
   }
   insert(row: Row | Row[]) { this.op = 'insert'; this.payload = row; return this; }
   update(patch: Row) { this.op = 'update'; this.payload = patch; return this; }
-  upsert(row: Row, opts?: { onConflict?: string }) {
+  upsert(row: Row | Row[], opts?: { onConflict?: string }) {
     this.op = 'upsert';
     this.payload = row;
     this.conflictCols = (opts?.onConflict ?? 'id').split(',').map((c) => c.trim());
@@ -146,6 +146,23 @@ class Query implements PromiseLike<any> {
   eq(col: string, val: any) { this.filters.push((r) => (r[col] ?? null) === (val ?? null)); return this; }
   is(col: string, val: any) { this.filters.push((r) => (r[col] ?? null) === val); return this; }
   neq(col: string, val: any) { this.filters.push((r) => r[col] !== val); return this; }
+  /** PostgREST `or('a.is.null,b.neq.x')` — only `is` / `eq` / `neq` terms. */
+  or(expr: string) {
+    const terms = expr.split(',').map((t) => {
+      const [col, op, ...rest] = t.split('.');
+      return { col, op, val: rest.join('.') };
+    });
+    this.filters.push((r) =>
+      terms.some((t) => {
+        const v = r[t.col] ?? null;
+        if (t.op === 'is') return t.val === 'null' ? v === null : String(v) === t.val;
+        if (t.op === 'eq') return v !== null && String(v) === t.val;
+        if (t.op === 'neq') return v !== null && String(v) !== t.val;
+        return false;
+      })
+    );
+    return this;
+  }
   in(col: string, vals: any[]) { this.filters.push((r) => vals.includes(r[col])); return this; }
   gt(col: string, val: any) { this.filters.push((r) => r[col] != null && r[col] > val); return this; }
   gte(col: string, val: any) { this.filters.push((r) => r[col] != null && r[col] >= val); return this; }
@@ -229,13 +246,15 @@ class Query implements PromiseLike<any> {
         return { data: this.returning ? (Array.isArray(this.payload) ? out : out[0]) : null, error: null };
       }
       case 'upsert': {
-        const row = this.payload as Row;
         const all = this.db.rows(this.table);
-        const hit = all.find((r) => this.conflictCols.every((c) => r[c] === row[c]));
-        if (hit) Object.assign(hit, row);
-        else all.push({ updated_at: new Date().toISOString(), ...row });
-        const out = { ...(hit ?? all[all.length - 1]) };
-        return { data: this.returning ? [out] : null, error: null };
+        const outs: Row[] = [];
+        for (const row of (Array.isArray(this.payload) ? this.payload : [this.payload]) as Row[]) {
+          const hit = all.find((r) => this.conflictCols.every((c) => r[c] === row[c]));
+          if (hit) Object.assign(hit, row);
+          else all.push({ updated_at: new Date().toISOString(), ...row });
+          outs.push({ ...(hit ?? all[all.length - 1]) });
+        }
+        return { data: this.returning ? outs : null, error: null };
       }
       case 'update': {
         const rows = this.matched();

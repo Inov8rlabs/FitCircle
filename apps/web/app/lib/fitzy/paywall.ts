@@ -42,7 +42,15 @@ export const FITZY_CHAT_LOCKED_MESSAGE = {
 /** The pre-trial-first message, still used if the free limit is ever raised above 0 again. */
 export const FITZY_QUOTA_USED_MESSAGE = "You've used today's free Fitzy messages — go Pro for unlimited coaching.";
 
-export function paywallFor(trigger: PaywallTrigger, opts?: { trialEligible: boolean; trialDays?: number }): FitzyPaywall {
+/** 1.1.5 weekly refusal (ENGAGEMENT_115_SPEC §3.3): headline when no trial is offered. */
+export const FITZY_WEEKLY_HEADLINE = 'Keep chatting with Fitzy';
+
+/** "You've used this week's 3 free Fitzy messages. They reset Monday." */
+export function fitzyWeeklyUsedMessage(limit: number): string {
+  return `You've used this week's ${limit} free Fitzy ${limit === 1 ? 'message' : 'messages'}. They reset Monday.`;
+}
+
+export function paywallFor(trigger: PaywallTrigger, opts?: { trialEligible: boolean; trialDays?: number; weekly?: boolean }): FitzyPaywall {
   const base: FitzyPaywall = { trigger, headline: HEADLINES[trigger], bullets: [...BULLETS], cta: 'Unlock Fitzy Pro' };
   if (!opts) return base;
   const trial = opts.trialEligible;
@@ -51,7 +59,7 @@ export function paywallFor(trigger: PaywallTrigger, opts?: { trialEligible: bool
   if (trigger !== 'fitzy_quota') return withTrial;
   return {
     ...withTrial,
-    headline: trial ? tryProFreeHeadline(days) : NON_TRIAL_COPY.headline,
+    headline: trial ? tryProFreeHeadline(days) : opts.weekly ? FITZY_WEEKLY_HEADLINE : NON_TRIAL_COPY.headline,
     // "Cancel anytime" rides in the bullets so shipped clients that render bullets show it too.
     bullets: trial ? [...BULLETS, TRIAL_COPY.cancelAnytime] : [...BULLETS],
     cta: trial ? TRIAL_COPY.cta : NON_TRIAL_COPY.cta,
@@ -100,18 +108,55 @@ export function foodAiPaywall(limit: number, trialEligible: boolean, trialDays: 
   };
 }
 
+/**
+ * 1.1.5 daily phase (docs/ENGAGEMENT_115_SPEC.md §2.3, founder decision §13.5): "Scan every
+ * meal" everywhere; "unlimited" is never used for scans (Pro has a fair-use ceiling).
+ */
+export const FOOD_SCAN_DAILY_COPY = {
+  headline: 'Scan every meal',
+} as const;
+
+const scans = (n: number) => `${n} free ${n === 1 ? 'scan' : 'scans'}`;
+
+/** "You've used today's 2 free scans. They reset at midnight, or scan every meal with Pro." */
+export function foodScanDailyBody(dailyLimit: number): string {
+  return `You've used today's ${scans(dailyLimit)}. They reset at midnight, or scan every meal with Pro.`;
+}
+
+export type FoodAiPhase = 'starter' | 'daily' | 'exhausted';
+
 /** The food-route UPGRADE_REQUIRED message. `savedNote`: the photo/entry was kept (Option B). */
-export function foodAiUpgradeMessage(limit: number, trialEligible: boolean, savedNote = false, trialDays: number = DEFAULT_TRIAL_DAYS): string {
-  const body = foodAiBody(limit, trialEligible, trialDays);
+export function foodAiUpgradeMessage(
+  limit: number,
+  trialEligible: boolean,
+  savedNote = false,
+  trialDays: number = DEFAULT_TRIAL_DAYS,
+  phase?: FoodAiPhase
+): string {
+  const body = phase === 'daily' ? `You've used today's ${limit} free AI ${limit === 1 ? 'scan' : 'scans'}.` : foodAiBody(limit, trialEligible, trialDays);
   return savedNote ? `${body} We saved your photo so you can add the details.` : body;
 }
 
-/** details for a food UPGRADE_REQUIRED: the legacy {feature, used, limit} plus the additive paywall. */
-export function foodAiUpgradeDetails(err: { feature: string; used: number; limit: number; trialEligible?: boolean; trialDays?: number }) {
+/**
+ * details for a food UPGRADE_REQUIRED: the legacy {feature, used, limit} plus the additive
+ * paywall, and (1.1.5) `allowance` = allowances.foodScans after the refusal. In the daily phase
+ * used / limit are the DAILY numbers and the paywall uses the daily copy.
+ */
+export function foodAiUpgradeDetails(err: {
+  feature: string;
+  used: number;
+  limit: number;
+  trialEligible?: boolean;
+  trialDays?: number;
+  extra?: { phase?: FoodAiPhase; allowance?: unknown };
+}) {
+  const paywall = foodAiPaywall(err.limit, err.trialEligible === true, err.trialDays);
+  const daily = err.extra?.phase === 'daily';
   return {
     feature: err.feature,
     used: err.used,
     limit: err.limit,
-    paywall: foodAiPaywall(err.limit, err.trialEligible === true, err.trialDays),
+    paywall: daily ? { ...paywall, headline: FOOD_SCAN_DAILY_COPY.headline, body: foodScanDailyBody(err.limit) } : paywall,
+    ...(err.extra?.allowance ? { allowance: err.extra.allowance } : {}),
   };
 }

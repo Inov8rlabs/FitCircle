@@ -82,7 +82,16 @@ describe('CircleMealPostService copy + payload', () => {
       fat_g: 57,
       image_id: 'img-1',
       photo_path: '/api/mobile/food-log/images/img-1?size=medium',
+      // 1.1.5 additive (ENGAGEMENT_115_SPEC §4.4): unknown size → null (clients assume 4:3).
+      image_width: null,
+      image_height: null,
     });
+  });
+
+  it('1.1.5: carries the primary image size; never a size without an image', () => {
+    expect(CircleMealPostService.buildPayload(meal, 'img-1', { width: 1080, height: 1440 })).toMatchObject({ image_width: 1080, image_height: 1440 });
+    expect(CircleMealPostService.buildPayload(meal, null, { width: 1080, height: 1440 })).toMatchObject({ image_width: null, image_height: null });
+    expect(CircleMealPostService.buildPayload(meal, 'img-1', { width: 0, height: -3 })).toMatchObject({ image_width: null, image_height: null });
   });
 
   it('leaves the photo null until one is attached and tolerates missing macros', () => {

@@ -23,6 +23,7 @@ import { testAccountReason, type AudienceFacts, type AudienceTestReason } from '
 import { computeLifecycle, latestOf, type Lifecycle } from '../notifications/lifecycle';
 import { DEFAULT_NOTIFICATION_TZ, isPlaceholderTimezone, resolveNotificationTimezone } from '../notifications/user-timezone';
 import { createAdminSupabase } from '../supabase-admin';
+import { confirmedOnly } from '@/lib/meal-drafts/config';
 
 export interface UserAudience extends AudienceFacts {
   userId: string;
@@ -70,7 +71,13 @@ async function latestPerUser(table: string, column: string, ids: string[], since
     try {
       const rows = await readAll((from, to) =>
         orderBy
-          .reduce((q: any, col) => q.order(col, { ascending: true }), db.from(table).select(`user_id, ${column}`).in('user_id', part).gte(column, since))
+          .reduce(
+            (q: any, col) => q.order(col, { ascending: true }),
+            // Draft meals are created by a cron, not by the user: never "activity" (ENGAGEMENT_115_SPEC §14.6).
+            (table === 'food_log_entries' ? confirmedOnly(db.from(table).select(`user_id, ${column}`)) : db.from(table).select(`user_id, ${column}`))
+              .in('user_id', part)
+              .gte(column, since)
+          )
           .range(from, to)
       );
       for (const r of rows) {

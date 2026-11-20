@@ -287,3 +287,51 @@ describe('context: "onboarding" (ONBOARDING_V2 §5.3 step 6)', () => {
     expect(systemText(ai.calls[0])).toContain('ONBOARDING MODE');
   });
 });
+
+describe('1.1.5 weekly free Fitzy (ENGAGEMENT_115_SPEC §3)', () => {
+  // The deploy uses `appVersionGte: '1.1.5'` rules; a default stands in for them here (these
+  // requests carry no version). Weekly mode ignores the 5/day daily default above.
+  beforeEach(() => {
+    db.rows('remote_config_defaults').push({ config_key: 'free_fitzy_messages_per_week', value: 3, updated_by: null, updated_at: '2026-11-13T00:00:00Z' });
+    resetRemoteConfigCache();
+  });
+
+  it('chat: remaining counts down the week and the response adds limit / window / resetsAt', async () => {
+    ai.generate.push('Hi!');
+    const body = await (await legacyChat(req('/api/mobile/fitzy/chat', { as: FREE, method: 'POST', body: { messages: [{ role: 'user', content: 'hi' }] } }))).json();
+    expect(body.data).toMatchObject({ remaining: 2, limit: 3, window: 'week', resetsAt: expect.stringMatching(/T\d\d:00:00\.000Z$/) });
+    expect(db.rows('fitzy_message_log')).toEqual([expect.objectContaining({ user_id: FREE, tier: 'free', context: null })]);
+  });
+
+  it('stream: meta + done carry the weekly fields', async () => {
+    ai.stream.push(['Hello!']);
+    const { events } = await sse(await streamChat(req('/api/mobile/fitzy/chat/stream', { as: FREE, method: 'POST', body: { message: 'hi' } })));
+    const meta = events.find((e) => e.event === 'meta')!.data;
+    const done = events.find((e) => e.event === 'done')!.data;
+    for (const d of [meta, done]) expect(d).toMatchObject({ remaining: 2, limit: 3, window: 'week', resetsAt: expect.any(String) });
+  });
+
+  it('refusal at 3/3: 429 envelope with window + resetsAt, weekly copy; stream gets one error frame; no model call', async () => {
+    for (let i = 0; i < 3; i++) db.rows('fitzy_message_log').push({ user_id: FREE, created_at: new Date().toISOString(), tier: 'free', context: null });
+    const res = await legacyChat(req('/api/mobile/fitzy/chat', { as: FREE, method: 'POST', body: { messages: [{ role: 'user', content: 'hi' }] } }));
+    expect(res.status).toBe(429);
+    const body = await res.json();
+    expect(body.error).toMatchObject({
+      code: 'UPGRADE_REQUIRED',
+      message: "You've used this week's 3 free Fitzy messages. They reset Monday.",
+      details: { feature: 'fitzy_unlimited', used: 3, limit: 3, window: 'week', resetsAt: expect.any(String), paywall: { trigger: 'fitzy_quota' } },
+    });
+    const { events } = await sse(await streamChat(req('/api/mobile/fitzy/chat/stream', { as: FREE, method: 'POST', body: { message: 'hi' } })));
+    expect(events).toHaveLength(1);
+    expect(events[0]).toMatchObject({ event: 'error', data: { code: 'UPGRADE_REQUIRED', details: { window: 'week', used: 3, limit: 3 }, paywall: { trigger: 'fitzy_quota' } } });
+    expect(ai.calls).toEqual([]);
+    expect(db.rows('fitzy_message_log')).toHaveLength(3);
+  });
+
+  it('Pro: weekly fields are null, as today', async () => {
+    ai.generate.push('Hi!');
+    const body = await (await legacyChat(req('/api/mobile/fitzy/chat', { as: PRO, method: 'POST', body: { messages: [{ role: 'user', content: 'hi' }] } }))).json();
+    expect(body.data).toMatchObject({ remaining: null, limit: null, window: null, resetsAt: null, tier: 'pro' });
+    expect(db.rows('fitzy_message_log')).toEqual([expect.objectContaining({ tier: 'pro' })]);
+  });
+});

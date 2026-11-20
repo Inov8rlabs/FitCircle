@@ -33,6 +33,7 @@ import { decideRatingPrompt, type IneligibleReason, type RatingPromptPlatform } 
 import { createAdminSupabase } from '@/lib/supabase-admin';
 
 import { ledgerOf, localDay, ratingConfigCache, readPublishedConfig } from './rating-prompt-service';
+import { confirmedOnly } from '@/lib/meal-drafts/config';
 
 export const publishBodySchema = z
   .object({
@@ -183,9 +184,8 @@ export class RatingPromptAdminService {
     const rows = (profiles ?? []) as ProfileRow[];
     const todayByUser = new Map(rows.map((p) => [p.id, localDay(now, p.timezone)]));
     const since = new Date(now.getTime() - 400 * 86_400_000).toISOString().slice(0, 10);
-    const { data: food, error: foodError } = await supabase
-      .from('food_log_entries')
-      .select('user_id, entry_date')
+    const { data: food, error: foodError } = await confirmedOnly(supabase.from('food_log_entries')
+      .select('user_id, entry_date'))
       .eq('entry_type', 'food')
       .is('deleted_at', null)
       .gte('entry_date', since)

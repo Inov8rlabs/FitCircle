@@ -133,6 +133,10 @@ const USER_DATA_TABLES: ReadonlyArray<readonly [table: string, column: string]> 
   ['daily_goals', 'user_id'],
   ['weekly_goals', 'user_id'],
   ['token_blacklist', 'user_id'],
+  // Migration 138 (1.1.5). Both also cascade with the profile; a missing table (138 not
+  // applied) is a non-fatal clear error like any other row here.
+  ['meal_share_circle_prefs', 'user_id'],
+  ['streak_save_offers', 'user_id'],
   // Payments are kept until the profile delete for financial record keeping;
   // payments.user_id is ON DELETE CASCADE, so they go with the profile.
 ];

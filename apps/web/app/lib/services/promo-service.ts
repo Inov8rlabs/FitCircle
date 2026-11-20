@@ -26,6 +26,7 @@ import { createAdminSupabase } from '@/lib/supabase-admin';
 import { ProLifecycleService, lifecycleConfigCache, lifecycleLive, type PublishedConfig } from './pro-lifecycle-service';
 import { promoStylesCache } from './promo-style-store';
 import { TrialConfig } from './trial-config';
+import { confirmedOnly } from '@/lib/meal-drafts/config';
 
 export type ConversionKind = 'meal_logged' | 'subscription_started' | 'fitzy_opened';
 
@@ -178,17 +179,15 @@ export const defaultPromoLoaders: PromoLoaders = {
   async journeyFacts(userId, localDate) {
     const supabase = createAdminSupabase();
     const [last, recent] = await Promise.all([
-      supabase
-        .from('food_log_entries')
-        .select('title, meal_type, logged_at')
+      confirmedOnly(supabase.from('food_log_entries')
+        .select('title, meal_type, logged_at'))
         .eq('user_id', userId)
         .eq('entry_type', 'food')
         .is('deleted_at', null)
         .order('logged_at', { ascending: false })
         .limit(1),
-      supabase
-        .from('food_log_entries')
-        .select('entry_type, entry_date, meal_type, logged_at')
+      confirmedOnly(supabase.from('food_log_entries')
+        .select('entry_type, entry_date, meal_type, logged_at'))
         .eq('user_id', userId)
         .eq('entry_type', 'food')
         .is('deleted_at', null)

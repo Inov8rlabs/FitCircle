@@ -32,7 +32,7 @@ import { FoodLogService } from './food-log-service';
 import { FoodsSemanticService, type SemanticCandidate } from './foods-semantic-service';
 import { FoodsService } from './foods-service';
 import { NutritionGroundingService, type GroundingMode } from './nutrition-grounding-service';
-import { UsageService } from './usage-service';
+import { UsageService, type FoodAiRepeat } from './usage-service';
 
 /**
  * NutritionIntelligenceService — the server-side "brain" for nutrition (PRD §6.1, §7.2.1).
@@ -80,6 +80,13 @@ export interface ParsePhotoOptions {
    * and their free-text correction. Never served from or written to the cache.
    */
   refine?: PhotoRefineRequest;
+  /**
+   * Client analysis job id (X-Analysis-Job-Id). A repeat of a counted analysis within
+   * FOOD_AI_REPEAT_WINDOW_MS (same content or same job) is never counted twice; a job repeat
+   * with different bytes (a re-encoded upload) is answered from the first analysis' cached result.
+   * Ignored for a "Fix" (refine), which is always a new, counted analysis.
+   */
+  jobId?: string;
 }
 
 /**
@@ -90,6 +97,8 @@ export interface ParsePhotoOptions {
  */
 export interface ParseVoiceOptions {
   source?: ParseInputSource;
+  /** Client analysis job id (X-Analysis-Job-Id), stored with the credit. Repeats dedupe by transcript. */
+  jobId?: string;
   model?: string;
   fallbackModel?: string | null;
   bypassQuota?: boolean;
@@ -336,7 +345,7 @@ export class NutritionIntelligenceService {
     userId: string,
     images: ParsePhotoImage[],
     note?: string | null,
-    opts: Pick<ParsePhotoOptions, 'refine'> = {},
+    opts: Pick<ParsePhotoOptions, 'refine' | 'jobId'> = {},
   ): Promise<NutritionDraftDTO> {
     return (await this.parsePhotoWithStats(userId, images, note, opts)).draft;
   }
@@ -380,15 +389,27 @@ export class NutritionIntelligenceService {
     }
     const imageHash = hasher.digest('hex');
     const useCache = !opts.bypassCache && !refine;
+    const jobId = refine ? undefined : opts.jobId;
+    // A repeat of an analysis this user was already charged for in the last 10 minutes (same
+    // photo bytes, or the same client job id: queue retry / background resend / resume) is
+    // never charged again (ENGAGEMENT_115_SPEC §14.4 item 3) — and never paywalled either.
+    const repeat = useCache && !opts.bypassQuota ? await UsageService.recentFoodAiCredit(userId, imageHash, jobId) : null;
     // A free user past the lifetime allowance gets the paywall even for a cached result
     // (TRIAL_FIRST_SPEC §5: no AI analysis for them past 5, served fresh or from cache).
     // A cache hit itself never consumes a credit.
-    if (useCache && !opts.bypassQuota) await UsageService.assertFoodAiQuota(userId);
-    const cachedResult = useCache ? await this.getCachedResult(imageHash) : null;
+    if (useCache && !opts.bypassQuota && !repeat) await UsageService.assertFoodAiQuota(userId);
+    let cachedResult = useCache ? await this.getCachedResult(imageHash) : null;
+    let cachedHash = imageHash;
+    if (!cachedResult && repeat) {
+      // The first analysis may still be running (a retry while it is in flight): wait briefly for
+      // its result instead of paying for a second model call.
+      cachedResult = await this.awaitRepeatResult(repeat);
+      if (cachedResult) cachedHash = repeat.contentHash;
+    }
     if (cachedResult) {
       const { dbKcalPer100g, ...draft } = await this.toDraft(userId, cachedResult, VISION_MODEL, true, 'photo', 'llm_vision', opts.grounding);
       return {
-        draft: { ...draft, parseHash: imageHash },
+        draft: { ...draft, parseHash: cachedHash },
         model: VISION_MODEL,
         cached: true,
         latencyMs: 0,
@@ -404,7 +425,11 @@ export class NutritionIntelligenceService {
     //    Lifetime allowance for free users (5 total), 100/day ceiling for Pro: the credit is
     //    RESERVED here (race-safe) and released again if both models fail (success-only counting).
     //    A "Fix" (refine) is a real analysis and counts too.
-    const reservation = opts.bypassQuota ? null : await UsageService.reserveFoodAi(userId, imageHash);
+    //    Identical bytes already counted (the first result never reached the cache in time): run
+    //    the model again, uncounted. A job repeat with DIFFERENT bytes and no cached first result
+    //    is counted as usual (a job id alone never unlocks a free analysis of new content).
+    const uncounted = repeat !== null && repeat.contentHash === imageHash;
+    const reservation = opts.bypassQuota || uncounted ? null : await UsageService.reserveFoodAi(userId, imageHash, { jobId });
 
     // 3. Structured vision call via the AI Gateway. generateText + Output.object validates
     //    the result against the Zod schema; explicit failover below handles a failed attempt.
@@ -483,7 +508,7 @@ export class NutritionIntelligenceService {
     // 4. Record the call (for the daily cap) and cache the result by image hash. A bake-off
     //    run bypasses the cache entirely so it never seeds production with eval outputs.
     //    The parse-log row (the credit) was already written by reserveFoodAi.
-    if (useCache) await this.recordParse(userId, imageHash, result, { logged: reservation !== null });
+    if (useCache) await this.recordParse(userId, imageHash, result, { logged: reservation !== null || uncounted });
 
     const { dbKcalPer100g, ...draft } = await this.toDraft(userId, result, model, false, 'photo', 'llm_vision', opts.grounding);
     return {
@@ -522,7 +547,10 @@ export class NutritionIntelligenceService {
     // recorded parse counts toward the same daily budget. May throw UpgradeRequiredError.
     // Reserved before the model call (race-safe), released on failure (success-only counting).
     const transcriptHash = createHash('sha256').update(transcript).digest('hex');
-    const reservation = opts.bypassQuota ? null : await UsageService.reserveFoodAi(userId, transcriptHash);
+    // The same transcript already counted in the last 10 minutes (double submit, client retry):
+    // analysed again but not charged again (ENGAGEMENT_115_SPEC §14.4 item 3). No transcript cache.
+    const repeat = opts.bypassQuota ? null : await UsageService.recentFoodAiCredit(userId, transcriptHash);
+    const reservation = opts.bypassQuota || repeat ? null : await UsageService.reserveFoodAi(userId, transcriptHash, { jobId: opts.jobId });
 
     let result: TextParseResult;
     let model = primaryModel;
@@ -632,6 +660,7 @@ export class NutritionIntelligenceService {
     grams?: number,
     quantity?: number,
     servingUnit?: string,
+    opts: { jobId?: string } = {},
   ): Promise<NutritionDraftItem> {
     const cleanName = name.trim();
     const resolved = this.resolveItemPortion(grams, quantity, servingUnit);
@@ -648,8 +677,10 @@ export class NutritionIntelligenceService {
     // A successful re-estimate is deterministic for the same food/portion. Check the cache
     // before the daily cap so a user retry is instant and never incurs another model call.
     // Free users past the lifetime allowance get the paywall even for a cached estimate.
-    await UsageService.assertFoodAiQuota(userId);
-    const cached = await this.getCachedResult(itemHash);
+    // A repeat of an estimate already counted in the last 10 minutes is neither paywalled nor charged.
+    const repeat = await UsageService.recentFoodAiCredit(userId, itemHash);
+    if (!repeat) await UsageService.assertFoodAiQuota(userId);
+    const cached = (await this.getCachedResult(itemHash)) ?? (repeat ? await this.awaitRepeatResult(repeat) : null);
     if (cached?.items[0]) {
       return await this.finalizeEstimatedItem(userId, cleanName, resolved, cached.items[0]);
     }
@@ -657,7 +688,7 @@ export class NutritionIntelligenceService {
     // Tier-aware daily quota — COMBINED across all paid parses (photo/voice/item); every
     // recorded parse counts toward the same daily budget. May throw UpgradeRequiredError.
     // Reserved before the model call (race-safe), released on failure (success-only counting).
-    const reservation = await UsageService.reserveFoodAi(userId, itemHash);
+    const reservation = repeat ? null : await UsageService.reserveFoodAi(userId, itemHash, { jobId: opts.jobId });
 
     let llm: ParsedFoodItem;
     const startedAt = Date.now();
@@ -679,7 +710,7 @@ export class NutritionIntelligenceService {
           primaryModel: ITEM_MODEL,
           primaryError: this.describeParseError(primaryError),
         }, fallbackError);
-        await reservation.release();
+        await reservation?.release();
         throw new Error('ParseFailed');
       }
     }
@@ -1522,6 +1553,30 @@ export class NutritionIntelligenceService {
     score -= Math.min(2, (t.sugarG * per1000) / 50); // sugar penalty
     score -= Math.min(2, (t.sodiumMg * per1000) / 2300); // sodium penalty
     return Math.max(0, Math.min(10, Math.round(score)));
+  }
+
+  /**
+   * Max wait for an in-flight first analysis' result (repeat request). Small, so a repeat that
+   * then has to call the model itself still fits the 60 s route budget (model ≤ 50 s).
+   */
+  static repeatWaitMs = 6_000;
+  static repeatPollMs = 1_500;
+
+  /**
+   * The cached result of the analysis a repeat request duplicates. Polls only while that first
+   * analysis can still be running (counted < 55 s ago), at most repeatWaitMs.
+   */
+  private static async awaitRepeatResult(repeat: FoodAiRepeat): Promise<PhotoParseResult | null> {
+    const first = await this.getCachedResult(repeat.contentHash);
+    if (first) return first;
+    const inFlightUntil = Date.parse(repeat.countedAt) + 55_000;
+    const deadline = Math.min(Date.now() + this.repeatWaitMs, Number.isNaN(inFlightUntil) ? 0 : inFlightUntil);
+    while (Date.now() < deadline) {
+      await new Promise((r) => setTimeout(r, Math.min(this.repeatPollMs, Math.max(0, deadline - Date.now()))));
+      const hit = await this.getCachedResult(repeat.contentHash);
+      if (hit) return hit;
+    }
+    return null;
   }
 
   /** Look up a previously-parsed identical image (content-hash cache). */

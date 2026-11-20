@@ -85,7 +85,7 @@ async function expectUnlocked() {
   for (const [key, f] of Object.entries(e.features)) expect({ key, allowed: f.allowed }).toEqual({ key, allowed: true });
   expect(e.features.ads_removed.allowed).toBe(true); // ads removed
   expect(e.limits).toMatchObject({ fitzyMessagesPerDay: 200, foodAiParsesPerDay: 100, foodAiAnalysesTotal: null, foodAiAnalysesRemaining: null, historyDays: null, maxActiveCreatedCircles: null });
-  await expect(UsageService.assertFitzyQuota(USER)).resolves.toBeUndefined(); // Fitzy quota lifts
+  await expect(UsageService.assertFitzyQuota(USER)).resolves.toMatchObject({ tier: expect.stringMatching(/^(free|pro)$/) }); // Fitzy quota lifts
   await expect(UsageService.assertFoodAiQuota(USER)).resolves.toBeUndefined();
   expect(await UsageService.fitzyTier(USER)).toBe('pro'); // weekly plan, memory, history
   expect(await UsageService.historyWindowDays(USER)).toBe(Number.POSITIVE_INFINITY);

@@ -125,7 +125,8 @@ export class HealthSyncPushService {
         .select('notification_type, sent_at')
         .eq('user_id', userId)
         .eq('suppressed', false)
-        .in('notification_type', ['health_sync_update', 'winback_day3', 'winback_day7', 'winback_day14', 'winback_day30'])
+        // + the 1.1.5 D+1 pushes, which count like a win-back step (ENGAGEMENT_115_SPEC §5.2).
+        .in('notification_type', ['health_sync_update', 'winback_day3', 'winback_day7', 'winback_day14', 'winback_day30', 'dont_miss_twice', 'streak_save_offer'])
         .gte('sent_at', new Date(now.getTime() - 4 * 86_400_000).toISOString());
       if (error) return { lastHealthSyncAt: null, lastWinbackAt: null };
       let lastHealthSyncAt: string | null = null;

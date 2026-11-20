@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from 'next/server';
 
+import { dontMissTwiceEnabled } from '../journey/dont-miss-twice';
 import { NotificationOrchestrator } from '../services/notification-orchestrator';
 import { StreakClaimingService } from '../services/streak-claiming-service';
 import { createAdminSupabase } from '../supabase-admin';
@@ -46,6 +47,12 @@ export async function runDailyStreakCheck(request: NextRequest) {
 
     console.log(`[Cron Daily Check] Checking ${allUsers.length} users with active streaks`);
 
+    // 1.1.5 (docs/ENGAGEMENT_115_SPEC.md §5.2, founder decision §13.4): with the D+1 job on, the
+    // night streak_lost / shield_applied pushes are retired: that state rides on the next-day
+    // dont_miss_twice / streak_save_offer push. The protect-or-break itself always runs here.
+    // DONT_MISS_TWICE_PUSH_ENABLED off → the old night pushes return.
+    const nightPushes = !dontMissTwiceEnabled();
+
     let brokenCount = 0;
     let shieldsApplied = 0;
     let paywallEligibleCount = 0;
@@ -67,6 +74,7 @@ export async function runDailyStreakCheck(request: NextRequest) {
               if (result.paywallEligible) paywallEligibleCount++;
               // Tell them what happened and how to start again. The
               // orchestrator handles quiet hours / caps / preferences.
+              if (!nightPushes) return;
               const sent = await NotificationOrchestrator.send(user.user_id, 'streak_lost', {
                 lostStreak: result.lostStreak,
                 paywallEligible: result.paywallEligible,
@@ -76,6 +84,7 @@ export async function runDailyStreakCheck(request: NextRequest) {
               if (sent.sent) notified++;
             } else if (result.shieldApplied) {
               shieldsApplied++;
+              if (!nightPushes) return;
               const sent = await NotificationOrchestrator.send(user.user_id, 'shield_applied', {
                 streakDays: result.currentStreak,
                 shieldsRemaining: result.shieldsRemaining,
@@ -107,6 +116,7 @@ export async function runDailyStreakCheck(request: NextRequest) {
         streaks_broken: brokenCount,
         paywall_eligible: paywallEligibleCount,
         shields_applied: shieldsApplied,
+        night_pushes: nightPushes,
         notified,
         errors,
         duration_ms: duration,

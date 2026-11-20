@@ -25,6 +25,7 @@ import {
 
 import { ChatNotificationService } from './chat-notification-service';
 import { ChatSafetyService } from './chat-safety-service';
+import { CircleTodayCheckinsService } from './circle-today-checkins-service';
 import { scrubbedMealPayload } from './food-entry-privacy';
 import { logIgnoredQueryError } from '@/lib/api/route-errors';
 
@@ -158,6 +159,12 @@ export class CircleChatService {
 
     const nextBefore =
       hasMore && pageRows.length > 0 ? pageRows[pageRows.length - 1].created_at : null;
+
+    // First page only: today's check-in status (fails open to null).
+    if (!params.before) {
+      const todayCheckins = await CircleTodayCheckinsService.forCircle(circleId, userId);
+      return { messages, hasMore, nextBefore, todayCheckins };
+    }
 
     return { messages, hasMore, nextBefore };
   }

@@ -29,6 +29,7 @@ import { AD_CHANNELS, type AdEntityRow, type AttributionRow } from '../types';
 import { chunk, db, selectAll } from './db';
 import { AdsReportService } from './report-service';
 import { AdsSyncService } from './sync-service';
+import { confirmedOnly } from '@/lib/meal-drafts/config';
 
 export const DEFAULT_RECIPIENTS = ['ani@inov8rlabs.com'];
 /** Never look further back than this for "since launch" (keeps the queries bounded). */
@@ -97,7 +98,7 @@ export class AdsEmailReportService {
           db().from('push_tokens').select('id, user_id, platform, created_at').in('user_id', ids).order('created_at', { ascending: true }).order('id', { ascending: true })
         ),
         selectAll<{ id: string; user_id: string; input_method: string | null }>(() =>
-          db().from('food_log_entries').select('id, user_id, input_method').in('user_id', ids).order('id', { ascending: true })
+          confirmedOnly(db().from('food_log_entries').select('id, user_id, input_method')).in('user_id', ids).order('id', { ascending: true })
         ),
         selectAll<RevenueEvent>(() =>
           db()

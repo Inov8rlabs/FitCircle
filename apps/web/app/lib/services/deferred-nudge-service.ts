@@ -29,6 +29,7 @@ import { createAdminSupabase } from '../supabase-admin';
 
 import { AppOpenService } from './app-open-service';
 import { NotificationOrchestrator, startOfLocalDay, type NotificationType } from './notification-orchestrator';
+import { confirmedOnly } from '@/lib/meal-drafts/config';
 
 export interface DeferredReleaseSummary {
   heldUsers: number;
@@ -144,9 +145,8 @@ export class DeferredNudgeService {
         return (await AppOpenService.openedSince(row.user_id, morning, localClockIn(now, tz).date)) ? 'opened_this_morning' : null;
       }
       if (type.startsWith('meal_reminder_')) {
-        const { data } = await db
-          .from('food_log_entries')
-          .select('id')
+        const { data } = await confirmedOnly(db.from('food_log_entries')
+          .select('id'))
           .eq('user_id', row.user_id)
           .eq('entry_type', 'food')
           .is('deleted_at', null)

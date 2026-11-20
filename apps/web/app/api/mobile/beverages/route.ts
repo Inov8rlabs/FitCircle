@@ -10,6 +10,7 @@ import { z } from 'zod';
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { BeverageLogService } from '@/lib/services/beverage-log-service';
 import { StreakClaimingService } from '@/lib/services/streak-claiming-service';
+import { requestShowsStreakCelebration } from '@/lib/streaks/celebration';
 import { resolveClientTimezone } from '@/lib/streaks/client-timezone';
 import { createAdminSupabase } from '@/lib/supabase-admin';
 import { resolveEntryDate } from '@/lib/utils/entry-date';
@@ -215,6 +216,7 @@ export async function POST(request: NextRequest) {
       timezone: resolveClientTimezone(request, body?.timezone),
       source: 'beverage_log',
       referenceId: result.data?.id,
+      inAppCelebration: requestShowsStreakCelebration(request),
     });
 
     return NextResponse.json(

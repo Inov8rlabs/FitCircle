@@ -199,6 +199,13 @@ export class OnboardingFlowService {
    * experiment is running or concluded — a paused (e.g. released) experiment
    * never locks anyone. Once set, the gate stays (re-lock on lapse, §11.3);
    * only the admin release-gate clears it.
+   *
+   * `onboarding_paywall` (1.1.5 "Forced trial (no close)", payload paywall "hard") NEVER
+   * sets it: that test only requires a trial/purchase to FINISH onboarding, enforced by the
+   * client (which falls back to the closable paywall when not trial-eligible / offline /
+   * the store offer fails, and skips it for Pro). A lapsed trial must leave a normal free
+   * account, not a locked app, and a client fallback must never be locked server-side.
+   * Invited, Pro, complimentary (review demo) and < 1.1.5 users are never in that arm.
    */
   static async reachPaywall(userId: string, now: Date = new Date()): Promise<{ gate: OnboardingGate }> {
     const supabase = createAdminSupabase();

@@ -89,9 +89,11 @@ export async function POST(request: NextRequest) {
           }
         }
       };
+      // The 1.1.5 weekly refusal adds details {feature, used, limit, window, resetsAt}
+      // (ENGAGEMENT_115_SPEC §3.3); the daily refusal frame is unchanged.
       const sendError = (error: unknown) => {
         const d = describeFitzyError(error, 'mobile/fitzy/chat/stream');
-        write(frame('error', { code: d.code, message: d.message, ...(d.paywall ? { paywall: d.paywall } : {}), ...(d.details && d.code === 'AI_CONSENT_REQUIRED' ? { details: d.details } : {}) }));
+        write(frame('error', { code: d.code, message: d.message, ...(d.paywall ? { paywall: d.paywall } : {}), ...(d.details && (d.code === 'AI_CONSENT_REQUIRED' || d.details.window === 'week') ? { details: d.details } : {}) }));
       };
 
       try {

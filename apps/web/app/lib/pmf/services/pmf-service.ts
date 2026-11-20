@@ -27,6 +27,7 @@ import { SOURCES } from '../catalog';
 import { buildInsights, SIGNAL_NOTE_PREFIX } from '../insights';
 import { buildKpis, pmfScore, type PmfFacts, type PmfMembership, type PmfPlatform, type PmfUser } from '../scorecard';
 import { PMF_PERIODS, type PmfPeriod, type PmfReport } from '../types';
+import { confirmedOnly } from '@/lib/meal-drafts/config';
 
 const DEAD_CIRCLE_STATUSES = new Set(['cancelled', 'draft']);
 const ACTIVITY_KPIS = new Set(['dau', 'mau', 'stickiness', 'buddy_wau', 'arpu_monthly']);
@@ -124,9 +125,8 @@ export class PmfService {
       AdsReportService.reportCohort({ start: spanStart, end: today, today, timeZone, includeTest: false, now }),
       FinanceData.activity(activityFrom, nowIso),
       selectAll<{ id: string; user_id: string; created_at: string }>(() =>
-        db()
-          .from('food_log_entries')
-          .select('id, user_id, created_at')
+        confirmedOnly(db().from('food_log_entries')
+          .select('id, user_id, created_at'))
           .eq('entry_type', 'food')
           .or('input_method.is.null,input_method.neq.imported')
           .gte('created_at', activityFrom)

@@ -32,6 +32,7 @@ import { UsageService } from './usage-service';
 /** Largest free-scan allowance a win-back push will quote (trial-first rule today: 21). */
 const MAX_QUOTED_FREE_SCANS = 100;
 import { UserAudienceService, type UserAudience } from './user-audience-service';
+import { confirmedOnly } from '@/lib/meal-drafts/config';
 
 type Row = Record<string, any>;
 
@@ -66,6 +67,8 @@ export interface WinbackRunResult {
 }
 
 const TRIGGER_TYPES = ['leaderboard_overtaken', 'health_sync_update'];
+/** 1.1.5 D+1 pushes (ENGAGEMENT_115_SPEC §5.2): a recent one is that day's win-back touch. */
+const DMT_TYPES = ['dont_miss_twice', 'streak_save_offer'];
 const WINBACK_TYPE_LIST = WINBACK_STEPS.map(typeForStep);
 const HISTORY_LOOKBACK_DAYS = 40;
 
@@ -121,6 +124,7 @@ export class WinbackService {
           sentSteps: episodeSteps,
           lastWinbackAt: h?.lastWinbackAt ?? null,
           lastTriggerAt: h?.lastTriggerAt ?? null,
+          lastDontMissTwiceAt: h?.lastDontMissTwiceAt ?? null,
         } satisfies WinbackHistory,
       });
       const decision: WinbackDecision = {
@@ -176,16 +180,16 @@ export class WinbackService {
   static async loadHistory(
     userIds: string[],
     now: Date
-  ): Promise<Map<string, { winback: Array<{ step: WinbackStep; lapseStart: string | null }>; lastWinbackAt: string | null; lastTriggerAt: string | null }>> {
+  ): Promise<Map<string, { winback: Array<{ step: WinbackStep; lapseStart: string | null }>; lastWinbackAt: string | null; lastTriggerAt: string | null; lastDontMissTwiceAt?: string | null }>> {
     const db = createAdminSupabase();
     const since = new Date(now.getTime() - HISTORY_LOOKBACK_DAYS * 86_400_000).toISOString();
-    const out = new Map<string, { winback: Array<{ step: WinbackStep; lapseStart: string | null }>; lastWinbackAt: string | null; lastTriggerAt: string | null }>();
+    const out = new Map<string, { winback: Array<{ step: WinbackStep; lapseStart: string | null }>; lastWinbackAt: string | null; lastTriggerAt: string | null; lastDontMissTwiceAt?: string | null }>();
     for (const part of chunks(userIds, 150)) {
       const { data, error } = await db
         .from('notification_log')
         .select('user_id, notification_type, data, sent_at')
         .in('user_id', part)
-        .in('notification_type', [...WINBACK_TYPE_LIST, ...TRIGGER_TYPES])
+        .in('notification_type', [...WINBACK_TYPE_LIST, ...TRIGGER_TYPES, ...DMT_TYPES])
         .eq('suppressed', false)
         .gte('sent_at', since);
       if (error) throw new Error(`notification_log read failed: ${error.message}`);
@@ -193,6 +197,7 @@ export class WinbackService {
         const h = out.get(r.user_id) ?? { winback: [], lastWinbackAt: null, lastTriggerAt: null };
         const later = (a: string | null, b: string) => (!a || Date.parse(b) > Date.parse(a) ? b : a);
         if (TRIGGER_TYPES.includes(r.notification_type)) h.lastTriggerAt = later(h.lastTriggerAt, r.sent_at);
+        else if (DMT_TYPES.includes(r.notification_type)) h.lastDontMissTwiceAt = later(h.lastDontMissTwiceAt ?? null, r.sent_at);
         else {
           const step = String(r.notification_type).replace('winback_', '') as WinbackStep;
           h.winback.push({ step, lapseStart: (r.data?.lapseStart as string) ?? null });
@@ -314,9 +319,8 @@ export class WinbackService {
   }
 
   static async daysLogged(userId: string): Promise<number> {
-    const { data, error } = await createAdminSupabase()
-      .from('food_log_entries')
-      .select('entry_date')
+    const { data, error } = await confirmedOnly(createAdminSupabase().from('food_log_entries')
+      .select('entry_date'))
       .eq('user_id', userId)
       .is('deleted_at', null)
       .limit(5000);

@@ -119,6 +119,45 @@ describe('paywall moments (pure)', () => {
     expect(paywallEligibility({ ...base, isPro: true })).toMatchObject({ autoEligible: false, postAhaEligible: false });
     expect(paywallEligibility({ ...base, subscriptionsEnabled: false })).toMatchObject({ autoEligible: false, postAhaEligible: false });
   });
+
+  describe('post-aha spacing exemption (ENGAGEMENT_115_SPEC §14.2)', () => {
+    // Onboarding paywall (automatic) 1 h ago, well inside the 72 h spacing.
+    const spaced = { ...base, autoLastAt: '2026-10-26T17:00:00Z' };
+    it('no meal on the server before the last automatic paywall → exempt from the 72 h spacing', () => {
+      expect(paywallEligibility({ ...spaced, firstMealAt: '2026-10-26T17:30:00Z' })).toMatchObject({ postAhaEligible: true, autoEligible: false });
+      // First meal not synced yet (offline-first) still counts as "no meal before".
+      expect(paywallEligibility({ ...spaced, mealsLoggedEver: 0, firstMealAt: null }).postAhaEligible).toBe(true);
+    });
+    it('a meal logged before (or at) the last automatic paywall → spacing still applies', () => {
+      expect(paywallEligibility({ ...spaced, firstMealAt: '2026-10-26T16:59:00Z' }).postAhaEligible).toBe(false);
+      expect(paywallEligibility({ ...spaced, firstMealAt: '2026-10-26T17:00:00Z' }).postAhaEligible).toBe(false);
+    });
+    it('first-meal input unknown or unparseable → no exemption', () => {
+      expect(paywallEligibility(spaced).postAhaEligible).toBe(false);
+      expect(paywallEligibility({ ...spaced, firstMealAt: 'garbage' }).postAhaEligible).toBe(false);
+    });
+    it('exemption never overrides once-only, Pro/trialing or subscriptions off', () => {
+      const exempt = { ...spaced, firstMealAt: '2026-10-26T17:30:00Z' };
+      expect(paywallEligibility({ ...exempt, ahaShownAt: '2026-10-26T17:45:00Z' }).postAhaEligible).toBe(false);
+      expect(paywallEligibility({ ...exempt, isPro: true }).postAhaEligible).toBe(false);
+      expect(paywallEligibility({ ...exempt, subscriptionsEnabled: false }).postAhaEligible).toBe(false);
+    });
+    it('nextAutoEligibleAt still reports the spacing for the other automatic moments', () => {
+      expect(paywallEligibility({ ...spaced, firstMealAt: '2026-10-26T17:30:00Z' }).nextAutoEligibleAt).toBe('2026-10-29T17:00:00.000Z');
+    });
+  });
+});
+
+describe('GET journey: first_meal_aha after an onboarding paywall without a scan', () => {
+  it('onboarding paywall, then the first meal → postAhaEligible despite the spacing; an earlier meal blocks it', async () => {
+    db.rows('profiles')[0].created_at = '2026-10-26T16:00:00Z';
+    db.rows('profiles')[0].paywall_auto_last_at = '2026-10-26T16:30:00Z';
+    db.rows('food_log_entries').push({ id: 'a', user_id: U, entry_type: 'food', created_at: '2026-10-26T17:58:00Z', deleted_at: null });
+    expect((await (await get()).json()).data).toMatchObject({ postAhaEligible: true, autoEligible: false, firstMealAt: '2026-10-26T17:58:00Z' });
+
+    db.rows('food_log_entries').push({ id: 'b', user_id: U, entry_type: 'food', created_at: '2026-10-26T16:10:00Z', deleted_at: null });
+    expect((await (await get()).json()).data.postAhaEligible).toBe(false);
+  });
 });
 
 describe('PATCH /api/mobile/me/journey (meal reminder prefs)', () => {

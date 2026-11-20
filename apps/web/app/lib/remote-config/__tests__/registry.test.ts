@@ -51,8 +51,14 @@ describe('paywall plan keys (docs/PAYWALL_DEFAULT_PLAN.md)', () => {
     for (const bad of ['lifetime', true, ['annual']]) expect(validValue('paywall_badge_plan', bad)).toBeNull();
   });
 
+  it('paywall_trial_timeline: on | off, default on (ENGAGEMENT_115_SPEC §14.1)', () => {
+    expect(codeDefault('paywall_trial_timeline')).toBe('on');
+    for (const ok of ['on', 'off']) expect(validValue('paywall_trial_timeline', ok)).toBe(ok);
+    for (const bad of ['true', true, 'ON', 1, null]) expect(validValue('paywall_trial_timeline', bad)).toBeNull();
+  });
+
   it('only the paywall keys are client visible', () => {
-    expect([...CLIENT_VISIBLE_KEYS]).toEqual(['paywall_default_plan', 'paywall_badge_plan']);
+    expect([...CLIENT_VISIBLE_KEYS]).toEqual(['paywall_default_plan', 'paywall_badge_plan', 'paywall_trial_timeline', 'meal_share_prompt', 'streak_save_offer']);
     for (const k of CLIENT_VISIBLE_KEYS) expect(keyDef(k).type).toBe('enum');
   });
 });

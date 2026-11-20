@@ -18,6 +18,8 @@ import { NutritionTrainingService } from '@/lib/services/nutrition-training-serv
 import { PromoService } from '@/lib/services/promo-service';
 import { StreakClaimingService } from '@/lib/services/streak-claiming-service';
 import { VitalsService } from '@/lib/services/vitals-service';
+import { MealShareService } from '@/lib/services/meal-share-service';
+import { requestShowsStreakCelebration } from '@/lib/streaks/celebration';
 import { createAdminSupabase } from '@/lib/supabase-admin';
 import { runAfterResponse } from '@/lib/utils/after-response';
 import { entryDateIn, resolveEntryTimezone } from '@/lib/utils/entry-date';
@@ -27,6 +29,8 @@ import {
   normalizeFoodLogEntryAliases,
 } from '@/lib/validation/food-log-validation';
 import { parseLenient, validationMessage } from '@/lib/validation/lenient-parse';
+import { includeDraftsFor } from '@/lib/meal-drafts/config';
+import { MealDraftService, isAnalysisId } from '@/lib/services/meal-draft-service';
 
 /**
  * GET /api/mobile/food-log
@@ -97,6 +101,8 @@ export async function GET(request: NextRequest) {
         end_date: validatedQuery.end_date ?? undefined,
         meal_type: validatedQuery.meal_type ?? undefined,
         tags,
+        // Draft meals (ENGAGEMENT_115_SPEC §14.6): only for clients declaring X-Client-Features: meal_drafts.
+        includeDrafts: includeDraftsFor(request),
       },
       supabase
     );
@@ -261,7 +267,7 @@ export async function POST(request: NextRequest) {
     const validatedData = parseLenient(
       CreateFoodLogEntrySchema,
       normalizeFoodLogEntryAliases(body),
-      { ignore: ['id', 'timezone'] } // read from the raw body below
+      { ignore: ['id', 'timezone', 'analysis_id'] } // read from the raw body below
     );
 
     // File the entry under the day it was eaten in the person's timezone AT LOG
@@ -278,11 +284,27 @@ export async function POST(request: NextRequest) {
     // Privacy: private unless the body carries share_with_circles:true or the
     // user's saved default is on (docs/FOOD_ENTRY_PRIVACY_SPEC.md). The default
     // comes from the profile auth just loaded — no extra read.
-    const result = await FoodLogService.createEntry(user.id, validatedData, supabase, {
-      id: clientId,
-      defer: (task) => runAfterResponse(task, 'food-log create side effect'),
+    const createOpts = {
+      defer: (task: () => unknown) => runAfterResponse(task, 'food-log create side effect'),
       shareByDefault: user && 'preferences' in user ? shareMealsByDefault(user.preferences) : undefined,
-    });
+    };
+    // Draft meals (ENGAGEMENT_115_SPEC §14.6): the AI result this save came from (`analysis_id`,
+    // the parse response's `analysisId`). Resolved BEFORE the insert: a result the cron already
+    // turned into a draft is confirmed with this content instead of being saved twice.
+    const analysisId = isAnalysisId(body?.analysis_id) ? (body.analysis_id as string) : null;
+    const link = analysisId ? await MealDraftService.claimForSave(user.id, analysisId) : ({ kind: 'none' } as const);
+    const result =
+      link.kind === 'drafted'
+        ? await MealDraftService.saveOntoDraft(user.id, link.entryId, validatedData, supabase, createOpts)
+        : await FoodLogService.createEntry(user.id, validatedData, supabase, { id: clientId, ...createOpts });
+    if (analysisId && link.kind === 'pending' && result.data) {
+      const savedId = result.data.id;
+      runAfterResponse(() => MealDraftService.linkSaved(user.id, analysisId, savedId), 'meal analysis link');
+    }
+    // 1.1.5 offline-outbox share: remember the rows the user saw (share_seen_circle_ids). Never fails the create.
+    if (result.data && Array.isArray(validatedData.share_seen_circle_ids)) {
+      await MealShareService.rememberFromEntryBody(user.id, validatedData);
+    }
 
     if (result.conflict) {
       return NextResponse.json(
@@ -340,11 +362,13 @@ export async function POST(request: NextRequest) {
     const [streak, hydration, milestones] = await Promise.all([
       StreakClaimingService.autoClaimForManualLog(user.id, {
         // Claim the day the entry was filed under, so the two can never disagree.
-        occurredAt: validatedData.entry_date ?? result.data?.logged_at ?? null,
+        // (A save onto a draft claims the day the draft was eaten, not today.)
+        occurredAt: (link.kind === 'drafted' ? result.data?.entry_date : validatedData.entry_date) ?? result.data?.logged_at ?? null,
         // With no zone from the client or profile, the claim keeps its own
         // fallback (the last claim's zone).
         timezone: entryTz.source === 'default' ? null : entryTz.timezone,
         source: 'food_log',
+        inAppCelebration: requestShowsStreakCelebration(request),
         referenceId: result.data?.id,
       }),
       isWater

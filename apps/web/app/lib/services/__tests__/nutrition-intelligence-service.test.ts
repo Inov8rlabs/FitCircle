@@ -1,8 +1,13 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { normalizeAssumptions, textParseResultSchema } from '../../types/nutrition';
 import { NutritionIntelligenceService } from '../nutrition-intelligence-service';
 import { UpgradeRequiredError, UsageService } from '../usage-service';
+
+// No repeat of a counted analysis unless a test says so (and never a real DB read).
+beforeEach(() => {
+  vi.spyOn(UsageService, 'recentFoodAiCredit').mockResolvedValue(null);
+});
 
 const parsedItem = {
   name: 'Chicken biryani',
@@ -166,7 +171,7 @@ describe('NutritionIntelligenceService.parseVoice', () => {
   it('success keeps the reserved credit; both models failing releases it (success-only counting)', async () => {
     const call = stub([]);
     await NutritionIntelligenceService.parseVoice('user-1', 'latte');
-    expect(UsageService.reserveFoodAi).toHaveBeenCalledWith('user-1', expect.any(String));
+    expect(UsageService.reserveFoodAi).toHaveBeenCalledWith('user-1', expect.any(String), { jobId: undefined });
     expect(releaseSpy).not.toHaveBeenCalled();
 
     call.mockRejectedValueOnce(new Error('a')).mockRejectedValueOnce(new Error('b'));
@@ -270,5 +275,111 @@ describe('NutritionIntelligenceService.estimateItem — allowance', () => {
     cache.mockClear();
     await expect(NutritionIntelligenceService.estimateItem('user-1', 'Rice', 100)).rejects.toBeInstanceOf(UpgradeRequiredError);
     expect(cache).not.toHaveBeenCalled();
+  });
+});
+
+describe('repeat analyses are never counted twice (ENGAGEMENT_115_SPEC §14.4 item 3)', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    (NutritionIntelligenceService as any).repeatWaitMs = 6_000;
+  });
+  const img = [{ bytes: Buffer.from([1, 2, 3]), mimeType: 'image/jpeg' }];
+  const otherBytes = [{ bytes: Buffer.from([9, 9, 9]), mimeType: 'image/jpeg' }];
+  const cachedResult = { items: [parsedItem], overallConfidence: 0.9, notes: null };
+  const setup = () => {
+    const service = NutritionIntelligenceService as any;
+    const release = vi.fn();
+    const assert = vi.spyOn(UsageService, 'assertFoodAiQuota').mockResolvedValue(undefined);
+    const reserve = vi.spyOn(UsageService, 'reserveFoodAi').mockResolvedValue({ id: 'r1', release });
+    const cache = vi.spyOn(service, 'getCachedResult').mockResolvedValue(null);
+    const record = vi.spyOn(service, 'recordParse').mockResolvedValue(undefined);
+    vi.spyOn(service, 'toDraft').mockResolvedValue({ items: [], dbKcalPer100g: undefined });
+    const model = vi.spyOn(service, 'callPhotoModel').mockResolvedValue({ result: cachedResult, usage: {} });
+    const recent = vi.mocked(UsageService.recentFoodAiCredit);
+    return { service, release, assert, reserve, cache, record, model, recent };
+  };
+  const justNow = () => new Date(Date.now() - 2_000).toISOString();
+
+  it('photo: the job id is passed through to the credit', async () => {
+    const { reserve, recent } = setup();
+    await NutritionIntelligenceService.parsePhoto('user-1', img, null, { jobId: 'job-12345678' });
+    expect(recent).toHaveBeenCalledWith('user-1', expect.any(String), 'job-12345678');
+    expect(reserve).toHaveBeenCalledWith('user-1', expect.any(String), { jobId: 'job-12345678' });
+  });
+
+  it('photo: same job, re-encoded bytes, first result cached → that result, no credit, no paywall check', async () => {
+    const { cache, reserve, model, assert, recent } = setup();
+    recent.mockResolvedValue({ contentHash: 'firsthash', countedAt: justNow(), matchedBy: 'job' });
+    cache.mockImplementation(async (...a: unknown[]) => (a[0] === "firsthash" ? cachedResult : null));
+    const draft = await NutritionIntelligenceService.parsePhoto('user-1', otherBytes, null, { jobId: 'job-12345678' });
+    expect(draft.parseHash).toBe('firsthash');
+    expect(reserve).not.toHaveBeenCalled();
+    expect(model).not.toHaveBeenCalled();
+    expect(assert).not.toHaveBeenCalled();
+  });
+
+  it('photo: same job, different bytes, no cached first result → counted as a new analysis (a job id never unlocks free content)', async () => {
+    const { reserve, model, recent, service } = setup();
+    service.repeatWaitMs = 0;
+    recent.mockResolvedValue({ contentHash: 'firsthash', countedAt: justNow(), matchedBy: 'job' });
+    await NutritionIntelligenceService.parsePhoto('user-1', otherBytes, null, { jobId: 'job-12345678' });
+    expect(model).toHaveBeenCalledTimes(1);
+    expect(reserve).toHaveBeenCalledTimes(1);
+  });
+
+  it('photo: identical bytes while the first is still in flight → waits for its result (no second model call)', async () => {
+    const { cache, reserve, model, recent, service } = setup();
+    service.repeatWaitMs = 200;
+    service.repeatPollMs = 10;
+    let calls = 0;
+    recent.mockImplementation(async (_u: string, hash: string) => ({ contentHash: hash, countedAt: justNow(), matchedBy: 'content' }));
+    cache.mockImplementation(async () => (++calls >= 3 ? cachedResult : null));
+    await NutritionIntelligenceService.parsePhoto('user-1', img, null);
+    expect(model).not.toHaveBeenCalled();
+    expect(reserve).not.toHaveBeenCalled();
+  });
+
+  it('photo: identical bytes, result never arrives → model runs again but uncounted (no reserve, no extra log row)', async () => {
+    const { reserve, model, recent, record, service } = setup();
+    service.repeatWaitMs = 0;
+    recent.mockImplementation(async (_u: string, hash: string) => ({ contentHash: hash, countedAt: justNow(), matchedBy: 'content' }));
+    await NutritionIntelligenceService.parsePhoto('user-1', img, null);
+    expect(model).toHaveBeenCalledTimes(1);
+    expect(reserve).not.toHaveBeenCalled();
+    expect(record).toHaveBeenCalledWith('user-1', expect.any(String), expect.anything(), { logged: true });
+  });
+
+  it('photo: a Fix never matches a job and is always counted', async () => {
+    const { reserve, recent } = setup();
+    vi.spyOn(NutritionIntelligenceService as any, 'refinePromptBlock').mockReturnValue('fix');
+    await NutritionIntelligenceService.parsePhoto('user-1', img, null, { refine: { correction: 'tofu', items: [] } as any, jobId: 'job-12345678' } as any);
+    expect(recent).not.toHaveBeenCalled();
+    expect(reserve).toHaveBeenCalledTimes(1);
+  });
+
+  it('voice/text: the same transcript counted in the last 10 min → analysed, not charged', async () => {
+    const service = NutritionIntelligenceService as any;
+    const reserve = vi.spyOn(UsageService, 'reserveFoodAi').mockResolvedValue({ id: 'r1', release: vi.fn() });
+    vi.spyOn(service, 'groundItemsByMode').mockImplementation(async (...args: unknown[]) => ({
+      items: (args[1] as any[]).map((it) => ({ ...it, matchedFoodId: null, itemSource: 'llm_vision', unitOptions: [] })),
+    }));
+    vi.spyOn(service, 'callVoiceModel').mockResolvedValue({ items: [parsedItem], overallConfidence: 0.9, notes: null, assumptions: [] });
+    vi.mocked(UsageService.recentFoodAiCredit).mockResolvedValueOnce({ contentHash: 'h', countedAt: justNow(), matchedBy: 'content' });
+    await NutritionIntelligenceService.parseVoice('user-1', 'banana and oatmeal', { source: 'text' });
+    expect(reserve).not.toHaveBeenCalled();
+    await NutritionIntelligenceService.parseVoice('user-1', 'banana and oatmeal', { source: 'text', jobId: 'job-12345678' });
+    expect(reserve).toHaveBeenCalledWith('user-1', expect.any(String), { jobId: 'job-12345678' });
+  });
+
+  it('estimate-item: a counted repeat skips the paywall check and the credit', async () => {
+    const service = NutritionIntelligenceService as any;
+    const assert = vi.spyOn(UsageService, 'assertFoodAiQuota').mockResolvedValue(undefined);
+    const reserve = vi.spyOn(UsageService, 'reserveFoodAi').mockResolvedValue({ id: 'r1', release: vi.fn() });
+    vi.spyOn(service, 'getCachedResult').mockResolvedValue(cachedResult);
+    vi.spyOn(service, 'finalizeEstimatedItem').mockResolvedValue(parsedItem);
+    vi.mocked(UsageService.recentFoodAiCredit).mockResolvedValueOnce({ contentHash: 'h', countedAt: justNow(), matchedBy: 'content' });
+    await NutritionIntelligenceService.estimateItem('user-1', 'Rice', 100);
+    expect(assert).not.toHaveBeenCalled();
+    expect(reserve).not.toHaveBeenCalled();
   });
 });

@@ -201,7 +201,7 @@ export class LeaderboardOvertakeService {
       .select('notification_type, data, sent_at')
       .eq('user_id', userId)
       .eq('suppressed', false)
-      .in('notification_type', ['leaderboard_overtaken', 'winback_day3', 'winback_day7', 'winback_day14', 'winback_day30'])
+      .in('notification_type', ['leaderboard_overtaken', 'winback_day3', 'winback_day7', 'winback_day14', 'winback_day30', 'dont_miss_twice', 'streak_save_offer'])
       .gte('sent_at', since(REPEAT_WINDOW_DAYS * 24));
     if (error) return null; // fail open; the orchestrator's interval + dedupe still apply
     const rows = (data ?? []) as Row[];
@@ -209,6 +209,8 @@ export class LeaderboardOvertakeService {
     if (rows.some((r) => r.notification_type === 'leaderboard_overtaken' && recent(r, 20))) return 'one_per_day';
     if (rows.some((r) => r.notification_type === 'leaderboard_overtaken' && r.data?.circleId === circleId && r.data?.overtakerId === overtakerId)) return 'repeat_pair';
     if (isLapsed(audience?.stage) && rows.some((r) => String(r.notification_type).startsWith('winback_') && recent(r, 20))) return 'winback_sent_today';
+    // 1.1.5: a D+1 push (ENGAGEMENT_115_SPEC §5.2) is that user's touch for the day, like a win-back step.
+    if (rows.some((r) => (r.notification_type === 'dont_miss_twice' || r.notification_type === 'streak_save_offer') && recent(r, 20))) return 'dont_miss_twice_sent_today';
     return null;
   }
 

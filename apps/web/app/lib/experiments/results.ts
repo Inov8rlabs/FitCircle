@@ -255,6 +255,28 @@ export const RATE_METRICS: readonly RateMetricDef[] = [
     evaluate: matureAfter(7 * D, (u) => anyWithin(u.mealAt, u.assignedAt - H, u.assignedAt + 7 * D)),
   },
   {
+    // ENGAGEMENT_115_SPEC §14.8: the primary metric of `onboarding_meal_step` (read it off the
+    // scorecard; the automatic ship rule stays revenue/user D30 for every experiment).
+    key: 'first_meal_24h_after_onboarding',
+    title: 'Logged a meal by 24 hours after onboarding',
+    definition:
+      'Of users who finished onboarding, the share with a confirmed meal (draft meals excluded) logged between entering the experiment and 24 hours after finishing onboarding.',
+    numerator: 'Users with a confirmed meal by 24 h after finishing onboarding',
+    denominator: 'Users who finished onboarding at least 24 hours ago',
+    maturityLabel: 'Users 24 h past onboarding',
+    group: 'secondary',
+    label: 'First meal ≤ 24 h after onboarding',
+    kind: 'rate',
+    window: 'onboarding + 24h',
+    higherIsBetter: true,
+    pending: (u, now) => u.onboardingCompletedAt !== null && now < u.onboardingCompletedAt + D,
+    evaluate: (u, now) => {
+      if (u.onboardingCompletedAt === null || u.onboardingCompletedAt < u.assignedAt - H) return null;
+      if (now < u.onboardingCompletedAt + D) return null;
+      return anyWithin(u.mealAt, u.assignedAt - H, u.onboardingCompletedAt + D);
+    },
+  },
+  {
     key: 'trial_cancellation',
     title: 'Cancelled during the free trial',
     definition: 'Of users who started a trial, the share who turned off auto-renew before the trial ended.',

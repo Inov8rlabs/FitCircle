@@ -5,10 +5,12 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+
 import { StreakClaimingService } from '@/lib/services/streak-claiming-service';
-import { StreakClaimError } from '@/lib/types/streak-claiming';
 import { addDays } from '@/lib/streaks/streak-calculator';
 import { createAdminSupabase } from '@/lib/supabase-admin';
+import { StreakClaimError } from '@/lib/types/streak-claiming';
+
 import { makeStreakDb, type FakeSupabase } from '../../helpers/fake-supabase';
 
 vi.mock('@/lib/supabase-admin');
@@ -458,5 +460,43 @@ describe('autoClaimForManualLog', () => {
       source: 'food_log',
     });
     expect(result).toMatchObject({ claimed: false, alreadyClaimed: false, skipped: 'error' });
+  });
+});
+
+describe('1.1.5 milestone ownership (ENGAGEMENT_115_SPEC §5.4)', () => {
+  const sixDays = () => [6, 5, 4, 3, 2, 1].map((n) => addDays(TODAY, -n));
+
+  it('no streak_celebration_v1 (old apps, sync, cron): milestone_achieved push + pending celebration stored', async () => {
+    const { StreakCelebrationService } = await import('@/lib/services/streak-celebration-service');
+    const notify = vi.spyOn(StreakCelebrationService, 'notifyMilestone').mockResolvedValue({ sent: true });
+    seedUser({ claims: sixDays() });
+    const result = await StreakClaimingService.claimStreak(USER, TODAY, TZ, 'manual_entry');
+    expect(result.milestone?.milestone).toBe(7);
+    expect(notify).toHaveBeenCalledWith(USER, { days: 7, name: '1-Week Warrior', shieldsGranted: 1, boundaryDay: TODAY });
+    const meta = db.getRows('streak_shields').find((r) => r.shield_type === 'milestone_shield')!.metadata;
+    expect(meta.pending_celebration).toMatchObject({ days: 7, name: '1-Week Warrior', day: TODAY, shieldsGranted: 1 });
+  });
+
+  it('inAppCelebration (a foreground manual route + streak_celebration_v1): no push, no pending — the app shows it', async () => {
+    const { StreakCelebrationService } = await import('@/lib/services/streak-celebration-service');
+    const notify = vi.spyOn(StreakCelebrationService, 'notifyMilestone').mockResolvedValue({ sent: true });
+    seedUser({ claims: sixDays() });
+    const result = await StreakClaimingService.autoClaimForManualLog(USER, { occurredAt: TODAY, timezone: TZ, source: 'food_log', inAppCelebration: true });
+    expect(result.milestone?.milestone).toBe(7);
+    expect(notify).not.toHaveBeenCalled();
+    const meta = db.getRows('streak_shields').find((r) => r.shield_type === 'milestone_shield')!.metadata;
+    expect(meta.pending_celebration).toBeUndefined();
+  });
+
+  it('a weekly shield earn without a celebration milestone (day 21) sends no milestone push', async () => {
+    const { StreakCelebrationService } = await import('@/lib/services/streak-celebration-service');
+    const notify = vi.spyOn(StreakCelebrationService, 'notifyMilestone').mockResolvedValue({ sent: true });
+    const days = Array.from({ length: 20 }, (_, i) => addDays(TODAY, -(20 - i)));
+    seedUser({ claims: days });
+    db.getRows('streak_shields').find((r) => r.shield_type === 'milestone_shield')!.metadata = {
+      celebrated_milestone_days: [addDays(TODAY, -18), addDays(TODAY, -14), addDays(TODAY, -7)],
+    };
+    await StreakClaimingService.claimStreak(USER, TODAY, TZ, 'manual_entry');
+    expect(notify).not.toHaveBeenCalled();
   });
 });

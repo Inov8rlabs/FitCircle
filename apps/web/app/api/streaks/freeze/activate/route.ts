@@ -3,6 +3,7 @@ import { z } from 'zod';
 
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { StreakClaimingService } from '@/lib/services/streak-claiming-service';
+import { StreakSaveService } from '@/lib/services/streak-save-service';
 import { readJsonBody } from '@/lib/streaks/request-body';
 import { addDays, isValidTimezone, localToday } from '@/lib/streaks/streak-calculator';
 import { createAdminSupabase } from '@/lib/supabase-admin';
@@ -98,6 +99,8 @@ export async function POST(request: NextRequest) {
     }
 
     console.log(`[POST /api/streaks/freeze/activate] User ${user.id} activated freeze for ${date}`);
+    // 1.1.5 (ENGAGEMENT_115_SPEC §5.3): a save-offer day that is now protected is saved. Never throws.
+    await StreakSaveService.markSaved(user.id, date, result.unlimited ? 'pro_unlimited' : 'shield');
 
     return NextResponse.json({
       success: true,

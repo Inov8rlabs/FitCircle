@@ -94,7 +94,7 @@ describe('assertFoodAiQuota — gate live', () => {
 describe('assertFitzyQuota', () => {
   it('is a no-op while the gate is dark (Fitzy historically uncapped)', async () => {
     seedFitzy(500);
-    await expect(UsageService.assertFitzyQuota(USER)).resolves.toBeUndefined();
+    await expect(UsageService.assertFitzyQuota(USER)).resolves.toMatchObject({ tier: expect.stringMatching(/^(free|pro)$/) });
   });
 
   it('trial-first: a free user is refused on the FIRST message once live (0/day)', async () => {
@@ -109,7 +109,7 @@ describe('assertFitzyQuota', () => {
     setGate('fitzy_unlimited', 'premium');
     setTier('premium');
     seedFitzy(TIER_LIMITS.free.fitzyMessagesPerDay + 10);
-    await expect(UsageService.assertFitzyQuota(USER)).resolves.toBeUndefined();
+    await expect(UsageService.assertFitzyQuota(USER)).resolves.toMatchObject({ tier: expect.stringMatching(/^(free|pro)$/) });
   });
 });
 

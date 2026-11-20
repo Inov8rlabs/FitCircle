@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { StreakClaimingService } from '@/lib/services/streak-claiming-service';
 import { WorkoutLoggingService } from '@/lib/services/workout-logging-service';
+import { requestShowsStreakCelebration } from '@/lib/streaks/celebration';
 import { resolveClientTimezone } from '@/lib/streaks/client-timezone';
 import { parseLenient, validationMessage } from '@/lib/validation/lenient-parse';
 import { quickLogCategorySchema } from '@/lib/validators/quick-log';
@@ -44,6 +45,7 @@ export async function POST(request: NextRequest) {
       timezone,
       source: 'exercise_log',
       referenceId: result.exercise?.id as string | undefined,
+      inAppCelebration: requestShowsStreakCelebration(request),
     });
 
     return NextResponse.json({

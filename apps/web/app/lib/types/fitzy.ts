@@ -34,6 +34,10 @@ export interface FitzyChatResponse {
   suggestions?: string[];
   actions?: FitzyAction[];
   remaining?: number | null;
+  /** 1.1.5 additive (ENGAGEMENT_115_SPEC §3.3): the free window (null for Pro / gate dark). */
+  limit?: number | null;
+  window?: 'week' | 'day' | null;
+  resetsAt?: string | null;
   tier?: FitzyTier;
 }
 

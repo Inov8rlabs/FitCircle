@@ -8,7 +8,7 @@ import { FitzyLockedError, FitzyNotFoundError } from '../services/fitzy-conversa
 import { UpgradeRequiredError } from '../services/usage-service';
 import type { FitzyPaywall } from '../types/fitzy';
 
-import { fitzyUpgradeMessage, paywallFor } from './paywall';
+import { fitzyUpgradeMessage, fitzyWeeklyUsedMessage, paywallFor } from './paywall';
 
 export { ok, fail };
 
@@ -20,15 +20,41 @@ export interface FitzyErrorBody {
   details?: Record<string, unknown>;
 }
 
+/**
+ * The UPGRADE_REQUIRED `message` + `details` for a Fitzy quota refusal: daily refusals are
+ * byte-identical to 1.1.4; weekly ones (1.1.5) add `window` + `resetsAt` and the weekly copy.
+ */
+export function fitzyUpgradeEnvelope(error: UpgradeRequiredError, dailyUsedMessage?: string): { message: string; details: Record<string, unknown> } {
+  const weekly = error.extra.window === 'week';
+  const trialEligible = error.trialEligible === true;
+  const message = weekly
+    ? fitzyWeeklyUsedMessage(error.limit)
+    : error.limit > 0 && dailyUsedMessage
+      ? dailyUsedMessage
+      : fitzyUpgradeMessage(error.limit, trialEligible);
+  return {
+    message,
+    details: {
+      feature: error.feature,
+      used: error.used,
+      limit: error.limit,
+      ...(weekly ? { window: 'week', resetsAt: error.extra.resetsAt ?? null } : {}),
+      paywall: paywallFor('fitzy_quota', { trialEligible, trialDays: error.trialDays, weekly }),
+    },
+  };
+}
+
 /** Map anything a Fitzy route can throw to {status, code, message, paywall?}. */
 export function describeFitzyError(error: unknown, label = 'fitzy'): FitzyErrorBody {
   if (error instanceof UpgradeRequiredError) {
+    const weekly = error.extra.window === 'week';
     return {
       status: 429,
       code: 'UPGRADE_REQUIRED',
-      message: fitzyUpgradeMessage(error.limit, error.trialEligible === true),
-      paywall: paywallFor('fitzy_quota', { trialEligible: error.trialEligible === true, trialDays: error.trialDays }),
-      details: { feature: error.feature, used: error.used, limit: error.limit },
+      message: weekly ? fitzyWeeklyUsedMessage(error.limit) : fitzyUpgradeMessage(error.limit, error.trialEligible === true),
+      paywall: paywallFor('fitzy_quota', { trialEligible: error.trialEligible === true, trialDays: error.trialDays, weekly }),
+      // 1.1.5 weekly mode adds window + resetsAt (ENGAGEMENT_115_SPEC §3.3); the daily refusal is unchanged.
+      details: { feature: error.feature, used: error.used, limit: error.limit, ...(weekly ? { window: 'week', resetsAt: error.extra.resetsAt ?? null } : {}) },
     };
   }
   if (error instanceof AiConsentRequiredError) {

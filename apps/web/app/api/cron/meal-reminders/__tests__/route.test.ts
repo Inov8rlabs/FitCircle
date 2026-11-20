@@ -30,7 +30,7 @@ describe('GET /api/cron/meal-reminders', () => {
     const order: string[] = [];
     vi.spyOn(DeferredNudgeService, 'releaseDue').mockImplementation(async () => (order.push('deferred'), { heldUsers: 0, released: 0, sent: 0, closed: {}, notSent: {} }));
     vi.spyOn(Day1MorningPushService, 'run').mockImplementation(async () => (order.push('day1'), { enabled: true, candidates: 0, due: 0, sent: 0, skipped: {}, variants: {} }));
-    vi.spyOn(MealReminderService, 'run').mockImplementation(async () => (order.push('meal'), { enabled: true, candidates: 0, due: 0, sent: 0, skipped: {}, bySlot: {} }));
+    vi.spyOn(MealReminderService, 'run').mockImplementation(async () => (order.push('meal'), { enabled: true, candidates: 0, due: 0, sent: 0, skipped: {}, bySlot: {}, firstMealNudges: 0 }));
     const res = await call();
     expect(res.status).toBe(200);
     expect(order).toEqual(['deferred', 'day1', 'meal']);
@@ -41,7 +41,7 @@ describe('GET /api/cron/meal-reminders', () => {
     vi.spyOn(console, 'error').mockImplementation(() => {});
     vi.spyOn(DeferredNudgeService, 'releaseDue').mockRejectedValue(new Error('db down'));
     vi.spyOn(Day1MorningPushService, 'run').mockRejectedValue(new Error('boom'));
-    const meal = vi.spyOn(MealReminderService, 'run').mockResolvedValue({ enabled: true, candidates: 1, due: 1, sent: 1, skipped: {}, bySlot: { lunch: 1 } });
+    const meal = vi.spyOn(MealReminderService, 'run').mockResolvedValue({ enabled: true, candidates: 1, due: 1, sent: 1, skipped: {}, bySlot: { lunch: 1 }, firstMealNudges: 0 });
     const res = await call();
     expect(res.status).toBe(200);
     expect(meal).toHaveBeenCalled();

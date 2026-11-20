@@ -9,10 +9,11 @@
 import { identifyInBackground, type AmplitudeIdentification } from '../analytics/amplitude-server';
 import { CampaignError } from '../campaigns/http';
 import { ComplimentaryGrantService } from '../services/complimentary-grant-service';
+import { PUBLIC_CIRCLE_IDS } from '../ads/virality';
 import { createAdminSupabase } from '../supabase-admin';
 
 import { assignmentIdentify, exposureIdentify } from './analytics';
-import { decideAssignment, type AssignmentContext, type AssignmentDecision } from './assign';
+import { decideAssignment, hasLiveHardArm, type AssignmentContext, type AssignmentDecision } from './assign';
 import {
   applyPatch,
   CONFLICT_STATUSES,
@@ -221,7 +222,7 @@ export class ExperimentService {
     const [{ data: expRows, error: expErr }, { data: overrideRows }, { data: assignmentRows }, grant] = await Promise.all([
       supabase.from('experiments').select('*').in('key', unique),
       supabase.from('experiment_overrides').select('experiment_key, arm').eq('user_id', profile.id).in('experiment_key', unique),
-      supabase.from('experiment_assignments').select('experiment_key, arm, reason').eq('user_id', profile.id).in('experiment_key', unique),
+      supabase.from('experiment_assignments').select('experiment_key, arm, reason, first_exposed_at').eq('user_id', profile.id).in('experiment_key', unique),
       ComplimentaryGrantService.activeGrant(profile.id).catch(() => null),
     ]);
     if (expErr) throw new Error(`experiments read failed: ${expErr.message}`);
@@ -235,6 +236,7 @@ export class ExperimentService {
       profileCreatedAt: typeof profile.created_at === 'string' ? profile.created_at : null,
       onboardingCompleted: typeof profile.onboarding_completed === 'boolean' ? profile.onboarding_completed : profile.onboarding_completed == null ? false : null,
       hasComplimentaryGrant: !!grant,
+      isPro: String(profile.subscription_tier ?? '').toLowerCase() === 'premium',
       now,
     };
 
@@ -246,13 +248,24 @@ export class ExperimentService {
         console.error(`[ExperimentService.assign] experiment ${row.key} is malformed:`, err?.message);
       }
     }
+    type ExistingRow = { experiment_key: string; arm: string; reason: AssignmentReason; first_exposed_at?: string | null };
+    const existingRows = (assignmentRows ?? []) as ExistingRow[];
+    // Invite lookup only when a hard-paywall arm could be decided: no row yet, or an
+    // unexposed row of a user still in onboarding (assign.ts step 2 exclusion).
+    const needsInvited = experiments.some((e) => {
+      if (!hasLiveHardArm(e)) return false;
+      const row = existingRows.find((a) => a.experiment_key === e.key);
+      return !row || (!row.first_exposed_at && ctx.onboardingCompleted === false);
+    });
+    if (needsInvited) ctx.invited = await this.arrivedViaInvite(profile.id);
     const layers = await this.layerFacts(profile.id, experiments);
 
     const out: Record<string, MobileAssignment> = {};
     const identifies: AmplitudeIdentification[] = [];
     for (const experiment of experiments) {
       const override = ((overrideRows ?? []) as { experiment_key: string; arm: string }[]).find((o) => o.experiment_key === experiment.key) ?? null;
-      const existing = ((assignmentRows ?? []) as { experiment_key: string; arm: string; reason: AssignmentReason }[]).find((a) => a.experiment_key === experiment.key) ?? null;
+      const row = existingRows.find((a) => a.experiment_key === experiment.key) ?? null;
+      const existing = row ? { arm: row.arm, reason: row.reason, exposed: !!row.first_exposed_at } : null;
       const layer = experiment.layer
         ? {
             salt: layers.salts.get(experiment.layer.key) ?? null,
@@ -281,6 +294,40 @@ export class ExperimentService {
     }
     identifyInBackground(identifies, 'experiment assignment');
     return out;
+  }
+
+  /**
+   * Did this user arrive through a friend? (ENGAGEMENT_115 forced-trial test: invited users
+   * always get the closable paywall.) True when ANY of:
+   *   - a `referrals` row names them as invitee, whatever its status (referral link / code,
+   *     email or SMS invite auto-attribution, and circle invite joins, which all claim
+   *     through ReferralService.claim — even a device-rejected claim came from a friend);
+   *   - they are a member of a non-public circle someone else invited them into
+   *     (fitcircle_members.invited_by ≠ them: circle invite link / code / email invite
+   *     acceptance, which works even when the referral program is switched off).
+   * Fails closed: any read error counts as invited, so they are served control.
+   */
+  static async arrivedViaInvite(userId: string): Promise<boolean> {
+    try {
+      const supabase = createAdminSupabase();
+      const [{ data: refs, error: refErr }, { data: members, error: memErr }] = await Promise.all([
+        supabase.from('referrals').select('id').eq('invitee_id', userId).limit(1),
+        supabase.from('fitcircle_members').select('fitcircle_id, invited_by').eq('user_id', userId).not('invited_by', 'is', null).limit(50),
+      ]);
+      if (refErr) throw refErr;
+      if (memErr) throw memErr;
+      if ((refs ?? []).length) return true;
+      const circleIds = [
+        ...new Set(((members ?? []) as { fitcircle_id: string; invited_by: string | null }[]).filter((m) => m.invited_by && m.invited_by !== userId).map((m) => m.fitcircle_id)),
+      ].filter((id) => !PUBLIC_CIRCLE_IDS.has(id));
+      if (!circleIds.length) return false;
+      const { data: circles, error: cErr } = await supabase.from('fitcircles').select('id, visibility').in('id', circleIds);
+      if (cErr) throw cErr;
+      return ((circles ?? []) as { id: string; visibility: string | null }[]).some((c) => c.visibility !== 'public');
+    } catch (err: any) {
+      console.warn('[ExperimentService.arrivedViaInvite] lookup failed, treating as invited:', err?.message ?? err);
+      return true;
+    }
   }
 
   /**
@@ -330,10 +377,11 @@ export class ExperimentService {
       country: ctx.country,
     };
     const supabase = createAdminSupabase();
-    // Overrides replace whatever was there (and reset exposure); everything else
-    // is first-write-wins so a concurrent call can never move a user.
+    // Overrides replace whatever was there (and reset exposure); so does the invited
+    // exclusion (assign.ts step 2, only for unexposed rows); everything else is
+    // first-write-wins so a concurrent call can never move a user.
     const { error } =
-      d.reason === 'override'
+      d.reason === 'override' || d.replace
         ? await supabase
             .from('experiment_assignments')
             .upsert({ ...row, first_exposed_at: null, exposure_surface: null }, { onConflict: 'experiment_key,user_id' })

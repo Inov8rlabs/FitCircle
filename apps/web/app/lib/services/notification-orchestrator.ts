@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from 'crypto';
 
 import { mealReminderCopy } from '../journey/meal-reminders';
+import { firstMealNudgeCopy } from '../journey/first-meal-nudge';
 import { audienceSuppression } from '../notifications/audience';
 import { pushPlatformFor, recordPushSent, type PushSentOutcome } from '../notifications/push-sent-events';
 import { DEFERRED_REASON, isDeferrable, planDeferral } from '../notifications/quiet-hours-deferral';
@@ -208,7 +209,13 @@ export type NotificationType =
   // A real circle member moved past the recipient on the circle leaderboard (§8.6; LeaderboardOvertakeService).
   | 'leaderboard_overtaken'
   // Background health sync brought meaningful new data (§8.5; HealthSyncPushService).
-  | 'health_sync_update';
+  | 'health_sync_update'
+  // 1.1.5 next-day push after a FIRST missed day (docs/ENGAGEMENT_115_SPEC.md §5.2; DontMissTwiceService).
+  // Copy in data.title/body; one of the two per lapse, never both.
+  | 'dont_miss_twice'
+  | 'streak_save_offer'
+  // 1.1.5 "Snap your first meal" (docs/ENGAGEMENT_115_SPEC.md §14.7; MealReminderService). Once per user.
+  | 'first_meal_nudge';
 
 interface NotificationContent {
   title: string;
@@ -320,6 +327,12 @@ export const TYPE_SCREEN_MAP: Record<NotificationType, NotificationScreen> = {
   // Circle detail opens on its Leaderboard tab in both apps (no circleId → the circles list).
   leaderboard_overtaken: 'circle_detail',
   health_sync_update: 'dashboard',
+  // Variant screen rides data.screen (food_log / exercise_log / dashboard); 1.1.5 also reads data.route.
+  dont_miss_twice: 'food_log',
+  // Old apps land on Streaks ("use shield" → 402 → the streak_shield paywall); 1.1.5 reads route=streak_save.
+  streak_save_offer: 'streaks',
+  // Food Log on old apps; data.route = log_meal_camera opens the camera logger (1.1.0+).
+  first_meal_nudge: 'food_log',
 };
 
 /** Coach pushes: Android "Coach" channel (FCM falls back to the default channel on older builds). */
@@ -333,6 +346,24 @@ const SCREEN_OVERRIDE_TYPES: Partial<Record<NotificationType, ReadonlySet<Notifi
   winback_day7: new Set<NotificationScreen>(['circle_detail', 'circles', 'dashboard']),
   winback_day30: new Set<NotificationScreen>(['campaign', 'dashboard', 'fitzy_chat']),
   health_sync_update: new Set<NotificationScreen>(['dashboard', 'exercise_log']),
+  dont_miss_twice: new Set<NotificationScreen>(['food_log', 'exercise_log', 'dashboard']),
+};
+
+/**
+ * 1.1.5 (ENGAGEMENT_115_SPEC §5): `data.route` values a service may set per send, per type.
+ * Shipped apps route by `screen` and ignore (iOS) / drop (Android allowlist) an unknown route.
+ */
+const ROUTE_OVERRIDE_TYPES: Partial<Record<NotificationType, ReadonlySet<string>>> = {
+  dont_miss_twice: new Set(['log_meal_camera']),
+  streak_save_offer: new Set(['streak_save']),
+  milestone_achieved: new Set(['streak_milestone']),
+};
+
+/** Extra string data keys forwarded for these types (all values stringified; absent keys omitted). */
+const STREAK_PUSH_DATA_KEYS: Partial<Record<NotificationType, readonly string[]>> = {
+  dont_miss_twice: ['mealType', 'variant', 'missedDate', 'streakDays'],
+  streak_save_offer: ['missedDate', 'lostStreak', 'offerId'],
+  milestone_achieved: ['milestone'],
 };
 
 export function screenFor(type: NotificationType, data: NotificationData): NotificationScreen {
@@ -477,6 +508,8 @@ export const NOTIFICATION_TEMPLATES: Record<
   meal_reminder_lunch: (data) => ({ ...mealReminderCopy('lunch', data.localDate), category: 'momentum' }),
   meal_reminder_snack: (data) => ({ ...mealReminderCopy('snack', data.localDate), category: 'momentum' }),
   meal_reminder_dinner: (data) => ({ ...mealReminderCopy('dinner', data.localDate, data.currentMomentum), category: 'momentum' }),
+  // Same category as the meal reminders (their toggle mutes it); counts toward the daily cap.
+  first_meal_nudge: (data) => ({ ...firstMealNudgeCopy(data.mealType), category: 'momentum' }),
 
   // ---- State - Circle (S5/S6/S12) ----
   circle_boost_threshold: (data) => ({
@@ -528,11 +561,14 @@ export const NOTIFICATION_TEMPLATES: Record<
     body: `${data.challengeTitle || 'A new daily challenge'} is waiting for you. Complete it for bonus points!`,
     category: 'challenge',
   }),
-  milestone_achieved: (data) => ({
-    title: 'Milestone unlocked',
-    body: `You just hit ${data.milestoneName || 'a new milestone'}! Your dedication is paying off.`,
-    category: 'celebration',
-  }),
+  milestone_achieved: (data) =>
+    data.title
+      ? prebuilt(data, 'Milestone unlocked', 'Tap to celebrate.', 'celebration')
+      : {
+          title: 'Milestone unlocked',
+          body: `You just hit ${data.milestoneName || 'a new milestone'}! Your dedication is paying off.`,
+          category: 'celebration',
+        },
   circle_invite_received: (data) => ({
     title: "You've been invited",
     body: `${data.friendName || 'Someone'} invited you to join "${data.circleName || 'a FitCircle'}". Check it out!`,
@@ -740,6 +776,8 @@ export const NOTIFICATION_TEMPLATES: Record<
   leaderboard_overtaken: (data) => prebuilt(data, 'Someone moved past you', 'Open your circle to see the leaderboard.', 'circle'),
   // Health sync news (lib/health-sync/push.ts builds the copy; Celebrations toggle).
   health_sync_update: (data) => prebuilt(data, 'New activity synced', 'Tap to see your day.', 'celebration'),
+  dont_miss_twice: (data) => prebuilt(data, "Don't miss two days", "Log one meal today and you're back on track.", 'momentum'),
+  streak_save_offer: (data) => prebuilt(data, 'Save your streak', 'You missed yesterday. A streak shield can still keep it. Today only.', 'momentum'),
 };
 
 /** momentum_at_risk copy from the user's real streak + shields. Pure. */
@@ -811,6 +849,9 @@ export const TYPE_MIN_INTERVAL_HOURS: Partial<Record<NotificationType, number>> 
   momentum_at_risk: 70,
   leaderboard_overtaken: 20,
   health_sync_update: 20,
+  // One D+1 push per lapse (the job also dedupes per missed day).
+  dont_miss_twice: 44,
+  streak_save_offer: 44,
 };
 
 // Frequency cap: at most this many *nudges* per user per local day. Anything
@@ -984,6 +1025,10 @@ export const CAP_EXEMPT_TYPES: ReadonlySet<NotificationType> = new Set<Notificat
   'meal_reminder_dinner',
   'streak_lost',
   'shield_applied',
+  // 1.1.5: replaces the cap-exempt night streak_lost (one per lapse, a streak about to be lost for good).
+  'streak_save_offer',
+  // 1.1.5: a celebration the user earned (only when the app did not show it in-app).
+  'milestone_achieved',
   'challenge_completed',
   // Referral outcomes: a reward the user earned must never lose to a nudge.
   'referral_friend_joined',
@@ -1393,9 +1438,16 @@ export class NotificationOrchestrator {
     if (data.deepLink) pushData.deepLink = data.deepLink;
     if (data.campaignSlug) pushData.campaignSlug = String(data.campaignSlug);
     // Meal-slot reminders: the slot, so 1.1.0 opens the logger preselected (older apps ignore it).
-    if (MEAL_REMINDER_TYPES.has(type) && typeof data.mealType === 'string') pushData.mealType = data.mealType;
+    if ((MEAL_REMINDER_TYPES.has(type) || type === 'first_meal_nudge') && typeof data.mealType === 'string') pushData.mealType = data.mealType;
     // Meal reminders: open the camera logger (clients that know `route`); `screen` stays the fallback.
-    if (MEAL_REMINDER_TYPES.has(type) || type === 'winback_day3') pushData.route = MEAL_REMINDER_ROUTE;
+    if (MEAL_REMINDER_TYPES.has(type) || type === 'winback_day3' || type === 'first_meal_nudge') pushData.route = MEAL_REMINDER_ROUTE;
+    // 1.1.5 streak pushes: a per-send route from the allowlist + their data keys (ENGAGEMENT_115_SPEC §5.2, §5.4).
+    const routes = ROUTE_OVERRIDE_TYPES[type];
+    if (routes && typeof data.route === 'string' && routes.has(data.route)) pushData.route = data.route;
+    for (const key of STREAK_PUSH_DATA_KEYS[type] ?? []) {
+      const v = data[key];
+      if (v !== undefined && v !== null && v !== '') pushData[key] = String(v);
+    }
     // The notification_log row id, so a tap can be reported back (POST /api/mobile/notifications/opened).
     if (notificationId) pushData.notification_id = notificationId;
     // Fitzy chat context (the tip the push came from); clients render it as plain text.

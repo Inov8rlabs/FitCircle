@@ -6,7 +6,10 @@
  *  - The post-first-meal soft paywall (`first_meal_aha`): once ever, after the
  *    Meet-Fitzy moment. Exempt from the 10-minute rule (that IS the moment);
  *    it does not require the meal to have reached the server yet (offline-first
- *    logging), and still respects the 72 h spacing.
+ *    logging), and respects the 72 h spacing, EXCEPT when the user had never
+ *    logged a meal before their last automatic paywall (typically the onboarding
+ *    paywall seen without a scan, ENGAGEMENT_115_SPEC §14.2): that paywall
+ *    could not have been about a meal, so the first real scan still gets its aha.
  *  - User-initiated taps always open the paywall (clients don't ask).
  */
 export const PAYWALL_AUTO_SPACING_HOURS = 72;
@@ -19,6 +22,11 @@ export interface PaywallInput {
   signupAt: string | null;
   autoLastAt: string | null;
   ahaShownAt: string | null;
+  /**
+   * created_at of the earliest (non-deleted) food entry, or null when the server has none
+   * yet (offline-first logging). Omitted (undefined) = unknown → no spacing exemption.
+   */
+  firstMealAt?: string | null;
   now: Date;
 }
 
@@ -40,7 +48,19 @@ export function paywallEligibility(i: PaywallInput): PaywallEligibility {
   const pastGrace = !Number.isNaN(signup) && i.now.getTime() - signup >= PAYWALL_NEW_USER_GRACE_MINUTES * 60_000;
   return {
     autoEligible: base && spaced && pastGrace && i.mealsLoggedEver >= 1,
-    postAhaEligible: base && spaced && !i.ahaShownAt,
+    postAhaEligible: base && !i.ahaShownAt && (spaced || noMealBeforeLastAuto(i.firstMealAt, last)),
     nextAutoEligibleAt: spaced || spacingEnds === null ? null : new Date(spacingEnds).toISOString(),
   };
+}
+
+/**
+ * True when the last automatic paywall (epoch ms) came before the user's first meal on the
+ * server, or there is no meal on the server yet. `undefined` (input not loaded) → false.
+ */
+function noMealBeforeLastAuto(firstMealAt: string | null | undefined, lastAutoMs: number): boolean {
+  if (firstMealAt === undefined || Number.isNaN(lastAutoMs)) return false;
+  if (firstMealAt === null) return true;
+  const first = Date.parse(firstMealAt);
+  if (Number.isNaN(first)) return false;
+  return first > lastAutoMs;
 }

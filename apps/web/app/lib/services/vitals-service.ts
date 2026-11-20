@@ -28,6 +28,7 @@ import {
 import { BMI_BANDS, BMI_SCALE, bmiCategory, computeBmi, healthyWeightRangeKg } from '../utils/bmi';
 import { getLastNDays, getTodayInTimezone } from '../utils/timezone';
 import { logIgnoredQueryError } from '@/lib/api/route-errors';
+import { confirmedOnly } from '@/lib/meal-drafts/config';
 
 const MAX_DAYS = 90;
 
@@ -245,9 +246,8 @@ export class VitalsService {
     const goalMl = Number.isFinite(userGoal) && userGoal > 0 ? Math.round(userGoal) : DEFAULT_WATER_GOAL_ML;
 
     const [{ data: foodWater }, { data: bevWater }] = await Promise.all([
-      supabase
-        .from('food_log_entries')
-        .select('entry_date, water_ml')
+      confirmedOnly(supabase.from('food_log_entries')
+        .select('entry_date, water_ml'))
         .eq('user_id', userId)
         .eq('entry_type', 'water')
         .is('deleted_at', null)

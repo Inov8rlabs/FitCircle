@@ -155,4 +155,23 @@ describe('GET /api/mobile/circles/[id]/messages', () => {
       before: '2026-09-28T12:00:00.000Z',
     });
   });
+
+  it('passes the first page todayCheckins status through (1.1.5 strip, additive)', async () => {
+    const todayCheckins = {
+      date: '2026-11-17',
+      timezone: 'America/New_York',
+      resetsAt: '2026-11-18T05:00:00.000Z',
+      checkedIn: 1,
+      total: 3,
+      viewerCheckedIn: true,
+      members: [{ id: 'user-1', name: 'Ana', avatarUrl: null, checkedIn: true }],
+    };
+    service.listMessages.mockResolvedValue({ messages: [dto], hasMore: false, nextBefore: null, todayCheckins });
+    const res = await GET(new Request(`${url}?limit=1`, { headers: { Authorization: 'Bearer t' } }) as any, ctx);
+    const body = await res.json();
+
+    expect(body.data.todayCheckins).toEqual(todayCheckins);
+    expect(body.data.messages).toEqual([dto]);
+    expect(service.listMessages).toHaveBeenCalledWith(CIRCLE, 'user-1', { limit: 1 });
+  });
 });

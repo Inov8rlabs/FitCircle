@@ -61,7 +61,7 @@ describe('Fitzy chat gate (TRIAL_FIRST_SPEC §1)', () => {
   it('trial (premium + trialing) and premium are allowed; the 200/day abuse ceiling is unchanged', async () => {
     getDb().profiles.get(USER)!.subscription_tier = 'premium';
     getDb().profiles.get(USER)!.subscription_status = 'trialing';
-    await expect(UsageService.assertFitzyQuota(USER)).resolves.toBeUndefined();
+    await expect(UsageService.assertFitzyQuota(USER)).resolves.toMatchObject({ tier: expect.stringMatching(/^(free|pro)$/) });
     const now = new Date().toISOString();
     for (let i = 0; i < TIER_LIMITS.premium.fitzyMessagesPerDay; i++) getDb().fitzy_message_log.push({ user_id: USER, created_at: now });
     const err = await UsageService.assertFitzyQuota(USER).catch((e) => e);
@@ -71,7 +71,7 @@ describe('Fitzy chat gate (TRIAL_FIRST_SPEC §1)', () => {
 
   it('gate dark → no-op for everyone (legacy)', async () => {
     getDb().feature_gates.set('fitzy_unlimited', 'free');
-    await expect(UsageService.assertFitzyQuota(USER)).resolves.toBeUndefined();
+    await expect(UsageService.assertFitzyQuota(USER)).resolves.toMatchObject({ tier: expect.stringMatching(/^(free|pro)$/) });
   });
 });
 
@@ -244,7 +244,7 @@ describe('remote config drives the free limits (TRIAL_FIRST_SPEC §6)', () => {
 
   it('free Fitzy messages can be opened up again (e.g. 3/day) without a deploy', async () => {
     getDb().remote_config_defaults.push({ config_key: 'free_fitzy_messages_per_day', value: 3, updated_by: null, updated_at: '2026-11-01T00:00:00Z' });
-    await expect(UsageService.assertFitzyQuota(USER)).resolves.toBeUndefined();
+    await expect(UsageService.assertFitzyQuota(USER)).resolves.toMatchObject({ tier: expect.stringMatching(/^(free|pro)$/) });
     expect((await UsageService.fitzyAllowance(USER)).remaining).toBe(3);
     const e = await EntitlementService.getEntitlements(USER);
     expect(e.limits?.fitzyMessagesPerDay).toBe(3);

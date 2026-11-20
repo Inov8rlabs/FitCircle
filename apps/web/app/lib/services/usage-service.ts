@@ -9,6 +9,19 @@ import { TIER_LIMITS, LEGACY_LIMITS } from '../config/tier-limits';
 import { trialEligibleFromProfile } from '../entitlements/trial-eligibility';
 import { RemoteConfigService } from '../remote-config/service';
 import { createAdminSupabase } from '../supabase-admin';
+import {
+  allowanceTimezone,
+  dailyScansUsed,
+  fitzyAllowanceFrom,
+  freeFoodScanAllowance,
+  localDayWindow,
+  localWeekWindow,
+  nextUtcMidnight,
+  unmeteredFoodScanAllowance,
+  UNLIMITED_FITZY_ALLOWANCE,
+  type FitzyAllowance,
+  type FoodScanAllowance,
+} from '../usage/allowance';
 
 import { TrialConfig } from './trial-config';
 
@@ -46,7 +59,18 @@ export class UpgradeRequiredError extends Error {
     /** Fitzy chat gate only: may the user still start a free trial (paywall copy). Undefined elsewhere. */
     public readonly trialEligible?: boolean,
     /** Free-trial length for the paywall copy (remote config `trial_days` for this request). */
-    public readonly trialDays?: number
+    public readonly trialDays?: number,
+    /**
+     * 1.1.5 additive context (docs/ENGAGEMENT_115_SPEC.md §2.3, §3.3):
+     *  - food: `phase` (starter | daily | exhausted) and the allowance AFTER the refusal;
+     *  - Fitzy weekly: `window: 'week'` + `resetsAt`.
+     */
+    public readonly extra: {
+      phase?: 'starter' | 'daily' | 'exhausted';
+      allowance?: FoodScanAllowance;
+      window?: 'week' | 'day';
+      resetsAt?: string | null;
+    } = {}
   ) {
     super('UPGRADE_REQUIRED');
     this.name = 'UpgradeRequiredError';
@@ -54,6 +78,30 @@ export class UpgradeRequiredError extends Error {
 }
 
 type Tier = 'free' | 'premium';
+
+interface FreeFoodAiPlan {
+  kind: 'free';
+  /** Lifetime starter allowance (free_food_ai_analyses_total). */
+  limit: number;
+  /** Daily allowance after the starter (free_food_ai_daily_after_total); 0 = none. */
+  daily: number;
+  trialEligible: boolean;
+  trialDays?: number;
+  timezone: string;
+  dayStart: Date;
+  resetsAt: Date;
+}
+type FoodAiPlan = { kind: 'legacy' | 'premium'; limit: number; trialEligible: boolean } | FreeFoodAiPlan;
+interface FreeScanUsage {
+  lifetime: number;
+  today: number;
+}
+
+/** How assertFitzyQuota says the message must be recorded (fitzy_message_log.tier / .context). */
+export interface FitzyQuotaDecision {
+  tier: 'free' | 'pro';
+  context: 'onboarding' | null;
+}
 
 /** Free Fitzy answers per day for the onboarding tour's "Ask Fitzy" step (TRIAL_FIRST_SPEC §1.3). */
 export const ONBOARDING_FREE_FITZY_MESSAGES = 3;
@@ -65,37 +113,103 @@ export interface FoodAiReservation {
   release(): Promise<void>;
 }
 
+/**
+ * A food AI analysis repeated within this window (same content hash, or same client
+ * `X-Analysis-Job-Id`) is not counted again (ENGAGEMENT_115_SPEC §14.4 item 3).
+ */
+export const FOOD_AI_REPEAT_WINDOW_MS = 10 * 60_000;
+/** Separator between the content hash and the job id in nutrition_parse_log.image_hash. */
+const JOB_TAG = '|job:';
+
+/**
+ * nutrition_parse_log.image_hash for a credit: the content hash, plus `|job:<id>` when the client
+ * sent an analysis job id. No column needed: image_hash is write-only audit data (nothing else
+ * reads it; the parse cache has its own table).
+ */
+export function foodAiCreditHash(contentHash: string, jobId?: string): string {
+  return jobId ? `${contentHash}${JOB_TAG}${jobId}` : contentHash;
+}
+
+/** The counted analysis a request repeats (content hash of that analysis + when it was counted). */
+export interface FoodAiRepeat {
+  contentHash: string;
+  countedAt: string;
+  matchedBy: 'content' | 'job';
+}
+
 export class UsageService {
   /**
+   * The user's counted food AI analysis this request repeats, if any: a nutrition_parse_log row
+   * within FOOD_AI_REPEAT_WINDOW_MS with the same content hash, or (when `jobId` is given) the
+   * same analysis job id. One indexed read (user_id, created_at). Fail-soft: errors → null
+   * (the request is simply counted, as before).
+   */
+  static async recentFoodAiCredit(userId: string, contentHash: string, jobId?: string, now: Date = new Date()): Promise<FoodAiRepeat | null> {
+    try {
+      const since = new Date(now.getTime() - FOOD_AI_REPEAT_WINDOW_MS).toISOString();
+      const { data, error } = await createAdminSupabase()
+        .from('nutrition_parse_log')
+        .select('image_hash, created_at')
+        .eq('user_id', userId)
+        .gte('created_at', since)
+        .order('created_at', { ascending: false })
+        .limit(200);
+      if (error) {
+        logIgnoredQueryError('UsageService.recentFoodAiCredit', error);
+        return null;
+      }
+      for (const row of (data ?? []) as Array<{ image_hash: string | null; created_at: string }>) {
+        const stored = row.image_hash ?? '';
+        const at = stored.indexOf(JOB_TAG);
+        const hash = at >= 0 ? stored.slice(0, at) : stored;
+        const job = at >= 0 ? stored.slice(at + JOB_TAG.length) : null;
+        if (hash && hash === contentHash) return { contentHash: hash, countedAt: row.created_at, matchedBy: 'content' };
+        if (jobId && job === jobId && hash) return { contentHash: hash, countedAt: row.created_at, matchedBy: 'job' };
+      }
+      return null;
+    } catch (err: any) {
+      console.warn('[UsageService] recentFoodAiCredit failed (counting as usual):', err?.message ?? err);
+      return null;
+    }
+  }
+
+  /**
    * Food AI quota check WITHOUT consuming (photo + voice + describe + Fix + estimate-item combined).
-   * Call it before serving a cached analysis so a free user past the lifetime allowance gets the
+   * Call it before serving a cached analysis so a free user past the allowance gets the
    * paywall instead of a free result. Use reserveFoodAi() right before an actual model call.
    *
-   * Trial-first (TRIAL_FIRST_SPEC §5): once food_ai_unlimited is live, FREE = 5 successful AI
-   * analyses in TOTAL (lifetime, every row in nutrition_parse_log); Pro / trial = the 100/day
-   * abuse ceiling. Gate dark = the legacy 25/day RateLimited cap for everyone.
+   * Phases (docs/ENGAGEMENT_115_SPEC.md §2.1): Pro / trial = the 100/day abuse ceiling; gate
+   * dark = the legacy 25/day RateLimited cap; free = the lifetime starter allowance
+   * (free_food_ai_analyses_total), then free_food_ai_daily_after_total per LOCAL day (0 = none,
+   * which is every request without a >= 1.1.5 app version).
    */
   static async assertFoodAiQuota(userId: string): Promise<void> {
     const plan = await this.foodAiPlan(userId);
-    const used = await this.countFoodAi(userId, plan.scope);
-    if (used >= plan.limit) throw await this.foodAiRefusalNoted(plan, used, userId);
+    if (plan.kind !== 'free') {
+      const used = await this.countToday('nutrition_parse_log', userId);
+      if (used >= plan.limit) throw new Error('RateLimited');
+      return;
+    }
+    const usage = await this.freeScanUsage(userId, plan);
+    if (this.freeScanBlocked(plan, usage, 0)) throw await this.foodAiRefusalNoted(plan, usage, userId);
   }
 
   /**
    * Reserve ONE food AI analysis before the model call (race-safe insert-then-count).
    * Inserts the nutrition_parse_log row first, then counts; if the count (including this row)
-   * is over the limit the row is deleted and the call refused. Two parallel requests at 4/5 can
-   * therefore never both pass (worst case both see 6/5 and both are refused — the user retries
-   * and gets the last credit). Only SUCCESSFUL analyses keep their row: callers MUST call
-   * `release()` when the model call fails, so failed/fallback parses never burn a credit.
+   * is over the allowance the row is deleted and the call refused, BEFORE any model call. Two
+   * parallel requests at the last credit can never both pass (worst case both are refused —
+   * the user retries and gets the last credit). Only SUCCESSFUL analyses keep their row:
+   * callers MUST call `release()` when the model call fails, so failed parses never burn a credit.
    *
    * @throws UpgradeRequiredError (free, gate live) / Error('RateLimited') (ceilings)
    */
-  static async reserveFoodAi(userId: string, hash: string): Promise<FoodAiReservation> {
+  static async reserveFoodAi(userId: string, contentHash: string, opts: { jobId?: string } = {}): Promise<FoodAiReservation> {
     const plan = await this.foodAiPlan(userId);
     const supabase = createAdminSupabase();
+    const hash = foodAiCreditHash(contentHash, opts.jobId);
     // Attested device (Android integrity): the credit also counts against the device.
-    const deviceId = plan.scope === 'lifetime' ? await this.attestedRequestDevice(userId) : null;
+    const deviceId = plan.kind === 'free' ? await this.attestedRequestDevice(userId) : null;
     let { data: row, error: insertError } = await supabase
       .from('nutrition_parse_log')
       .insert({ user_id: userId, image_hash: hash, ...(deviceId ? { device_id: deviceId } : {}) })
@@ -112,8 +226,13 @@ export class UsageService {
       // Couldn't write the reservation: fall back to the plain (non-atomic) check so a logging
       // fault never blocks a paying user, and still refuse a free user who is clearly over.
       console.error('[UsageService] nutrition_parse_log reservation failed:', insertError?.message);
-      const used = await this.countFoodAi(userId, plan.scope);
-      if (used >= plan.limit) throw this.foodAiRefusal(plan, used);
+      if (plan.kind !== 'free') {
+        const used = await this.countToday('nutrition_parse_log', userId);
+        if (used >= plan.limit) throw new Error('RateLimited');
+      } else {
+        const usage = await this.freeScanUsage(userId, plan);
+        if (this.freeScanBlocked(plan, usage, 0)) throw await this.foodAiRefusalNoted(plan, usage, userId);
+      }
       return { id: null, release: async () => {} };
     }
     const id = row.id as string;
@@ -121,18 +240,26 @@ export class UsageService {
       const { error } = await createAdminSupabase().from('nutrition_parse_log').delete().eq('id', id);
       if (error) console.error('[UsageService] nutrition_parse_log release failed:', error.message);
     };
-    const count = await this.countFoodAi(userId, plan.scope);
-    if (count > plan.limit) {
+    if (plan.kind !== 'free') {
+      const count = await this.countToday('nutrition_parse_log', userId);
+      if (count > plan.limit) {
+        await release();
+        throw new Error('RateLimited');
+      }
+      return { id, release };
+    }
+    const usage = await this.freeScanUsage(userId, plan);
+    if (this.freeScanBlocked(plan, usage, 1)) {
       await release();
-      throw await this.foodAiRefusalNoted(plan, count - 1, userId);
+      throw await this.foodAiRefusalNoted(plan, { lifetime: Math.max(0, usage.lifetime - 1), today: Math.max(0, usage.today - 1) }, userId);
     }
     return { id, release };
   }
 
   /**
-   * Free food AI allowance for GET /api/mobile/entitlements (TRIAL_FIRST_SPEC §5):
-   * total = 5 and remaining = 5 − lifetime analyses for free users once the gate is live;
-   * both null for Pro / trial (only the abuse ceiling) and while the gate is dark.
+   * Legacy `limits.foodAiAnalysesTotal` / `foodAiAnalysesRemaining` (TRIAL_FIRST_SPEC §5):
+   * the lifetime allowance. Both null for Pro / trial (only the abuse ceiling) and while the
+   * gate is dark.
    */
   static async foodAiAllowance(
     userId: string,
@@ -143,6 +270,21 @@ export class UsageService {
     if (!gateLive || tier !== 'free') return { total: null, remaining: null };
     const [total, used] = await Promise.all([this.freeFoodAiTotal(userId, signupAt), this.countFoodAi(userId, 'lifetime')]);
     return { total, remaining: Math.max(0, total - used) };
+  }
+
+  /**
+   * `allowances.foodScans` for GET /api/mobile/entitlements (ENGAGEMENT_115_SPEC §2.3). The
+   * daily key is resolved for the current request (X-App-Version / X-App-Platform rules), so
+   * 1.1.2–1.1.4, web and header-less requests resolve 0 → starter / exhausted only.
+   */
+  static async foodScanAllowance(userId: string, tier: Tier, gateLive: boolean, requestTz?: string | null): Promise<FoodScanAllowance> {
+    if (!gateLive || tier !== 'free') {
+      return unmeteredFoodScanAllowance(gateLive ? 'unlimited' : 'legacy', allowanceTimezone(requestTz, null));
+    }
+    const profile = await this.getProfileForGate(userId);
+    const plan = await this.freePlan(userId, profile, requestTz);
+    const usage = await this.freeScanUsage(userId, plan);
+    return this.scanAllowanceOf(plan, usage);
   }
 
   /**
@@ -187,28 +329,91 @@ export class UsageService {
     return RemoteConfigService.value('free_fitzy_messages_per_day', { userId, ...(signupAt !== undefined ? { signupAt } : {}) });
   }
 
-  private static async foodAiPlan(
-    userId: string
-  ): Promise<{ kind: 'legacy' | 'free' | 'premium'; scope: 'today' | 'lifetime'; limit: number; trialEligible: boolean; trialDays?: number }> {
+  /** Daily scans after the starter allowance (remote config; 0 unless a >= 1.1.5 version rule matches). */
+  static freeFoodAiDaily(userId: string, signupAt?: string | null): Promise<number> {
+    return RemoteConfigService.value('free_food_ai_daily_after_total', { userId, ...(signupAt !== undefined ? { signupAt } : {}) });
+  }
+
+  static freeFitzyWeekly(userId: string, signupAt?: string | null): Promise<number> {
+    return RemoteConfigService.value('free_fitzy_messages_per_week', { userId, ...(signupAt !== undefined ? { signupAt } : {}) });
+  }
+
+  private static async foodAiPlan(userId: string): Promise<FoodAiPlan> {
     const gateLive = await this.isGateLive('food_ai_unlimited');
-    if (!gateLive) return { kind: 'legacy', scope: 'today', limit: LEGACY_LIMITS.foodAiParsesPerDay, trialEligible: false };
+    if (!gateLive) return { kind: 'legacy', limit: LEGACY_LIMITS.foodAiParsesPerDay, trialEligible: false };
     const profile = await this.getProfileForGate(userId);
-    if (profile.tier === 'premium') return { kind: 'premium', scope: 'today', limit: TIER_LIMITS.premium.foodAiParsesPerDay, trialEligible: false };
-    const [limit, trialDays] = await Promise.all([this.freeFoodAiTotal(userId, profile.signupAt), TrialConfig.days(userId)]);
-    return { kind: 'free', scope: 'lifetime', limit, trialEligible: profile.trialEligible, trialDays };
+    if (profile.tier === 'premium') return { kind: 'premium', limit: TIER_LIMITS.premium.foodAiParsesPerDay, trialEligible: false };
+    return this.freePlan(userId, profile);
   }
 
-  /** The refusal, after recording a shared-device / shared-mailbox limit hit (free plan only). */
-  private static async foodAiRefusalNoted(plan: { kind: 'legacy' | 'free' | 'premium'; limit: number; trialEligible: boolean; trialDays?: number }, used: number, userId: string): Promise<Error> {
-    if (plan.kind === 'free') await this.noteSharedLimit(userId, plan.limit);
-    return this.foodAiRefusal(plan, used);
+  private static async freePlan(
+    userId: string,
+    profile: { trialEligible: boolean; signupAt: string | null; timezone: string | null },
+    requestTz?: string | null
+  ): Promise<FreeFoodAiPlan> {
+    const tzHeader = requestTz !== undefined ? requestTz : await this.requestTimezone();
+    const timezone = allowanceTimezone(tzHeader, profile.timezone);
+    const [limit, daily, trialDays] = await Promise.all([
+      this.freeFoodAiTotal(userId, profile.signupAt),
+      this.freeFoodAiDaily(userId, profile.signupAt).catch(() => 0),
+      TrialConfig.days(userId),
+    ]);
+    const day = localDayWindow(timezone);
+    return { kind: 'free', limit, daily, trialEligible: profile.trialEligible, trialDays, timezone, dayStart: day.start, resetsAt: day.resetsAt };
   }
 
-  private static foodAiRefusal(plan: { kind: 'legacy' | 'free' | 'premium'; limit: number; trialEligible: boolean; trialDays?: number }, used: number): Error {
-    if (plan.kind === 'free') {
-      return new UpgradeRequiredError('food_ai_unlimited', used, plan.limit, plan.trialEligible, plan.trialDays);
+  /** Lifetime rows (L) and, once the starter allowance is used and a daily allowance applies, rows since local midnight (T). */
+  private static async freeScanUsage(userId: string, plan: FreeFoodAiPlan): Promise<FreeScanUsage> {
+    const lifetime = (await this.lifetimeFoodAiUsage(userId)).used;
+    const today = plan.daily > 0 && lifetime >= plan.limit ? (await this.lifetimeFoodAiUsage(userId, plan.dayStart)).used : 0;
+    return { lifetime, today };
+  }
+
+  /**
+   * Is the free user over the allowance? `pending` = rows of THIS request already counted
+   * (1 right after the reservation insert, 0 for a plain check).
+   */
+  private static freeScanBlocked(plan: FreeFoodAiPlan, usage: FreeScanUsage, pending: 0 | 1): boolean {
+    if (usage.lifetime - pending < plan.limit) return false; // inside the starter allowance
+    if (plan.daily <= 0) return true;
+    const used = dailyScansUsed(plan.limit, usage.lifetime, usage.today);
+    return pending === 1 ? used > plan.daily : used >= plan.daily;
+  }
+
+  private static scanAllowanceOf(plan: FreeFoodAiPlan, usage: FreeScanUsage): FoodScanAllowance {
+    return freeFoodScanAllowance({
+      total: plan.limit,
+      daily: plan.daily,
+      lifetimeUsed: usage.lifetime,
+      todayUsed: usage.today,
+      timezone: plan.timezone,
+      resetsAt: plan.resetsAt,
+    });
+  }
+
+  /** The refusal (usage WITHOUT the refused request), after recording a shared-device / mailbox hit. */
+  private static async foodAiRefusalNoted(plan: FreeFoodAiPlan, usage: FreeScanUsage, userId: string): Promise<UpgradeRequiredError> {
+    const allowance = this.scanAllowanceOf(plan, usage);
+    if (allowance.mode === 'daily') {
+      // The user's own daily allowance: not a shared-device / shared-mailbox starter hit.
+      const used = dailyScansUsed(plan.limit, usage.lifetime, usage.today);
+      return new UpgradeRequiredError('food_ai_unlimited', used, plan.daily, plan.trialEligible, plan.trialDays, { phase: 'daily', allowance });
     }
-    return new Error('RateLimited');
+    await this.noteSharedLimit(userId, plan.limit);
+    return new UpgradeRequiredError('food_ai_unlimited', usage.lifetime, plan.limit, plan.trialEligible, plan.trialDays, {
+      phase: allowance.mode === 'exhausted' ? 'exhausted' : 'starter',
+      allowance,
+    });
+  }
+
+  /** X-Client-Timezone of the current request; null outside a request (cron, scripts, tests). */
+  private static async requestTimezone(): Promise<string | null> {
+    try {
+      const h = await headers();
+      return h.get('x-client-timezone');
+    } catch {
+      return null;
+    }
   }
 
   /**
@@ -221,27 +426,35 @@ export class UsageService {
     return (await this.lifetimeFoodAiUsage(userId)).used;
   }
 
+  /** Food AI rows since an instant, with the same mailbox / attested-device max as lifetime. */
+  static async countFoodAiSince(userId: string, since: Date): Promise<number> {
+    return (await this.lifetimeFoodAiUsage(userId, since)).used;
+  }
+
   /** Lifetime usage split: own account, mailbox group, attested device. */
   private static async lifetimeFoodAiUsage(
-    userId: string
+    userId: string,
+    since?: Date
   ): Promise<{ used: number; ownUsed: number; deviceId: string | null; sharedLimitReason: 'device' | 'mailbox' | null }> {
     const supabase = createAdminSupabase();
     const [ids, deviceId] = await Promise.all([this.mailboxAccountIds(userId), this.attestedRequestDevice(userId)]);
-    const accountQuery = supabase.from('nutrition_parse_log').select('*', { count: 'exact', head: true });
+    // `since` = the local-day window of the daily phase (ENGAGEMENT_115_SPEC §2.1); absent = lifetime.
+    const rows = () => {
+      const q = supabase.from('nutrition_parse_log').select('*', { count: 'exact', head: true });
+      return since ? q.gte('created_at', since.toISOString()) : q;
+    };
+    const accountQuery = rows();
     const { count, error } = await (ids.length === 1 ? accountQuery.eq('user_id', userId) : accountQuery.in('user_id', ids));
     logIgnoredQueryError('UsageService.countFoodAi', error);
     const groupUsed = count ?? 0;
     let ownUsed = groupUsed;
     if (ids.length > 1) {
-      const { count: own } = await supabase.from('nutrition_parse_log').select('*', { count: 'exact', head: true }).eq('user_id', userId);
+      const { count: own } = await rows().eq('user_id', userId);
       ownUsed = own ?? 0;
     }
     let deviceUsed = 0;
     if (deviceId) {
-      const { count: deviceCount, error: deviceError } = await supabase
-        .from('nutrition_parse_log')
-        .select('*', { count: 'exact', head: true })
-        .eq('device_id', deviceId);
+      const { count: deviceCount, error: deviceError } = await rows().eq('device_id', deviceId);
       if (!deviceError) deviceUsed = deviceCount ?? 0;
     }
     const used = Math.max(groupUsed, deviceUsed);
@@ -271,42 +484,110 @@ export class UsageService {
   }
 
   /**
-   * Fitzy / nutrition-coach quota. Historically uncapped, so gate-dark is a no-op.
-   * Trial-first (TRIAL_FIRST_SPEC §1): free = 0 messages/day once the gate is live, so a
-   * free user's FIRST message throws UpgradeRequiredError here — before any conversation
-   * write, message log or model call. Pro (incl. trialing) keeps the 200/day abuse ceiling.
+   * Fitzy / nutrition-coach quota, checked BEFORE any conversation write, message log or model
+   * call. Gate dark = no-op. Pro (incl. trialing) = the 200/day abuse ceiling.
+   *
+   * Free (docs/ENGAGEMENT_115_SPEC.md §3.1):
+   *  - weekly mode when free_fitzy_messages_per_week resolves > 0 for this request (apps
+   *    >= 1.1.5): free, non-onboarding messages since Monday 00:00 local; the daily key is
+   *    ignored for the request;
+   *  - otherwise the daily key (free_fitzy_messages_per_day, 0 = first message → paywall),
+   *    exactly as 1.1.2–1.1.4.
+   * The onboarding tour's "Ask Fitzy" step stays answerable for users who haven't finished
+   * onboarding (ONBOARDING_FREE_FITZY_MESSAGES per day) and those messages never count.
+   *
+   * Returns how the message must be recorded (pass it to recordFitzyMessage).
    */
-  static async assertFitzyQuota(userId: string, opts: { onboarding?: boolean } = {}): Promise<void> {
+  static async assertFitzyQuota(userId: string, opts: { onboarding?: boolean } = {}): Promise<FitzyQuotaDecision> {
     const gateLive = await this.isGateLive('fitzy_unlimited');
-    if (!gateLive) return;
+    const profile = await this.getProfileForGate(userId);
+    const tier: 'free' | 'pro' = profile.tier === 'premium' ? 'pro' : 'free';
+    if (!gateLive) return { tier, context: null };
 
-    const [profile, used] = await Promise.all([
-      this.getProfileForGate(userId),
-      this.countToday('fitzy_message_log', userId),
-    ]);
-    const tier = profile.tier;
-    const limit = tier === 'free' ? await this.freeFitzyLimit(userId, profile.signupAt) : TIER_LIMITS.premium.fitzyMessagesPerDay;
-    // The onboarding tour's "Ask Fitzy" step (context 'onboarding') stays answerable for free users
-    // who haven't finished onboarding — shipped apps show a dead-end error there, not the paywall.
-    // Narrow on purpose: unfinished onboarding only, ONBOARDING_FREE_FITZY_MESSAGES per day.
-    if (tier === 'free' && opts.onboarding && profile.onboardingCompleted !== true && used < ONBOARDING_FREE_FITZY_MESSAGES) return;
-    if (used >= limit) {
-      if (tier === 'free') throw new UpgradeRequiredError('fitzy_unlimited', used, limit, profile.trialEligible, await TrialConfig.days(userId));
-      throw new Error('RateLimited');
+    const usedToday = await this.countToday('fitzy_message_log', userId);
+    if (tier === 'pro') {
+      if (usedToday >= TIER_LIMITS.premium.fitzyMessagesPerDay) throw new Error('RateLimited');
+      return { tier, context: null };
     }
+    // Narrow on purpose: unfinished onboarding only, ONBOARDING_FREE_FITZY_MESSAGES per day.
+    if (opts.onboarding && profile.onboardingCompleted !== true && usedToday < ONBOARDING_FREE_FITZY_MESSAGES) {
+      return { tier, context: 'onboarding' };
+    }
+    const weekly = await this.freeFitzyWeekly(userId, profile.signupAt).catch(() => 0);
+    if (weekly > 0) {
+      const tz = allowanceTimezone(await this.requestTimezone(), profile.timezone);
+      const week = localWeekWindow(tz);
+      const used = await this.countFreeFitzySince(userId, week.start);
+      if (used >= weekly) {
+        throw new UpgradeRequiredError('fitzy_unlimited', used, weekly, profile.trialEligible, await TrialConfig.days(userId), {
+          window: 'week',
+          resetsAt: week.resetsAt.toISOString(),
+        });
+      }
+      return { tier, context: null };
+    }
+    const limit = await this.freeFitzyLimit(userId, profile.signupAt);
+    if (usedToday >= limit) {
+      throw new UpgradeRequiredError('fitzy_unlimited', usedToday, limit, profile.trialEligible, await TrialConfig.days(userId), {
+        window: 'day',
+        resetsAt: nextUtcMidnight().toISOString(),
+      });
+    }
+    return { tier, context: null };
   }
 
   /**
-   * Fitzy tier + messages left today (FITZY_V2_SPEC §6). `remaining` is null
-   * when uncapped for this user (Pro, or the free gate is still dark). Call
-   * after recordFitzyMessage so the count includes the current message.
+   * Fitzy tier + what is left after this message (FITZY_V2_SPEC §6, ENGAGEMENT_115_SPEC §3.3).
+   * `remaining` / `limit` / `window` / `resetsAt` are null when uncapped (Pro, or the gate is
+   * dark). Call after recordFitzyMessage so the count includes the current message.
    */
-  static async fitzyAllowance(userId: string): Promise<{ tier: 'free' | 'pro'; remaining: number | null; limit: number | null }> {
+  static async fitzyAllowance(
+    userId: string
+  ): Promise<{ tier: 'free' | 'pro'; remaining: number | null; limit: number | null; window: 'week' | 'day' | null; resetsAt: string | null }> {
     const [gateLive, tier] = await Promise.all([this.isGateLive('fitzy_unlimited'), this.getTier(userId)]);
-    if (tier === 'premium') return { tier: 'pro', remaining: null, limit: null };
-    if (!gateLive) return { tier: 'free', remaining: null, limit: null };
-    const [used, limit] = await Promise.all([this.countToday('fitzy_message_log', userId), this.freeFitzyLimit(userId)]);
-    return { tier: 'free', remaining: Math.max(0, limit - used), limit };
+    const t: 'free' | 'pro' = tier === 'premium' ? 'pro' : 'free';
+    if (t === 'pro' || !gateLive) return { tier: t, remaining: null, limit: null, window: null, resetsAt: null };
+    const a = await this.freeFitzyWindow(userId);
+    return { tier: t, remaining: a.remaining, limit: a.limit, window: a.window, resetsAt: a.resetsAt };
+  }
+
+  /** `allowances.fitzy` for GET /api/mobile/entitlements. */
+  static async fitzyAllowanceFor(userId: string, tier: Tier, gateLive: boolean, requestTz?: string | null): Promise<FitzyAllowance> {
+    if (tier !== 'free' || !gateLive) return { ...UNLIMITED_FITZY_ALLOWANCE };
+    return this.freeFitzyWindow(userId, requestTz);
+  }
+
+  private static async freeFitzyWindow(userId: string, requestTz?: string | null): Promise<FitzyAllowance> {
+    const profile = await this.getProfileForGate(userId);
+    const weekly = await this.freeFitzyWeekly(userId, profile.signupAt).catch(() => 0);
+    if (weekly > 0) {
+      const tz = allowanceTimezone(requestTz !== undefined ? requestTz : await this.requestTimezone(), profile.timezone);
+      const week = localWeekWindow(tz);
+      const used = await this.countFreeFitzySince(userId, week.start);
+      return fitzyAllowanceFrom({ window: 'week', limit: weekly, used, resetsAt: week.resetsAt });
+    }
+    const [used, limit] = await Promise.all([this.countToday('fitzy_message_log', userId), this.freeFitzyLimit(userId, profile.signupAt)]);
+    return fitzyAllowanceFrom({ window: 'day', limit, used, resetsAt: nextUtcMidnight() });
+  }
+
+  /**
+   * Free, non-onboarding Fitzy messages since an instant (the weekly count). Rows from before
+   * migration 138 have tier NULL and never count; a missing column counts 0 (generous, never blocking).
+   */
+  private static async countFreeFitzySince(userId: string, since: Date): Promise<number> {
+    const supabase = createAdminSupabase();
+    const { count, error } = await supabase
+      .from('fitzy_message_log')
+      .select('*', { count: 'exact', head: true })
+      .eq('user_id', userId)
+      .eq('tier', 'free')
+      .or('context.is.null,context.neq.onboarding')
+      .gte('created_at', since.toISOString());
+    if (error) {
+      if (!isMissingColumn(error, 'tier') && !isMissingColumn(error, 'context')) logIgnoredQueryError('UsageService.countFreeFitzySince', error);
+      return 0;
+    }
+    return count ?? 0;
   }
 
   /** 'pro' for premium/enterprise subscribers (Fitzy Pro features: plans, memory, history). */
@@ -315,12 +596,19 @@ export class UsageService {
   }
 
   /**
-   * Record one Fitzy/coach message. Called BEFORE the model call (insert-before-
-   * call closes the check/insert race in the caller's favor, not the abuser's).
+   * Record one Fitzy/coach message. Called BEFORE the model call (insert-before-call closes
+   * the check/insert race in the caller's favor, not the abuser's). `decision` (from
+   * assertFitzyQuota) stamps `tier` / `context` (migration 138) for the weekly count; without
+   * it the tier is looked up. Falls back to the plain insert until 138 is applied.
    */
-  static async recordFitzyMessage(userId: string): Promise<void> {
+  static async recordFitzyMessage(userId: string, decision?: FitzyQuotaDecision | void): Promise<void> {
     const supabase = createAdminSupabase();
-    const { error } = await supabase.from('fitzy_message_log').insert({ user_id: userId });
+    const tier = decision?.tier ?? ((await this.getTier(userId)) === 'premium' ? 'pro' : 'free');
+    const context = decision?.context ?? null;
+    let { error } = await supabase.from('fitzy_message_log').insert({ user_id: userId, tier, context });
+    if (error && (isMissingColumn(error, 'tier') || isMissingColumn(error, 'context'))) {
+      ({ error } = await supabase.from('fitzy_message_log').insert({ user_id: userId }));
+    }
     if (error) console.error('[UsageService] fitzy_message_log insert failed:', error.message);
   }
 
@@ -369,11 +657,11 @@ export class UsageService {
   /** Tier + trial eligibility from ONE profile read (the Fitzy gate needs both). */
   private static async getProfileForGate(
     userId: string
-  ): Promise<{ tier: Tier; trialEligible: boolean; signupAt: string | null; onboardingCompleted: boolean | null }> {
+  ): Promise<{ tier: Tier; trialEligible: boolean; signupAt: string | null; onboardingCompleted: boolean | null; timezone: string | null }> {
     const supabase = createAdminSupabase();
     const { data, error: dataError } = await supabase
       .from('profiles')
-      .select('subscription_tier, subscription_platform, trial_started_at, created_at, onboarding_completed')
+      .select('subscription_tier, subscription_platform, trial_started_at, created_at, onboarding_completed, timezone')
       .eq('id', userId)
       .maybeSingle();
     logIgnoredQueryError('UsageService.getProfileForGate', dataError);
@@ -383,6 +671,7 @@ export class UsageService {
       trialEligible: trialEligibleFromProfile(data ?? null),
       signupAt: typeof data?.created_at === 'string' ? data.created_at : null,
       onboardingCompleted: typeof data?.onboarding_completed === 'boolean' ? data.onboarding_completed : null,
+      timezone: typeof (data as any)?.timezone === 'string' ? ((data as any).timezone as string) : null,
     };
   }
 

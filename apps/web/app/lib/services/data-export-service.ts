@@ -155,6 +155,8 @@ export const EXPORT_TABLES: readonly ExportTableSpec[] = [
   t('streak_claims'),
   t('streak_shields'),
   t('streak_recoveries'),
+  // Migration 138 (1.1.5): streak save offers; optional until applied.
+  t('streak_save_offers', 'user_id', { order: 'missed_date', optional: true }),
   t('achievements'),
   t('user_achievements'),
 
@@ -179,6 +181,8 @@ export const EXPORT_TABLES: readonly ExportTableSpec[] = [
   t('circle_message_reports', 'reporter_id'),
   t('circle_chat_state', 'user_id', { order: 'fitcircle_id' }),
   t('circle_food_privacy', 'user_id', { order: 'fitcircle_id' }),
+  // Migration 138 (1.1.5): per-circle meal-share memory; optional until applied.
+  t('meal_share_circle_prefs', 'user_id', { order: 'fitcircle_id', optional: true }),
   t('circle_member_blocks', 'blocker_id'),
   t('circle_check_ins'),
   t('circle_encouragements_sent', 'from_user_id', { table: 'circle_encouragements' }),

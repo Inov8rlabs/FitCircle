@@ -12,6 +12,7 @@ import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { FoodLogImageService } from '@/lib/services/food-log-image-service';
 import { FoodLogService } from '@/lib/services/food-log-service';
 import { VitalsService } from '@/lib/services/vitals-service';
+import { MealShareService } from '@/lib/services/meal-share-service';
 import { createAdminSupabase } from '@/lib/supabase-admin';
 import { runAfterResponse } from '@/lib/utils/after-response';
 import { resolveEntryDate } from '@/lib/utils/entry-date';
@@ -20,6 +21,7 @@ import {
   normalizeFoodLogEntryAliases,
 } from '@/lib/validation/food-log-validation';
 import { parseLenient, validationMessage } from '@/lib/validation/lenient-parse';
+import { includeDraftsFor } from '@/lib/meal-drafts/config';
 
 function errorResponse(code: string, message: string, status: number, details: Record<string, unknown> = {}) {
   return NextResponse.json(
@@ -59,7 +61,7 @@ export async function GET(
     const supabase = createAdminSupabase();
 
     // Get entry
-    const entryResult = await FoodLogService.getEntryById(entryId, user.id, supabase);
+    const entryResult = await FoodLogService.getEntryById(entryId, user.id, supabase, { includeDrafts: includeDraftsFor(request) });
 
     if (entryResult.error) {
       return NextResponse.json(
@@ -199,6 +201,10 @@ export async function PATCH(
     const result = await FoodLogService.updateEntry(entryId, user.id, validatedData, supabase, {
       defer: (task) => runAfterResponse(task, 'food-log update side effect'),
     });
+    // 1.1.5 offline-outbox share inside the meal update: remember the rows the user saw. Never fails the update.
+    if (result.data && Array.isArray(validatedData.share_seen_circle_ids)) {
+      await MealShareService.rememberFromEntryBody(user.id, validatedData);
+    }
 
     if (result.error || !result.data) {
       const failure = result.failure ?? 'DATABASE_ERROR';

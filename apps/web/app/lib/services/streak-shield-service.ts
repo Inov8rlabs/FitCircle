@@ -94,6 +94,8 @@ export interface StreakGrowthAward {
   capped: boolean;
   /** The highest milestone this growth newly reached that hasn't been celebrated yet. */
   milestone: StreakMilestoneDef | null;
+  /** The calendar day that milestone fell on (its boundary day; dedupe key for the push). */
+  milestoneDay?: string;
 }
 
 export interface ConsumeResult {
@@ -424,7 +426,17 @@ export class StreakShieldService {
    */
   static async awardForStreakGrowth(
     userId: string,
-    params: { oldStreak: number; newStreak: number; runEndDay?: string }
+    params: {
+      oldStreak: number;
+      newStreak: number;
+      runEndDay?: string;
+      /**
+       * 1.1.5 (ENGAGEMENT_115_SPEC §5.4): the app shows the celebration in-app from this
+       * response. When false, a reached milestone is stored as `pending_celebration` (same
+       * optimistic write) for GET /api/mobile/streaks/celebrations. Default false.
+       */
+      inAppCelebration?: boolean;
+    }
   ): Promise<StreakGrowthAward> {
     const { oldStreak, newStreak } = params;
     const none: StreakGrowthAward = { credited: 0, earned: 0, capped: false, milestone: null };
@@ -481,11 +493,24 @@ export class StreakShieldService {
     const credited = Math.min(earned, capHeadroom);
     const capped = !inventory.unlimited && earned > credited;
 
+    const milestoneDay = milestone ? dayForStreakValue(milestone.days) : undefined;
     const nextMetadata = {
       ...metadata,
       paid_boundaries: [...paidBoundaries, ...newlyPaid].slice(-PAID_HISTORY_LIMIT),
       celebrated_milestone_days: [...celebrated, ...newlyCelebrated].slice(-PAID_HISTORY_LIMIT),
       last_award_at: new Date().toISOString(),
+      ...(milestone && !params.inAppCelebration
+        ? {
+            pending_celebration: {
+              days: milestone.days,
+              name: milestone.name,
+              icon: milestone.icon ?? null,
+              day: milestoneDay,
+              at: new Date().toISOString(),
+              shieldsGranted: credited,
+            },
+          }
+        : {}),
     };
 
     // Optimistic-concurrency write: only apply if the milestone_shield count
@@ -505,14 +530,14 @@ export class StreakShieldService {
       if (!(params as { _retried?: boolean })._retried) {
         return this.awardForStreakGrowth(userId, { ...params, _retried: true } as typeof params);
       }
-      return { credited: 0, earned, capped, milestone };
+      return { credited: 0, earned, capped, milestone, ...(milestoneDay ? { milestoneDay } : {}) };
     }
 
     if (credited > 0) {
       await this.mirrorLegacyBalance(userId, inventory.available + credited, inventory.rules.maxBalance);
       recordShieldGranted(userId, 'streak_earned', credited);
     }
-    return { credited, earned, capped, milestone };
+    return { credited, earned, capped, milestone, ...(milestoneDay ? { milestoneDay } : {}) };
   }
 
   /**

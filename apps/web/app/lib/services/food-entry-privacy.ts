@@ -133,3 +133,80 @@ export function scrubbedMealPayload(payload: Record<string, unknown> | null | un
   if ('entry_id' in p) out.entry_id = p.entry_id;
   return out;
 }
+
+// ---------------------------------------------------------------- 1.1.5 per-meal circle lists
+// docs/ENGAGEMENT_115_SPEC.md §4. `share_circle_ids` (migration 138) is the explicit per-meal
+// list from the meal-logged success sheet; NULL = the legacy rule (every circle where the
+// owner's tier is 'full'), so every shipped client and old row behaves exactly as before.
+
+/** A valid explicit list, or null (legacy rule). */
+export function explicitShareList(entry: { share_circle_ids?: unknown } | null | undefined): string[] | null {
+  const v = entry?.share_circle_ids;
+  return Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : null;
+}
+
+/**
+ * Is a SHARED entry visible in this circle? An explicit per-meal list beats the tier row
+ * (turning a circle off for one meal must not hide older photos there); else tier 'full'.
+ * The caller still checks that the entry is shared at all (isEntryPrivate) and membership.
+ */
+export function mealVisibleInCircle(entry: { share_circle_ids?: unknown }, circleId: string, ownerTier: string | null | undefined): boolean {
+  const list = explicitShareList(entry);
+  if (list) return list.includes(circleId);
+  return ownerTier === 'full';
+}
+
+/** `sharing_default` on GET /food-log/share-targets: the STORED key (true / false / absent). */
+export function sharingDefaultState(preferences: unknown): 'on' | 'off' | 'unset' {
+  const privacy = preferences && typeof preferences === 'object' ? (preferences as Record<string, unknown>).privacy : null;
+  const v = privacy && typeof privacy === 'object' ? (privacy as Record<string, unknown>).share_meals_with_circles : undefined;
+  return v === true ? 'on' : v === false ? 'off' : 'unset';
+}
+
+/** `preferences.privacy.meals_made_private_at` (bulk "Make all past meals private"), when set. */
+export function mealsMadePrivateAt(preferences: unknown): string | null {
+  const privacy = preferences && typeof preferences === 'object' ? (preferences as Record<string, unknown>).privacy : null;
+  const v = privacy && typeof privacy === 'object' ? (privacy as Record<string, unknown>).meals_made_private_at : undefined;
+  return typeof v === 'string' && v.length > 0 ? v : null;
+}
+
+export type ShareTargetReason =
+  | 'remembered'
+  | 'circle_privacy'
+  | 'sharing_default_off'
+  | 'made_private'
+  | 'public_circle'
+  | 'large_circle'
+  | 'friend_circle';
+
+export interface DefaultOnInput {
+  /** meal_share_circle_prefs.share for (user, circle), if a row exists. */
+  remembered: boolean | null;
+  /** The explicit circle_food_privacy row's tier, if a row exists (no row = 'full'). */
+  explicitTier: string | null;
+  /** preferences.privacy.share_meals_with_circles STORED as false. */
+  sharingDefaultOff: boolean;
+  /** preferences.privacy.meals_made_private_at is set. */
+  madePrivate: boolean;
+  isOfficial: boolean;
+  circleVisibility: string | null;
+  /** Active members, the user included. */
+  memberCount: number;
+  /** meal_share_large_circle_threshold (20). */
+  largeCircleThreshold: number;
+}
+
+/**
+ * The success-sheet toggle default for one circle (§4.3, first rule that applies wins).
+ * Rules 2–4 respect an explicit privacy choice: anyone who ever chose "private" starts with
+ * every toggle off. A default never posts anything by itself: sharing always needs the tap.
+ */
+export function defaultOnFor(i: DefaultOnInput): { default_on: boolean; reason: ShareTargetReason } {
+  if (i.remembered !== null) return { default_on: i.remembered, reason: 'remembered' };
+  if (i.explicitTier !== null && i.explicitTier !== 'full') return { default_on: false, reason: 'circle_privacy' };
+  if (i.sharingDefaultOff) return { default_on: false, reason: 'sharing_default_off' };
+  if (i.madePrivate) return { default_on: false, reason: 'made_private' };
+  if (i.isOfficial || i.circleVisibility === 'public') return { default_on: false, reason: 'public_circle' };
+  if (i.memberCount > i.largeCircleThreshold) return { default_on: false, reason: 'large_circle' };
+  return { default_on: true, reason: 'friend_circle' };
+}

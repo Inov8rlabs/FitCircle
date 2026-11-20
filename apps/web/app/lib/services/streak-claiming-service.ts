@@ -46,7 +46,9 @@ import {
 } from '../types/streak-claiming';
 
 import { MomentumService } from './momentum-service';
+import { StreakCelebrationService } from './streak-celebration-service';
 import { StreakShieldService } from './streak-shield-service';
+import { confirmedOnly } from '@/lib/meal-drafts/config';
 
 /** Normalize route inputs (Date at UTC midnight, or YYYY-MM-DD string). */
 function toDayStr(date: Date | string): string {
@@ -77,6 +79,12 @@ export class StreakClaimingService {
       referenceId?: string;
       /** Claim dates the caller just read (getClaimDates) — saves re-reading them. */
       claimDates?: Set<string>;
+      /**
+       * 1.1.5 (ENGAGEMENT_115_SPEC §5.4): true only for a foreground manual route whose app
+       * declared `streak_celebration_v1` — that app shows the milestone from this response, so
+       * no milestone_achieved push and no pending celebration. Sync / cron / old apps: false.
+       */
+      inAppCelebration?: boolean;
     } = {}
   ): Promise<ClaimResult> {
     const supabaseAdmin = createAdminSupabase();
@@ -182,7 +190,17 @@ export class StreakClaimingService {
         oldStreak,
         newStreak,
         runEndDay,
+        inAppCelebration: opts.inAppCelebration === true,
       });
+      if (award.milestone && opts.inAppCelebration !== true) {
+        // Fire-and-forget: a push failure never fails the claim.
+        void StreakCelebrationService.notifyMilestone(userId, {
+          days: award.milestone.days,
+          name: award.milestone.name,
+          shieldsGranted: award.credited,
+          boundaryDay: award.milestoneDay ?? claimDateStr,
+        }).catch((err: any) => console.error('[StreakClaimingService] milestone push failed:', err?.message));
+      }
       if (award.milestone) {
         milestone = {
           milestone: award.milestone.days,
@@ -238,6 +256,8 @@ export class StreakClaimingService {
       timezone?: string | null;
       source: AutoClaimSource;
       referenceId?: string;
+      /** See claimStreak opts.inAppCelebration. */
+      inAppCelebration?: boolean;
     }
   ): Promise<AutoClaimResult> {
     const { source, referenceId } = input;
@@ -270,6 +290,7 @@ export class StreakClaimingService {
           source,
           referenceId,
           claimDates,
+          inAppCelebration: input.inAppCelebration === true,
         });
         return {
           ...base,
@@ -439,9 +460,8 @@ export class StreakClaimingService {
           .select('tracking_date, weight_kg, steps, mood_score, energy_level')
           .eq('user_id', userId)
           .gte('tracking_date', windowStart),
-        supabaseAdmin
-          .from('food_log_entries')
-          .select('entry_date')
+        confirmedOnly(supabaseAdmin.from('food_log_entries')
+          .select('entry_date'))
           .eq('user_id', userId)
           .gte('entry_date', windowStart),
         supabaseAdmin
@@ -980,7 +1000,7 @@ export class StreakClaimingService {
         .eq('user_id', userId)
         .eq('tracking_date', date)
         .maybeSingle(),
-      supabaseAdmin.from('food_log_entries').select('id').eq('user_id', userId).eq('entry_date', date).limit(1),
+      confirmedOnly(supabaseAdmin.from('food_log_entries').select('id')).eq('user_id', userId).eq('entry_date', date).limit(1),
       supabaseAdmin.from('beverage_logs').select('id').eq('user_id', userId).eq('entry_date', date).limit(1),
       supabaseAdmin.from('exercise_logs').select('id').eq('user_id', userId).eq('exercise_date', date).limit(1),
     ]);

@@ -28,6 +28,7 @@
  * milestone; the create is unaffected.
  */
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { confirmedOnly } from '@/lib/meal-drafts/config';
 
 export const MEALS_LOGGED_3_DAYS = 'meals_logged_3_days' as const;
 export type ConversionMilestone = typeof MEALS_LOGGED_3_DAYS;
@@ -83,9 +84,8 @@ export class ConversionMilestoneService {
     day: string
   ): Promise<boolean> {
     const foodRows = () =>
-      supabase
-        .from('food_log_entries')
-        .select('entry_date')
+      confirmedOnly(supabase.from('food_log_entries')
+        .select('entry_date'))
         .eq('user_id', userId)
         .eq('entry_type', 'food')
         .is('deleted_at', null);

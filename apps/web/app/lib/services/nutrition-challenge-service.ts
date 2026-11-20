@@ -13,6 +13,7 @@ import {
 } from '../types/nutrition-challenge';
 
 import { isEntryPrivate } from './food-entry-privacy';
+import { confirmedOnly } from '@/lib/meal-drafts/config';
 
 /**
  * NutritionChallengeService — nutrition-driven challenge metrics (PRD v4 §6.5).
@@ -242,9 +243,8 @@ export class NutritionChallengeService {
   ): Promise<Map<string, { successDays: number; daysLogged: number; sum: number; anyPrivate?: boolean }>> {
     const supabaseAdmin = createAdminSupabase();
 
-    let query = supabaseAdmin
-      .from('food_log_entries')
-      .select('user_id, entry_date, calories, protein_g, carbs_g, tags, is_private, visibility')
+    let query = confirmedOnly(supabaseAdmin.from('food_log_entries')
+      .select('user_id, entry_date, calories, protein_g, carbs_g, tags, is_private, visibility'))
       .in('user_id', memberIds)
       .is('deleted_at', null);
     if (rangeStart) query = query.gte('entry_date', rangeStart);

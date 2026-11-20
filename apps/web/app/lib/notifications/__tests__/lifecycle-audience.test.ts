@@ -51,6 +51,18 @@ describe('audience rules', () => {
     for (const type of TRANSACTIONAL_AUDIENCE_TYPES) expect(audienceSuppression(type, t)).toBeNull();
   });
 
+  it('internal (team) accounts get habit pushes like real users', () => {
+    const t = { testReason: 'internal' as const, stage: 'active' as const };
+    expect(audienceSuppression('meal_reminder_lunch', t)).toBeNull();
+    expect(audienceSuppression('fitzy_daily_focus', t)).toBeNull();
+    expect(audienceSuppression('chat_message', t)).toBeNull();
+  });
+
+  it('test devices and reviewers stay muted', () => {
+    expect(audienceSuppression('meal_reminder_lunch', { testReason: 'test_device', stage: 'active' })).toBe('test_user');
+    expect(audienceSuppression('meal_reminder_lunch', { testReason: 'review', stage: 'active' })).toBe('test_user');
+  });
+
   it('habit nudges only for active users', () => {
     for (const type of HABIT_TYPES) {
       expect(audienceSuppression(type, real('active'))).toBeNull();

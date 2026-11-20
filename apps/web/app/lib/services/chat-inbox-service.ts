@@ -56,7 +56,15 @@ export interface WindowRow {
   sender_id: string | null;
   created_at: string;
   deleted_at: string | null;
+  /** System post type (null for member messages). */
+  system_event_type?: string | null;
 }
+
+/**
+ * The nightly "N of M checked in today" summary card: 1.1.5 apps hide it in the thread and show a
+ * live status strip instead, so it never counts as unread and is never the inbox preview.
+ */
+const HIDDEN_SYSTEM_TYPES: ReadonlySet<string> = new Set(['daily_summary']);
 
 interface DetailRow extends WindowRow {
   kind: 'user_text' | 'user_photo' | 'system_event';
@@ -69,6 +77,7 @@ type Row = Record<string, any>;
 /** Is this message visible to (and countable for) the viewer? Pure. */
 export function isVisibleTo(row: WindowRow, hidden: ReadonlySet<string>): boolean {
   if (row.deleted_at) return false;
+  if (row.system_event_type && HIDDEN_SYSTEM_TYPES.has(row.system_event_type)) return false;
   return !(row.sender_id && hidden.has(row.sender_id));
 }
 
@@ -153,7 +162,7 @@ export class ChatInboxService {
       this.blockedIdsFor([userId]).then((m) => m.get(userId) ?? new Set<string>()),
       db
         .from('circle_messages')
-        .select('id, fitcircle_id, sender_id, created_at, deleted_at')
+        .select('id, fitcircle_id, sender_id, created_at, deleted_at, system_event_type')
         .in('fitcircle_id', circleIds)
         .gte('created_at', since)
         .order('created_at', { ascending: false })
@@ -189,7 +198,7 @@ export class ChatInboxService {
     if (silent.length > 0) {
       const { data: older, error } = await db
         .from('circle_messages')
-        .select('id, fitcircle_id, sender_id, created_at, deleted_at')
+        .select('id, fitcircle_id, sender_id, created_at, deleted_at, system_event_type')
         .in('fitcircle_id', silent)
         .lt('created_at', since)
         .is('deleted_at', null)
@@ -315,7 +324,7 @@ export class ChatInboxService {
       if (allCircles.length > 0) {
         const { data, error } = await db
           .from('circle_messages')
-          .select('id, fitcircle_id, sender_id, created_at, deleted_at')
+          .select('id, fitcircle_id, sender_id, created_at, deleted_at, system_event_type')
           .in('fitcircle_id', allCircles)
           .gte('created_at', lookbackStart(now))
           .order('created_at', { ascending: false })

@@ -1,15 +1,21 @@
 import { NextRequest } from 'next/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { trackServerEventInBackground } from '@/lib/analytics/amplitude-server';
+import { sendEmail } from '@/lib/email/email-service';
+import { cancelSteps, formatTrialEnd, trialReminderEmail } from '@/lib/email/trial-reminder-email';
 import { createAdminSupabase } from '@/lib/supabase-admin';
 
 import { FakeSupabase } from '../../../../__tests__/helpers/fake-supabase';
 import { GET as CRON } from '../../../api/cron/trial-reminders/route';
 import { NotificationOrchestrator, isCapExempt, TYPE_SCREEN_MAP, NOTIFICATION_TEMPLATES } from '../notification-orchestrator';
 import { NotificationPreferencesService } from '../notification-preferences-service';
-import { TrialReminderService, trialReminderDedupeKey } from '../trial-reminder-service';
+import { TrialReminderService, needsEmailFallback, trialDays, trialReminderDedupeKey, trialReminderEmailEnabled } from '../trial-reminder-service';
+import { UserAudienceService } from '../user-audience-service';
 
 vi.mock('@/lib/supabase-admin', () => ({ createAdminSupabase: vi.fn() }));
+vi.mock('@/lib/email/email-service', () => ({ sendEmail: vi.fn() }));
+vi.mock('@/lib/analytics/amplitude-server', async (orig) => ({ ...(await orig<typeof import('@/lib/analytics/amplitude-server')>()), trackServerEventInBackground: vi.fn() }));
 
 const NOW = new Date('2026-10-30T14:05:00Z'); // 10:05 Toronto
 const U1 = '11111111-1111-4111-8111-111111111111';
@@ -32,6 +38,9 @@ beforeEach(() => {
   prefs = { quiet_hours_start: '22:00', quiet_hours_end: '07:00', quiet_hours_timezone: 'America/Toronto' };
   vi.spyOn(NotificationPreferencesService, 'getPreferences').mockImplementation(async () => prefs as any);
   vi.spyOn(NotificationOrchestrator, 'send').mockResolvedValue({ sent: true });
+  vi.mocked(sendEmail).mockReset().mockResolvedValue({ success: true, id: 'em_1' });
+  vi.mocked(trackServerEventInBackground).mockReset();
+  UserAudienceService.resetCache();
 });
 afterEach(() => {
   vi.restoreAllMocks();
@@ -139,5 +148,155 @@ describe('cron route', () => {
     const ok = await CRON(new NextRequest('https://api.test/api/cron/trial-reminders', { headers: { authorization: 'Bearer cs' } }));
     expect(ok.status).toBe(200);
     expect(await ok.json()).toMatchObject({ success: true, enabled: true });
+  });
+});
+
+describe('email fallback (ENGAGEMENT_115_SPEC §14.1)', () => {
+  const U2 = '22222222-2222-4222-8222-222222222222';
+  const withEmail = (over: Record<string, any> = {}) => {
+    const row = db.getRows('profiles')[0];
+    Object.assign(row, {
+      email: 'maya@gmail.com',
+      is_admin: false,
+      metadata: {},
+      subscription_platform: 'app_store',
+      subscription_product_id: 'fitcircle_pro_annual',
+      trial_started_at: '2026-10-24T18:05:00.000Z', // 7-day trial
+      ...over,
+    });
+  };
+
+  it('push delivered → no email; stamped; Trial Reminder Sent {push, trial_days}', async () => {
+    withEmail();
+    const s = await TrialReminderService.run({ now: NOW });
+    expect(s).toMatchObject({ sent: 1, emailed: 0 });
+    expect(sendEmail).not.toHaveBeenCalled();
+    expect(db.getRows('profiles')[0].trial_reminder_sent_at).toBe(NOW.toISOString());
+    expect(trackServerEventInBackground).toHaveBeenCalledWith(
+      expect.objectContaining({ event_type: 'Trial Reminder Sent', user_id: U1, event_properties: { channel: 'push', trial_days: 7 } }),
+      expect.any(String)
+    );
+  });
+
+  it.each([
+    ['no_delivery (no token / every send failed)', 'no_delivery'],
+    ['push master switch off', 'category_disabled'],
+    ['suppressed for a non-quiet reason', 'suppressed_by_streak_lost'],
+    ['frequency cap', 'frequency_cap'],
+  ])('%s → email, stamped, channel email', async (_label, reason) => {
+    withEmail();
+    vi.mocked(NotificationOrchestrator.send).mockResolvedValueOnce({ sent: false, reason });
+    const s = await TrialReminderService.run({ now: NOW });
+    expect(s).toMatchObject({ sent: 1, emailed: 1, skipped: {} });
+    expect(sendEmail).toHaveBeenCalledTimes(1);
+    const arg = vi.mocked(sendEmail).mock.calls[0][0];
+    expect(arg).toMatchObject({
+      to: 'maya@gmail.com',
+      subject: 'Your FitCircle trial ends tomorrow',
+      category: 'trial_reminder',
+      idempotencyKey: trialReminderDedupeKey(U1, '2026-10-31T18:05:00.000Z'),
+    });
+    // End date in the user's zone (Toronto), the plan, App Store cancel steps, no invented price.
+    expect(arg.text).toContain('Saturday, October 31 at 2:05 PM EDT');
+    expect(arg.text).toContain('your annual plan starts and renews automatically');
+    expect(arg.text).toContain('Settings → tap your name (Apple ID) → Subscriptions');
+    expect(arg.text).not.toContain('Play Store');
+    expect(arg.text).not.toMatch(/\$\d/);
+    expect(db.getRows('profiles')[0].trial_reminder_sent_at).toBe(NOW.toISOString());
+    expect(trackServerEventInBackground).toHaveBeenCalledWith(expect.objectContaining({ event_properties: { channel: 'email', trial_days: 7 } }), expect.any(String));
+  });
+
+  it('quiet hours / deferred / duplicate never email', async () => {
+    withEmail();
+    for (const reason of ['quiet_hours', 'deferred', 'duplicate']) {
+      db.getRows('profiles')[0].trial_reminder_sent_at = null;
+      vi.mocked(NotificationOrchestrator.send).mockResolvedValueOnce({ sent: false, reason });
+      await TrialReminderService.run({ now: NOW });
+    }
+    expect(sendEmail).not.toHaveBeenCalled();
+    expect(trackServerEventInBackground).not.toHaveBeenCalled();
+  });
+
+  it('kill switch TRIAL_REMINDER_EMAIL_ENABLED=false → no email; a final push outcome still stamps', async () => {
+    vi.stubEnv('TRIAL_REMINDER_EMAIL_ENABLED', 'false');
+    withEmail();
+    vi.mocked(NotificationOrchestrator.send).mockResolvedValueOnce({ sent: false, reason: 'no_delivery' });
+    expect(await TrialReminderService.run({ now: NOW })).toMatchObject({ sent: 0, skipped: { 'no_delivery+email_disabled': 1 } });
+    expect(sendEmail).not.toHaveBeenCalled();
+    expect(db.getRows('profiles')[0].trial_reminder_sent_at).toBe(NOW.toISOString());
+  });
+
+  it('transient email failure → not stamped (next run retries); permanent failure on a final push → stamped', async () => {
+    withEmail();
+    vi.mocked(NotificationOrchestrator.send).mockResolvedValue({ sent: false, reason: 'no_delivery' });
+    vi.mocked(sendEmail).mockResolvedValueOnce({ success: false, errorName: 'rate_limit_exceeded' });
+    expect((await TrialReminderService.run({ now: NOW })).skipped).toEqual({ 'no_delivery+email_rate_limit_exceeded': 1 });
+    expect(db.getRows('profiles')[0].trial_reminder_sent_at).toBeNull();
+    vi.mocked(sendEmail).mockResolvedValueOnce({ success: false, errorName: 'suppressed' });
+    await TrialReminderService.run({ now: NOW });
+    expect(db.getRows('profiles')[0].trial_reminder_sent_at).toBe(NOW.toISOString());
+    expect(trackServerEventInBackground).not.toHaveBeenCalled();
+  });
+
+  it('non-final push reason + permanent email failure → not stamped (push retried next run, as before)', async () => {
+    withEmail({ email: null });
+    vi.mocked(NotificationOrchestrator.send).mockResolvedValueOnce({ sent: false, reason: 'frequency_cap' });
+    expect((await TrialReminderService.run({ now: NOW })).skipped).toEqual({ 'frequency_cap+email_no_address': 1 });
+    expect(db.getRows('profiles')[0].trial_reminder_sent_at).toBeNull();
+  });
+
+  it('robot / QA test accounts get no email; internal accounts do, but no Amplitude event', async () => {
+    withEmail({ email: 'robot@example.com' }); // qa
+    vi.mocked(NotificationOrchestrator.send).mockResolvedValue({ sent: false, reason: 'no_delivery' });
+    expect((await TrialReminderService.run({ now: NOW })).skipped).toEqual({ 'no_delivery+email_test_account': 1 });
+    expect(sendEmail).not.toHaveBeenCalled();
+
+    db.getRows('profiles')[0].trial_reminder_sent_at = null;
+    withEmail({ email: 'team@fitcircle.ai' }); // internal
+    expect(await TrialReminderService.run({ now: NOW })).toMatchObject({ sent: 1, emailed: 1 });
+    expect(sendEmail).toHaveBeenCalledTimes(1);
+    expect(trackServerEventInBackground).not.toHaveBeenCalled();
+  });
+
+  it('Play / unknown store → matching cancel steps; monthly plan; unknown plan', async () => {
+    db.seed('profiles', [trialing(U2, { email: 'b@gmail.com', subscription_platform: null, subscription_product_id: null })]);
+    withEmail({ subscription_platform: 'play_store', subscription_product_id: 'pro_monthly:monthly' });
+    vi.mocked(NotificationOrchestrator.send).mockResolvedValue({ sent: false, reason: 'no_delivery' });
+    expect(await TrialReminderService.run({ now: NOW })).toMatchObject({ sent: 2, emailed: 2 });
+    const [play, unknown] = vi.mocked(sendEmail).mock.calls.map((c) => c[0]);
+    expect(play.text).toContain('Payments & subscriptions → Subscriptions');
+    expect(play.text).not.toContain('Apple ID');
+    expect(play.text).toContain('your monthly plan starts');
+    expect(unknown.text).toContain('Apple ID');
+    expect(unknown.text).toContain('Payments & subscriptions');
+    expect(unknown.text).toContain('your FitCircle Pro subscription starts');
+  });
+});
+
+describe('trial reminder helpers', () => {
+  it('needsEmailFallback', () => {
+    expect(needsEmailFallback({ sent: true })).toBe(false);
+    for (const r of ['quiet_hours', 'deferred', 'duplicate']) expect(needsEmailFallback({ sent: false, reason: r })).toBe(false);
+    for (const r of ['no_delivery', 'category_disabled', 'suppressed_by_x', 'unknown_type', undefined]) expect(needsEmailFallback({ sent: false, reason: r })).toBe(true);
+  });
+  it('trialReminderEmailEnabled defaults on', () => {
+    expect(trialReminderEmailEnabled({} as any)).toBe(true);
+    expect(trialReminderEmailEnabled({ TRIAL_REMINDER_EMAIL_ENABLED: 'off' } as any)).toBe(false);
+    expect(trialReminderEmailEnabled({ TRIAL_REMINDER_EMAIL_ENABLED: 'true' } as any)).toBe(true);
+  });
+  it('trialDays', () => {
+    expect(trialDays('2026-10-24T18:05:00Z', '2026-10-31T18:05:00Z')).toBe(7);
+    expect(trialDays('2026-10-28T18:05:00Z', '2026-10-31T17:00:00Z')).toBe(3);
+    expect(trialDays(null, '2026-10-31T18:05:00Z')).toBeUndefined();
+    expect(trialDays('2026-11-01T00:00:00Z', '2026-10-31T18:05:00Z')).toBeUndefined();
+  });
+  it('template: price only when given; escaped; stripe → web billing', () => {
+    const base = { trialEndsAt: new Date('2026-10-31T18:05:00Z'), timezone: 'Europe/London', endsPhrase: 'on Saturday', store: 'app_store' as const, plan: 'annual' as const, postalAddress: null };
+    expect(trialReminderEmail({ ...base, price: '£29.99' }).text).toContain('your annual plan starts at £29.99/year');
+    expect(trialReminderEmail(base).text).not.toContain('£');
+    expect(trialReminderEmail({ ...base, price: '<b>1</b>' }).html).not.toContain('<b>1</b>');
+    expect(formatTrialEnd(base.trialEndsAt, 'Europe/London')).toBe('Saturday, October 31 at 6:05 PM GMT');
+    expect(cancelSteps('stripe')[0].url).toBe('https://www.fitcircle.ai/settings/billing');
+    expect(trialReminderEmail(base).subject).toBe('Your FitCircle trial ends on Saturday');
   });
 });

@@ -34,6 +34,7 @@ import {
 } from '@/lib/pro-lifecycle';
 import { isValidTimezone } from '@/lib/streaks/streak-calculator';
 import { createAdminSupabase } from '@/lib/supabase-admin';
+import { confirmedOnly } from '@/lib/meal-drafts/config';
 
 export const PROFILE_COLUMNS =
   'id, email, is_admin, display_name, timezone, subscription_tier, subscription_status, subscription_platform, subscription_product_id, subscription_expires_at, subscription_will_renew, trial_started_at, trial_ends_at, trial_converted_at';
@@ -120,9 +121,8 @@ export async function loadFactsFor(profiles: LifecycleProfile[]): Promise<Map<st
 export async function loadUsage(userId: string, since: string, until: string): Promise<ProUsage> {
   const supabase = createAdminSupabase();
   const [meals, chats, plans] = await Promise.all([
-    supabase
-      .from('food_log_entries')
-      .select('nutrition_source')
+    confirmedOnly(supabase.from('food_log_entries')
+      .select('nutrition_source'))
       .eq('user_id', userId)
       .eq('entry_type', 'food')
       .is('deleted_at', null)

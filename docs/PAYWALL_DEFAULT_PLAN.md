@@ -10,16 +10,19 @@ Ships in **iOS 1.1.4 (build 98+)** and **Android 1.1.4 (versionCode 61)**. Older
 |---|---|---|---|---|
 | `paywall_default_plan` | enum | `annual`, `monthly` | `annual` | Plan pre-selected when a paywall opens |
 | `paywall_badge_plan` | enum | `annual`, `monthly`, `none` | `annual` | Plan whose row shows the "Most popular" badge (`none` = no badge) |
+| `paywall_trial_timeline` | enum | `on`, `off` | `on` | 1.1.5+: show the trial timeline under the plan cards on every paywall placement when the selected plan has a confirmed trial (docs/ENGAGEMENT_115_SPEC.md §14.1). Served as the boolean `trialTimeline`. |
 
-Both keys resolve through `RemoteConfigService.enumValue(key, ctx)` (the enum accessor of the same resolver as every other key), so admin defaults and rules work as usual (platform, app version, country, experiment, user). The ctx takes `platform` / `appVersion` / `country` from the request headers (`X-App-Platform`, `X-App-Version`, `x-vercel-ip-country`), as the other mobile routes do. They are listed in `CLIENT_VISIBLE_KEYS`, the only keys a client endpoint may serve. No migration: values are stored as JSON strings in the existing `remote_config_defaults.value` / `remote_config_rules.value` jsonb columns, and invalid stored values fall through to the next source (rule → admin default → code default).
+All three keys resolve through `RemoteConfigService.enumValue(key, ctx)` (the enum accessor of the same resolver as every other key), so admin defaults and rules work as usual (platform, app version, country, experiment, user). The ctx takes `platform` / `appVersion` / `country` from the request headers (`X-App-Platform`, `X-App-Version`, `x-vercel-ip-country`), as the other mobile routes do. They are listed in `CLIENT_VISIBLE_KEYS`, the only keys a client endpoint may serve. No migration: values are stored as JSON strings in the existing `remote_config_defaults.value` / `remote_config_rules.value` jsonb columns, and invalid stored values fall through to the next source (rule → admin default → code default).
 
 ## 2. Endpoint
 
 `GET /api/mobile/paywall/config` (`apps/web/app/api/mobile/paywall/config/route.ts`). Mobile auth is optional: it works signed out, because the onboarding paywall can appear before sign-up completes. It uses `verifyMobileAuth` (Bearer token, or web session cookie); no token, an invalid token, or an auth error all resolve with an anonymous ctx (`userId: null`). Middleware doesn't gate `/api/*`, so the route is reachable signed out. Response `cache-control: no-store`.
 
 ```json
-{ "success": true, "data": { "defaultPlan": "annual", "badgePlan": "annual" }, "error": null, "meta": { "requestTime": 12 } }
+{ "success": true, "data": { "defaultPlan": "annual", "badgePlan": "annual", "trialTimeline": true }, "error": null, "meta": { "requestTime": 12 } }
 ```
+
+- `trialTimeline` (boolean, **added for 1.1.5**, additive: older apps ignore it) is `paywall_trial_timeline == "on"`. It resolves exactly like the plan keys (signed out included). Clients cache it in `paywall_config_v1` next to the plans; when the config was never fetched, the fallback is `true`. The trial timeline still only renders for a CONFIRMED free trial on the selected plan (`intro_eligibility` eligible / server_promoted) and is hidden otherwise. On the onboarding paywall, the `onboarding_paywall` arm payload `trial_timeline` (when present, true or false) wins over this switch.
 
 - `meta` carries `requestTime`, plus `degraded: true` when the code defaults were served because of an error. Clients should ignore `meta`.
 - **Signed out**, admin defaults and request-only rule conditions apply (`platforms`, `appVersionGte/Lt`, `countries`). User-scoped conditions never match: `userIds`, `percent`, `channels`, signup dates and `experiment`. (`excludeUserIds` excludes nobody.) No per-user rows are read. To target one experiment arm, the user must be signed in; the onboarding paywall can still use the arm's own rule (step 3.2.2 below).
@@ -29,7 +32,7 @@ Both keys resolve through `RemoteConfigService.enumValue(key, ctx)` (the enum ac
 
 ## 3. Client behaviour (iOS and Android identical)
 
-1. **Prefetch.** Fetch the config at app launch and on sign-in, without blocking, and cache it on the device (UserDefaults or DataStore, key `paywall_config_v1`, holding `{defaultPlan, badgePlan, fetchedAt}`).
+1. **Prefetch.** Fetch the config at app launch and on sign-in, without blocking, and cache it on the device (UserDefaults or DataStore, key `paywall_config_v1`, holding `{defaultPlan, badgePlan, fetchedAt}`; 1.1.5+ also `trialTimeline`).
 2. **On paywall open,** pre-select in this order:
    1. an explicit request plan: deep-link `plan=` / caller preselect;
    2. the experiment arm's own rule, i.e. variantB `annualOnly`;

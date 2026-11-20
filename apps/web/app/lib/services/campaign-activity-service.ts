@@ -7,6 +7,7 @@
  * non-deleted `food_log_entries` row on that date.
  */
 import { createAdminSupabase } from '../supabase-admin';
+import { confirmedOnly } from '@/lib/meal-drafts/config';
 
 export interface FriendProfile {
   userId: string;
@@ -40,9 +41,8 @@ export class CampaignActivityService {
           .in('user_id', part)
           .gte('claim_date', from)
           .lte('claim_date', to),
-        supabase
-          .from('food_log_entries')
-          .select('user_id, entry_date')
+        confirmedOnly(supabase.from('food_log_entries')
+          .select('user_id, entry_date'))
           .in('user_id', part)
           .gte('entry_date', from)
           .lte('entry_date', to)

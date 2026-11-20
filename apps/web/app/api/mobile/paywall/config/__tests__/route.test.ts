@@ -1,6 +1,6 @@
 /**
  * GET /api/mobile/paywall/config (docs/PAYWALL_DEFAULT_PLAN.md): optional auth, only the
- * two paywall keys, no-store, never 5xx because of config.
+ * three paywall keys, no-store, never 5xx because of config.
  */
 import { NextRequest } from 'next/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -57,17 +57,17 @@ describe('GET /api/mobile/paywall/config', () => {
     const { res, body } = await call();
     expect(res.status).toBe(200);
     expect(res.headers.get('cache-control')).toBe('no-store');
-    expect(body).toMatchObject({ success: true, data: { defaultPlan: 'annual', badgePlan: 'annual' }, error: null });
-    expect(Object.keys(body.data).sort()).toEqual(['badgePlan', 'defaultPlan']); // only these two keys, ever
+    expect(body).toMatchObject({ success: true, data: { defaultPlan: 'annual', badgePlan: 'annual', trialTimeline: true }, error: null });
+    expect(Object.keys(body.data).sort()).toEqual(['badgePlan', 'defaultPlan', 'trialTimeline']); // only these keys, ever
   });
 
   it('signed out → admin defaults and platform / version rules still apply', async () => {
     db.seed('remote_config_defaults', [def('paywall_default_plan', 'monthly'), def('paywall_badge_plan', 'none')]);
     db.seed('remote_config_rules', [rule('paywall_default_plan', { platforms: ['android'], appVersionGte: '1.1.4' }, 'annual')]);
-    expect((await call()).body.data).toEqual({ defaultPlan: 'monthly', badgePlan: 'none' });
+    expect((await call()).body.data).toEqual({ defaultPlan: 'monthly', badgePlan: 'none', trialTimeline: true });
     resetRemoteConfigCache();
     const android = await call({ 'x-app-platform': 'android', 'x-app-version': '1.1.4' });
-    expect(android.body.data).toEqual({ defaultPlan: 'annual', badgePlan: 'none' });
+    expect(android.body.data).toEqual({ defaultPlan: 'annual', badgePlan: 'none', trialTimeline: true });
     const oldAndroid = await call({ 'x-app-platform': 'android', 'x-app-version': '1.1.3' });
     expect(oldAndroid.body.data.defaultPlan).toBe('monthly');
   });
@@ -80,7 +80,7 @@ describe('GET /api/mobile/paywall/config', () => {
       rule('paywall_badge_plan', { channels: ['apple_ads'] }, 'none'),
     ]);
     const from = vi.spyOn(db, 'from');
-    expect((await call()).body.data).toEqual({ defaultPlan: 'annual', badgePlan: 'annual' });
+    expect((await call()).body.data).toEqual({ defaultPlan: 'annual', badgePlan: 'annual', trialTimeline: true });
     const tables = from.mock.calls.map(([t]) => t);
     expect(tables).not.toContain('experiment_assignments');
     expect(tables).not.toContain('user_attribution');
@@ -96,14 +96,14 @@ describe('GET /api/mobile/paywall/config', () => {
     ]);
     const { res, body } = await call({ authorization: 'Bearer t', 'x-app-platform': 'ios' });
     expect(res.status).toBe(200);
-    expect(body.data).toEqual({ defaultPlan: 'monthly', badgePlan: 'monthly' });
+    expect(body.data).toEqual({ defaultPlan: 'monthly', badgePlan: 'monthly', trialTimeline: true });
   });
 
   it('invalid stored values fall through to the code default', async () => {
     vi.mocked(verifyMobileAuth).mockResolvedValue({ id: USER });
     db.seed('remote_config_defaults', [def('paywall_default_plan', 'weekly'), def('paywall_badge_plan', 42)]);
     db.seed('remote_config_rules', [rule('paywall_default_plan', {}, 'lifetime'), rule('paywall_badge_plan', {}, ['annual'])]);
-    expect((await call()).body.data).toEqual({ defaultPlan: 'annual', badgePlan: 'annual' });
+    expect((await call()).body.data).toEqual({ defaultPlan: 'annual', badgePlan: 'annual', trialTimeline: true });
   });
 
   it('auth throwing → anonymous, still 200', async () => {
@@ -120,6 +120,31 @@ describe('GET /api/mobile/paywall/config', () => {
     });
     const { res, body } = await call();
     expect(res.status).toBe(200);
-    expect(body).toMatchObject({ success: true, data: { defaultPlan: 'annual', badgePlan: 'annual' } });
+    expect(body).toMatchObject({ success: true, data: { defaultPlan: 'annual', badgePlan: 'annual', trialTimeline: true } });
+  });
+
+  describe('trialTimeline (paywall_trial_timeline, ENGAGEMENT_115_SPEC §14.1)', () => {
+    it('admin default off → false, signed out included', async () => {
+      db.seed('remote_config_defaults', [def('paywall_trial_timeline', 'off')]);
+      expect((await call()).body.data.trialTimeline).toBe(false);
+    });
+
+    it('platform / version rule applies signed out; user-scoped rule only signed in', async () => {
+      db.seed('remote_config_rules', [
+        rule('paywall_trial_timeline', { platforms: ['android'], appVersionGte: '1.1.5' }, 'off', 2),
+        rule('paywall_trial_timeline', { userIds: [USER] }, 'off', 1),
+      ]);
+      expect((await call({ 'x-app-platform': 'android', 'x-app-version': '1.1.5' })).body.data.trialTimeline).toBe(false);
+      expect((await call({ 'x-app-platform': 'ios', 'x-app-version': '1.1.5' })).body.data.trialTimeline).toBe(true);
+      resetRemoteConfigCache();
+      vi.mocked(verifyMobileAuth).mockResolvedValue({ id: USER });
+      expect((await call({ authorization: 'Bearer t', 'x-app-platform': 'ios' })).body.data.trialTimeline).toBe(false);
+    });
+
+    it('invalid stored value → code default (true)', async () => {
+      db.seed('remote_config_defaults', [def('paywall_trial_timeline', true)]);
+      db.seed('remote_config_rules', [rule('paywall_trial_timeline', {}, 'false')]);
+      expect((await call()).body.data.trialTimeline).toBe(true);
+    });
   });
 });

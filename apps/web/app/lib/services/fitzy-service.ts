@@ -185,6 +185,7 @@ export {
   parseFitzyContext,
   type FitzyChatContext,
 } from '../fitzy/context';
+import { confirmedOnly } from '@/lib/meal-drafts/config';
 
 /** System messages for a chat turn: cached SYSTEM_PROMPT + the user's grounding (+ the onboarding addendum). */
 export const chatSystemMessages = (grounding: string, context: FitzyChatContext | null = null): ModelMessage[] => {
@@ -221,6 +222,8 @@ export interface PreparedTurn {
   system: ModelMessage[];
   tier: FitzyTier;
   remaining: number | null;
+  /** 1.1.5 additive (ENGAGEMENT_115_SPEC §3.3): the free window; all null for Pro / gate dark. */
+  quota?: FitzyQuotaFields;
   growthAllowed: boolean;
   circleId?: string;
   userMessageAt?: string;
@@ -242,10 +245,19 @@ export interface TurnResult {
 }
 
 export type FitzyStreamEvent =
-  | { event: 'meta'; data: { conversationId: string; tier: FitzyTier; remaining: number | null } }
+  | { event: 'meta'; data: { conversationId: string; tier: FitzyTier; remaining: number | null } & FitzyQuotaFields }
   | { event: 'delta'; data: { text: string } }
   | { event: 'replace'; data: { text: string } }
-  | { event: 'done'; data: { messageId: string; answer: string; suggestions: string[]; actions: FitzyAction[]; disclaimer: string; remaining: number | null } };
+  | { event: 'done'; data: { messageId: string; answer: string; suggestions: string[]; actions: FitzyAction[]; disclaimer: string; remaining: number | null } & FitzyQuotaFields };
+
+/** Additive quota fields on the chat response and the stream meta / done events (null for Pro). */
+export interface FitzyQuotaFields {
+  limit: number | null;
+  window: 'week' | 'day' | null;
+  resetsAt: string | null;
+}
+
+const NO_QUOTA: FitzyQuotaFields = { limit: null, window: null, resetsAt: null };
 
 /** Background work after the response (Next `after`), falling back to fire-and-forget outside a request. */
 let scheduleBackground = (fn: () => Promise<unknown>) => {
@@ -339,6 +351,7 @@ export class FitzyService implements IFitzyService {
       suggestions: result.suggestions,
       actions: result.actions,
       remaining: prepared.remaining,
+      ...(prepared.quota ?? NO_QUOTA),
       tier: prepared.tier,
     };
   }
@@ -355,7 +368,7 @@ export class FitzyService implements IFitzyService {
     abortSignal?: AbortSignal
   ): Promise<TurnResult> {
     const prepared = await this.prepareTurn(userId, input);
-    emit({ event: 'meta', data: { conversationId: prepared.conversationId, tier: prepared.tier, remaining: prepared.remaining } });
+    emit({ event: 'meta', data: { conversationId: prepared.conversationId, tier: prepared.tier, remaining: prepared.remaining, ...(prepared.quota ?? NO_QUOTA) } });
 
     const send = (events: GuardEvent[]) => {
       for (const e of events) emit(e.type === 'delta' ? { event: 'delta', data: { text: e.text } } : { event: 'replace', data: { text: e.text } });
@@ -365,7 +378,7 @@ export class FitzyService implements IFitzyService {
     const result = await this.finishTurn(prepared, { answer, metaRaw, tripped, model, ...usage });
     emit({
       event: 'done',
-      data: { messageId: result.messageId, answer: result.answer, suggestions: result.suggestions, actions: result.actions, disclaimer: DISCLAIMER, remaining: prepared.remaining },
+      data: { messageId: result.messageId, answer: result.answer, suggestions: result.suggestions, actions: result.actions, disclaimer: DISCLAIMER, remaining: prepared.remaining, ...(prepared.quota ?? NO_QUOTA) },
     });
     return result;
   }
@@ -458,9 +471,9 @@ export class FitzyService implements IFitzyService {
     const message = (input.message ?? '').trim();
     // Tier-aware daily quota. Recording happens BEFORE the model call so the check/insert
     // race can't be exploited to overshoot the quota.
-    await UsageService.assertFitzyQuota(userId, { onboarding: input.context === 'onboarding' });
+    const quota = await UsageService.assertFitzyQuota(userId, { onboarding: input.context === 'onboarding' });
     if (input.assertAiConsent) await input.assertAiConsent();
-    await UsageService.recordFitzyMessage(userId);
+    await UsageService.recordFitzyMessage(userId, quota);
     const allowance = await UsageService.fitzyAllowance(userId);
 
     let conversationId: string;
@@ -495,6 +508,7 @@ export class FitzyService implements IFitzyService {
       system: chatSystemMessages(grounding, input.context ?? null),
       tier: allowance.tier,
       remaining: allowance.remaining,
+      quota: { limit: allowance.limit ?? null, window: allowance.window ?? null, resetsAt: allowance.resetsAt ?? null },
       growthAllowed,
       circleId: input.circleId,
       userMessageAt,
@@ -661,9 +675,8 @@ export class FitzyService implements IFitzyService {
 
     // (a) Food log macros — daily averages only.
     try {
-      const { data: entries, error: entriesError } = await supabase
-        .from('food_log_entries')
-        .select('calories, protein_g, carbs_g, fat_g, entry_date')
+      const { data: entries, error: entriesError } = await confirmedOnly(supabase.from('food_log_entries')
+        .select('calories, protein_g, carbs_g, fat_g, entry_date'))
         .eq('user_id', userId)
         .gte('entry_date', sinceDate)
         .is('deleted_at', null);

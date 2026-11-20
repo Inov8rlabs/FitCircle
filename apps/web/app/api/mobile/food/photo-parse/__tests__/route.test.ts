@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // --- Mocks ---------------------------------------------------------------------
 const state = {
@@ -9,11 +9,14 @@ const state = {
   afterCalls: 0,
   reuse: false,
   dedupeKeys: [] as string[],
+  parseOpts: [] as unknown[],
 };
 
 // AI consent gate: allow-all here; the rule itself is tested in consent-service / ai-consent-routes tests.
 vi.mock('@/lib/services/consent-service', async (orig) => (await import('@/lib/services/__tests__/consent-stub')).allowAllConsentModule(orig));
 vi.mock('@sentry/nextjs', () => ({ captureException: vi.fn() }));
+// The per-user abuse limiter is in-process; this file makes more requests than its window allows.
+vi.mock('@/lib/security/abuse-limits', () => ({ enforceAbuseLimits: async () => null }));
 vi.mock('next/server', async (importOriginal) => {
   const original: Record<string, unknown> = await importOriginal();
   return {
@@ -33,7 +36,9 @@ vi.mock('@/lib/services/usage-service', () => {
       public readonly feature: string,
       public readonly used: number,
       public readonly limit: number,
-      public readonly trialEligible?: boolean
+      public readonly trialEligible?: boolean,
+      public readonly trialDays?: number,
+      public readonly extra: Record<string, unknown> = {}
     ) {
       super('UPGRADE_REQUIRED');
     }
@@ -42,7 +47,8 @@ vi.mock('@/lib/services/usage-service', () => {
 });
 vi.mock('@/lib/services/nutrition-intelligence-service', () => ({
   NutritionIntelligenceService: {
-    parsePhoto: async () => {
+    parsePhoto: async (...args: unknown[]) => {
+      state.parseOpts.push(args[3]);
       if (state.parseError) throw state.parseError;
       return { items: [], totals: {}, overallConfidence: 0.9 };
     },
@@ -68,7 +74,7 @@ const NEW_ENTRY = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const EXISTING = '3f2b8c1e-9a4d-4c6b-8e21-5d7f0a9b1c23';
 const SOMEONE_ELSES = '7c9e6679-7425-40de-944b-e07fc1f90ae7';
 
-function post(fields: Record<string, string> = {}) {
+function post(fields: Record<string, string> = {}, headers: Record<string, string> = {}) {
   // The handler only uses `formData()` with `getAll('image')` / `get(name)`. A minimal
   // stand-in keeps the test independent of multipart parsing and of jsdom's File
   // (which has no arrayBuffer()).
@@ -82,7 +88,7 @@ function post(fields: Record<string, string> = {}) {
     getAll: (key: string) => (key === 'image' ? [image] : []),
     get: (key: string) => (key in fields ? fields[key] : null),
   };
-  return POST({ formData: async () => form, headers: new Headers() } as any);
+  return POST({ formData: async () => form, headers: new Headers(headers) } as any);
 }
 
 describe('POST /api/mobile/food/photo-parse — Option-B fallback', () => {
@@ -210,6 +216,40 @@ describe('POST /api/mobile/food/photo-parse — Option-B fallback', () => {
     expect(state.saveCalls).toBe(0);
   });
 
+  it('1.1.5 daily phase: daily copy, Option B kept, details.allowance after the refusal', async () => {
+    const allowance = {
+      mode: 'daily', remaining: 0, starterTotal: 21, starterRemaining: 0, dailyLimit: 2, dailyRemaining: 0,
+      resetsAt: '2026-11-14T05:00:00.000Z', timezone: 'America/New_York',
+    };
+    state.parseError = new (UpgradeRequiredError as any)('food_ai_unlimited', 2, 2, false, 7, { phase: 'daily', allowance });
+
+    const res = await post();
+    expect(res.status).toBe(429);
+    const body = await res.json();
+    expect(body.error.code).toBe('UPGRADE_REQUIRED');
+    expect(body.error.message).toBe("You've used today's 2 free AI scans. We saved your photo so you can add the details.");
+    expect(body.error.details).toEqual({
+      savedEntryId: NEW_ENTRY,
+      imageUrls: [],
+      feature: 'food_ai_unlimited',
+      used: 2,
+      limit: 2,
+      allowance,
+      paywall: expect.objectContaining({
+        trigger: 'food_ai',
+        headline: 'Scan every meal',
+        body: "You've used today's 2 free scans. They reset at midnight, or scan every meal with Pro.",
+      }),
+    });
+
+    // Re-run on the saved entry with skip_fallback_save: nothing saved, the copy says so.
+    state.saveCalls = 0;
+    const skipped = await (await post({ existing_entry_id: EXISTING, skip_fallback_save: 'true' })).json();
+    expect(state.saveCalls).toBe(0);
+    expect(skipped.error.message).toBe("You've used today's 2 free AI scans.");
+    expect(skipped.error.details).toMatchObject({ savedEntryId: EXISTING, fallbackSaved: false, allowance });
+  });
+
   it('a successful parse is unaffected by the new fields', async () => {
     state.parseError = null;
     const res = await post({ existing_entry_id: EXISTING, skip_fallback_save: 'true' });
@@ -258,5 +298,45 @@ describe('trial-first food AI allowance on photo-parse (TRIAL_FIRST_SPEC §5)', 
     const body = await (await post()).json();
     expect(body.error.details.savedEntryId).toBe(NEW_ENTRY);
     expect(state.afterCalls).toBe(0);
+  });
+});
+
+describe('POST /api/mobile/food/photo-parse — X-Analysis-Job-Id (ENGAGEMENT_115_SPEC §14.4 item 3)', () => {
+  beforeEach(() => {
+    state.parseError = null;
+    state.parseOpts = [];
+  });
+  it('passes a valid job id to the service (lower-cased); absent or malformed → undefined; a Fix carries none', async () => {
+    expect((await post({}, { 'X-Analysis-Job-Id': 'A1B2C3D4-0000-4000-8000-000000000001' })).status).toBe(200);
+    await post();
+    await post({}, { 'X-Analysis-Job-Id': 'bad id!' });
+    await post({ correction: 'it was tofu', draft: '[]' }, { 'X-Analysis-Job-Id': 'a1b2c3d4-0000-4000-8000-000000000001' });
+    expect(state.parseOpts[0]).toEqual({ jobId: 'a1b2c3d4-0000-4000-8000-000000000001' });
+    expect(state.parseOpts[1]).toEqual({ jobId: undefined });
+    expect(state.parseOpts[2]).toEqual({ jobId: undefined });
+    expect(state.parseOpts[3]).not.toHaveProperty('jobId');
+  });
+});
+
+describe('POST /api/mobile/food/photo-parse — analysisId for Draft meals (ENGAGEMENT_115_SPEC §14.6)', () => {
+  beforeEach(() => {
+    state.parseError = null;
+    state.afterCalls = 0;
+  });
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+  it('1.1.5 client (meal_drafts) + drafts on → analysisId in data and the result is held after the response', async () => {
+    vi.stubEnv('MEAL_DRAFTS_ENABLED', 'true');
+    const res = await post({}, { 'X-Client-Features': 'meal_drafts' });
+    const body = await res.json();
+    expect(body.data.analysisId).toMatch(/^[0-9a-f-]{36}$/);
+    expect(state.afterCalls).toBe(2); // training capture + recordAnalysis
+  });
+  it('old client, drafts off, or a re-analysis of an existing entry → no analysisId', async () => {
+    expect((await (await post({}, { 'X-Client-Features': 'meal_drafts' })).json()).data.analysisId).toBeUndefined();
+    vi.stubEnv('MEAL_DRAFTS_ENABLED', 'true');
+    expect((await (await post()).json()).data.analysisId).toBeUndefined();
+    expect((await (await post({ skip_fallback_save: 'true' }, { 'X-Client-Features': 'meal_drafts' })).json()).data.analysisId).toBeUndefined();
   });
 });

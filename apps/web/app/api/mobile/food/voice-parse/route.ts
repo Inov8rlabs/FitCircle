@@ -11,6 +11,9 @@ import { NutritionTrainingService } from '@/lib/services/nutrition-training-serv
 import { UpgradeRequiredError } from '@/lib/services/usage-service';
 import { safeParseLenient } from '@/lib/validation/lenient-parse';
 import { PARSE_FALLBACK_KEYS, readParseFallbackOptionsFromJson } from '@/lib/validation/nutrition-parse-options';
+import { readAnalysisJobId } from '@/lib/validation/analysis-job-id';
+import { includeDraftsFor } from '@/lib/meal-drafts/config';
+import { MealDraftService } from '@/lib/services/meal-draft-service';
 
 // LLM parse can exceed the platform default function timeout; give it room.
 export const maxDuration = 60;
@@ -97,9 +100,26 @@ export async function POST(request: NextRequest) {
     try {
       // Server-side AI consent (docs/PRIVACY_COMPLIANCE_SPEC.md §4); refused → 403 + Option-B save.
       await ConsentService.assertUserAi(user.id, request, parsed.data.source === 'text' ? 'food_text' : 'food_voice');
+      const jobId = readAnalysisJobId(request);
       const draft = await NutritionIntelligenceService.parseVoice(user.id, parsed.data.transcript, {
         source: parsed.data.source,
+        jobId,
       });
+      // Draft meals (ENGAGEMENT_115_SPEC §14.6): see photo-parse. Not for re-analysis / prefill.
+      const analysisId =
+        includeDraftsFor(request) && !fallback.skipFallbackSave && !fallback.existingEntryId ? MealDraftService.newAnalysisId() : null;
+      if (analysisId) {
+        after(() =>
+          MealDraftService.recordAnalysis({
+            id: analysisId,
+            userId: user.id,
+            method: parsed.data.source === 'text' ? 'text' : 'voice',
+            draft,
+            jobId,
+            timezone: request.headers.get('x-client-timezone'),
+          })
+        );
+      }
 
       // Production accuracy signal (see photo-parse): draft row written after the response.
       const latencyMs = Date.now() - startTime;
@@ -115,7 +135,7 @@ export async function POST(request: NextRequest) {
 
       return NextResponse.json({
         success: true,
-        data: draft,
+        data: analysisId ? { ...draft, analysisId } : draft,
         meta: { requestTime: Date.now() - startTime },
         error: null,
       });
@@ -193,12 +213,12 @@ export async function POST(request: NextRequest) {
       const limitName = parsed.data.source === 'text' ? 'AI-estimate' : 'voice-estimate';
       const message = fallback.skipFallbackSave
         ? isUpgrade
-          ? foodAiUpgradeMessage(parseError.limit, parseError.trialEligible === true, false, parseError.trialDays)
+          ? foodAiUpgradeMessage(parseError.limit, parseError.trialEligible === true, false, parseError.trialDays, parseError.extra?.phase)
           : isRate
             ? `You've reached today's ${limitName} limit — you can add the details yourself.`
             : "Couldn't understand that — you can add the details yourself."
         : isUpgrade
-          ? `${foodAiUpgradeMessage(parseError.limit, parseError.trialEligible === true, false, parseError.trialDays)} We saved your note so you can add the details.`
+          ? `${foodAiUpgradeMessage(parseError.limit, parseError.trialEligible === true, false, parseError.trialDays, parseError.extra?.phase)} We saved your note so you can add the details.`
           : isRate
             ? `You've reached today's ${limitName} limit — we saved your note so you can add the details.`
             : "Couldn't understand that — we saved your note so you can add the details.";

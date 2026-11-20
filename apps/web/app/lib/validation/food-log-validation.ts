@@ -84,6 +84,10 @@ export const CreateFoodLogEntrySchema = z.object({
   visibility: z.enum(['private', 'shared', 'circle']).optional(),
   // The user's explicit per-entry choice (clients with the sharing control).
   share_with_circles: z.boolean().optional(),
+  // 1.1.5: the circles to share with (only with share_with_circles:true). Absent = legacy rule.
+  share_circle_ids: z.array(z.string().uuid()).max(50).optional(),
+  // 1.1.5: the rows the user saw on the share card → remembered per circle (offline outbox shares).
+  share_seen_circle_ids: z.array(z.string().uuid()).max(100).optional(),
   tags: z.array(z.string().max(50)).max(10).optional(),
 }).refine(
   (data) => {
@@ -115,6 +119,10 @@ export const UpdateFoodLogEntrySchema = z.object({
   visibility: z.enum(['private', 'shared', 'circle']).optional(),
   // The user's explicit per-entry choice (clients with the sharing control).
   share_with_circles: z.boolean().optional(),
+  // 1.1.5: the circles to share with (only with share_with_circles:true). Absent = legacy rule.
+  share_circle_ids: z.array(z.string().uuid()).max(50).optional(),
+  // 1.1.5: the rows the user saw on the share card → remembered per circle (offline outbox shares).
+  share_seen_circle_ids: z.array(z.string().uuid()).max(100).optional(),
   tags: z.array(z.string().max(50)).max(10).optional(),
 });
 

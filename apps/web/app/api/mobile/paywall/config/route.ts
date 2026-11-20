@@ -1,15 +1,16 @@
 /**
- * GET /api/mobile/paywall/config - Which plan a paywall pre-selects, and which row gets
- * the "Most popular" badge (docs/PAYWALL_DEFAULT_PLAN.md).
+ * GET /api/mobile/paywall/config - Which plan a paywall pre-selects, which row gets
+ * the "Most popular" badge, and whether paywalls show the trial timeline
+ * (docs/PAYWALL_DEFAULT_PLAN.md; trialTimeline = docs/ENGAGEMENT_115_SPEC.md §14.1).
  *
  * Auth optional: the onboarding paywall can open before sign-up completes. A valid
  * Bearer token (or web session) adds the user to the remote config ctx; no token, or an
  * invalid one, resolves anonymously (admin defaults + platform / app version / country
  * rules; user-scoped rule conditions never match).
  *
- * Serves ONLY the two registry keys below, by name: the request can't pick a key.
+ * Serves ONLY the three registry keys below, by name: the request can't pick a key.
  *
- * Response: { success, data: { defaultPlan, badgePlan }, meta, error }, Cache-Control: no-store.
+ * Response: { success, data: { defaultPlan, badgePlan, trialTimeline }, meta, error }, Cache-Control: no-store.
  * Never fails because of config: any internal error answers 200 with the code defaults
  * (`meta.degraded: true`).
  */
@@ -28,6 +29,7 @@ export async function GET(request: NextRequest) {
   let degraded = false;
   let defaultPlan = codeDefault('paywall_default_plan') as string;
   let badgePlan = codeDefault('paywall_badge_plan') as string;
+  let trialTimeline = codeDefault('paywall_trial_timeline') === 'on';
 
   try {
     let userId: string | null = null;
@@ -46,10 +48,14 @@ export async function GET(request: NextRequest) {
       appVersion: info.appVersion,
       country: info.ipCountry,
     };
-    [defaultPlan, badgePlan] = await Promise.all([
+    const [plan, badge, timeline] = await Promise.all([
       RemoteConfigService.enumValue('paywall_default_plan', ctx),
       RemoteConfigService.enumValue('paywall_badge_plan', ctx),
+      RemoteConfigService.enumValue('paywall_trial_timeline', ctx),
     ]);
+    defaultPlan = plan;
+    badgePlan = badge;
+    trialTimeline = timeline === 'on';
   } catch (error: unknown) {
     degraded = true;
     console.error('[Mobile API] Paywall config failed; serving code defaults:', {
@@ -60,7 +66,7 @@ export async function GET(request: NextRequest) {
   return NextResponse.json(
     {
       success: true,
-      data: { defaultPlan, badgePlan },
+      data: { defaultPlan, badgePlan, trialTimeline },
       error: null,
       meta: { requestTime: Date.now() - startTime, ...(degraded ? { degraded } : {}) },
     },

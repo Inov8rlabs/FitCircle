@@ -16,10 +16,15 @@ describe('quietHoursEndAt', () => {
 
 describe('planDeferral', () => {
   const night = new Date('2026-11-10T05:30:00Z'); // 23:30 Chicago
-  it('only setup / meal / Day-1 nudges are deferrable', () => {
+  it('only setup / meal / Day-1 nudges (+ 1.1.5 milestone_achieved) are deferrable', () => {
     expect([...DEFERRABLE_TYPES].sort()).toEqual(
-      ['day1_morning', 'meal_reminder_breakfast', 'meal_reminder_dinner', 'meal_reminder_lunch', 'meal_reminder_snack', 'onboarding_finish_reminder'].sort()
+      ['day1_morning', 'meal_reminder_breakfast', 'meal_reminder_dinner', 'meal_reminder_lunch', 'meal_reminder_snack', 'onboarding_finish_reminder', 'milestone_achieved'].sort()
     );
+    // A milestone reached by a 2 am sync is held until quiet hours end (ENGAGEMENT_115_SPEC §5.2).
+    expect(planDeferral('milestone_achieved', night, CHI, '07:00')).toEqual({ deferUntil: '2026-11-10T13:00:00.000Z', deferExpiresAt: '2026-11-10T16:00:00.000Z' });
+    // The D+1 pushes are never held: the job already avoids quiet hours.
+    expect(planDeferral('dont_miss_twice', night, CHI, '07:00')).toBeNull();
+    expect(planDeferral('streak_save_offer', night, CHI, '07:00')).toBeNull();
     expect(planDeferral('chat_message', night, CHI, '07:00')).toBeNull();
     expect(planDeferral('momentum_at_risk', night, CHI, '07:00')).toBeNull();
   });

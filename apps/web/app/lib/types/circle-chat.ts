@@ -220,6 +220,12 @@ export interface ListMessagesResult {
   messages: ChatMessageDTO[]; // reverse-chronological (newest first)
   hasMore: boolean;
   nextBefore: string | null; // pass back as `before` for the next page
+  /**
+   * 1.1.5: today's check-in status for the strip above the thread. Present
+   * (object or null on a lookup failure) only on the FIRST page (no `before`).
+   * Additive — older clients ignore it.
+   */
+  todayCheckins?: import('../services/circle-today-checkins-service').TodayCheckinsDTO | null;
 }
 
 export interface SendMessageInput {

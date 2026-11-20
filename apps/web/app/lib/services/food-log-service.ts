@@ -12,6 +12,8 @@
 
 import { type SupabaseClient } from '@supabase/supabase-js';
 
+import { logIgnoredQueryError } from '@/lib/api/route-errors';
+import { ENTRY_STATUS_DRAFT, confirmedOnly, isDraftEntry, mealDraftsEnabled } from '@/lib/meal-drafts/config';
 import type {
   FoodLogEntry,
   FoodLogStats,
@@ -29,12 +31,15 @@ import {
   resolveUpdatePrivacy,
   shareMealsByDefault,
 } from './food-entry-privacy';
-import { logIgnoredQueryError } from '@/lib/api/route-errors';
 
 /**
  * Runs best-effort work that must not hold up the response. Routes pass Next's
  * `after()` (see lib/utils/after-response); without one, work runs inline as before.
  */
+/** updateEntry's ownership read; entry_status only exists once migration 139 is live. */
+const EXISTING_COLUMNS = (): string =>
+  mealDraftsEnabled() ? 'user_id, entry_type, is_private, visibility, entry_status' : 'user_id, entry_type, is_private, visibility';
+
 export type DeferFn = (task: () => Promise<unknown> | unknown) => void;
 
 const POSTGRES_UNIQUE_VIOLATION = '23505';
@@ -70,6 +75,11 @@ export class FoodLogService {
        * when omitted and needed; any read failure means private.
        */
       shareByDefault?: boolean;
+      /**
+       * Store as a Draft meal (ENGAGEMENT_115_SPEC §14.6; MealDraftService only): always private,
+       * no circle meal card, counts nowhere until confirmed. Needs migration 139.
+       */
+      draft?: { method: string; analysisId: string; createdAt: string };
     } = {}
   ): Promise<{
     data: FoodLogEntry | null;
@@ -80,6 +90,10 @@ export class FoodLogService {
     conflict?: boolean;
   }> {
     try {
+      // 1.1.5: share_circle_ids [] with share_with_circles:true = "share to none" = private.
+      data = normalizeEmptyShareList(data);
+      // A draft is never shared, whatever the body or the user's default says.
+      if (opts.draft) data = { ...data, share_with_circles: false, share_circle_ids: undefined, is_private: true, visibility: 'private' };
       // Validate entry type requirements
       this.validateEntryData(data);
 
@@ -95,34 +109,54 @@ export class FoodLogService {
         ? opts.shareByDefault ?? (await this.readShareDefault(userId, supabase))
         : false;
       const privacy = resolveCreatePrivacy(data, shareByDefault);
+      // 1.1.5 per-meal circle list: only with an explicit share_with_circles:true.
+      const shareList = privacy.is_private ? null : explicitCreateList(data);
 
-      const { data: entry, error } = await supabase
+      const insertRow = {
+        ...(opts.id ? { id: opts.id } : {}),
+        user_id: userId,
+        entry_type: data.entry_type,
+        logged_at: data.logged_at || new Date().toISOString(),
+        entry_date: data.entry_date || new Date().toISOString().split('T')[0],
+        meal_type: data.meal_type,
+        title: data.title,
+        description: data.description,
+        notes: data.notes,
+        nutrition_data: data.nutrition_data,
+        // Typed nutrition columns (migration 054) — what Plate Score / Fitzy / insights READ.
+        // Derived from nutrition_data when not passed explicitly, so existing clients that only
+        // send nutrition_data still populate them (fixes the empty Plate Score).
+        ...this.nutritionColumns(data),
+        water_ml: data.water_ml,
+        supplement_name: data.supplement_name,
+        supplement_dosage: data.supplement_dosage,
+        // Both columns always agree (every reader may check either).
+        is_private: privacy.is_private,
+        visibility: privacy.visibility,
+        tags: data.tags || [],
+        ...(opts.draft
+          ? {
+              entry_status: ENTRY_STATUS_DRAFT,
+              draft_created_at: opts.draft.createdAt,
+              draft_method: opts.draft.method,
+              draft_analysis_id: opts.draft.analysisId,
+            }
+          : {}),
+      };
+      let { data: entry, error } = await supabase
         .from('food_log_entries')
-        .insert({
-          ...(opts.id ? { id: opts.id } : {}),
-          user_id: userId,
-          entry_type: data.entry_type,
-          logged_at: data.logged_at || new Date().toISOString(),
-          entry_date: data.entry_date || new Date().toISOString().split('T')[0],
-          meal_type: data.meal_type,
-          title: data.title,
-          description: data.description,
-          notes: data.notes,
-          nutrition_data: data.nutrition_data,
-          // Typed nutrition columns (migration 054) — what Plate Score / Fitzy / insights READ.
-          // Derived from nutrition_data when not passed explicitly, so existing clients that only
-          // send nutrition_data still populate them (fixes the empty Plate Score).
-          ...this.nutritionColumns(data),
-          water_ml: data.water_ml,
-          supplement_name: data.supplement_name,
-          supplement_dosage: data.supplement_dosage,
-          // Both columns always agree (every reader may check either).
-          is_private: privacy.is_private,
-          visibility: privacy.visibility,
-          tags: data.tags || [],
-        })
+        .insert(shareList ? { ...insertRow, share_circle_ids: shareList } : insertRow)
         .select()
         .single();
+      if (error && shareList && isMissingColumnError(error, 'share_circle_ids')) {
+        // Migration 138 not applied: store without the list. The hooks below still post only to
+        // the chosen circles (the list rides on the in-memory entry).
+        ({ data: entry, error } = await supabase.from('food_log_entries').insert(insertRow).select().single());
+      }
+      if (entry && shareList && !Array.isArray((entry as FoodLogEntry).share_circle_ids)) {
+        entry = { ...entry, share_circle_ids: shareList };
+      }
+      if (entry) entry = withShareList(entry);
 
       if (error) {
         if (opts.id && error.code === POSTGRES_UNIQUE_VIOLATION) {
@@ -131,7 +165,10 @@ export class FoodLogService {
         return { data: null, error: new Error(error.message) };
       }
 
-      if (opts.defer) {
+      if (opts.draft) {
+        // Drafts: audit only. No meal card, ever (CircleMealPostService also refuses drafts).
+        await this.auditLog(userId, entry.id, 'create', supabase, { draft: true });
+      } else if (opts.defer) {
         opts.defer(() => this.auditLog(userId, entry.id, 'create', supabase));
         // Water / supplements never become meal cards — don't even schedule it.
         if (CircleMealPostService.isShareableMeal(entry as FoodLogEntry)) {
@@ -202,6 +239,8 @@ export class FoodLogService {
       end_date?: string;
       meal_type?: string;
       tags?: string[];
+      /** Include the user's Draft meals (1.1.5+ clients only, `includeDraftsFor(request)`). */
+      includeDrafts?: boolean;
     },
     supabase: SupabaseClient
   ): Promise<{
@@ -215,9 +254,8 @@ export class FoodLogService {
       const limit = Math.min(options.limit || 20, 100);
       const offset = (page - 1) * limit;
 
-      let query = supabase
-        .from('food_log_entries')
-        .select('*', { count: 'exact' })
+      const base = supabase.from('food_log_entries').select('*', { count: 'exact' });
+      let query = (options.includeDrafts ? base : confirmedOnly(base))
         .eq('user_id', userId)
         .is('deleted_at', null)
         .order('logged_at', { ascending: false });
@@ -274,12 +312,12 @@ export class FoodLogService {
   static async getEntriesForDay(
     userId: string,
     entryDate: string,
-    supabase: SupabaseClient
+    supabase: SupabaseClient,
+    opts: { includeDrafts?: boolean } = {}
   ): Promise<{ data: FoodLogEntry[]; error: Error | null }> {
     try {
-      const { data, error } = await supabase
-        .from('food_log_entries')
-        .select('*')
+      const base = supabase.from('food_log_entries').select('*');
+      const { data, error } = await (opts.includeDrafts ? base : confirmedOnly(base))
         .eq('user_id', userId)
         .eq('entry_date', entryDate)
         .is('deleted_at', null)
@@ -303,9 +341,24 @@ export class FoodLogService {
   static async getEntryById(
     entryId: string,
     viewerId: string,
-    supabase: SupabaseClient
+    supabase: SupabaseClient,
+    opts: { includeDrafts?: boolean } = {}
   ): Promise<{ data: FoodLogEntry | null; error: Error | null }> {
     try {
+      // A Draft meal is visible to its owner on a 1.1.5+ client only; nobody else ever sees it.
+      if (mealDraftsEnabled()) {
+        const { data: own, error: ownError } = await supabase
+          .from('food_log_entries')
+          .select('*')
+          .eq('id', entryId)
+          .eq('user_id', viewerId)
+          .is('deleted_at', null)
+          .maybeSingle();
+        logIgnoredQueryError('FoodLogService.getEntryById', ownError);
+        if (own && isDraftEntry(own)) {
+          return opts.includeDrafts ? { data: own as FoodLogEntry, error: null } : { data: null, error: new Error('Entry not found') };
+        }
+      }
       // Check permission
       const canView = await this.canViewEntry(entryId, viewerId, supabase);
       if (!canView) {
@@ -357,13 +410,22 @@ export class FoodLogService {
     privacyChange?: { from: 'private' | 'shared'; to: 'private' | 'shared' };
   }> {
     try {
+      // 1.1.5: share_circle_ids [] with share_with_circles:true = "share to none" = private.
+      data = normalizeEmptyShareList(data);
       // Verify ownership. Missing / deleted → NOT_FOUND; someone else's → FORBIDDEN.
-      const { data: existing, error: readError } = await supabase
+      const { data: existingRow, error: readError } = await supabase
         .from('food_log_entries')
-        .select('user_id, entry_type, is_private, visibility')
+        .select(EXISTING_COLUMNS())
         .eq('id', entryId)
         .is('deleted_at', null)
         .maybeSingle();
+      const existing = existingRow as unknown as {
+        user_id: string;
+        entry_type: string;
+        is_private?: boolean | null;
+        visibility?: string | null;
+        entry_status?: string;
+      } | null;
 
       if (readError) {
         if (readError.code === POSTGRES_INVALID_TEXT_REPRESENTATION) {
@@ -403,23 +465,35 @@ export class FoodLogService {
       // Privacy: an explicit share_with_circles wins; a legacy request for
       // privacy is honoured; a legacy is_private:false (shipped clients re-send
       // the whole entry) never re-shares. Both columns are always written together.
+      // A Draft meal stays private until it is confirmed (sharing is decided at confirm).
+      if (isDraftEntry(existing as { entry_status?: unknown })) {
+        data = { ...data, share_with_circles: undefined, share_circle_ids: undefined, is_private: undefined, visibility: undefined };
+      }
       const wasPrivate = isEntryPrivate(existing as { is_private?: boolean | null; visibility?: string | null });
       const privacy = resolveUpdatePrivacy(data, existing as { entry_type: string; is_private?: boolean | null; visibility?: string | null });
       if (privacy) {
         updatePayload.is_private = privacy.is_private;
         updatePayload.visibility = privacy.visibility;
       }
+      // 1.1.5 per-meal circle list (ENGAGEMENT_115_SPEC §4.4): set only with share_with_circles:true;
+      // share_with_circles:false (or any resolution to private) clears it; absent keeps the stored list.
+      const nextList = updateShareList(data, privacy, isShareableType((existing as { entry_type: string }).entry_type));
+      if (nextList !== undefined) updatePayload.share_circle_ids = nextList;
       // Keep the typed nutrition columns (migration 054) in sync on edit — derived from
       // nutrition_data when not passed explicitly. These are what Plate Score / Fitzy / insights read.
       Object.assign(updatePayload, this.nutritionColumns(data));
 
-      const { data: updated, error } = await supabase
-        .from('food_log_entries')
-        .update(updatePayload)
-        .eq('id', entryId)
-        .eq('user_id', userId)
-        .select()
-        .single();
+      const runUpdate = (payload: Record<string, unknown>) =>
+        supabase.from('food_log_entries').update(payload).eq('id', entryId).eq('user_id', userId).select().single();
+      let { data: updated, error } = await runUpdate(updatePayload);
+      if (error && 'share_circle_ids' in updatePayload && isMissingColumnError(error, 'share_circle_ids')) {
+        // Migration 138 not applied: legacy rule; the in-memory list still scopes the cards below.
+        const { share_circle_ids: _list, ...rest } = updatePayload;
+        void _list;
+        ({ data: updated, error } = await runUpdate(rest));
+      }
+      if (updated && nextList !== undefined) updated = { ...updated, share_circle_ids: nextList };
+      if (updated) updated = withShareList(updated);
 
       if (error) {
         // Deleted between the ownership read and the update.
@@ -445,6 +519,11 @@ export class FoodLogService {
         // Pull the meal from every circle chat BEFORE answering, so "Private"
         // in the app means it is already gone for everyone else.
         await CircleMealPostService.retractMeal(entryId);
+      } else if (Array.isArray(nextList) && !isEntryPrivate(updated as FoodLogEntry)) {
+        // A new per-meal circle list: cards in circles no longer chosen go BEFORE answering.
+        await CircleMealPostService.syncMealCircles(updated as FoodLogEntry);
+        if (opts.defer) opts.defer(() => CircleMealPostService.onMealUpdated(updated as FoodLogEntry));
+        else await CircleMealPostService.onMealUpdated(updated as FoodLogEntry);
       } else if (opts.defer) {
         // Keep the cards in sync (or post them if it just became shared).
         opts.defer(() => CircleMealPostService.onMealUpdated(updated as FoodLogEntry));
@@ -463,6 +542,85 @@ export class FoodLogService {
   }
 
   /**
+   * Confirm a Draft meal (ENGAGEMENT_115_SPEC §14.6): optional content edits, then
+   * entry_status → 'confirmed' keeping the original capture time / day, privacy resolved like a
+   * create (explicit share_with_circles, else the user's default), then the create side effect
+   * (circle meal card). Idempotent: an already-confirmed entry is returned with
+   * `alreadyConfirmed: true` and nothing runs again. The route runs the streak claim.
+   */
+  static async confirmDraft(
+    entryId: string,
+    userId: string,
+    edits: UpdateFoodLogEntryInput & { share_with_circles?: boolean; share_circle_ids?: string[] },
+    supabase: SupabaseClient,
+    opts: { shareByDefault?: boolean; defer?: DeferFn } = {}
+  ): Promise<{ data: FoodLogEntry | null; error: Error | null; failure?: UpdateFailure; alreadyConfirmed?: boolean }> {
+    try {
+      const read = async () => {
+        const { data, error } = await supabase
+          .from('food_log_entries')
+          .select('*')
+          .eq('id', entryId)
+          .eq('user_id', userId)
+          .is('deleted_at', null)
+          .maybeSingle();
+        if (error && error.code !== POSTGRES_INVALID_TEXT_REPRESENTATION) throw new Error(error.message);
+        return (data as FoodLogEntry | null) ?? null;
+      };
+      const entry = await read();
+      if (!entry) return { data: null, error: new Error('Entry not found'), failure: 'NOT_FOUND' };
+      if (!isDraftEntry(entry as { entry_status?: unknown })) return { data: withShareList(entry), error: null, alreadyConfirmed: true };
+
+      // 1. Content edits (while still a draft: no privacy change, no meal card).
+      const { share_with_circles, share_circle_ids, is_private, visibility, ...content } = edits;
+      const hasContent = Object.values(content).some((v) => v !== undefined);
+      if (hasContent) {
+        const edited = await this.updateEntry(entryId, userId, content, supabase);
+        if (edited.error) return { data: null, error: edited.error, failure: edited.failure };
+      }
+
+      // 2. Privacy decided now, exactly like a create.
+      const req = normalizeEmptyShareList({ entry_type: entry.entry_type, share_with_circles, share_circle_ids, is_private, visibility });
+      const needsDefault = isShareableType(entry.entry_type) && typeof req.share_with_circles !== 'boolean' && req.is_private !== true && req.visibility !== 'private';
+      const shareByDefault = needsDefault ? opts.shareByDefault ?? (await this.readShareDefault(userId, supabase)) : false;
+      const privacy = resolveCreatePrivacy(req, shareByDefault);
+      const list = privacy.is_private ? null : explicitCreateList(req);
+      const patch: Record<string, unknown> = {
+        entry_status: 'confirmed',
+        is_private: privacy.is_private,
+        visibility: privacy.visibility,
+        updated_at: new Date().toISOString(),
+        ...(list ? { share_circle_ids: list } : {}),
+      };
+      // Conditional on still being a draft: two confirms never both run the side effects.
+      const { data: rows, error } = await supabase
+        .from('food_log_entries')
+        .update(patch)
+        .eq('id', entryId)
+        .eq('user_id', userId)
+        .eq('entry_status', ENTRY_STATUS_DRAFT)
+        .select();
+      if (error) return { data: null, error: new Error(error.message), failure: 'DATABASE_ERROR' };
+      const updated = ((rows ?? []) as FoodLogEntry[])[0];
+      if (!updated) {
+        const now = await read();
+        return now ? { data: withShareList(now), error: null, alreadyConfirmed: true } : { data: null, error: new Error('Entry not found'), failure: 'NOT_FOUND' };
+      }
+      const confirmed = withShareList(list ? { ...updated, share_circle_ids: list } : updated);
+
+      await this.auditLog(userId, entryId, 'update', supabase, { confirmed_draft: true });
+      // The create side effect: a shared meal becomes a meal card in its circles.
+      if (CircleMealPostService.isShareableMeal(confirmed)) {
+        if (opts.defer) opts.defer(() => CircleMealPostService.onMealLogged(confirmed));
+        else await CircleMealPostService.onMealLogged(confirmed);
+      }
+      return { data: confirmed, error: null };
+    } catch (error) {
+      return { data: null, error: error instanceof Error ? error : new Error('Unknown error'), failure: 'DATABASE_ERROR' };
+    }
+  }
+
+  /**
    * Check if user can view a food log entry
    */
   static async canViewEntry(
@@ -472,9 +630,10 @@ export class FoodLogService {
   ): Promise<boolean> {
     try {
       // Check if user owns the entry
-      const { data: entry, error: entryError } = await supabase
-        .from('food_log_entries')
-        .select('user_id, entry_type, is_private, visibility')
+      // Drafts are excluded (getEntryById serves the owner's own draft itself).
+      const { data: entry, error: entryError } = await confirmedOnly(
+        supabase.from('food_log_entries').select('user_id, entry_type, is_private, visibility')
+      )
         .eq('id', entryId)
         .is('deleted_at', null)
         .single();
@@ -517,9 +676,8 @@ export class FoodLogService {
   ): Promise<{ success: boolean; shares?: FoodLogShare[]; error: Error | null }> {
     try {
       // Verify ownership
-      const { data: entry, error: entryError } = await supabase
-        .from('food_log_entries')
-        .select('user_id, entry_type')
+      // A Draft meal is never shared (not found here).
+      const { data: entry, error: entryError } = await confirmedOnly(supabase.from('food_log_entries').select('user_id, entry_type'))
         .eq('id', entryId)
         .is('deleted_at', null)
         .single();
@@ -689,9 +847,9 @@ export class FoodLogService {
   ): Promise<{ data: FoodLogStats | null; error: Error | null }> {
     try {
       // Get all entries in date range
-      const { data: entries, error } = await supabase
-        .from('food_log_entries')
-        .select('entry_type, meal_type, water_ml, entry_date, nutrition_data')
+      const { data: entries, error } = await confirmedOnly(
+        supabase.from('food_log_entries').select('entry_type, meal_type, water_ml, entry_date, nutrition_data')
+      )
         .eq('user_id', userId)
         .gte('entry_date', startDate)
         .lte('entry_date', endDate)
@@ -878,9 +1036,7 @@ export class FoodLogService {
     supabase: SupabaseClient
   ): Promise<number> {
     // Get dates with entries, sorted descending
-    const { data: entries, error: entriesError } = await supabase
-      .from('food_log_entries')
-      .select('entry_date')
+    const { data: entries, error: entriesError } = await confirmedOnly(supabase.from('food_log_entries').select('entry_date'))
       .eq('user_id', userId)
       .is('deleted_at', null)
       .order('entry_date', { ascending: false });
@@ -934,4 +1090,53 @@ export class FoodLogService {
       metadata: metadata || {},
     });
   }
+}
+
+// ---------------------------------------------------------------- 1.1.5 per-meal circle lists
+
+/** PGRST204 / 42703 naming `column` (migration 138 not applied yet). */
+function isMissingColumnError(error: { code?: string; message?: string } | null, column: string): boolean {
+  if (!error || (error.code !== 'PGRST204' && error.code !== '42703')) return false;
+  return typeof error.message === 'string' && error.message.includes(column);
+}
+
+/**
+ * An explicit EMPTY list with share_with_circles:true means "share to none" (ENGAGEMENT_115
+ * contract §4): treated exactly like share_with_circles:false (private, list cleared, cards
+ * retracted). Omitting the field (never [] ) is what asks for the legacy all-full-circles rule.
+ */
+export function normalizeEmptyShareList<T extends { share_with_circles?: boolean; share_circle_ids?: string[] }>(data: T): T {
+  if (data.share_with_circles === true && Array.isArray(data.share_circle_ids) && data.share_circle_ids.length === 0) {
+    const { share_circle_ids: _empty, ...rest } = data;
+    void _empty;
+    return { ...rest, share_with_circles: false } as T;
+  }
+  return data;
+}
+
+/** The explicit list on a create (deduped), or null = legacy rule. Only with share_with_circles:true. */
+function explicitCreateList(data: { share_with_circles?: boolean; share_circle_ids?: string[] }): string[] | null {
+  if (data.share_with_circles !== true || !Array.isArray(data.share_circle_ids)) return null;
+  return Array.from(new Set(data.share_circle_ids));
+}
+
+/**
+ * The share_circle_ids write for an edit: undefined = leave the stored list; null = clear;
+ * an array = the new list (only together with share_with_circles:true).
+ */
+function updateShareList(
+  data: { share_with_circles?: boolean; share_circle_ids?: string[] },
+  privacy: { is_private: boolean } | null,
+  shareable: boolean
+): string[] | null | undefined {
+  if (!shareable) return undefined;
+  if (data.share_with_circles === false || privacy?.is_private === true) return null;
+  if (data.share_with_circles === true && Array.isArray(data.share_circle_ids)) return Array.from(new Set(data.share_circle_ids));
+  return undefined;
+}
+
+/** Responses always carry share_circle_ids (uuid[] or null; additive for shipped clients). */
+function withShareList<T extends object>(entry: T): T & { share_circle_ids: string[] | null } {
+  const v = (entry as { share_circle_ids?: unknown }).share_circle_ids;
+  return { ...entry, share_circle_ids: Array.isArray(v) ? (v as string[]) : null };
 }

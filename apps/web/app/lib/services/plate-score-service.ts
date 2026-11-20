@@ -69,9 +69,8 @@ export class PlateScoreService {
     const supabase = createAdminSupabase();
 
     // 1. Pull the day's macro-bearing food log entries.
-    const { data: entries, error: entriesError } = await supabase
-      .from('food_log_entries')
-      .select('meal_type, calories, protein_g, carbs_g, fat_g')
+    const { data: entries, error: entriesError } = await confirmedOnly(supabase.from('food_log_entries')
+      .select('meal_type, calories, protein_g, carbs_g, fat_g'))
       .eq('user_id', userId)
       .eq('entry_date', date)
       .is('deleted_at', null);
@@ -370,6 +369,7 @@ export class PlateScoreService {
 // (IPlateScoreService) even though the service uses static methods (FoodsService style).
 import { type IPlateScoreService, type PlateScoreTargetSource } from '../types/plate-score';
 import { logIgnoredQueryError } from '@/lib/api/route-errors';
+import { confirmedOnly } from '@/lib/meal-drafts/config';
 const _signatureCheck: IPlateScoreService = PlateScoreService;
 void _signatureCheck;
 

@@ -1148,6 +1148,30 @@
       "columns": [
         "user_id"
       ],
+      "name": "meal_analysis_results_user_id_fkey",
+      "ref": "profiles",
+      "table": "meal_analysis_results"
+    },
+    {
+      "columns": [
+        "fitcircle_id"
+      ],
+      "name": "meal_share_circle_prefs_fitcircle_id_fkey",
+      "ref": "fitcircles",
+      "table": "meal_share_circle_prefs"
+    },
+    {
+      "columns": [
+        "user_id"
+      ],
+      "name": "meal_share_circle_prefs_user_id_fkey",
+      "ref": "profiles",
+      "table": "meal_share_circle_prefs"
+    },
+    {
+      "columns": [
+        "user_id"
+      ],
       "name": "metric_streaks_user_id_fkey",
       "ref": "profiles",
       "table": "metric_streaks"
@@ -1487,6 +1511,14 @@
       "name": "streak_recoveries_user_id_fkey",
       "ref": "profiles",
       "table": "streak_recoveries"
+    },
+    {
+      "columns": [
+        "user_id"
+      ],
+      "name": "streak_save_offers_user_id_fkey",
+      "ref": "profiles",
+      "table": "streak_save_offers"
     },
     {
       "columns": [
@@ -2777,7 +2809,9 @@
     "fitzy_message_log": [
       "id",
       "user_id",
-      "created_at"
+      "created_at",
+      "tier",
+      "context"
     ],
     "fitzy_messages": [
       "id",
@@ -2863,7 +2897,12 @@
       "input_method",
       "nutrition_source",
       "llm_confidence",
-      "source_external_id"
+      "source_external_id",
+      "share_circle_ids",
+      "entry_status",
+      "draft_created_at",
+      "draft_method",
+      "draft_analysis_id"
     ],
     "food_log_images": [
       "id",
@@ -3101,6 +3140,28 @@
       "user_id",
       "reaction",
       "created_at"
+    ],
+    "meal_analysis_results": [
+      "id",
+      "user_id",
+      "method",
+      "parse_hash",
+      "job_id",
+      "draft",
+      "image_paths",
+      "meal_type",
+      "timezone",
+      "captured_at",
+      "status",
+      "entry_id",
+      "resolved_at",
+      "created_at"
+    ],
+    "meal_share_circle_prefs": [
+      "user_id",
+      "fitcircle_id",
+      "share",
+      "updated_at"
     ],
     "metric_streaks": [
       "id",
@@ -3655,6 +3716,18 @@
       "metadata",
       "created_at",
       "updated_at"
+    ],
+    "streak_save_offers": [
+      "id",
+      "user_id",
+      "missed_date",
+      "lost_streak",
+      "status",
+      "method",
+      "offered_at",
+      "opened_at",
+      "saved_at",
+      "expires_at"
     ],
     "streak_shields": [
       "id",

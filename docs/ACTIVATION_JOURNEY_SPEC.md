@@ -66,7 +66,7 @@ Replace the lunch/dinner-only logic in `reminder-service.ts` with four slots, us
 - **Soft paywall after the first successful AI analysis** (in onboarding or later): shown once, after the Meet-Fitzy moment, placement `first_meal_aha`. Dismissible; never blocks saving the meal.
 - **Feed `pro_value` card** → paywall placement `feed_pro_value`.
 - Existing gates unchanged (scan limits etc.).
-- Frequency: an *automatically presented* paywall at most once per 72 h and never in the user's first 10 minutes unless it is the post-aha moment. User-initiated taps always open it.
+- Frequency: an *automatically presented* paywall at most once per 72 h and never in the user's first 10 minutes unless it is the post-aha moment. The post-aha moment is also exempt from the 72 h when no meal was logged before the last automatic paywall (§Appendix A `postAhaEligible`, ENGAGEMENT_115_SPEC §14.2). User-initiated taps always open it.
 - Track `Paywall Viewed {source}` with the new sources.
 
 ## 6. Meeting Fitzy
@@ -167,7 +167,7 @@ Add to each event of a promo card: `promo_id` (= props.promoId), `creative_id`, 
   "mealReminderPrefs": { "breakfast": true, "lunch": true, "snack": false, "dinner": true } }
 ```
 - `autoEligible`: free + subscriptions on + ≥ 1 meal + ≥ 10 min since sign-up + no automatic paywall in the last 72 h.
-- `postAhaEligible`: free + subscriptions on + `first_meal_aha` never shown + 72 h spacing. Not gated on meals/10 min (the app has just seen the aha; the meal may still be in the offline outbox). Show the Meet-Fitzy sheet first when `fitzyOpenedAt == null && fitzyIntroSeenAt == null`, then the soft paywall on the next dismissal.
+- `postAhaEligible`: free + subscriptions on + `first_meal_aha` never shown + 72 h spacing, **except** (1.1.5 backend, ENGAGEMENT_115_SPEC §14.2) when the user had never logged a meal before their last automatic paywall: the earliest non-deleted food entry (`firstMealAt`) is after `paywall_auto_last_at`, or there is none on the server yet. That is the onboarding paywall seen without a scan, so the first real scan still gets the aha even inside the 72 h. Still once-only, never Pro/trialing, subscriptions must be on. No extra query: it reuses the `firstMealAt` read. Not gated on meals/10 min (the app has just seen the aha; the meal may still be in the offline outbox). Show the Meet-Fitzy sheet first when `fitzyOpenedAt == null && fitzyIntroSeenAt == null`, then the soft paywall on the next dismissal.
 - User-initiated paywall taps never need a check.
 
 `PATCH /api/mobile/me/journey` `{ "mealReminderPrefs": { "snack": true } }` → `{ data: { mealReminderPrefs } }` (full, with defaults). The same toggles are accepted by `PATCH /api/mobile/notifications/preferences` as `"meal_reminders": { breakfast?, lunch?, snack?, dinner? }`, and its GET now also returns `meal_reminders` (extra key; the six `*_enabled` booleans are unchanged).

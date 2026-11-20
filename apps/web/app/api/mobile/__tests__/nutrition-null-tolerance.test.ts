@@ -158,13 +158,13 @@ describe('estimate-item', () => {
   it('accepts null grams / quantity / servingUnit', async () => {
     const res = await estimateItem(req({ name: 'banana', grams: null, quantity: null, servingUnit: null }));
     expect(res.status).toBe(200);
-    expect(calls.estimateItem[0]).toEqual(['user-1', 'banana', undefined, undefined, undefined]);
+    expect(calls.estimateItem[0]).toEqual(['user-1', 'banana', undefined, undefined, undefined, { jobId: undefined }]);
   });
 
   it('OLD request shape is unchanged', async () => {
     const res = await estimateItem(req({ name: 'rice', grams: 150, quantity: 1, servingUnit: 'cup' }));
     expect(res.status).toBe(200);
-    expect(calls.estimateItem[0]).toEqual(['user-1', 'rice', 150, 1, 'cup']);
+    expect(calls.estimateItem[0]).toEqual(['user-1', 'rice', 150, 1, 'cup', { jobId: undefined }]);
   });
 
   it('still validates: an empty name keeps its own message, code and details', async () => {

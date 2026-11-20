@@ -31,6 +31,16 @@ describe('win-back step selection', () => {
     expect(pick(at(7), { history: { ...empty, lastWinbackAt: new Date(now.getTime() - 30 * 3_600_000).toISOString() } })).toEqual({ skip: 'spacing' });
   });
 
+  it('1.1.5: a D+1 dont_miss_twice / streak_save_offer in the last 44 h is the touch; day 3 slides to the next day of its band', () => {
+    const ago = (h: number) => new Date(now.getTime() - h * 3_600_000).toISOString();
+    expect(pick(at(3), { history: { ...empty, lastDontMissTwiceAt: ago(20) } })).toEqual({ skip: 'replaced_by_dont_miss_twice' });
+    expect(pick(at(3), { history: { ...empty, lastDontMissTwiceAt: ago(43) } })).toEqual({ skip: 'replaced_by_dont_miss_twice' });
+    // The next day of the band (lapsed_3 still current), 45 h after the D+1 push: day 3 goes.
+    expect(pick(at(4), { history: { ...empty, lastDontMissTwiceAt: ago(45) } })).toEqual({ step: 'day3' });
+    // No D+1 push (shipped behaviour): unchanged.
+    expect(pick(at(3), { history: { ...empty } })).toEqual({ step: 'day3' });
+  });
+
   it('an overtake / health-sync push today replaces the step', () => {
     expect(pick(at(3), { history: { ...empty, lastTriggerAt: new Date(now.getTime() - 3 * 3_600_000).toISOString() } })).toEqual({ skip: 'replaced_by_trigger' });
     expect(pick(at(3), { history: { ...empty, lastTriggerAt: new Date(now.getTime() - 25 * 3_600_000).toISOString() } })).toEqual({ step: 'day3' });

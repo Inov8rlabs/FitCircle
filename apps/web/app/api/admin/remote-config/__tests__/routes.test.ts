@@ -111,6 +111,17 @@ describe('GET list', () => {
       expect.objectContaining({ key: 'streak_shield_earn_interval_days', type: 'int', min: 3, max: 60, codeDefault: 7, default: null, rules: [] }),
       expect.objectContaining({ key: 'streak_shield_starter_count', type: 'int', min: 0, max: 3, codeDefault: 2, default: null, rules: [] }),
       expect.objectContaining({ key: 'streak_shield_max_balance', type: 'int', min: 1, max: 10, codeDefault: 3, default: null, rules: [] }),
+      expect.objectContaining({ key: 'paywall_trial_timeline', type: 'enum', options: ['on', 'off'], codeDefault: 'on', default: null, rules: [] }),
+      // Release 1.1.5 engagement (docs/ENGAGEMENT_115_SPEC.md §8).
+      expect.objectContaining({ key: 'free_food_ai_daily_after_total', type: 'int', min: 0, max: 50, codeDefault: 0, default: null, rules: [] }),
+      expect.objectContaining({ key: 'free_fitzy_messages_per_week', type: 'int', min: 0, max: 100, codeDefault: 0, default: null, rules: [] }),
+      expect.objectContaining({ key: 'meal_share_prompt', type: 'enum', options: ['on', 'off'], codeDefault: 'on', default: null, rules: [] }),
+      expect.objectContaining({ key: 'meal_share_large_circle_threshold', type: 'int', min: 2, max: 500, codeDefault: 20, default: null, rules: [] }),
+      expect.objectContaining({ key: 'streak_save_offer', type: 'enum', options: ['on', 'off'], codeDefault: 'on', default: null, rules: [] }),
+      expect.objectContaining({ key: 'streak_save_offer_min_streak', type: 'int', min: 2, max: 30, codeDefault: 3, default: null, rules: [] }),
+      expect.objectContaining({ key: 'streak_milestone_push', type: 'enum', options: ['on', 'off'], codeDefault: 'on', default: null, rules: [] }),
+      expect.objectContaining({ key: 'dont_miss_twice_push', type: 'enum', options: ['on', 'off'], codeDefault: 'on', default: null, rules: [] }),
+      expect.objectContaining({ key: 'circle_daily_summary_post', type: 'enum', options: ['on', 'off'], codeDefault: 'off', default: null, rules: [] }),
     ]);
   });
 });
@@ -244,9 +255,19 @@ describe('preview + estimate', () => {
       quiet_hours_deferral: { value: 'on', source: 'code' },
       paywall_default_plan: { value: 'annual', source: 'code' },
       paywall_badge_plan: { value: 'annual', source: 'code' },
+      paywall_trial_timeline: { value: 'on', source: 'code' },
       streak_shield_earn_interval_days: { value: 7, source: 'code' },
       streak_shield_starter_count: { value: 2, source: 'code' },
       streak_shield_max_balance: { value: 3, source: 'code' },
+      free_food_ai_daily_after_total: { value: 0, source: 'code' },
+      free_fitzy_messages_per_week: { value: 0, source: 'code' },
+      meal_share_prompt: { value: 'on', source: 'code' },
+      meal_share_large_circle_threshold: { value: 20, source: 'code' },
+      streak_save_offer: { value: 'on', source: 'code' },
+      streak_save_offer_min_streak: { value: 3, source: 'code' },
+      streak_milestone_push: { value: 'on', source: 'code' },
+      dont_miss_twice_push: { value: 'on', source: 'code' },
+      circle_daily_summary_post: { value: 'off', source: 'code' },
     });
     expect(body.data.context).toMatchObject({ platform: 'ios', country: 'US', channel: 'apple_ads', signupAt: '2026-11-01T00:00:00Z' });
     expect((await PREVIEW(req('/api/admin/remote-config/preview', { method: 'POST', body: { userId: 'x' } }))).status).toBe(400);

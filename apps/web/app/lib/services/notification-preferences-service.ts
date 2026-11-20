@@ -54,6 +54,11 @@ const TYPE_CATEGORY_MAP: Record<string, NotificationCategory> = {
   meal_reminder_dinner: 'momentum',
   shield_applied: 'momentum',
   streak_lost: 'momentum',
+  // 1.1.5 next-day push (ENGAGEMENT_115_SPEC §5.2).
+  dont_miss_twice: 'momentum',
+  streak_save_offer: 'momentum',
+  // 1.1.5 "Snap your first meal" (ENGAGEMENT_115_SPEC §14.7): the meal-reminder (momentum) toggle mutes it.
+  first_meal_nudge: 'momentum',
   shield_earned: 'celebration',
 
   // State - Circle (S5/S6/S12)

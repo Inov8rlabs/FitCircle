@@ -16,6 +16,7 @@ import { createAdminSupabase } from '@/lib/supabase-admin';
 
 import { EntitlementService, normalizeTier } from './entitlement-service';
 import { PromoService } from './promo-service';
+import { confirmedOnly } from '@/lib/meal-drafts/config';
 
 export const JOURNEY_EVENTS = ['fitzy_opened', 'fitzy_intro_seen', 'paywall_shown'] as const;
 export type JourneyEvent = (typeof JOURNEY_EVENTS)[number];
@@ -43,10 +44,9 @@ export class JourneyService {
   static async getJourney(profile: Profile, now = new Date()): Promise<JourneyView> {
     const supabase = createAdminSupabase();
     const [countRes, firstRes, subscriptionsEnabled] = await Promise.all([
-      supabase.from('food_log_entries').select('id', { count: 'exact', head: true }).eq('user_id', profile.id).eq('entry_type', 'food').is('deleted_at', null),
-      supabase
-        .from('food_log_entries')
-        .select('created_at')
+      confirmedOnly(supabase.from('food_log_entries').select('id', { count: 'exact', head: true })).eq('user_id', profile.id).eq('entry_type', 'food').is('deleted_at', null),
+      confirmedOnly(supabase.from('food_log_entries')
+        .select('created_at'))
         .eq('user_id', profile.id)
         .eq('entry_type', 'food')
         .is('deleted_at', null)
@@ -67,6 +67,7 @@ export class JourneyService {
       signupAt,
       autoLastAt: str(profile.paywall_auto_last_at),
       ahaShownAt: str(profile.paywall_aha_shown_at),
+      firstMealAt,
       now,
     });
     return {

@@ -81,6 +81,28 @@ export class FoodEntryPrivacyService {
     }
 
     const postsRemoved = await CircleMealPostService.retractMeals(all.map((r) => r.id));
+    // An explicit "private" choice: the 1.1.5 success sheet starts every circle toggle off
+    // (share-targets reason made_private, ENGAGEMENT_115_SPEC §4.3 rule 4 / §4.6).
+    await this.markMealsMadePrivate(userId).catch((e: unknown) => {
+      console.error('[FoodEntryPrivacyService] meals_made_private_at write failed:', e instanceof Error ? e.message : String(e));
+    });
     return { entries_made_private: toFlip.length, posts_removed: postsRemoved };
+  }
+
+  /**
+   * preferences.privacy.meals_made_private_at = now (server merge, keeps every other key).
+   * `onlyIfAbsent` (the one-off backfill) never overwrites an existing value.
+   */
+  static async markMealsMadePrivate(userId: string, opts: { at?: string; onlyIfAbsent?: boolean } = {}): Promise<boolean> {
+    const supabase = createAdminSupabase();
+    const { data, error } = await supabase.from('profiles').select('preferences').eq('id', userId).maybeSingle();
+    if (error) throw error;
+    const current: Record<string, unknown> = (data as { preferences?: Record<string, unknown> } | null)?.preferences ?? {};
+    const privacy = (current.privacy && typeof current.privacy === 'object' ? current.privacy : {}) as Record<string, unknown>;
+    if (opts.onlyIfAbsent && typeof privacy.meals_made_private_at === 'string') return false;
+    const preferences = { ...current, privacy: { ...privacy, meals_made_private_at: opts.at ?? new Date().toISOString() } };
+    const { error: updateError } = await supabase.from('profiles').update({ preferences, updated_at: new Date().toISOString() }).eq('id', userId);
+    if (updateError) throw updateError;
+    return true;
   }
 }

@@ -12,6 +12,9 @@ import { UpgradeRequiredError } from '@/lib/services/usage-service';
 import { PHOTO_PARSE_MAX_IMAGES, PHOTO_PARSE_MAX_NOTE_CHARS } from '@/lib/types/nutrition';
 import { readParseFallbackOptions } from '@/lib/validation/nutrition-parse-options';
 import { readRefineRequest } from '@/lib/validation/nutrition-refine';
+import { readAnalysisJobId } from '@/lib/validation/analysis-job-id';
+import { includeDraftsFor } from '@/lib/meal-drafts/config';
+import { MealDraftService } from '@/lib/services/meal-draft-service';
 
 // The vision parse routinely takes 20-40s. Without this, the function is killed at
 // the platform default (~10s) and the request appears to "time out". 60s is the max
@@ -32,6 +35,9 @@ export const maxDuration = 60;
  * off the Option-B fallback save for re-analysis of a saved entry / "add photo to this
  * meal" / form prefill — see lib/validation/nutrition-parse-options.ts. Without them the
  * route behaves exactly as before.
+ *
+ * Optional header `X-Analysis-Job-Id` (ENGAGEMENT_115_SPEC §14.4 item 3): a repeat of an analysis
+ * already counted in the last 10 minutes (same job id or identical bytes) is not counted again.
  *
  * Thin route: all nutrition logic lives in NutritionIntelligenceService (§7.2.1).
  */
@@ -145,7 +151,26 @@ export async function POST(request: NextRequest) {
       // Server-side AI consent (docs/PRIVACY_COMPLIANCE_SPEC.md §4). Refused → 403
       // AI_CONSENT_REQUIRED below, with the same Option-B save so the meal is never lost.
       await ConsentService.assertUserAi(user.id, request, 'food_photo');
-      const draft = await NutritionIntelligenceService.parsePhoto(user.id, images, note, refine ? { refine } : {});
+      const jobId = readAnalysisJobId(request);
+      const draft = await NutritionIntelligenceService.parsePhoto(user.id, images, note, refine ? { refine } : { jobId });
+      // Draft meals (ENGAGEMENT_115_SPEC §14.6): 1.1.5+ clients get an `analysisId`; the result
+      // (and photo) is held after the response and becomes a Draft meal if left unsaved 30 min.
+      // Not for re-analysis of an existing entry / outbox entry / form prefill (the entry exists).
+      const analysisId =
+        includeDraftsFor(request) && !fallback.skipFallbackSave && !fallback.existingEntryId ? MealDraftService.newAnalysisId() : null;
+      if (analysisId) {
+        after(() =>
+          MealDraftService.recordAnalysis({
+            id: analysisId,
+            userId: user.id,
+            method: 'photo',
+            draft,
+            jobId,
+            timezone: request.headers.get('x-client-timezone'),
+            images,
+          })
+        );
+      }
 
       // Production accuracy signal: record the draft AFTER responding so the user never
       // waits on it; the food-log create route links the saved entry to this row.
@@ -163,7 +188,7 @@ export async function POST(request: NextRequest) {
 
       return NextResponse.json({
         success: true,
-        data: draft,
+        data: analysisId ? { ...draft, analysisId } : draft,
         meta: { requestTime: Date.now() - startTime },
         error: null,
       });
@@ -273,12 +298,12 @@ export async function POST(request: NextRequest) {
       // Nothing was saved when the fallback is skipped, so the copy must not claim it was.
       const message = fallback.skipFallbackSave
         ? isUpgrade
-          ? foodAiUpgradeMessage(parseError.limit, parseError.trialEligible === true, false, parseError.trialDays)
+          ? foodAiUpgradeMessage(parseError.limit, parseError.trialEligible === true, false, parseError.trialDays, parseError.extra?.phase)
           : isRate
             ? "You've reached today's photo-estimate limit — you can add the details yourself."
             : "Couldn't auto-detect the food — you can add the details yourself."
         : isUpgrade
-          ? foodAiUpgradeMessage(parseError.limit, parseError.trialEligible === true, true, parseError.trialDays)
+          ? foodAiUpgradeMessage(parseError.limit, parseError.trialEligible === true, true, parseError.trialDays, parseError.extra?.phase)
           : isRate
             ? "You've reached today's photo-estimate limit — we saved your photo so you can add the details."
             : "Couldn't auto-detect the food — we saved your photo so you can add the details.";

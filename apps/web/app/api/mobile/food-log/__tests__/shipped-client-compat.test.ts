@@ -798,3 +798,59 @@ describe('food entry privacy — shipped clients (iOS 1.1.1, Android 1.1.1)', ()
     expect(iosDetail(d.body)).toEqual([]);
   });
 });
+
+describe('1.1.5 per-meal circle lists — 1.1.4 bodies and outbox replays unchanged (ENGAGEMENT_115_SPEC §4.4, §9)', () => {
+  it('1.1.4 chip on (share_with_circles:true, no share_circle_ids) → shared, legacy rule (no list stored), decodes', async () => {
+    const r = await call('engage115.ios.create.chip-on', create(IOS_JSON, iosMeal({ share_with_circles: true })));
+    expect(is2xx(r.status)).toBe(true);
+    expect([...iosEnvelope(r.body), ...iosEntry(r.body.data)]).toEqual([]);
+    expect(r.body.data).toMatchObject({ is_private: false, visibility: 'circle', share_circle_ids: null });
+    expect(entryRow(IOS_MEAL_ID).share_circle_ids ?? null).toBeNull();
+  });
+
+  it('Android 1.1.4 outbox replay of the same create → same entry, still no list', async () => {
+    const body = androidMeal({ share_with_circles: true });
+    await create(ANDROID_JSON, body);
+    const again = await call('engage115.android.create.replay', create(ANDROID_JSON, body));
+    expect(is2xx(again.status)).toBe(true);
+    expect([...androidEnvelope(again.body), ...androidOk(again.body), ...androidEntry(again.body.data)]).toEqual([]);
+    expect(entryRow(ANDROID_MEAL_ID).share_circle_ids ?? null).toBeNull();
+  });
+
+  it('1.1.5 create with share_circle_ids + chip on → the list is stored; without the chip it is ignored', async () => {
+    const A = 'aaaaaaaa-1111-4111-8111-111111111111';
+    const r = await call('engage115.ios.create.list', create(IOS_JSON, iosMeal({ share_with_circles: true, share_circle_ids: [A, A] })));
+    expect(is2xx(r.status)).toBe(true);
+    expect(r.body.data.share_circle_ids).toEqual([A]);
+    expect(entryRow(IOS_MEAL_ID).share_circle_ids).toEqual([A]);
+  });
+
+  it('PATCH without share_circle_ids keeps the stored list; share_with_circles:false clears it', async () => {
+    const A = 'aaaaaaaa-1111-4111-8111-111111111111';
+    await create(IOS_JSON, iosMeal({ share_with_circles: true, share_circle_ids: [A] }));
+    const { id: _id, ...body } = iosMeal({ notes: 'Edited', share_with_circles: true });
+    const kept = await call('engage115.ios.patch.keep', patch(IOS_JSON, IOS_MEAL_ID, body));
+    expect(is2xx(kept.status)).toBe(true);
+    expect(entryRow(IOS_MEAL_ID).share_circle_ids).toEqual([A]);
+    const off = await call('engage115.ios.patch.off', patch(IOS_JSON, IOS_MEAL_ID, { share_with_circles: false }));
+    expect(off.body.data).toMatchObject({ is_private: true, share_circle_ids: null });
+    expect(entryRow(IOS_MEAL_ID).share_circle_ids).toBeNull();
+  });
+});
+
+describe('1.1.5 empty share list = share to none (client contract §4)', () => {
+  it('create: share_with_circles:true + share_circle_ids:[] → private, no list stored', async () => {
+    const r = await call('engage115.ios.create.empty-list', create(IOS_JSON, iosMeal({ share_with_circles: true, share_circle_ids: [] })));
+    expect(is2xx(r.status)).toBe(true);
+    expect(r.body.data).toMatchObject({ is_private: true, visibility: 'private', share_circle_ids: null });
+  });
+
+  it('PATCH: a shared meal edited to [] becomes private and the list is cleared', async () => {
+    const A = 'aaaaaaaa-1111-4111-8111-111111111111';
+    await create(IOS_JSON, iosMeal({ share_with_circles: true, share_circle_ids: [A] }));
+    const r = await call('engage115.ios.patch.empty-list', patch(IOS_JSON, IOS_MEAL_ID, { share_with_circles: true, share_circle_ids: [] }));
+    expect(is2xx(r.status)).toBe(true);
+    expect(r.body.data).toMatchObject({ is_private: true, share_circle_ids: null });
+    expect(entryRow(IOS_MEAL_ID).share_circle_ids).toBeNull();
+  });
+});

@@ -37,6 +37,7 @@ import { createAdminSupabase } from '../supabase-admin';
 
 import { AppOpenService } from './app-open-service';
 import { NotificationOrchestrator, startOfLocalDay } from './notification-orchestrator';
+import { confirmedOnly } from '@/lib/meal-drafts/config';
 
 const MIN_AGE_HOURS = 6;
 const MAX_AGE_HOURS = 60;
@@ -193,7 +194,7 @@ export class Day1MorningPushService {
     const db = createAdminSupabase();
     const [memberships, meals, streak, mySteps] = await Promise.all([
       db.from('fitcircle_members').select('fitcircle_id, joined_at, status').eq('user_id', row.id).eq('status', 'active'),
-      db.from('food_log_entries').select('id').eq('user_id', row.id).eq('entry_type', 'food').is('deleted_at', null).gte('created_at', row.created_at).limit(1),
+      confirmedOnly(db.from('food_log_entries').select('id')).eq('user_id', row.id).eq('entry_type', 'food').is('deleted_at', null).gte('created_at', row.created_at).limit(1),
       db.from('engagement_streaks').select('current_streak').eq('user_id', row.id).maybeSingle(),
       db.from('daily_tracking').select('steps').eq('user_id', row.id).eq('tracking_date', signupLocalDate).maybeSingle(),
     ]);

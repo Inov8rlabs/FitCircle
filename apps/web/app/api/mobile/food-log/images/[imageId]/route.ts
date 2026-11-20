@@ -12,6 +12,7 @@ import { type NextRequest, NextResponse } from 'next/server';
 import { requireMobileAuth } from '@/lib/middleware/mobile-auth';
 import { CircleMealPostService } from '@/lib/services/circle-meal-post-service';
 import { createAdminSupabase } from '@/lib/supabase-admin';
+import { confirmedOnly } from '@/lib/meal-drafts/config';
 
 /**
  * Image size variants
@@ -113,11 +114,20 @@ export async function GET(
     // in the circle chat). The previous check queried tables that no longer
     // exist, so every member request 403'd.
     if (imageRecord.user_id !== user.id) {
-      const { data: entryData } = await supabase
-        .from('food_log_entries')
-        .select('id, user_id, entry_type, visibility, is_private, title, meal_type, logged_at, deleted_at')
+      // + share_circle_ids (migration 138): a meal shared to a per-meal list is visible only in
+      // those circles (ENGAGEMENT_115_SPEC §4.4). Before 138 the column is missing → legacy rule.
+      const ENTRY_COLUMNS = 'id, user_id, entry_type, visibility, is_private, title, meal_type, logged_at, deleted_at';
+      // Drafts (ENGAGEMENT_115_SPEC §14.6) are never visible to anyone but the owner.
+      const first = await confirmedOnly(supabase.from('food_log_entries').select(`${ENTRY_COLUMNS}, share_circle_ids`))
         .eq('id', imageRecord.food_log_entry_id)
         .maybeSingle();
+      let entryData = first.data;
+      const entryError = first.error;
+      if (entryError && (entryError.code === '42703' || entryError.code === 'PGRST204')) {
+        ({ data: entryData } = await confirmedOnly(supabase.from('food_log_entries').select(ENTRY_COLUMNS))
+          .eq('id', imageRecord.food_log_entry_id)
+          .maybeSingle());
+      }
 
       const allowed = entryData
         ? await CircleMealPostService.viewerCanSeeEntry(user.id, entryData as any)

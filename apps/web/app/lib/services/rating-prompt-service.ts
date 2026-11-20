@@ -28,6 +28,7 @@ import {
 } from '@/lib/rating-prompt/eligibility';
 import { isValidTimezone } from '@/lib/streaks/streak-calculator';
 import { createAdminSupabase } from '@/lib/supabase-admin';
+import { confirmedOnly } from '@/lib/meal-drafts/config';
 
 export interface PublishedConfig {
   enabled: boolean;
@@ -113,9 +114,8 @@ export class RatingPromptService {
     let count = 0;
     let before = today;
     while (count < cap) {
-      const { data, error } = await supabase
-        .from('food_log_entries')
-        .select('entry_date')
+      const { data, error } = await confirmedOnly(supabase.from('food_log_entries')
+        .select('entry_date'))
         .eq('user_id', userId)
         .eq('entry_type', 'food')
         .is('deleted_at', null)

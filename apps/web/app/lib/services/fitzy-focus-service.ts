@@ -48,6 +48,7 @@ const cp = (s: string) => [...s].length;
 export { fitBody } from '../fitzy/text';
 import { fitBody } from '../fitzy/text';
 import { logIgnoredQueryError } from '@/lib/api/route-errors';
+import { confirmedOnly } from '@/lib/meal-drafts/config';
 
 const FREE_CTA = (): FitzyDailyFocus['cta'] => ({ label: 'Make this my plan', action: { type: 'start_plan', label: 'Make this my plan' } });
 
@@ -111,7 +112,7 @@ export class FitzyFocusService {
     const since = addDays(today, -14);
     const supabase = createAdminSupabase();
     const [food, workouts, claims] = await Promise.all([
-      supabase.from('food_log_entries').select('id').eq('user_id', userId).gte('entry_date', since).is('deleted_at', null).limit(1),
+      confirmedOnly(supabase.from('food_log_entries').select('id')).eq('user_id', userId).gte('entry_date', since).is('deleted_at', null).limit(1),
       supabase.from('exercise_logs').select('id').eq('user_id', userId).gte('exercise_date', since).eq('is_deleted', false).limit(1),
       supabase.from('streak_claims').select('id').eq('user_id', userId).gte('claim_date', since).limit(1),
     ]);

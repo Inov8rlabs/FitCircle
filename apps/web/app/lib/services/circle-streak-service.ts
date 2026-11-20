@@ -12,6 +12,7 @@ import {
 
 import type * as OrchestratorModule from './notification-orchestrator';
 import { logIgnoredQueryError } from '@/lib/api/route-errors';
+import { confirmedOnly } from '@/lib/meal-drafts/config';
 
 /**
  * CircleStreakService — collective circle streak + the weekly save pool
@@ -377,9 +378,8 @@ export class CircleStreakService {
     const wanted = new Set(userIds);
     const [{ data: claims, error: claimsError }, { data: entries, error: entriesError }] = await Promise.all([
       supabaseAdmin.from('streak_claims').select('user_id, claim_method').eq('claim_date', date).in('user_id', userIds),
-      supabaseAdmin
-        .from('food_log_entries')
-        .select('user_id')
+      confirmedOnly(supabaseAdmin.from('food_log_entries')
+        .select('user_id'))
         .eq('entry_date', date)
         .in('user_id', userIds)
         .not('calories', 'is', null)
